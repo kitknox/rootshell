@@ -6,7 +6,7 @@ A free, Metal-accelerated terminal emulator for iPhone, iPad, Vision Pro, and Ma
 
 ## About
 
-rootshell is a terminal emulator built for Apple platforms. It features GPU-accelerated rendering powered by libghostty, native SSH with jump host support, Secure Enclave key storage, cloud provider integration (AWS, Azure, Linode, DigitalOcean), Kubernetes node debugging, and Rootshell Roam — a mosh-compatible and tssh (QUIC+KCP) mobile terminal protocol with seamless network roaming and session persistence.
+rootshell is a terminal emulator built for Apple platforms. It features GPU-accelerated rendering powered by libghostty, native SSH with post-quantum key exchange, Secure Enclave key storage, VPN tunneling, a built-in file browser and native git client, a voice-controlled AI agent, cloud provider integration (AWS, Azure, Linode, DigitalOcean), Kubernetes node debugging, and Rootshell Roam — a mosh-compatible and tssh (QUIC+KCP) mobile terminal protocol with seamless network roaming and session persistence.
 
 For full feature details, screenshots, and documentation, visit **[beta.rootshell.com](https://beta.rootshell.com)**.
 
@@ -45,22 +45,35 @@ rootshell is **completely free** with no ads, subscriptions, or in-app purchases
 |----------|------|
 | iOS, iPadOS, visionOS, macOS (sandboxed) | [TestFlight](https://testflight.apple.com/join/DEVnH3N2) |
 | macOS (standalone) | [Direct Download](https://beta.rootshell.com/downloads/rootshell-macos-latest.tar.xz) |
+| macOS (Homebrew) | See below |
+
+### Install via Homebrew
+
+```bash
+brew tap kitknox/rootshell
+brew install --cask rootshell
+```
 
 ## Key Features
 
 ### Terminal & Rendering
 - **Metal Accelerated** - GPU-accelerated rendering powered by [libghostty](https://github.com/ghostty-org/ghostty) with buttery smooth scrolling
 - **450+ Themes** - Curated color themes with live preview, favorites, and per-tab overrides
+- **Custom Themes** - Create your own themes with a full color picker, duplicate built-in themes, or import Ghostty theme files. Theme-aware UI tints the entire app
 - **Day/Night Themes** - Automatic theme switching based on sunrise/sunset at your location
 - **Tabs & Splits** - Resizable split windows within tabs with session persistence
 - **Session Restoration** - Tabs, splits, themes, and connections restore automatically on launch
 - **Nerd Fonts** - Multiple monospace Nerd Fonts built-in with full icon support
+- **Custom Font Import** - Import TTF and OTF fonts with live preview, auto-grouped by family
+- **Clickable Hyperlinks** - URLs in terminal output are interactive — Cmd+click or context menu to open
+- **Cursor Blink Styles** - 7 animated cursor modes: normal, breathing, heartbeat, neon flicker, pulse, candle, and rootshell
 
 ### Visual Effects
 - **Custom Shaders** - Import shaders directly from Shadertoy with full uniform support
 - **Cursor Effects** - Warp, Sweep, Tail, and Blaze cursor animations
 - **Background Effects** - Solar (real-time sun tracking), Starfield, Fireflies, Aurora, Nebula
 - **Video Backgrounds** - Play looping video files as terminal backgrounds with speed control
+- **Photo Backgrounds** - Terminal background from photo library with opacity presets, 9 image filters, and Ken Burns cinematic pan/zoom animation
 - **Window Transparency** - Configurable transparency with blur (macOS)
 
 ### SSH & Networking
@@ -68,10 +81,18 @@ rootshell is **completely free** with no ads, subscriptions, or in-app purchases
 - **Jump Hosts** - Multi-hop connections through bastion servers
 - **SSH Agent Forwarding** - Three approval modes: auto-approve, per-session, per-request
 - **Secure Enclave Keys** - Ed25519, ECDSA, and RSA keys with biometric protection
-- **Port Forwarding** - Local (`-L`) and remote (`-R`) TCP forwarding
+- **Post-Quantum SSH** - `mlkem768x25519-sha256` hybrid key exchange and ML-DSA host key signatures for end-to-end post-quantum protection. Also supports `sntrup761x25519-sha512` (OpenSSH 9.0+)
+- **Port Forwarding** - Local (`-L`), remote (`-R`), and dynamic SOCKS5 (`-D`) forwarding
+- **VPN Tunnel** - Any SSH or TSSH profile can act as a system-level VPN, routing all device traffic through the remote server. Per-profile DNS presets, route exclusions, Home Screen/Control Center widgets, Live Activity with real-time stats, and Siri Shortcuts support
+- **Multipath TCP** - MPTCP over Apple Network.framework maintains subflows on WiFi and cellular simultaneously for near-instant handover (requires Linux 5.6+ on server)
+- **Native SCP & SFTP** - Built-in `scp` and interactive `sftp` client with tab completion, glob patterns, and real-time progress
+- **Background SSH Tunnels** - Maintain port forwards without a terminal UI with auto-start on launch and byte transfer statistics
 - **Auto-start tmux** - Automatically attach to or create tmux sessions on connect
+- **tmux Session Discovery** - After connecting, lists active tmux sessions with window count and live terminal preview
 - **Tailscale Integration** - Device discovery and SSH to your tailnet with no-auth support
 - **Host Shorthand (HSS)** - Pattern-based hostname expansion with YAML configuration
+- **Connection Health** - Real-time RTT and packet loss tracking with time series chart and negotiated cryptographic algorithm details
+- **Scrollback Encryption** - Persisted scrollback encrypted at rest with AES-256-GCM and restored on session reconnect with full ANSI colors
 
 ### YubiKey & FIDO2
 - **YubiKey PIV** - SSH authentication with hardware-bound private keys via Lightning, NFC, or USB-C. Supports RSA, ECDSA, and Ed25519 (firmware 5.7+) with key generation directly on device
@@ -101,17 +122,45 @@ rootshell is **completely free** with no ads, subscriptions, or in-app purchases
   - Providers: Anthropic Claude, OpenAI, Google Gemini, OpenRouter
   - Web search and page fetch tools
   - Thinking model support with extended reasoning
+- **Voice Agent** - Real-time bidirectional voice conversation powered by Google Gemini Flash via WebSocket with sub-second latency. Reads terminal scrollback, types keystrokes, pastes text, and executes commands hands-free. Floating bubble overlay with live transcript, tool approval cards, three approval modes, and 30-voice selection
+- **AI Commit Messages** - `git commit` auto-generates commit messages from staged diffs using your configured AI provider with preview and edit support
 - **MCP Server** - Connect external AI tools to execute SSH commands and access cloud resources
+
+### Built-in Tools
+- **rf File Browser** - Yazi-inspired Swift-native TUI file browser with miller columns, vim navigation, tabs, ripgrep search, bookmarks, file operations, bat syntax-highlighted preview, kitty image preview, git status indicators, and 700+ Nerd Font icons. Includes SFTP remote browsing and cross-source yank/paste (local ↔ remote). Configurable via `~/.config/rf/rf.yaml`
+- **Native Git** - Swift-native git powered by libgit2 with truecolor output and Nerd Font icons. Supports init, clone, status, add, commit, diff, log, blame, branch, reset, pull, push, fetch, rm, mv, show, revert, cherry-pick, rebase, reflog, worktree, clean, apply, switch. SSH transport, [Helix](https://github.com/kitknox/helix/tree/ios) editor integration, syntax-highlighted pager via bat
+- **Helix Editor** - Native [Helix](https://github.com/kitknox/helix/tree/ios) text editor (`hx`) with tree-sitter syntax highlighting, system clipboard, git diff gutter, and full CLI argument support
+- **POSIX Shell** - Run shell scripts on device via `sh` with if/for/while/case, functions, pipelines, variables, here-documents, redirections, brace expansion, and 25 builtins
+- **bat** - Syntax-highlighted file viewing with automatic paging
+- **ripgrep** - Fast regex-based file search (`rg`) with all standard flags
+- **mtr/traceroute** - Interactive TUI with per-hop loss, RTT, jitter, AS lookups, truecolor gradients, and report formats (text, CSV, JSON, XML)
+- **vim 9.2** - "Huge" feature set with 24-bit color, langmap, and vartabs
+- **curl** - curl 8.19.0 with HTTP/2 via nghttp2
+- **imgcat** - Display images inline using Kitty graphics protocol (PNG, JPEG, HEIC)
+- **libarchive** - bsdtar, unzip with Zip64, RAR/RAR5, 7-Zip, Zstandard, lz4 support
+- **xz** - XZ/LZMA2 compression and decompression
 
 ### Input & Interaction
 - **Terminal Mouse Support** - Full mouse event passthrough for tmux, vim, zellij
-- **Keyboard Shortcuts** - Fully customizable keybindings with menu bar integration
-- **Touch Selection** - Single-finger drag to select, two-finger to scroll
-- **Virtual Keyboard** - Tab key toolbar with double-tap for literal tab
+- **Keyboard Shortcuts** - Fully customizable keybindings with menu bar integration and Ghostty keybind config compatibility
+- **Customizable Toolbar** - Drag-and-drop keyboard toolbar with custom keys that send arbitrary text or key sequences. Sticky modifier keys with single-tap one-shot and double-tap lock
+- **Compose Overlay** - Floating text editor (⌘⇧K) for drafting input with autocorrect, spell check, predictive text, and dictation before sending to the terminal
+- **Mod-Tap Keys** - QMK-style dual-function keys: one action on tap, another on hold. 55 source keys, 14 tap actions, configurable hold threshold
+- **Dictation & CJK Input** - iOS dictation and full CJK input method composition in the terminal with preedit overlay
+- **Touch Selection** - Single-finger drag to select, two-finger to scroll, magnifier loupe with draggable selection handles
+- **Virtual Keyboard** - Tab key toolbar with double-tap for literal tab, arrow joystick mode on iPhone
 
 ### Sync & Persistence
 - **iCloud Sync** - Connection history, known hosts, and profiles sync across devices
+- **Backup & Restore** - Export all app data (keys, passwords, profiles, themes, fonts, shortcuts, cloud accounts, settings) into a single AES-256-GCM encrypted `.rootshellbackup` file with intelligent merging on restore
+- **Shell Startup & Custom Prompt** - `~/.rootshellrc` sourced on new shell tabs. Fully customizable prompt via `.promptrc.toml` with Starship-compatible format strings, 11 modules, Powerline arrows, and transient prompt support
 - **Local Shell** - Full terminal sessions on iOS and macOS
+
+### Platform Integration
+- **25 Languages** - Arabic, Brazilian Portuguese, Catalan, Czech, Danish, Dutch, Finnish, French, German, Hebrew, Hungarian, Italian, Japanese, Korean, Norwegian Bokmal, Polish, Portuguese, Romanian, Simplified Chinese, Slovenian, Spanish, Swedish, Traditional Chinese, Ukrainian, Vietnamese
+- **Siri & Shortcuts** - Open any saved connection profile from Shortcuts, Siri, or automation triggers. VPN connect/disconnect intents
+- **Live Activity & Widgets** - Lock Screen and Dynamic Island show active sessions with real-time stats. Home Screen widgets for VPN and WiFi info
+- **Paste Image Upload** - Paste clipboard images into SSH sessions to upload files to the remote server and insert the path at cursor
 
 ## Privacy
 
