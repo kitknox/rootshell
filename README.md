@@ -2,44 +2,40 @@
 
 A free, Metal-accelerated terminal emulator for iPhone, iPad, Vision Pro, and Mac.
 
+<p>
+  <img alt="Apple Platforms" src="https://img.shields.io/badge/Apple%20Platforms-iPhone%20%7C%20iPad%20%7C%20Vision%20Pro%20%7C%20Mac-111111?style=flat-square">
+  <img alt="Rendering" src="https://img.shields.io/badge/Rendering-Metal%20Accelerated-5b2eff?style=flat-square">
+  <img alt="SSH" src="https://img.shields.io/badge/SSH-Native-1f6feb?style=flat-square">
+  <img alt="Roam" src="https://img.shields.io/badge/Roam-Seamless%20Network%20Handover-0a7f5a?style=flat-square">
+  <img alt="Pricing" src="https://img.shields.io/badge/Pricing-Free-2ea44f?style=flat-square">
+</p>
+
 **[Website](https://beta.rootshell.com)** · **[App Store](https://apps.apple.com/app/rootshell-local-terminal-ssh/id6755794662)** · **[TestFlight Beta](https://testflight.apple.com/join/DEVnH3N2)** · **[macOS Download](https://beta.rootshell.com/downloads/rootshell-macos-latest.tar.xz)**
 
 <a href="https://apps.apple.com/app/rootshell-local-terminal-ssh/id6755794662">
   <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on the App Store" height="60">
 </a>
 
+## Why rootshell?
+
+rootshell is built for developers who need a terminal that actually works on mobile — not a stripped-down compromise.
+
+It combines GPU-accelerated rendering, native SSH, resilient roaming sessions, deep cloud and Kubernetes integration, and AI-assisted workflows in a single Apple-native app.
+
+## Highlights
+
+- Metal-accelerated terminal rendering powered by libghostty
+- Native SSH with post-quantum key exchange and Secure Enclave key storage
+- Rootshell Roam for seamless WiFi/cellular handoff and persistent mobile sessions
+- Built-in file browser, native git client, and local shell
+- Cloud provider integration for AWS, Azure, Linode, DigitalOcean, and Tailscale
+- Voice-controlled AI agent and built-in assistant inside terminal sessions
+
 ## About
 
 rootshell is a terminal emulator built for Apple platforms. It features GPU-accelerated rendering powered by libghostty, native SSH with post-quantum key exchange, Secure Enclave key storage, VPN tunneling, a built-in file browser and native git client, a voice-controlled AI agent, cloud provider integration (AWS, Azure, Linode, DigitalOcean), Kubernetes node debugging, and Rootshell Roam — a mosh-compatible and tssh (QUIC+KCP) mobile terminal protocol with seamless network roaming and session persistence.
 
 For full feature details, screenshots, and documentation, visit **[beta.rootshell.com](https://beta.rootshell.com)**.
-
-## This Repository
-
-This repository serves as the **public issue tracker** for rootshell. Use it to:
-
-- Report bugs
-- Request features
-- Ask questions about functionality
-
-## Reporting Issues
-
-Before opening an issue, please:
-
-1. **Check existing issues** to avoid duplicates
-2. **Update to the latest version** via the App Store, TestFlight, or the macOS download
-3. **Include relevant details** when reporting bugs:
-   - App version (Settings → About)
-   - Device and OS version
-   - Steps to reproduce
-   - Expected vs actual behavior
-   - Any error messages or screenshots
-
-### Issue Templates
-
-- **Bug Report** - Something isn't working correctly
-- **Feature Request** - Suggest a new feature or improvement
-- **Question** - General questions about usage
 
 ## Getting the App
 
@@ -59,6 +55,20 @@ rootshell is **completely free** with no ads, subscriptions, or in-app purchases
 brew tap kitknox/rootshell
 brew install --cask rootshell
 ```
+
+## Feature Areas
+
+- [Terminal & Rendering](#terminal--rendering)
+- [Visual Effects](#visual-effects)
+- [SSH & Networking](#ssh--networking)
+- [YubiKey & FIDO2](#yubikey--fido2)
+- [Rootshell Roam](#rootshell-roam)
+- [Cloud & Infrastructure](#cloud--infrastructure)
+- [AI Integration](#ai-integration)
+- [Built-in Tools](#built-in-tools)
+- [Input & Interaction](#input--interaction)
+- [Sync & Persistence](#sync--persistence)
+- [Platform Integration](#platform-integration)
 
 ## Key Features
 
@@ -167,6 +177,33 @@ brew install --cask rootshell
 - **Siri & Shortcuts** - Open any saved connection profile from Shortcuts, Siri, or automation triggers. VPN connect/disconnect intents
 - **Live Activity & Widgets** - Lock Screen and Dynamic Island show active sessions with real-time stats. Home Screen widgets for VPN and WiFi info
 - **Paste Image Upload** - Paste clipboard images into SSH sessions to upload files to the remote server and insert the path at cursor
+
+## This Repository
+
+This repository serves as the **public issue tracker** for rootshell. Use it to:
+
+- Report bugs
+- Request features
+- Ask questions about functionality
+
+## Reporting Issues
+
+Before opening an issue, please:
+
+1. **Check existing issues** to avoid duplicates
+2. **Update to the latest version** via the App Store, TestFlight, or the macOS download
+3. **Include relevant details** when reporting bugs:
+   - App version (Settings → About)
+   - Device and OS version
+   - Steps to reproduce
+   - Expected vs actual behavior
+   - Any error messages or screenshots
+
+### Issue Templates
+
+- **Bug Report** - Something isn't working correctly
+- **Feature Request** - Suggest a new feature or improvement
+- **Question** - General questions about usage
 
 ## Privacy
 
