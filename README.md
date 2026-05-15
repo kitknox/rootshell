@@ -111,7 +111,7 @@ brew install --cask rootshell
 - **Mosh-Compatible Protocol** - Native [mosh](https://mosh.org)-compatible implementation built entirely in Swift with SSP (State Synchronization Protocol) support. Works with any standard mosh-server installation
 - **tssh/trzsz Support** - [tssh](https://github.com/trzsz/trzsz-ssh) connections with UDP-based terminal transport offering full native scrollback and lower interactive latency than mosh
 - **QUIC + KCP Transports** - Choose between QUIC (TLS 1.3, modern congestion control) or KCP (AES-GCM-256) for tssh transport. Configure in Settings → Roam → Transport Mode
-- **Session Resumption** - Roam sessions survive app termination and device reboots. Credentials are stored in the Keychain and sessions resume automatically. tsshd reconnect support requires our [upstream PR](https://github.com/trzsz/tsshd/pull/16) ([fork](https://github.com/kitknox/tsshd))
+- **Session Resumption** - Roam sessions survive app termination and device reboots. Credentials are stored in the Keychain and sessions resume automatically.
 - **Seamless Network Roaming** - Switch between WiFi and cellular without dropping your session. Handles IP address changes, network transitions, and temporary connectivity loss with a status banner
 - **STUN Firewall Traversal** - Automatic NAT hole-punching via STUN to enable connections through stateful firewalls without VPN tunnels
 - **Predictive Local Echo** - Keystroke predictions displayed immediately while waiting for server confirmation, making typing responsive on high-latency connections
