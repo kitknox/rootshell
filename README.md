@@ -2,7 +2,7 @@
 
 A free, Metal-accelerated terminal emulator for iPhone, iPad, Vision Pro, and Mac.
 
-**[Website](https://beta.rootshell.com)** · **[App Store](https://apps.apple.com/app/rootshell-local-terminal-ssh/id6755794662)** · **[TestFlight Beta](https://testflight.apple.com/join/DEVnH3N2)** · **[macOS Download](https://beta.rootshell.com/downloads/rootshell-macos-latest.tar.xz)**
+**[Website](https://www.rootshell.com)** · **[App Store](https://apps.apple.com/app/rootshell-local-terminal-ssh/id6755794662)** · **[App Store (China)](https://apps.apple.com/app/rootshell-%E6%9C%AC%E5%9C%B0%E7%BB%88%E7%AB%AF-ssh/id6763402687)** · **[TestFlight Beta](https://testflight.apple.com/join/DEVnH3N2)** · **[macOS Download](https://www.rootshell.com/downloads/rootshell-macos-latest.tar.xz)**
 
 <a href="https://apps.apple.com/app/rootshell-local-terminal-ssh/id6755794662">
   <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on the App Store" height="60">
@@ -12,7 +12,7 @@ A free, Metal-accelerated terminal emulator for iPhone, iPad, Vision Pro, and Ma
 
 rootshell is a terminal emulator built for Apple platforms. It features GPU-accelerated rendering powered by libghostty, native SSH with post-quantum key exchange, Secure Enclave key storage, VPN tunneling, a built-in file browser and native git client, a voice-controlled AI agent, cloud provider integration (AWS, Azure, Linode, DigitalOcean), Kubernetes node debugging, and Rootshell Roam — a mosh-compatible and tssh (QUIC+KCP) mobile terminal protocol with seamless network roaming and session persistence.
 
-For full feature details, screenshots, and documentation, visit **[beta.rootshell.com](https://beta.rootshell.com)**.
+For full feature details, screenshots, and documentation, visit **[www.rootshell.com](https://www.rootshell.com)**.
 
 ## This Repository
 
@@ -48,9 +48,10 @@ rootshell is **completely free** with no ads, subscriptions, or in-app purchases
 | Platform | Link |
 |----------|------|
 | iPhone & iPad | [App Store](https://apps.apple.com/app/rootshell-local-terminal-ssh/id6755794662) |
+| iPhone & iPad (China) | [App Store (China)](https://apps.apple.com/app/rootshell-%E6%9C%AC%E5%9C%B0%E7%BB%88%E7%AB%AF-ssh/id6763402687) |
 | visionOS (beta) | [TestFlight](https://testflight.apple.com/join/DEVnH3N2) |
 | macOS (sandboxed, beta) | [TestFlight](https://testflight.apple.com/join/DEVnH3N2) |
-| macOS (standalone) | [Direct Download](https://beta.rootshell.com/downloads/rootshell-macos-latest.tar.xz) |
+| macOS (standalone) | [Direct Download](https://www.rootshell.com/downloads/rootshell-macos-latest.tar.xz) |
 | macOS (Homebrew) | See below |
 
 ### Install via Homebrew
@@ -145,6 +146,7 @@ brew install --cask rootshell
 - **imgcat** - Display images inline using Kitty graphics protocol (PNG, JPEG, HEIC)
 - **libarchive** - bsdtar, unzip with Zip64, RAR/RAR5, 7-Zip, Zstandard, lz4 support
 - **xz** - XZ/LZMA2 compression and decompression
+- **WASM Runtime** - Compile your own CLI tools in any language that targets WASI Preview 1 (C/C++ via clang/wasi-sdk, Rust, Go, TinyGo, Zig, and more) and run them on device by dropping the `.wasm` into the rootshell directory. Sandboxed filesystem access plus a host-provided socket ABI for TCP, UDP, TLS, and DNS
 
 ### Input & Interaction
 - **Terminal Mouse Support** - Full mouse event passthrough for tmux, vim, zellij
@@ -174,4 +176,4 @@ rootshell collects no analytics or crash data unless otherwise part of the TestF
 
 ## Links
 
-- [Website & Documentation](https://beta.rootshell.com)
+- [Website & Documentation](https://www.rootshell.com)
