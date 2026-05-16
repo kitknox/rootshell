@@ -1,0 +1,4 @@
+.build/
+dist/
+.swiftpm/
+Package.resolved

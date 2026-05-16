@@ -6,18 +6,31 @@ targets WASI Preview 1 (C/C++ via clang/wasi-sdk, Rust, Go, TinyGo, Zig,
 AssemblyScript, and so on) and run them on iPhone, iPad, and Vision Pro by
 dropping the resulting `.wasm` into the rootshell directory.
 
-Two reference implementations, same surface area:
+Three reference implementations, same surface area:
 
-| Demo            | Language | Path           | Builds with |
-|-----------------|----------|----------------|-------------|
-| `wasm-demo`     | Rust     | [`rust/`](rust/) | `rustup target add wasm32-wasip1` |
-| `wasm-demo-go`  | Go       | [`go/`](go/)     | Go 1.21+ (`GOOS=wasip1 GOARCH=wasm`) or TinyGo 0.31+ |
+| Demo                | Language | Path                 | Builds with |
+|---------------------|----------|----------------------|-------------|
+| `wasm-demo`         | Rust     | [`rust/`](rust/)     | `rustup target add wasm32-wasip1` |
+| `wasm-demo-go`      | Go       | [`go/`](go/)         | Go 1.21+ (`GOOS=wasip1 GOARCH=wasm`) or TinyGo 0.31+ |
+| `wasm-demo-swift`   | Swift    | [`swift/`](swift/)   | Swift 6.3+ with the swift.org `wasm` SDK (`wasm32-unknown-wasip1`) |
 
-Both exercise the same subcommands (`hello`, `fs-write`, `fs-read`,
+All three exercise the same subcommands (`hello`, `fs-write`, `fs-read`,
 `fs-escape`, `tcp-client`, `tls-client`, `dns-query`, `tcp-listen`, `all`)
 and link against the same host-provided `rootshell_socket_*` and
 `rootshell_terminal_*` ABIs. Use them as starting points for your own
 ports.
+
+A note on Swift binary size: the demo here deliberately avoids
+`import Foundation`. Foundation works on WASI (URLs, FileHandle,
+ProcessInfo, Data all behave), but it drags in roughly **50 MB** of
+extra wasm (ICU, the full NS object graph, the Swift concurrency
+runtime). At that size, even `hello` takes several seconds to
+instantiate on an iPhone or Vision Pro because the runtime has to
+parse and validate every byte of the module before main runs. Sticking
+to `WASILibc` for file I/O / stdio / environ / exit keeps the demo
+around **3 MB** with no measurable startup delay. Foundation is fine if
+you genuinely need it (JSON, URL parsing, NSCalendar, etc.), but go in
+knowing the cost.
 
 ## Quick start
 
@@ -33,6 +46,10 @@ cd go && ./build.sh
 # Go (TinyGo, smaller binary)
 cd go && ./build.sh tinygo
 # -> dist/wasm-demo-go-tinygo.wasm
+
+# Swift (needs the SwiftWasm wasm32-unknown-wasi SDK, see swift/build.sh)
+cd swift && ./build.sh
+# -> dist/wasm-demo-swift.wasm
 ```
 
 Get the resulting `.wasm` onto the device by either:
@@ -321,9 +338,10 @@ Each subcommand exists to exercise one slice of the runtime:
 `wasm test` self-test runner (which spins up a loopback client),
 not by `all`.
 
-The full source for both bindings is the canonical reference for the
-ABI. For Rust see [`rust/src/socket_shim.rs`](rust/src/socket_shim.rs);
-for Go see [`go/socket.go`](go/socket.go).
+The full source for all three bindings is the canonical reference for
+the ABI. For Rust see [`rust/src/socket_shim.rs`](rust/src/socket_shim.rs);
+for Go see [`go/socket.go`](go/socket.go); for Swift see
+[`swift/Sources/wasm-demo-swift/SocketShim.swift`](swift/Sources/wasm-demo-swift/SocketShim.swift).
 
 ---
 
@@ -337,6 +355,15 @@ toolchains:
 - **Go**: `GOOS=wasip1 GOARCH=wasm go build` (Go 1.21+).
 - **TinyGo**: `tinygo build -target=wasip1 -opt=z` (much smaller
   binaries, occasional stdlib gaps).
+- **Swift**: install the official swift.org `wasm` SDK with
+  `swift sdk install <artifactbundle url>` (the 6.3.2 bundle targets
+  `wasm32-unknown-wasip1`), then `swift build --swift-sdk
+  swift-6.3.2-RELEASE_wasm -c release`. Needs Swift 6.0+ for the
+  `@_extern(wasm, module:, name:)` attribute used to import host
+  functions, plus a matching host toolchain (use
+  [swiftly](https://www.swift.org/install/macos/) to keep them in
+  sync). Skip `import Foundation` unless you need it — see the size
+  note above.
 - **C / C++**: wasi-sdk (`clang --target=wasm32-wasi`).
 - **Zig**: `zig build-exe -target wasm32-wasi`.
 - **AssemblyScript**, **Grain**, etc.: anything that emits a
@@ -351,7 +378,9 @@ declare the imports under the right module name:
 
 In Rust the imports default to module `env` and the host accepts that
 as a fallback; in Go the `//go:wasmimport` directive requires an
-explicit module name (see [`go/socket.go`](go/socket.go)).
+explicit module name (see [`go/socket.go`](go/socket.go)); in Swift
+6.0+ the `@_extern(wasm, module:, name:)` attribute names the module
+explicitly (see [`swift/Sources/wasm-demo-swift/SocketShim.swift`](swift/Sources/wasm-demo-swift/SocketShim.swift)).
 
 Drop the resulting `.wasm` into the rootshell document directory (the
 Files app "rootshell" folder, or `scp` / `sftp` it in directly from a
