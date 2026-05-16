@@ -2,7 +2,7 @@
 
 A free, Metal-accelerated terminal emulator for iPhone, iPad, Vision Pro, and Mac.
 
-**[Website](https://www.rootshell.com)** · **[App Store](https://apps.apple.com/app/rootshell-local-terminal-ssh/id6755794662)** · **[App Store (China)](https://apps.apple.com/app/rootshell-%E6%9C%AC%E5%9C%B0%E7%BB%88%E7%AB%AF-ssh/id6763402687)** · **[TestFlight Beta](https://testflight.apple.com/join/DEVnH3N2)** · **[macOS Download](https://www.rootshell.com/downloads/rootshell-macos-latest.tar.xz)**
+**[Website](https://www.rootshell.com)** · **[App Store](https://apps.apple.com/app/rootshell-local-terminal-ssh/id6755794662)** · **[App Store (China)](https://apps.apple.com/app/rootshell-%E6%9C%AC%E5%9C%B0%E7%BB%88%E7%AB%AF-ssh/id6763402687)** · **[Release Notes](https://www.rootshell.com/release-notes.html)** · **[TestFlight Beta](https://testflight.apple.com/join/DEVnH3N2)** · **[macOS Download](https://www.rootshell.com/downloads/rootshell-macos-latest.tar.xz)**
 
 <a href="https://apps.apple.com/app/rootshell-local-terminal-ssh/id6755794662">
   <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on the App Store" height="60">
