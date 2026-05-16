@@ -146,7 +146,7 @@ brew install --cask rootshell
 - **imgcat** - Display images inline using Kitty graphics protocol (PNG, JPEG, HEIC)
 - **libarchive** - bsdtar, unzip with Zip64, RAR/RAR5, 7-Zip, Zstandard, lz4 support
 - **xz** - XZ/LZMA2 compression and decompression
-- **WASM Runtime** - Compile your own CLI tools in any language that targets WASI Preview 1 (C/C++ via clang/wasi-sdk, Rust, Go, TinyGo, Zig, and more) and run them on device by dropping the `.wasm` into the rootshell directory. Sandboxed filesystem access plus a host-provided socket ABI for TCP, UDP, TLS, and DNS
+- **WASM Runtime** - Compile your own CLI tools in any language that targets WASI Preview 1 (C/C++ via clang/wasi-sdk, Rust, Go, TinyGo, Zig, and more) and run them on device by dropping the `.wasm` into the rootshell directory. Sandboxed filesystem access plus a host-provided socket ABI for TCP, UDP, TLS, and DNS. See [`wasm/`](wasm/) for end-to-end Rust and Go demos, the full host ABI reference, and the raw/cooked terminal mode docs
 
 ### Input & Interaction
 - **Terminal Mouse Support** - Full mouse event passthrough for tmux, vim, zellij
