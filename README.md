@@ -1,6 +1,10 @@
-# rootshell
+<p align="center">
+  <img src="icon.png" alt="rootshell" width="160" height="160">
+</p>
 
-A free, Metal-accelerated terminal emulator for iPhone, iPad, Vision Pro, and Mac.
+<h1 align="center">rootshell</h1>
+
+<p align="center">A free, Metal-accelerated terminal emulator for iPhone, iPad, Vision Pro, and Mac.</p>
 
 **[Website](https://www.rootshell.com)** · **[App Store](https://apps.apple.com/app/rootshell-local-terminal-ssh/id6755794662)** · **[App Store (China)](https://apps.apple.com/app/rootshell-%E6%9C%AC%E5%9C%B0%E7%BB%88%E7%AB%AF-ssh/id6763402687)** · **[Release Notes](https://www.rootshell.com/release-notes.html)** · **[TestFlight Beta](https://testflight.apple.com/join/DEVnH3N2)** · **[macOS Download](https://www.rootshell.com/downloads/rootshell-macos-latest.tar.xz)**
 
