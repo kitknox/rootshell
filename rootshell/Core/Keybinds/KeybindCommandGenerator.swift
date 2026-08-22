@@ -312,6 +312,23 @@ final class KeybindCommandGenerator: ObservableObject {
         }
         #endif
 
+        // System Cancel chord (Cmd+Period). Apple reserves it as an Escape
+        // equivalent, so it defaults to a one-shot ESC. When a keybind claims
+        // cmd+period, the generic handleKeybindCommand command is emitted
+        // instead (same pattern as arrows/Tab/F-keys). No allowKeyRepeat():
+        // the chord is deliberately one-shot, matching system Cancel semantics.
+        #if !os(visionOS)
+        if !isClaimedByKeybind(.commandPeriod) {
+            let cancelCommand = UIKeyCommand(
+                input: ".",
+                modifierFlags: .command,
+                action: #selector(Ghostty.TerminalView.handleSystemCancelCommand(_:))
+            )
+            cancelCommand.wantsPriorityOverSystemBehavior = true
+            commands.append(cancelCommand)
+        }
+        #endif
+
         // Tab key — each combo skipped if claimed by a binding or sequence prefix.
         let tabVariants: [(UIKeyModifierFlags, Selector)] = [
             ([], #selector(Ghostty.TerminalView.handleTabKey(_:))),

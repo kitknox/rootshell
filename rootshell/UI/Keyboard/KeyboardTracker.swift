@@ -170,6 +170,30 @@ class KeyboardTracker {
     private static let softwareKeyboardHeightThreshold: CGFloat = 120
     private static let appTransitionKeyboardPreservationDuration: Duration = .milliseconds(750)
 
+    /// True when the physical Cmd+Period system-cancel chord is down right now.
+    /// Pure GCKeyboard poll used only to disambiguate an event that already
+    /// arrived (translated Escape, or Period with Command stripped); it never
+    /// initiates dispatch, so a stale latched Command bit cannot inject input
+    /// on its own. Requiring Escape to NOT be down rejects a real Escape press
+    /// even under a stale Command latch.
+    @MainActor
+    static func isSystemCancelChordPhysicallyDown() -> Bool {
+        #if os(visionOS)
+        return false
+        #else
+        guard UIApplication.shared.applicationState == .active,
+              let input = GCKeyboard.coalesced?.keyboardInput,
+              input.button(forKeyCode: .period)?.isPressed == true,
+              input.button(forKeyCode: .escape)?.isPressed != true else { return false }
+        let commandDown = input.button(forKeyCode: .leftGUI)?.isPressed == true
+            || input.button(forKeyCode: .rightGUI)?.isPressed == true
+        let extraModifier = [GCKeyCode.leftShift, .rightShift, .leftControl,
+                             .rightControl, .leftAlt, .rightAlt]
+            .contains { input.button(forKeyCode: $0)?.isPressed == true }
+        return commandDown && !extraModifier
+        #endif
+    }
+
     // MARK: - Initialization
 
     private init() {

@@ -471,6 +471,20 @@ class ShortcutCaptureUIView: UIView {
         }
     }
 
+    private func cancelCapture() {
+        guard !hasCompleted else { return }
+        hasCompleted = true
+        onCancel?()
+    }
+
+    /// Catalyst delivers the reserved Cmd+Period chord only through the menu
+    /// rail (nil-target menuSystemCancel action). The action reaches this view
+    /// first while it owns first responder, so recording wins over the
+    /// terminal handler.
+    @objc func menuSystemCancel(_ sender: Any?) {
+        processCapture(trigger: .commandPeriod)
+    }
+
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         for press in presses {
             guard let key = press.key else { continue }
@@ -484,9 +498,21 @@ class ShortcutCaptureUIView: UIView {
             ]
             guard !modifierOnlyKeys.contains(key.keyCode) else { continue }
 
+            // iPadOS may deliver the reserved Cmd+Period chord as Period with
+            // Command stripped or as a translated Escape. Normalize either
+            // representation so the chord is recordable; the twin keyCommands
+            // delivery dedups via duplicateDeliveryWindow since both produce
+            // the identical trigger.
+            if (key.keyCode != .keyboardEscape && KeyCode.sentinelKey(for: key.characters) == .escape)
+                || ((key.keyCode == .keyboardPeriod || key.keyCode == .keyboardEscape)
+                    && KeyboardTracker.isSystemCancelChordPhysicallyDown()) {
+                processCapture(trigger: .commandPeriod)
+                return
+            }
+
             // Handle Escape to cancel
             if key.keyCode == .keyboardEscape && key.modifierFlags.isEmpty {
-                onCancel?()
+                cancelCapture()
                 return
             }
 

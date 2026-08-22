@@ -57,6 +57,22 @@ final class TerminalInputController {
     /// Whether GCKeyboard modifier snapshots can currently be trusted.
     var isGCKeyboardModifierStateTrusted = true
 
+    /// UIKit can deliver one physical press of the Cmd+Period system-cancel
+    /// chord through both a UIKeyCommand and pressesBegan within milliseconds
+    /// (the same twin-delivery behavior ShortcutCaptureUIView dedups).
+    /// Time-based so a delivery whose release never reaches pressesEnded
+    /// (UIKeyCommand-only rail) cannot wedge the latch.
+    private var lastSystemCancelDeliveryTime: CFTimeInterval = 0
+    private static let systemCancelDuplicateWindow: CFTimeInterval = 0.05
+
+    /// True for the first delivery of a physical chord press; twins are rejected.
+    func consumeSystemCancelChordDelivery() -> Bool {
+        let now = CACurrentMediaTime()
+        guard now - lastSystemCancelDeliveryTime > Self.systemCancelDuplicateWindow else { return false }
+        lastSystemCancelDeliveryTime = now
+        return true
+    }
+
     func invalidateKeyCommandCache() {
         cachedKeyCommands = nil
         #if targetEnvironment(macCatalyst)

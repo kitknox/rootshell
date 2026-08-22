@@ -259,6 +259,31 @@ enum KeyCode: String, Codable, CaseIterable, Hashable, Sendable {
         }
     }
 
+    /// UIKit's "UIKeyInput*" sentinels. They can arrive in `UIKey.characters`
+    /// for a translated chord and must never reach a terminal as literal text.
+    /// Derived from `uiKeyInput` so the two cannot drift apart.
+    static let uiKeyInputSentinels: [String: KeyCode] = Dictionary(
+        allCases
+            .filter { $0.uiKeyInput.hasPrefix("UIKeyInput") }
+            .map { ($0.uiKeyInput, $0) },
+        uniquingKeysWith: { first, _ in first }
+    )
+
+    /// The key a UIKit sentinel denotes, or nil when `text` is real text.
+    /// Matched exactly, never by prefix: `insertText` also receives pasted text.
+    static func sentinelKey(for text: String) -> KeyCode? {
+        uiKeyInputSentinels[text]
+    }
+
+    static func isUIKeyInputSentinel(_ text: String) -> Bool {
+        uiKeyInputSentinels[text] != nil
+    }
+
+    /// `uiKeyInput` when it is real text; nil for sentinels.
+    var literalKeyInput: String? {
+        KeyCode.isUIKeyInputSentinel(uiKeyInput) ? nil : uiKeyInput
+    }
+
     /// Initialize from UIKeyboardHIDUsage
     init?(hidUsage: UIKeyboardHIDUsage) {
         switch hidUsage {
@@ -417,17 +442,11 @@ enum KeyCode: String, Codable, CaseIterable, Hashable, Sendable {
         case "\u{08}": self = .backspace
 
         default:
-            // Check against UIKeyCommand constants
-            if uiKeyInput == UIKeyCommand.inputEscape { self = .escape }
-            else if uiKeyInput == UIKeyCommand.inputUpArrow { self = .up }
-            else if uiKeyInput == UIKeyCommand.inputDownArrow { self = .down }
-            else if uiKeyInput == UIKeyCommand.inputLeftArrow { self = .left }
-            else if uiKeyInput == UIKeyCommand.inputRightArrow { self = .right }
-            else if uiKeyInput == UIKeyCommand.inputPageUp { self = .pageUp }
-            else if uiKeyInput == UIKeyCommand.inputPageDown { self = .pageDown }
-            else if uiKeyInput == UIKeyCommand.inputHome { self = .home }
-            else if uiKeyInput == UIKeyCommand.inputEnd { self = .end }
-            else { return nil }
+            // UIKeyCommand constants ("UIKeyInputEscape" and friends). The
+            // derived table also covers Delete and F1-F12, which the old
+            // hand-rolled chain missed.
+            guard let key = KeyCode.sentinelKey(for: uiKeyInput) else { return nil }
+            self = key
         }
     }
 
@@ -578,6 +597,9 @@ enum KeyCode: String, Codable, CaseIterable, Hashable, Sendable {
 struct KeyTrigger: Codable, Hashable, CustomStringConvertible, Sendable {
     let key: KeyCode
     let modifiers: KeybindModifiers
+
+    /// The chord Apple platforms reserve as the system Cancel/Escape shortcut.
+    static let commandPeriod = KeyTrigger(key: .period, modifiers: .command)
 
     init(key: KeyCode, modifiers: KeybindModifiers = []) {
         self.key = key

@@ -3699,6 +3699,9 @@ extension Ghostty {
         #endif
         
         func insertText(_ text: String) {
+            // Sentinel key names are not text. Drop before any flag is consumed.
+            if KeyCode.isUIKeyInputSentinel(text) { return }
+
             // Skip if we already handled this key in pressesBegan (OPTION+key on Catalyst)
             // The text input system sends composed characters (e.g., 'å' for Option+a) separately
             if didHandleOptionKey {
@@ -3998,7 +4001,10 @@ extension Ghostty {
         
         func handleSpecialKey(_ key: UIKey) -> String? {
             let modifiers = key.modifierFlags
-            
+            // Sentinel characters are a key name; the keyCode branches below
+            // still resolve the real key.
+            let characters = KeyCode.isUIKeyInputSentinel(key.characters) ? "" : key.characters
+
             // Check for Tab with Shift modifier FIRST (before control character check)
             // iOS converts Shift+Tab to control character 0x19, but we need to catch it as Tab
             if key.keyCode == .keyboardTab && modifiers.contains(.shift) {
@@ -4016,7 +4022,7 @@ extension Ghostty {
             if key.keyCode == .keyboardDeleteOrBackspace {
                 return "\u{7F}"
             }
-            if let char = key.characters.first, char.unicodeScalars.count == 1 {
+            if let char = characters.first, char.unicodeScalars.count == 1 {
                 let scalar = char.unicodeScalars.first!
                 if scalar.value == 8 {
                     return "\u{7F}"
@@ -4034,7 +4040,7 @@ extension Ghostty {
             
             // Handle Ctrl combinations explicitly
             if modifiers.contains(.control) {
-                if let char = key.characters.lowercased().first {
+                if let char = characters.lowercased().first {
                     // Ctrl+A through Ctrl+Z map to ASCII 1-26
                     if let asciiValue = char.asciiValue, asciiValue >= 97, asciiValue <= 122 {
                         let controlChar = asciiValue - 96
@@ -5213,6 +5219,9 @@ extension Ghostty.TerminalView {
         guard let surface = surface else { return false }
         guard let nativeKeycode = Ghostty.Input.nativeKeyCode(for: keyCode) else { return false }
 
+        // A UIKit sentinel is a key name, not text.
+        let text = text.flatMap { KeyCode.isUIKeyInputSentinel($0) ? nil : $0 }
+
         let event = Ghostty.Input.KeyEvent(
             nativeKeyCode: nativeKeycode,
             action: action,
@@ -5248,6 +5257,9 @@ extension Ghostty.TerminalView: KeyboardButtonDelegate {
     func keyPressed(_ key: String, modifiers: KeyModifiers) {
         // Debug logging
         Ghostty.logger.debug("TerminalView.keyPressed: key=\(key), modifiers rawValue=\(modifiers.rawValue)")
+
+        // A UIKit sentinel is a key name, not text.
+        guard !KeyCode.isUIKeyInputSentinel(key) else { return }
 
         // Accessory keys bypass UIKit's normal keyboard insertion path. Notify
         // the text system after shifted input so one-shot software Shift is

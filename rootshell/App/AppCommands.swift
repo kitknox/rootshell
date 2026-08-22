@@ -54,6 +54,14 @@ final class MenuShortcutState: ObservableObject {
                 continue
             }
 
+            #if targetEnvironment(macCatalyst)
+            // The fixed "Send Escape" menu item is the sole owner of ⌘. on
+            // Catalyst (the reserved chord only arrives via the menu rail);
+            // its handler dispatches a cmd+period binding itself. Publishing
+            // the shortcut here too would create a duplicate key equivalent.
+            if firstTrigger == .commandPeriod { continue }
+            #endif
+
             let modifiers = firstTrigger.swiftUIEventModifiers
             newShortcuts[binding.action] = KeyboardShortcut(keyEquivalent, modifiers: modifiers)
         }
@@ -461,6 +469,24 @@ struct TerminalCommands: Commands {
                 }
             }
             .modifier(DynamicShortcut(action: .toggle_mouse_capture, shortcuts: shortcutState.shortcuts))
+
+            #if targetEnvironment(macCatalyst)
+            Divider()
+
+            // Cmd+Period never reaches responder UIKeyCommands or press events
+            // on Catalyst — a menu key equivalent (like Xcode's ⌘. Stop item)
+            // is the one rail that receives AND consumes the reserved chord.
+            // Fixed shortcut: MenuShortcutState excludes cmd+period so this
+            // item stays its sole owner; the handler dispatches a cmd+period
+            // keybind first and falls back to sending Escape.
+            Button("Send Escape") {
+                UIApplication.shared.sendAction(
+                    #selector(Ghostty.TerminalView.menuSystemCancel(_:)),
+                    to: nil, from: nil, for: nil
+                )
+            }
+            .keyboardShortcut(".", modifiers: .command)
+            #endif
         }
     }
 }

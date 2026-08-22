@@ -51,6 +51,13 @@ extension UIApplication {
 
     // MARK: Terminal Menu Actions
 
+    /// Reserved Cmd+Period chord, delivered via the menu rail. The nil-target
+    /// walk starts at the first responder, so a recording ShortcutCaptureUIView
+    /// wins over the focused terminal's handler.
+    @objc func ghostty_systemCancel(_ sender: Any?) {
+        sendAction(#selector(Ghostty.TerminalView.menuSystemCancel(_:)), to: nil, from: sender, for: nil)
+    }
+
     @objc func ghostty_increaseFontSize(_ sender: Any?) {
         sendAction(#selector(Ghostty.TerminalView.increaseFontSize(_:)), to: nil, from: sender, for: nil)
     }
@@ -1048,10 +1055,26 @@ class CatalystAppDelegate: AppDelegate {
             toggleCompose, toggleMouseCapture
         ])
 
+        // Cmd+Period never reaches responder UIKeyCommands or press events on
+        // Catalyst — a menu key equivalent (like Xcode's ⌘. Stop item) is the
+        // one rail that receives AND consumes the reserved chord. The handler
+        // dispatches a cmd+period keybind first and falls back to sending
+        // Escape.
+        let sendEscape = UIKeyCommand(
+            title: String(localized: "Send Escape"),
+            action: #selector(UIApplication.ghostty_systemCancel(_:)),
+            input: ".",
+            modifierFlags: [.command]
+        )
+
+        let systemCancelGroup = UIMenu(title: "", options: .displayInline, children: [
+            sendEscape
+        ])
+
         let terminalMenu = UIMenu(
             title: String(localized: "Terminal"),
             identifier: UIMenu.Identifier("com.rootshell.terminal"),
-            children: [splitCreateGroup, focusSplitGroup, splitManageGroup, scrollGroup, composeGroup]
+            children: [splitCreateGroup, focusSplitGroup, splitManageGroup, scrollGroup, composeGroup, systemCancelGroup]
         )
 
         builder.insertSibling(terminalMenu, afterMenu: .view)
