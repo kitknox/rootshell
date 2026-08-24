@@ -17,16 +17,15 @@ import AuthenticationServices
 /// Gets the frontmost key window so Authentication Services presents above the
 /// settings sidebar that initiated the request.
 private func getKeyWindow() -> UIWindow? {
-    let activeScenes = UIApplication.shared.connectedScenes
-        .compactMap { $0 as? UIWindowScene }
+    let activeScenes = UIApplication.shared.deviceWindowScenes
         .filter { $0.activationState == .foregroundActive }
 
     return activeScenes.lazy
-        .compactMap { scene in scene.windows.first(where: { $0.isKeyWindow }) }
+        .compactMap { scene in scene.windows.first(where: { $0.isKeyWindow && !$0.isExternalDisplayPresentation }) }
         .first
         ?? activeScenes.lazy
         .flatMap(\.windows)
-        .first(where: { !$0.isHidden })
+        .first(where: { !$0.isHidden && !$0.isExternalDisplayPresentation })
 }
 
 /// View for generating a passkey or external FIDO2 SSH credential.

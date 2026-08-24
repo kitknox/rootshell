@@ -1336,8 +1336,7 @@ struct CloudAccountAddView: View {
 /// Required because SwiftUI structs cannot conform to NSObject protocols
 private class AuthSessionPresenter: NSObject, ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = windowScene.windows.first else {
+        guard let window = UIApplication.shared.deviceKeyWindow else {
             fatalError("No window available for ASWebAuthenticationSession")
         }
         return window

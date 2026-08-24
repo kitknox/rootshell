@@ -394,6 +394,7 @@ class KeyboardTracker {
 
     @MainActor
     @objc private func sceneWillDeactivateForKeyboard(_ notification: Notification) {
+        guard !notification.isFromExternalDisplayScene else { return }
         beginAppTransitionKeyboardPreservationIfNeeded(autoClearIfAppStaysActive: true)
     }
 
@@ -418,6 +419,7 @@ class KeyboardTracker {
 
     @MainActor
     @objc private func sceneDidActivateForKeyboard(_ notification: Notification) {
+        guard !notification.isFromExternalDisplayScene else { return }
         scheduleAppTransitionKeyboardPreservationClear()
     }
 
@@ -610,10 +612,12 @@ class KeyboardTracker {
         for scene in UIApplication.shared.connectedScenes {
             guard let windowScene = scene as? UIWindowScene,
                   windowScene !== ownerScene,
+                  windowScene.session.role == .windowApplication,
                   windowScene.activationState == .foregroundActive else { continue }
             for window in windowScene.windows
             where window.windowLevel == .normal
                 && !window.isHidden
+                && !window.isExternalDisplayPresentation
                 && window.rootViewController != nil {
                 if window.traitCollection.activeAppearance == .active { return true }
             }
@@ -1276,7 +1280,9 @@ class KeyboardTracker {
             return true
         }
 
-        let scenes = UIApplication.shared.connectedScenes
+        // Device scenes only: the external scene stays .foregroundActive for
+        // its lifetime and would mask every device-side deactivation.
+        let scenes = UIApplication.shared.deviceWindowScenes
         let hasForegroundActiveScene = scenes.contains { $0.activationState == .foregroundActive }
         let hasForegroundInactiveScene = scenes.contains { $0.activationState == .foregroundInactive }
         return hasForegroundInactiveScene && !hasForegroundActiveScene

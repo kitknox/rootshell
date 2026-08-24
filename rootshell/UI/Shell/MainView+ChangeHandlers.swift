@@ -296,6 +296,8 @@ extension MainView {
             // Catalyst activation-only work remains in CatalystAppDelegate.
             #endif
             .onChange(of: windowIsKeyWindow) { _, newValue in
+                // External window never becomes key; never claim device intents.
+                guard !isExternalDisplayWindow else { return }
                 updateWindowFocusState()
                 if newValue {
                     refreshSelectionAfterExternalTabMutation(allowFocus: true)
@@ -352,6 +354,7 @@ extension MainView {
             .onChange(of: tabBarHidden) { _, isHidden in
                 // If the tab bar was just hidden while no terminals exist,
                 // show the connection sheet so the user isn't stranded.
+                guard !isExternalDisplayWindow else { return }
                 if isHidden && terminals.isEmpty && !showConnectionSidebar {
                     showConnectionSidebar = true
                 }

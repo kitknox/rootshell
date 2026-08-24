@@ -45,6 +45,11 @@ extension Ghostty.TerminalView {
             hideBrightnessHUD()
         }
 
+        #if !targetEnvironment(macCatalyst)
+        // Tapping a device terminal while forwarding returns typing focus.
+        ExternalDisplayManager.shared.noteDeviceTerminalTapped(windowId: windowId)
+        #endif
+
         // Notify MainView to update focused terminal
         // setFocusedTerminal() will handle UIKit focus via focusDidChange()
         NotificationCenter.default.post(name: .focusSplit, object: self)
@@ -326,6 +331,11 @@ extension Ghostty.TerminalView {
     /// Present a transient edit menu at the given point.
     /// Creates a fresh UIEditMenuInteraction each time to avoid conflicts with UIContextMenuInteraction.
     func presentTransientEditMenu(at point: CGPoint, fullContextMenu: Bool = false) {
+        #if !targetEnvironment(macCatalyst)
+        // Parked: the menu would render on the unhittable external screen.
+        if isExternalDisplayTerminal,
+           !ExternalDisplayManager.shared.isControlSurfaceActive { return }
+        #endif
         cancelPendingDoubleTapAction()
 
         // Remove any existing transient edit menu
@@ -870,6 +880,13 @@ extension Ghostty.TerminalView {
 extension Ghostty.TerminalView {
 
     override func copy(_ sender: Any?) {
+        #if !targetEnvironment(macCatalyst)
+        // Responder-chain actions follow typing focus to the external display.
+        if let redirect = externalInputRedirectTarget {
+            redirect.copy(sender)
+            return
+        }
+        #endif
         guard let surface = surface else { return }
 
         // Check if there's a selection
@@ -899,6 +916,12 @@ extension Ghostty.TerminalView {
     }
 
     override func paste(_ sender: Any?) {
+        #if !targetEnvironment(macCatalyst)
+        if let redirect = externalInputRedirectTarget {
+            redirect.paste(sender)
+            return
+        }
+        #endif
         // Check for non-text clipboard content when session supports SFTP upload.
         // On a tmux -CC pane this resolves the gateway's remote host (see
         // attachmentUploadSSHConfig) so image paste works there too.
@@ -925,11 +948,30 @@ extension Ghostty.TerminalView {
     }
 
     override func selectAll(_ sender: Any?) {
+        #if !targetEnvironment(macCatalyst)
+        if let redirect = externalInputRedirectTarget {
+            _ = redirect.performAction("select_all")
+            return
+        }
+        #endif
         // Use Ghostty's select_all binding action
         _ = performAction("select_all")
     }
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        #if !targetEnvironment(macCatalyst)
+        // Validate against the terminal the action lands on; paste falls
+        // through (pasteboard state is device-global).
+        if let redirect = externalInputRedirectTarget {
+            if action == #selector(copy(_:)) {
+                guard let surface = redirect.surface else { return false }
+                return ghostty_surface_has_selection(surface)
+            }
+            if action == #selector(selectAll(_:)) {
+                return redirect.surface != nil
+            }
+        }
+        #endif
         if action == #selector(copy(_:)) {
             guard let surface = surface else { return false }
             return ghostty_surface_has_selection(surface)
@@ -1018,8 +1060,7 @@ extension Ghostty.TerminalView {
         alert.addAction(cancelAction)
 
         // Find the presenting view controller
-        if let windowScene = self.window?.windowScene,
-           let rootViewController = windowScene.windows.first?.rootViewController {
+        if let rootViewController = self.window?.rootViewController {
             var presenter = rootViewController
             while let presented = presenter.presentedViewController {
                 presenter = presented
@@ -1035,6 +1076,15 @@ extension Ghostty.TerminalView {
 
     /// Sends user input to the appropriate destination based on platform
     func sendUserInput(_ data: Data) {
+        #if !targetEnvironment(macCatalyst)
+        // Toolbar keys, paste, compose and every other byte source on the
+        // device terminal act on the external terminal while forwarding.
+        if let redirect = externalInputRedirectTarget {
+            redirect.sendUserInput(data)
+            return
+        }
+        #endif
+
         // tmux -CC gateway: a lone ESC delivered to the gateway view means the
         // user is on the gateway and wants out of control mode. Detach instead of
         // forwarding the raw ESC to tmux. This is the convergence point for every
@@ -2334,8 +2384,7 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
         alert.addAction(okAction)
         alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
 
-        if let windowScene = self.window?.windowScene,
-           let rootViewController = windowScene.windows.first?.rootViewController {
+        if let rootViewController = self.window?.rootViewController {
             var presenter = rootViewController
             while let presented = presenter.presentedViewController {
                 presenter = presented

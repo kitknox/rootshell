@@ -191,6 +191,24 @@ struct SettingsAppearanceSection: View {
                 }
                 .themedRow()
 
+                #if !targetEnvironment(macCatalyst)
+                NavigationLink {
+                    ExternalDisplaySettingsView()
+                } label: {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "tv")
+                        Text("External Display")
+                        Spacer()
+                        Text(ExternalDisplaySettings.isEnabled
+                             ? String(localized: "On", comment: "Toggle state: enabled")
+                             : String(localized: "Off", comment: "Toggle state: disabled"))
+                            .foregroundColor(.secondary)
+                            .font(.subheadline)
+                    }
+                }
+                .themedRow()
+                #endif
+
                 NavigationLink {
                     BatterySettingsView()
                 } label: {

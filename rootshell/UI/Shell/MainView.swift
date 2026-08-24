@@ -474,7 +474,11 @@ struct MainView: View {
                     DispatchQueue.main.async {
                         if windowSceneSessionID != newID {
                             windowSceneSessionID = newID
-                            TerminalWindowRegistry.updateSceneSessionId(newID, for: windowId)
+                            // External window: never map "external" to the device
+                            // scene it shares (scene-keyed routing would misresolve).
+                            if !isExternalDisplayWindow {
+                                TerminalWindowRegistry.updateSceneSessionId(newID, for: windowId)
+                            }
                             #if targetEnvironment(macCatalyst)
                             // The scene link is now resolvable — this is the
                             // precise event the geometry restore was waiting for.
@@ -486,23 +490,38 @@ struct MainView: View {
                             }
                             #endif
                         }
-                        if windowSafeAreaInsets.top != newInsets.top ||
-                            windowSafeAreaInsets.leading != newInsets.leading ||
-                            windowSafeAreaInsets.bottom != newInsets.bottom ||
-                            windowSafeAreaInsets.trailing != newInsets.trailing {
-                            windowSafeAreaInsets = newInsets
+                        // External window renders for a screen with no safe areas;
+                        // in control mode its host is the device window (notch).
+                        let effectiveInsets = isExternalDisplayWindow ? EdgeInsets() : newInsets
+                        if windowSafeAreaInsets.top != effectiveInsets.top ||
+                            windowSafeAreaInsets.leading != effectiveInsets.leading ||
+                            windowSafeAreaInsets.bottom != effectiveInsets.bottom ||
+                            windowSafeAreaInsets.trailing != effectiveInsets.trailing {
+                            windowSafeAreaInsets = effectiveInsets
                         }
-                        if windowIsKeyWindow != isKeyWindow {
-                            windowIsKeyWindow = isKeyWindow
+                        let effectiveIsKey = isExternalDisplayWindow ? false : isKeyWindow
+                        if windowIsKeyWindow != effectiveIsKey {
+                            windowIsKeyWindow = effectiveIsKey
                             #if targetEnvironment(macCatalyst) && STANDALONE
                             MainAlertController.registerWindowController(alerts, isKeyWindow: isKeyWindow)
                             #endif
                         }
+                        #if !targetEnvironment(macCatalyst)
+                        if !isExternalDisplayWindow {
+                            if let scene {
+                                ExternalDisplayManager.shared.handleDeviceSceneReady(windowScene: scene)
+                            }
+                            ExternalDisplayManager.shared.noteDeviceWindowFocused(
+                                windowId: windowId,
+                                isKey: isKeyWindow
+                            )
+                        }
+                        #endif
                         #if targetEnvironment(macCatalyst) && STANDALONE
                         MainAlertController.registerWindowController(alerts, isKeyWindow: isKeyWindow)
                         #endif
                     }
-                }, onFrameUpdate: { frame in
+                }, suppressesFocusRegistry: isExternalDisplayWindow, onFrameUpdate: { frame in
                     // Continuously track this window's own frame so save doesn't
                     // depend on the terminate-time scene lookup (nil on macOS 27).
                     #if targetEnvironment(macCatalyst)

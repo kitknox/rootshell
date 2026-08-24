@@ -1663,8 +1663,33 @@ struct VerticalTabSidebar: View {
         }
     }
 
+    /// Standalone external-display entries: unlike the window-transfer menu
+    /// below they are offered on iPhone too, whenever a display is attached.
+    @ViewBuilder
+    private func externalDisplayItems(for tab: TabModel) -> some View {
+        #if !targetEnvironment(macCatalyst)
+        if TabTransferCoordinator.canOfferExternalDisplayTransfers,
+           TabTransferCoordinator.shared.canTransfer(tab) {
+            if windowId == ExternalDisplay.windowId {
+                Button {
+                    ExternalDisplayManager.shared.moveTabToDevice(tabID: tab.id)
+                } label: {
+                    Label("Move to Device", systemImage: "iphone")
+                }
+            } else {
+                Button {
+                    ExternalDisplayManager.shared.moveTabToExternal(tabID: tab.id, from: windowId)
+                } label: {
+                    Label("Move to External Display", systemImage: "tv")
+                }
+            }
+        }
+        #endif
+    }
+
     @ViewBuilder
     private func moveToWindowItems(for tab: TabModel) -> some View {
+        externalDisplayItems(for: tab)
         if TabTransferCoordinator.canOfferWindowTransfers,
            TabTransferCoordinator.shared.canTransfer(tab) {
             let targets = TerminalWindowRegistry.targets(excluding: windowId)
@@ -1681,13 +1706,16 @@ struct VerticalTabSidebar: View {
                         Label("\(target.title) (\(target.tabCount))", systemImage: "macwindow")
                     }
                 }
-                if !targets.isEmpty {
-                    Divider()
-                }
-                Button {
-                    onMoveTabToNewWindow(tab)
-                } label: {
-                    Label("New Window", systemImage: "plus.rectangle.on.rectangle")
+                // No new scene can be spawned from the external window.
+                if windowId != ExternalDisplay.windowId {
+                    if !targets.isEmpty {
+                        Divider()
+                    }
+                    Button {
+                        onMoveTabToNewWindow(tab)
+                    } label: {
+                        Label("New Window", systemImage: "plus.rectangle.on.rectangle")
+                    }
                 }
             } label: {
                 Label("Move to Window", systemImage: "arrowshape.turn.up.right")

@@ -20,9 +20,10 @@ extension MainView {
     /// deferred pass still claims — a request is never dropped.
     func consumePendingIntentRequests(retriesRemaining: Int = 20) {
         guard AppIntentCoordinator.shared.hasPending else { return }
+        // Intents are device-side; count device scenes only.
+        guard !isExternalDisplayWindow else { return }
 
-        let windowScenes = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
+        let windowScenes = UIApplication.shared.deviceWindowScenes
         if windowScenes.count > 1 && !windowIsKeyWindow {
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 700_000_000)

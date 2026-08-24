@@ -87,6 +87,15 @@ enum TerminalWindowRegistry {
             .compactMap { windowId, weakModel -> TerminalWindowTransferTarget? in
                 guard windowId != sourceWindowId,
                       let model = weakModel.model else { return nil }
+                if windowId == ExternalDisplay.windowId {
+                    // Only a live session is a target; never on Catalyst.
+                    guard TabTransferCoordinator.canOfferExternalDisplayTransfers else { return nil }
+                    return TerminalWindowTransferTarget(
+                        id: windowId,
+                        title: String(localized: "External Display", comment: "Transfer target: the connected external display window"),
+                        tabCount: model.tabs.count
+                    )
+                }
                 let title = model.selectedTab?.title
                     ?? model.tabs.first?.title
                     ?? String(localized: "Window", comment: "Fallback app window title")
@@ -142,6 +151,16 @@ final class TabTransferCoordinator {
         #endif
     }
 
+    /// External-display transfers bypass the multi-window gate: offered on
+    /// iPhone too, whenever a display session is active.
+    static var canOfferExternalDisplayTransfers: Bool {
+        #if targetEnvironment(macCatalyst)
+        return false
+        #else
+        return ExternalDisplayManager.shared.isExternalSessionActive
+        #endif
+    }
+
     func beginDrag(sourceWindowId: String, tabID: UUID) -> NSItemProvider {
         let payload = DragPayload(sourceWindowId: sourceWindowId, tabID: tabID)
         activeDragPayload = payload
@@ -172,6 +191,8 @@ final class TabTransferCoordinator {
     }
 
     func canAcceptActiveDrag(in destinationWindowId: String) -> Bool {
+        // The external window is not a touch target; use the explicit move actions.
+        guard destinationWindowId != ExternalDisplay.windowId else { return false }
         guard let activeDragPayload,
               activeDragPayload.sourceWindowId != destinationWindowId,
               let sourceModel = TerminalWindowRegistry.tabsModel(for: activeDragPayload.sourceWindowId),
@@ -492,14 +513,14 @@ final class TabTransferCoordinator {
     }
 
     private func closeEmptiedSourceWindow(_ sourceWindowId: String) {
+        // The external window stays alive (empty state) when emptied; only
+        // device scenes count toward "one of several".
         guard sourceWindowId != "visor",
+              sourceWindowId != ExternalDisplay.windowId,
               let sceneSessionId = TerminalWindowRegistry.sceneSessionId(for: sourceWindowId),
-              let scene = UIApplication.shared.connectedScenes
-                  .compactMap({ $0 as? UIWindowScene })
+              let scene = UIApplication.shared.deviceWindowScenes
                   .first(where: { $0.session.persistentIdentifier == sceneSessionId }),
-              UIApplication.shared.connectedScenes
-                  .compactMap({ $0 as? UIWindowScene })
-                  .count > 1 else {
+              UIApplication.shared.deviceWindowScenes.count > 1 else {
             return
         }
 

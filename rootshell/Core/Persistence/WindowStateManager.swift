@@ -17,6 +17,12 @@ final class WindowStateManager {
 
     private nonisolated static let logger = Logger(subsystem: "com.rootshell", category: "WindowStateManager")
     private static let visorWindowId = "visor"
+    private static let externalWindowId = ExternalDisplay.windowId
+
+    /// Windows that restore as regular device windows.
+    private static func isRegularWindowId(_ id: String) -> Bool {
+        id != visorWindowId && id != externalWindowId
+    }
 
     // MARK: - Settings
 
@@ -449,12 +455,13 @@ final class WindowStateManager {
             let terminalIds = state.allTerminalIds
             ResumeDebugLogger.shared.log("Loaded state: \(state.windows.count) windows, terminalIds=\(terminalIds.map { $0.uuidString.prefix(8) })")
 
-            pendingRestoration = state
+            let mergedState = Self.mergingExternalWindowIntoRegular(state)
+            pendingRestoration = mergedState
             restoredWindowIds.removeAll()
             requestedRegularRestorationWindowCount = 0
             regularRestorationActivationRetryCount = 0
             restoreFrameConnectIndex = 0
-            return state
+            return mergedState
 
         } catch {
             Self.logger.error("Failed to load saved state: \(error.localizedDescription)")
@@ -465,6 +472,24 @@ final class WindowStateManager {
             ScrollbackPersistenceManager.shared.cleanupOrphanedFiles(activeTerminalIds: [])
             return nil
         }
+    }
+
+    /// The external window exists only while a display is attached, so its
+    /// saved tabs fold into the first regular window at load time. Without a
+    /// regular window the entry stays for the regular fallback to claim.
+    private static func mergingExternalWindowIntoRegular(_ state: AppWindowState) -> AppWindowState {
+        guard let externalIndex = state.windows.firstIndex(where: { $0.id == externalWindowId }) else {
+            return state
+        }
+        var state = state
+        guard let regularIndex = state.windows.firstIndex(where: { isRegularWindowId($0.id) }) else {
+            return state
+        }
+        let external = state.windows.remove(at: externalIndex)
+        let destinationIndex = regularIndex > externalIndex ? regularIndex - 1 : regularIndex
+        state.windows[destinationIndex].tabs.append(contentsOf: external.tabs)
+        Self.logger.info("Merged \(external.tabs.count) external-display tabs into window \(state.windows[destinationIndex].id)")
+        return state
     }
 
     /// Get pending state for a specific window (and mark as restored)
@@ -520,7 +545,9 @@ final class WindowStateManager {
         let window: SerializableWindow?
         if let exactWindow {
             window = exactWindow
-        } else if allowRegularWindowFallback, windowId != Self.visorWindowId {
+        } else if allowRegularWindowFallback, Self.isRegularWindowId(windowId) {
+            // A leftover external entry (no regular window saved) is claimable
+            // here by a device window; it is never a restoration scene of its own.
             window = state.windows.first {
                 $0.id != Self.visorWindowId && !restoredWindowIds.contains($0.id)
             }
@@ -530,7 +557,7 @@ final class WindowStateManager {
 
         if let window = window {
             restoredWindowIds.insert(window.id)
-            if window.id != Self.visorWindowId,
+            if Self.isRegularWindowId(window.id),
                window.id != windowId,
                requestedRegularRestorationWindowCount > 0 {
                 requestedRegularRestorationWindowCount -= 1
@@ -594,7 +621,7 @@ final class WindowStateManager {
     /// that window). Returns nil when exhausted or the window has no saved frame.
     func nextPendingRestoreFrame() -> CGRect? {
         guard let state = pendingRestoration else { return nil }
-        let regulars = state.windows.filter { $0.id != Self.visorWindowId }
+        let regulars = state.windows.filter { Self.isRegularWindowId($0.id) }
         guard restoreFrameConnectIndex < regulars.count else { return nil }
         let window = regulars[restoreFrameConnectIndex]
         restoreFrameConnectIndex += 1
@@ -616,7 +643,7 @@ final class WindowStateManager {
     func claimPendingRegularWindowActivationCount() -> Int {
         guard let state = pendingRestoration else { return 0 }
         let pendingRegularCount = state.windows.filter {
-            $0.id != Self.visorWindowId && !restoredWindowIds.contains($0.id)
+            Self.isRegularWindowId($0.id) && !restoredWindowIds.contains($0.id)
         }.count
         let count = max(0, pendingRegularCount - requestedRegularRestorationWindowCount)
         requestedRegularRestorationWindowCount += count
@@ -683,7 +710,7 @@ final class WindowStateManager {
     var hasPendingRegularWindowRestoration: Bool {
         guard let state = pendingRestoration else { return false }
         return state.windows.contains {
-            $0.id != Self.visorWindowId && !restoredWindowIds.contains($0.id)
+            Self.isRegularWindowId($0.id) && !restoredWindowIds.contains($0.id)
         }
     }
 

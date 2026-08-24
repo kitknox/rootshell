@@ -93,6 +93,9 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
     let session: VNCSession
     let clipboardSynchronizer: VNCClipboardSynchronizer
     let keyboardCapture: VNCKeyboardCapture
+    /// External-display control mode drives this pane's keyboard through the
+    /// package's interaction view.
+    let remoteInputBridge = RemoteInputBridge()
     fileprivate let initialViewportPanningMode: RemoteViewportPanningMode
 
     private let clipboardSyncDefault: ScreenSharingClipboardSyncDefault
@@ -576,6 +579,9 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
     /// requests from background tabs or non-focused split leaves; a later
     /// focus gain retries without consuming the pending request.
     private func requestFullScreenIfNeeded() {
+        // No window-level takeover on the external display: it would escape
+        // the zoom container (and paint under the notch in control mode).
+        guard windowId != ExternalDisplay.windowId else { return }
         let wantsInitialAutomaticEntry = config.automaticallyEnterFullScreen
             && !hasHandledAutomaticFullScreen
         guard (wantsInitialAutomaticEntry || shouldRestoreFullScreenAfterTabSwitch),
@@ -618,6 +624,7 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
     /// (same pane-to-window pattern as `.closeSplit`) so the per-window
     /// PaneFullScreenController handles it.
     func requestToggleFullScreen() {
+        guard windowId != ExternalDisplay.windowId else { return }
         NotificationCenter.default.post(name: .vncToggleFullScreen, object: self)
     }
 
@@ -780,11 +787,23 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
     /// focus gates ordinary input so a hidden VNC pane cannot intercept keys.
     /// The narrow reserved-shortcut mode is independent and remains off until
     /// explicitly toggled.
+    /// Parked external content must never take first responder: the keyboard
+    /// would attach to a non-key window and the package re-claims it on every
+    /// frame, fighting the device UI. Control mode lifts the restriction.
+    private var keyboardCaptureAllowedForPresentation: Bool {
+        #if targetEnvironment(macCatalyst)
+        return true
+        #else
+        guard windowId == ExternalDisplay.windowId else { return true }
+        return ExternalDisplayManager.shared.isControlSurfaceActive
+        #endif
+    }
+
     @discardableResult
     override func focusDidChange(_ focused: Bool, skipResign: Bool = false) -> Bool {
         clipboardSynchronizer.setHostFocused(focused)
         if focused {
-            if !overlayOwnsKeyboard {
+            if !overlayOwnsKeyboard, keyboardCaptureAllowedForPresentation {
                 keyboardCapture.capture()
             }
             // A restored background pane may already be connected by the
@@ -832,7 +851,8 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
     /// resolves the latch on exit.
     private func reconcileCaptureAfterOverlayRelease(attempt: Int) {
         guard !overlayOwnsKeyboard else { return }
-        guard isLogicallyFocused, !isClosed, window != nil else {
+        guard isLogicallyFocused, !isClosed, window != nil,
+              keyboardCaptureAllowedForPresentation else {
             clearOverlayLatchedToolbarReserve()
             return
         }
@@ -1004,6 +1024,11 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
         // skip the pane forever.
         fullScreenController?.exitForWindowRetarget()
         self.windowId = windowId
+        // Landing parked on the external display: drop capture so the
+        // package's responder cannot fight the device UI.
+        if !keyboardCaptureAllowedForPresentation {
+            keyboardCapture.release()
+        }
     }
 
     override func prepareForAttachment(to parentViewController: UIViewController?) -> Bool {
@@ -1266,6 +1291,7 @@ struct VNCPaneRootView: View {
                     },
                     hostOwnsRecoveryChrome: true,
                     brightnessGain: brightnessManager.effectiveGain,
+                    inputBridge: pane.remoteInputBridge,
                     hudMenuExtras: {
                         Menu {
                             #if !os(visionOS)

@@ -121,7 +121,8 @@ final class KeybindCommandGenerator: ObservableObject {
              .toggle_full_screen, .toggle_mouse_capture, .cycle_input_source,
              .increase_font_size, .decrease_font_size,
              .reset_font_size, .start_search, .select_all, .toggle_theme_picker,
-             .toggle_clipboard_manager, .brightness_boost:
+             .toggle_clipboard_manager, .brightness_boost,
+             .focus_external_display, .move_tab_to_external_display:
             return true
 
         // Terminal actions are handled via ghostty_surface_binding_action

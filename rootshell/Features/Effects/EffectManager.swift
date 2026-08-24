@@ -486,18 +486,20 @@ final class EffectManager {
         #if os(visionOS)
         return nil
         #else
-        let scenes = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
+        // Device scenes/windows only: keyboard geometry must never resolve
+        // against the external screen or the control surface.
+        let scenes = UIApplication.shared.deviceWindowScenes
         let foregroundScene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
         guard let windowScene = foregroundScene else {
             return nil
         }
 
-        if let keyWindow = windowScene.windows.first(where: { $0.isKeyWindow }) {
+        let candidates = windowScene.windows.filter { !$0.isExternalDisplayPresentation }
+        if let keyWindow = candidates.first(where: { $0.isKeyWindow }) {
             return keyWindow.frame
         }
 
-        return windowScene.windows.first?.frame
+        return candidates.first?.frame
         #endif
     }
 

@@ -315,10 +315,9 @@ extension MainView {
                 #else
                 // iOS/iPadOS/visionOS: check if this is the only window scene.
                 // Destroying the sole scene leaves no visible UI and no recovery path.
-                let windowSceneCount = UIApplication.shared.connectedScenes
-                    .compactMap { $0 as? UIWindowScene }
-                    .count
-                if windowSceneCount > 1 {
+                // Device scenes only; the external window never closes itself.
+                let windowSceneCount = UIApplication.shared.deviceWindowScenes.count
+                if windowSceneCount > 1 && !isExternalDisplayWindow {
                     Ghostty.logger.info("Closing last split in last tab - closing window (\(windowSceneCount) scenes)")
                     closeCurrentWindow(windowScene: windowSceneToClose)
                 } else {
@@ -387,6 +386,8 @@ extension MainView {
     /// Pass the windowScene if available (capture before cleanup), otherwise falls back to active scene
     func closeCurrentWindow(windowScene: UIWindowScene? = nil) {
         Ghostty.logger.info("closeCurrentWindow called, passed windowScene: \(windowScene != nil)")
+        // The external scene is owned by the system/manager, never destroyed here.
+        guard !isExternalDisplayWindow else { return }
 
         let sceneToClose: UIWindowScene?
 
@@ -394,8 +395,8 @@ extension MainView {
             sceneToClose = scene
             Ghostty.logger.info("Using passed windowScene")
         } else {
-            // Fall back to finding the active foreground scene
-            let allScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            // Fall back to finding the active foreground device scene
+            let allScenes = UIApplication.shared.deviceWindowScenes
             Ghostty.logger.info("No windowScene passed, found \(allScenes.count) connected scenes")
             sceneToClose = allScenes.first { scene in
                 scene.activationState == .foregroundActive || scene.activationState == .foregroundInactive

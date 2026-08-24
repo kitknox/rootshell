@@ -228,8 +228,7 @@ extension AppleFIDO2Signer: ASAuthorizationControllerPresentationContextProvidin
 
         // Fallback: find the key window
         #if os(iOS) || os(visionOS)
-        if let windowScene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }
-        ), let window = windowScene.windows.first(where: { $0.isKeyWindow }) {
+        if let window = UIApplication.shared.deviceKeyWindow {
             return window
         }
         #endif

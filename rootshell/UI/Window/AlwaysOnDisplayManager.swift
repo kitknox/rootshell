@@ -75,6 +75,19 @@ final class AlwaysOnDisplayManager {
                 AlwaysOnDisplayManager.shared.reloadAndApply()
             }
         }
+        // Auto-lock tears down the external presentation, so an active
+        // external session holds the idle timer too.
+        for name in [Notification.Name.externalDisplayDidConnect, .externalDisplayDidDisconnect] {
+            NotificationCenter.default.addObserver(
+                forName: name,
+                object: nil,
+                queue: .main
+            ) { _ in
+                Task { @MainActor in
+                    AlwaysOnDisplayManager.shared.apply()
+                }
+            }
+        }
     }
 
     /// Re-read the persisted setting (protected data assumed available here) and
@@ -89,7 +102,8 @@ final class AlwaysOnDisplayManager {
     }
 
     private func apply() {
-        UIApplication.shared.isIdleTimerDisabled = isEnabled
+        UIApplication.shared.isIdleTimerDisabled =
+            isEnabled || ExternalDisplayManager.shared.isExternalSessionActive
     }
 }
 

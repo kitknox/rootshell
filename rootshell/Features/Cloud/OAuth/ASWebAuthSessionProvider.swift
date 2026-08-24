@@ -134,8 +134,7 @@ final class ASWebAuthSessionProvider: NSObject {
 
 extension ASWebAuthSessionProvider: ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = windowScene.windows.first else {
+        guard let window = UIApplication.shared.deviceKeyWindow else {
             fatalError("No window available for ASWebAuthenticationSession")
         }
         return window

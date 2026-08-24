@@ -82,7 +82,7 @@ extension MainView {
 #elseif !os(visionOS)
         view
             .modifier(TitlebarTabsModifier(isEnabled: usesTitlebarTabs, fullScreenEnabled: fullScreenModeEnabled))
-            .background(windowId == "visor" ? nil : CurrentWindowTitleAccessor(tabsModel: tabsModel))
+            .background(windowId == "visor" || isExternalDisplayWindow ? nil : CurrentWindowTitleAccessor(tabsModel: tabsModel))
 #else
         view
             .modifier(TitlebarTabsModifier(isEnabled: usesTitlebarTabs, fullScreenEnabled: false))

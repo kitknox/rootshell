@@ -76,13 +76,7 @@ final class ChatGPTAuthCoordinator {
 
 private final class ChatGPTPresentationAnchorProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        let scenes = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-
-        let window = scenes
-            .first { $0.activationState == .foregroundActive }?
-            .windows.first { $0.isKeyWindow }
-            ?? scenes.flatMap(\.windows).first
+        let window = UIApplication.shared.deviceKeyWindow
 
         return window ?? ASPresentationAnchor()
     }

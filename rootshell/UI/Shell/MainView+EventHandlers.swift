@@ -85,13 +85,18 @@ extension MainView {
     }
 
     func handleOnAppear() {
-        updateWindowFocusState()
+        // External window: key state is scene-shared noise, sidebar pin and
+        // effect focus belong to device windows.
+        let isExternalWindow = isExternalDisplayWindow
+        if !isExternalWindow {
+            updateWindowFocusState()
+        }
 
         // Restore the docked sidebar if it was pinned: `tabSidebarPinned`
         // persists but `showingTabSwitcher` does not, so re-assert it here.
         // The docked instance does not auto-focus its search field
         // (VerticalTabSidebar.isDocked), so this never steals the keyboard.
-        if tabSidebarPinned && canPinTabSidebar && !showingTabSwitcher {
+        if !isExternalWindow && tabSidebarPinned && canPinTabSidebar && !showingTabSwitcher {
             showingTabSwitcher = true
         }
         // Register with WindowStateManager for state persistence
@@ -108,7 +113,9 @@ extension MainView {
                 rebindWindowScopedCallbacks(for: tab)
             }
         )
-        TerminalWindowRegistry.updateSceneSessionId(windowSceneSessionID, for: windowId)
+        if !isExternalWindow {
+            TerminalWindowRegistry.updateSceneSessionId(windowSceneSessionID, for: windowId)
+        }
 
         // Register this window's tabs so tmux control mode reconcile actions
         // (routed via the viewer-owner surface) can map windows->tabs here.
@@ -124,8 +131,10 @@ extension MainView {
         // Background effects with Text Avoidance resolve the focused terminal
         // through this closure; re-installed on focus gain so the last-focused
         // window wins when several are visible.
-        TextAvoidanceFocus.install(windowId: windowId) { [weak tabsModel] in
-            tabsModel?.selectedTab?.focusedTerminal
+        if !isExternalWindow {
+            TextAvoidanceFocus.install(windowId: windowId) { [weak tabsModel] in
+                tabsModel?.selectedTab?.focusedTerminal
+            }
         }
 
         let tabTransferObserver = NotificationCenter.default.addObserver(
@@ -171,7 +180,13 @@ extension MainView {
 #endif
         
         // Check for pending restoration
-        if terminals.isEmpty,
+        if isExternalWindow {
+            // External window: always a fresh local shell (no restore, no
+            // connection sheet on a screen the user cannot touch).
+            if terminals.isEmpty {
+                createLocalShellTabInternal()
+            }
+        } else if terminals.isEmpty,
            TabTransferCoordinator.shared.claimPendingTransfer(
                for: windowId,
                isDestinationWindowFocused: isWindowFocused
@@ -262,9 +277,11 @@ extension MainView {
         // launch can precede this window's onReceive subscription. Deferred
         // so they run after the restoration-claim branch above; no-ops when
         // the coordinator buffers are empty.
-        Task { @MainActor in
-            consumePendingFileOpens()
-            consumePendingIntentRequests()
+        if !isExternalWindow {
+            Task { @MainActor in
+                consumePendingFileOpens()
+                consumePendingIntentRequests()
+            }
         }
     }
 
@@ -519,7 +536,7 @@ extension MainView {
             // Safety net: if no terminals exist and the tab bar is hidden,
             // re-show the sheet immediately. Without this, the user lands on an
             // empty state with no way to connect (no tab bar + button to tap).
-            if terminals.isEmpty && tabBarHidden {
+            if terminals.isEmpty && tabBarHidden && !isExternalDisplayWindow {
                 Ghostty.logger.info("Sheet dismissed with no terminals (tab bar hidden) - re-showing")
                 showConnectionSidebar = true
                 return
@@ -551,6 +568,9 @@ extension MainView {
     // MARK: - Window Focus
 
     func updateWindowFocusState() {
+        // External terminals' focus is driven by ExternalDisplayManager; the
+        // scene-shared activeAppearance would otherwise mirror the device window.
+        guard !isExternalDisplayWindow else { return }
         let isFocused: Bool
 #if targetEnvironment(macCatalyst)
         isFocused = windowIsKeyWindow

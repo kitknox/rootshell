@@ -102,6 +102,21 @@ final class TerminalSurfaceController: NSObject {
         lastSentGridSize = nil
     }
 
+    /// True until the next surviving sizeDidChange re-issues the paired
+    /// set_content_scale + set_size after invalidateCachedSize().
+    var hasPendingScaleSync: Bool { lastContentScaleFactor == nil }
+
+    /// The core sets the IOSurfaceLayer contentsScale once at creation and
+    /// drops frames whose density mismatches; realign it when the view moves
+    /// between screens of different scale.
+    func updateRendererLayerContentsScale(_ scale: CGFloat) {
+        guard let layer = rendererLayer(), layer.contentsScale != scale else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.contentsScale = scale
+        CATransaction.commit()
+    }
+
     func shouldSendPTYSize(for sessionID: ObjectIdentifier, gridSize: (rows: UInt16, cols: UInt16)) -> Bool {
         if lastSizedSessionID != sessionID {
             lastSizedSessionID = sessionID

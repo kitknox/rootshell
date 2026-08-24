@@ -1592,10 +1592,11 @@ extension MainView {
     /// The census itself lives in WindowSessionCensus; this forwarder keeps
     /// the existing call sites across the MainView extensions unchanged.
     func notifySessionCountChanged() {
+        // External window: its scene id must never key census entries.
         WindowSessionCensus.publish(
             tabs: terminals,
             windowId: windowId,
-            sceneSessionId: windowSceneSessionID
+            sceneSessionId: isExternalDisplayWindow ? nil : windowSceneSessionID
         )
     }
 }

@@ -251,8 +251,7 @@ struct WindowSettingsView: View {
         #if os(visionOS)
         return 1.0
         #else
-        return UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
+        return UIApplication.shared.deviceWindowScenes
             .map { $0.screen.potentialEDRHeadroom }
             .max() ?? 1.0
         #endif
@@ -292,10 +291,9 @@ struct WindowSettingsView: View {
     /// False on home-button devices, where "Extend Under Home Indicator" would be
     /// meaningless — so we hide the toggle there.
     private var deviceHasHomeIndicator: Bool {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
+        UIApplication.shared.deviceWindowScenes
             .flatMap(\.windows)
-            .contains { $0.safeAreaInsets.bottom > 0 }
+            .contains { !$0.isExternalDisplayPresentation && $0.safeAreaInsets.bottom > 0 }
     }
     #endif
 

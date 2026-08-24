@@ -146,14 +146,6 @@
       }
     },
     {
-      "identity" : "rootshell-vnc",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/kitknox/rootshell-vnc.git",
-      "state" : {
-        "revision" : "f4023314af1c29509e7810fc39f9f16e2ef84076"
-      }
-    },
-    {
       "identity" : "sparkle-rootshell",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kitknox/Sparkle-rootshell.git",

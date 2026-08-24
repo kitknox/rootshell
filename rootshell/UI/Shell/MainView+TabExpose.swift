@@ -142,6 +142,10 @@ extension MainView {
     }
 
     func toggleTabExpose() {
+        #if !targetEnvironment(macCatalyst)
+        // Parked external content is not interactive; only control mode.
+        guard !isExternalDisplayWindow || ExternalDisplayManager.shared.isControlSurfaceActive else { return }
+        #endif
         guard !isAnySheetPresented || tabExpose.isActive else { return }
         if !tabExpose.isActive, showingTabSwitcher, !tabSidebarIsDocked {
             showingTabSwitcher = false

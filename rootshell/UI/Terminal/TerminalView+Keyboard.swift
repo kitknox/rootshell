@@ -335,6 +335,22 @@ extension Ghostty.TerminalView {
 extension Ghostty.TerminalView {
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        #if !targetEnvironment(macCatalyst)
+        // External display forwarding: hardware keys act on the external
+        // terminal. Keybind chords arrive as UIKeyCommands before this point.
+        if let redirect = externalInputRedirectTarget {
+            redirect.pressesBegan(presses, with: event)
+            return
+        }
+        // External VNC pane: special keys go over as keysyms; character keys
+        // fall through to insertText (forwarded there).
+        if !isExternalDisplayTerminal,
+           ExternalDisplayManager.shared.inputProxy.forwardPressesToVNC(presses, down: true) {
+            super.pressesBegan(presses, with: event)
+            return
+        }
+        #endif
+
         var handled = false
         var shouldSkipSuper = false
 
@@ -1017,6 +1033,18 @@ extension Ghostty.TerminalView {
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        #if !targetEnvironment(macCatalyst)
+        if let redirect = externalInputRedirectTarget {
+            redirect.pressesEnded(presses, with: event)
+            return
+        }
+        if !isExternalDisplayTerminal,
+           ExternalDisplayManager.shared.inputProxy.forwardPressesToVNC(presses, down: false) {
+            super.pressesEnded(presses, with: event)
+            return
+        }
+        #endif
+
         // Reset OPTION key flag on key release
         didHandleOptionKey = false
 
@@ -1069,6 +1097,12 @@ extension Ghostty.TerminalView {
     }
 
     override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        #if !targetEnvironment(macCatalyst)
+        if let redirect = externalInputRedirectTarget {
+            redirect.pressesCancelled(presses, with: event)
+            return
+        }
+        #endif
         resetKeyboardInteractionState(sendSyntheticKeyReleases: true)
         super.pressesCancelled(presses, with: event)
     }
@@ -1673,6 +1707,14 @@ extension Ghostty.TerminalView {
 
     @objc func handleArrowKey(_ command: UIKeyCommand) {
         commitKoreanCompositionIfNeeded(external: true)
+        #if !targetEnvironment(macCatalyst)
+        // Forward wholesale (mirrors pressesBegan) so press/repeat bookkeeping
+        // lives on the redirect terminal and its pressesEnded sends the release.
+        if let redirect = externalInputRedirectTarget {
+            redirect.handleArrowKey(command)
+            return
+        }
+        #endif
         guard let input = command.input else { return }
         if overlayConsumedKeyCommand(command) { return }
 
@@ -1755,6 +1797,12 @@ extension Ghostty.TerminalView {
 
     @objc func handleModifiedReturnKey(_ command: UIKeyCommand) {
         commitKoreanCompositionIfNeeded(external: true)
+        #if !targetEnvironment(macCatalyst)
+        if let redirect = externalInputRedirectTarget {
+            redirect.handleModifiedReturnKey(command)
+            return
+        }
+        #endif
         if overlayConsumedKeyCommand(command) { return }
         if keysConsumedByOverlayAction.contains(.keyboardReturnOrEnter) { return }
         if discoveredSessions != nil {
@@ -2561,7 +2609,7 @@ extension Ghostty.TerminalView {
             userInfo["tabIndex"] = 8
         case .select_tab_9:
             userInfo["tabIndex"] = 9
-        case .new_tab, .new_window, .close_tab:
+        case .new_tab, .new_window, .close_tab, .move_tab_to_external_display:
             userInfo["windowId"] = windowId
         default:
             break

@@ -57,12 +57,20 @@ extension UIApplication {
         if let sceneID = ghostty_activeWindowSceneSessionID() {
             info[GhosttyCommandRouting.windowSceneSessionIDKey] = sceneID
         }
+        #if !targetEnvironment(macCatalyst)
+        // Untargeted commands follow typing focus to the external MainView,
+        // which shares the device scene session.
+        if ExternalDisplayManager.shared.isExternalSessionActive,
+           ExternalDisplayManager.shared.focusTarget == .external {
+            info[GhosttyCommandRouting.windowIdKey] = ExternalDisplay.windowId
+        }
+        #endif
         NotificationCenter.default.post(name: name, object: nil, userInfo: info.isEmpty ? nil : info)
     }
 
     @MainActor
     private func ghostty_activeWindowSceneSessionID() -> String? {
-        let scenes = connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scenes = deviceWindowScenes
         if let activeSceneId = WindowFocusRegistry.shared.activeSceneSessionId() {
             if scenes.contains(where: { $0.session.persistentIdentifier == activeSceneId }) {
                 return activeSceneId

@@ -384,9 +384,9 @@ extension MainView {
     #if !CHINA_BUILD
     func handleVPNIntent() {
         // VPN intent notifications are global; with multiple windows only
-        // the key window should open Settings > VPN.
-        let windowScenes = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
+        // the key window should open Settings > VPN. Device scenes only.
+        guard !isExternalDisplayWindow else { return }
+        let windowScenes = UIApplication.shared.deviceWindowScenes
         if windowScenes.count > 1 && !windowIsKeyWindow {
             return
         }

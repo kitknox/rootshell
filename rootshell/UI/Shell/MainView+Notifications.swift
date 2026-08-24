@@ -241,6 +241,15 @@ extension MainView {
                 }
             )
             #else
+            if self.isExternalDisplayWindow {
+                // openWindow is inert in the UIKit-owned external scene;
+                // request a device scene directly (no-op on iPhone).
+                guard UIDevice.current.userInterfaceIdiom == .pad else { return }
+                UIApplication.shared.requestSceneSessionActivation(
+                    nil, userActivity: nil, options: nil, errorHandler: nil
+                )
+                return
+            }
             self.openWindow(id: "main-terminal")
             #endif
         }
@@ -597,14 +606,17 @@ extension MainView {
 
     #if !targetEnvironment(macCatalyst)
     private func handleSceneDisconnectNotification(_ notification: Notification) {
+        // ExternalDisplayManager owns the external window's teardown.
+        guard !isExternalDisplayWindow else { return }
         let disconnectedID = (notification.object as? UIScene)?.session.persistentIdentifier
         if let windowSceneSessionID {
             guard disconnectedID == windowSceneSessionID else { return }
         } else {
             // UIKit may report the disconnect before or after removing the
             // scene from connectedScenes; <= 1 covers both single-window
-            // timings while avoiding cross-window cleanup.
-            let connectedSceneCount = UIApplication.shared.connectedScenes.count
+            // timings while avoiding cross-window cleanup. Device scenes only.
+            guard !notification.isFromExternalDisplayScene else { return }
+            let connectedSceneCount = UIApplication.shared.deviceWindowScenes.count
             guard connectedSceneCount <= 1 else { return }
         }
 
@@ -636,6 +648,12 @@ extension MainView {
     /// Notifications may include a terminal object or a window scene identifier
     func shouldHandleNotification(_ notification: Notification) -> Bool {
         guard let pane = notification.object as? SplitPaneView else {
+            // Explicit windowId wins: the only discriminator between the
+            // external window and the device window sharing its scene.
+            if let targetWindowId = notification.userInfo?[GhosttyCommandRouting.windowIdKey] as? String {
+                return targetWindowId == windowId
+            }
+
             // No terminal view in notification - check for scene ID targeting
             if let targetSceneID = notification.userInfo?[GhosttyCommandRouting.windowSceneSessionIDKey] as? String,
                let windowSceneSessionID,
@@ -643,10 +661,14 @@ extension MainView {
                 return true
             }
 
+            // Untargeted notifications belong to device windows only.
+            if isExternalDisplayWindow {
+                return false
+            }
+
             // On iPad/iPhone (single-window), accept notifications without explicit targeting
             // This handles the case when all tabs are closed and menu/keyboard shortcuts are used
-            let connectedScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-            if connectedScenes.count <= 1 {
+            if UIApplication.shared.deviceWindowScenes.count <= 1 {
                 return true
             }
 

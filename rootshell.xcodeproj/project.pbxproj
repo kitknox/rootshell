@@ -1473,7 +1473,7 @@
 				47280D792EEEFF6200624984 /* XCRemoteSwiftPackageReference "SwiftOpenAI-rootshell" */,
 				4747A1092F2ADF800080DE63 /* XCRemoteSwiftPackageReference "yubikit-swift-rootshell" */,
 				4722536F2F2BB891000B8D2E /* XCRemoteSwiftPackageReference "CryptoSwift" */,
-				47564E4300000000000000A1 /* XCRemoteSwiftPackageReference "rootshell-vnc" */,
+				47564E4300000000000000A2 /* XCLocalSwiftPackageReference "../rootshell-vnc" */,
 				47RGP0002F680000AABB0000 /* XCRemoteSwiftPackageReference "ripgrep-rootshell" */,
 				47BTP0002F680000AABB0000 /* XCRemoteSwiftPackageReference "bat-rootshell" */,
 				47A0B0012F8A000000000001 /* XCRemoteSwiftPackageReference "vim-rootshell" */,
@@ -5913,6 +5913,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		47564E4300000000000000A2 /* XCLocalSwiftPackageReference "../rootshell-vnc" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../rootshell-vnc";
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		4722536F2F2BB891000B8D2E /* XCRemoteSwiftPackageReference "CryptoSwift" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -5944,14 +5951,6 @@
 			requirement = {
 				kind = exactVersion;
 				version = 1.3.1;
-			};
-		};
-		47564E4300000000000000A1 /* XCRemoteSwiftPackageReference "rootshell-vnc" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/kitknox/rootshell-vnc.git";
-			requirement = {
-				kind = revision;
-				revision = f4023314af1c29509e7810fc39f9f16e2ef84076;
 			};
 		};
 		477408912ED51B9F0035CE92 /* XCRemoteSwiftPackageReference "Yams-rootshell" */ = {
@@ -6125,12 +6124,12 @@
 		};
 		47564E4300000000000000B1 /* rootshellVNC */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 47564E4300000000000000A1 /* XCRemoteSwiftPackageReference "rootshell-vnc" */;
+			package = 47564E4300000000000000A2 /* XCLocalSwiftPackageReference "../rootshell-vnc" */;
 			productName = rootshellVNC;
 		};
 		47564E4300000000000000B2 /* RFBTransport */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 47564E4300000000000000A1 /* XCRemoteSwiftPackageReference "rootshell-vnc" */;
+			package = 47564E4300000000000000A2 /* XCLocalSwiftPackageReference "../rootshell-vnc" */;
 			productName = RFBTransport;
 		};
 		477408922ED51B9F0035CE92 /* Yams */ = {

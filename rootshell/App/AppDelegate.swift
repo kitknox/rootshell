@@ -279,6 +279,30 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             LifecycleDebugLogger.shared.logMarker("APP TERMINATE")
         }
     }
+
+    #if !targetEnvironment(macCatalyst)
+    // Claims the external non-interactive display scene with our delegate;
+    // every other role gets a plain configuration so SwiftUI keeps driving
+    // the regular WindowGroups. CatalystAppDelegate overrides this.
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        if connectingSceneSession.role == .windowExternalDisplayNonInteractive {
+            let config = UISceneConfiguration(
+                name: "External Display",
+                sessionRole: connectingSceneSession.role
+            )
+            config.delegateClass = ExternalDisplaySceneDelegate.self
+            return config
+        }
+        return UISceneConfiguration(
+            name: "Default Configuration",
+            sessionRole: connectingSceneSession.role
+        )
+    }
+    #endif
 }
 
 final class ForegroundActivationGate: Sendable {

@@ -60,6 +60,7 @@ enum SettingsSearchDestination: Hashable {
     case customShaders
     case transparency
     case window
+    case externalDisplay
     case battery
     case toolbarKeys
     case keyboardShortcuts
@@ -284,6 +285,15 @@ struct SettingsSearchEntry: Identifiable, Hashable {
                 systemImage: "macwindow",
                 action: .destination(.window),
                 keywords: ["tab bar", "group menu", "project switcher", "layout", "display", "brightness", "hdr", "edr", "boost", "dynamic range", "selection", "loupe", "magnifier", "native"],
+                isSuggested: false
+            ),
+            .init(
+                id: "external-display",
+                title: String(localized: "External Display"),
+                subtitle: String(localized: "Terminals on USB-C and AirPlay displays"),
+                systemImage: "tv",
+                action: .destination(.externalDisplay),
+                keywords: ["airplay", "usb-c", "hdmi", "monitor", "tv", "mirroring", "second screen", "xreal", "zoom", "font size"],
                 isSuggested: false
             ),
             .init(
@@ -908,6 +918,14 @@ struct SettingsSearchEntry: Identifiable, Hashable {
         }
         #endif
 
+        #if targetEnvironment(macCatalyst)
+        // External display terminals are iOS/iPadOS only.
+        entries.removeAll { entry in
+            if case .destination(.externalDisplay) = entry.action { return true }
+            return false
+        }
+        #endif
+
         #if targetEnvironment(macCatalyst) || os(visionOS)
         entries.removeAll { entry in
             entry.id == "background-session-keepalive"
@@ -1329,6 +1347,12 @@ func settingsSearchDestinationView(for destination: SettingsSearchDestination) -
         #endif
     case .window:
         WindowSettingsView()
+    case .externalDisplay:
+        #if !targetEnvironment(macCatalyst)
+        ExternalDisplaySettingsView()
+        #else
+        SettingsAppearanceSection()
+        #endif
     case .battery:
         BatterySettingsView()
     case .toolbarKeys:

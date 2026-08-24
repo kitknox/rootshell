@@ -105,9 +105,7 @@ final class DayNightThemeManager: ObservableObject {
     /// window scene's traitCollection directly.
     static func currentInterfaceStyleIsLight() -> Bool {
         // Try key window first (most reliable when available)
-        if let windowScene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first {
+        if let windowScene = UIApplication.shared.deviceForegroundWindowScene {
             // Try key window
             if let keyWindow = windowScene.keyWindow {
                 return keyWindow.traitCollection.userInterfaceStyle != .dark
@@ -319,9 +317,7 @@ final class DayNightThemeManager: ObservableObject {
     }
 
     private static func keyWindow() -> UIWindow? {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?.keyWindow
+        UIApplication.shared.deviceKeyWindow
     }
 }
 

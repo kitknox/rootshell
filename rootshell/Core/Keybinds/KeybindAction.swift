@@ -176,6 +176,10 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
     case brightness_boost = "brightness_boost"
     /// Cycle to the next system keyboard/input source (Ctrl+Space-style)
     case cycle_input_source = "cycle_input_source"
+    /// Toggle input focus between the device and an external display
+    case focus_external_display = "focus_external_display"
+    /// Move the current tab to/from an external display
+    case move_tab_to_external_display = "move_tab_to_external_display"
 
     // Terminal Control Characters (Ctrl+A-Z)
     case ctrl_a = "ctrl_a"
@@ -297,7 +301,8 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
         case .new_local_shell, .new_tab, .new_window, .close_tab, .duplicate_ssh_tab,
              .previous_tab, .next_tab, .show_tmux_sessions, .detach_other_clients, .toggle_tab_switcher,
              .toggle_tab_expose, .previous_group, .next_group, .select_tab_1, .select_tab_2, .select_tab_3, .select_tab_4, .select_tab_5,
-             .select_tab_6, .select_tab_7, .select_tab_8, .select_tab_9:
+             .select_tab_6, .select_tab_7, .select_tab_8, .select_tab_9,
+             .move_tab_to_external_display:
             return .tabs
 
         case .split_right, .split_down,
@@ -308,7 +313,7 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
         case .increase_font_size, .decrease_font_size, .reset_font_size, .start_search,
              .toggle_tab_bar, .toggle_group_mode, .toggle_transparency, .toggle_titlebar, .toggle_theme_picker, .toggle_background_effect,
              .toggle_compose, .toggle_full_screen, .toggle_mouse_capture, .cycle_input_source, .brightness_boost,
-             .toggle_auto_redact:
+             .toggle_auto_redact, .focus_external_display:
             return .view
 
         case .open_settings, .browse_hosts, .browse_profiles, .toggle_ai_agent, .toggle_voice_agent:
@@ -396,6 +401,8 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
         case .toggle_mouse_capture: return String(localized: "Toggle Mouse Capture", comment: "Keybind action")
         case .brightness_boost: return String(localized: "Brightness Boost", comment: "Keybind action: toggle HDR brightness boost HUD")
         case .cycle_input_source: return String(localized: "Switch Keyboard Language", comment: "Keybind action: cycle to next system keyboard/input source")
+        case .focus_external_display: return String(localized: "Focus External Display", comment: "Keybind action: toggle input focus between device and external display")
+        case .move_tab_to_external_display: return String(localized: "Move Tab to External Display", comment: "Keybind action: move the current tab to/from the external display")
 
         // Control characters: technical abbreviations, not localized
         case .ctrl_a: return "Ctrl+A (SOH)"
@@ -478,6 +485,8 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
         case .toggle_clipboard_manager: return .toggleClipboardManager
         case .toggle_background_effect: return .toggleBackgroundEffect
         case .toggle_full_screen: return .toggleFullScreen
+        case .focus_external_display: return .toggleExternalDisplayFocus
+        case .move_tab_to_external_display: return .moveTabToExternalDisplay
 
         // toggle_compose and toggle_mouse_capture are handled directly in executeKeybindAction (not via notification)
         case .toggle_compose: return nil
@@ -553,7 +562,7 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
              // ⌘⌥[ / ⌘⌥]: Option composes a different character, so the menu
              // key-equivalent path can't claim the press before the terminal
              // encodes it as Alt-[; a prioritized UIKeyCommand must own it.
-             .previous_group, .next_group:
+             .previous_group, .next_group, .focus_external_display:
             return true
         default:
             return false
@@ -615,7 +624,8 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
 
         // These actions don't have menu entries, or (group navigation) have
         // menu entries but keep the shortcut on a prioritized UIKeyCommand.
-        case .reset_terminal, .send_text, .send_esc, .send_csi, .previous_group, .next_group:
+        case .reset_terminal, .send_text, .send_esc, .send_csi, .previous_group, .next_group,
+             .focus_external_display, .move_tab_to_external_display:
             return false
 
         // Control characters are handled separately

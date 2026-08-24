@@ -202,16 +202,19 @@ private final class TabSidebarOverlayInstallerViewController: UIViewController {
         // directly on UIWindow so it can sit above full-screen VNC, but that
         // reparenting otherwise loses Catalyst's traffic-light clearance.
         overlayController.windowControlsClearanceSourceView = view
-        if installedWindow === window, overlayController.view.superview === window {
-            overlayController.view.frame = window.bounds
+        // External-presentation windows host on the zoomed content view so
+        // the overlay scales with the workspace; otherwise the window itself.
+        let host = window.overlayInstallHostView
+        if installedWindow === window, overlayController.view.superview === host {
+            overlayController.view.frame = host.bounds
             return
         }
 
         detachOverlay()
-        overlayController.view.frame = window.bounds
+        overlayController.view.frame = host.bounds
         overlayController.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         installedWindow = window
-        window.addSubview(overlayController.view)
+        host.addSubview(overlayController.view)
     }
 
     func detachOverlay() {
@@ -353,8 +356,10 @@ private final class TabSidebarOverlayViewController: SidePanelOverlayViewControl
     /// Raising this transparent overlay keeps the pane live and full-sized
     /// while the panel and its backdrop render and receive input above it.
     private func elevateAboveWindowContent() {
-        guard let window = view.window, view.superview === window else { return }
-        window.bringSubviewToFront(view)
+        guard let window = view.window else { return }
+        let host = window.overlayInstallHostView
+        guard view.superview === host else { return }
+        host.bringSubviewToFront(view)
     }
 
     @objc

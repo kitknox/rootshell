@@ -72,7 +72,7 @@ final class StatusBarStyleManager {
     private func updateAllStatusBars() {
         for scene in UIApplication.shared.connectedScenes {
             guard let windowScene = scene as? UIWindowScene else { continue }
-            for window in windowScene.windows {
+            for window in windowScene.windows where !window.isExternalDisplayPresentation {
                 window.rootViewController?.setNeedsStatusBarAppearanceUpdate()
             }
         }
@@ -81,7 +81,7 @@ final class StatusBarStyleManager {
     private func swizzleExistingWindows() {
         for scene in UIApplication.shared.connectedScenes {
             guard let windowScene = scene as? UIWindowScene else { continue }
-            for window in windowScene.windows {
+            for window in windowScene.windows where !window.isExternalDisplayPresentation {
                 swizzleHostingControllerIfNeeded(for: window)
             }
         }

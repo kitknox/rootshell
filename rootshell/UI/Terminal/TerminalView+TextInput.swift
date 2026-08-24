@@ -145,8 +145,25 @@ extension Ghostty.TerminalView {
 
     /// Sends current composition text to GhosttyKit for inline preedit rendering.
     /// Pass nil or empty string to clear the preedit display.
+    ///
+    /// While forwarding, the preedit renders under the EXTERNAL cursor; the
+    /// UITextInput document bookkeeping stays local with first responder.
     func syncIMEPreedit(_ text: String?) {
-        guard let surface = self.surface else { return }
+        #if targetEnvironment(macCatalyst)
+        renderPreedit(text, on: self)
+        #else
+        let target = externalInputRedirectTarget ?? self
+        // Focus moved since the last render: clear the stale preedit there.
+        if let previous = lastExternalPreeditTarget, previous !== target {
+            renderPreedit(nil, on: previous)
+        }
+        lastExternalPreeditTarget = target === self ? nil : target
+        renderPreedit(text, on: target)
+        #endif
+    }
+
+    private func renderPreedit(_ text: String?, on view: Ghostty.TerminalView) {
+        guard let surface = view.surface else { return }
         if let text, !text.isEmpty {
             let normalized = text.precomposedStringWithCanonicalMapping
             normalized.withCString { ptr in
@@ -509,6 +526,10 @@ extension Ghostty.TerminalView {
     }
 
     private func imeVisibleBounds() -> CGRect {
+        #if !targetEnvironment(macCatalyst)
+        // External content has no device safe areas or keyboard toolbar.
+        if isExternalDisplayTerminal { return bounds }
+        #endif
         let bottomInset = max(safeAreaInsets.bottom, reservedKeyboardToolbarHeightAtBottom)
         let insets = UIEdgeInsets(top: safeAreaInsets.top, left: 0, bottom: bottomInset, right: 0)
         let visibleBounds = bounds.inset(by: insets)

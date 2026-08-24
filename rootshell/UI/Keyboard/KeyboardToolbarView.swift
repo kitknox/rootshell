@@ -271,6 +271,10 @@ class KeyboardToolbarView: UIView {
     /// Callback when drawer opens/closes (for height updates)
     var onDrawerStateChanged: (() -> Void)?
 
+    // External display focus button state
+    private weak var externalDisplayButton: KeyboardSymbolButton?
+    private var externalDisplayObserverTokens: [NSObjectProtocol] = []
+
     // Main toolbar views
     private let mainToolbarContainer = UIView()
     private let mainRowStackView = UIStackView()
@@ -329,6 +333,12 @@ class KeyboardToolbarView: UIView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        for token in externalDisplayObserverTokens {
+            NotificationCenter.default.removeObserver(token)
+        }
     }
 
     // MARK: - Setup
@@ -644,6 +654,8 @@ class KeyboardToolbarView: UIView {
             return createBrightnessBoostButton()
         case .clipboardManager:
             return createClipboardManagerButton()
+        case .externalDisplay:
+            return createExternalDisplayButton()
         case .drawerToggle:
             return createExtraKeysDrawerToggleButton()
         default:
@@ -928,6 +940,50 @@ class KeyboardToolbarView: UIView {
         )
         button.delegate = self
         return button
+    }
+
+    /// Toggles typing focus between the device and an external display.
+    /// Active while the external display owns input; dimmed with no session.
+    private func createExternalDisplayButton() -> KeyboardSymbolButton {
+        let button = KeyboardSymbolButton(
+            key: "__externalDisplay__",
+            display: .icon("tv"),
+            sizes: sizes
+        )
+        button.delegate = self
+        externalDisplayButton = button
+        installExternalDisplayObserversIfNeeded()
+        refreshExternalDisplayButtonState()
+        return button
+    }
+
+    private func installExternalDisplayObserversIfNeeded() {
+        #if !targetEnvironment(macCatalyst)
+        guard externalDisplayObserverTokens.isEmpty else { return }
+        let center = NotificationCenter.default
+        for name: Notification.Name in [
+            .externalDisplayDidConnect,
+            .externalDisplayDidDisconnect,
+            .externalDisplayFocusChanged,
+        ] {
+            externalDisplayObserverTokens.append(center.addObserver(
+                forName: name, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.refreshExternalDisplayButtonState()
+                }
+            })
+        }
+        #endif
+    }
+
+    private func refreshExternalDisplayButtonState() {
+        #if !targetEnvironment(macCatalyst)
+        guard let button = externalDisplayButton else { return }
+        let manager = ExternalDisplayManager.shared
+        button.isActive = manager.isExternalSessionActive && manager.focusTarget == .external
+        button.alpha = manager.isExternalSessionActive ? 1.0 : 0.4
+        #endif
     }
 
     // MARK: - Drawer Management
@@ -1317,6 +1373,10 @@ extension KeyboardToolbarView: KeyboardButtonDelegate {
         }
         if key == "__clipboardManager__" {
             onClipboardManagerRequested?()
+            return
+        }
+        if key == "__externalDisplay__" {
+            NotificationCenter.default.post(name: .toggleExternalDisplayFocus, object: nil)
             return
         }
         if key == "__arrowDrawer__" {

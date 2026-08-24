@@ -43,9 +43,21 @@ final class EmptyStateView: UIView {
         // keyboard, so it has no path into the lock snapshot. The latch is also
         // armed at launch and would block cold-start focus with no retry.
         DispatchQueue.main.async { [weak self] in
-            guard UIApplication.shared.applicationState != .background else { return }
-            self?.becomeFirstResponder()
+            guard let self, UIApplication.shared.applicationState != .background,
+                  self.mayClaimFirstResponder else { return }
+            self.becomeFirstResponder()
         }
+    }
+
+    /// A parked external-display empty state must not pull the keyboard onto
+    /// the non-interactive external window.
+    private var mayClaimFirstResponder: Bool {
+        #if targetEnvironment(macCatalyst)
+        return true
+        #else
+        guard window?.isExternalDisplayPresentation == true else { return true }
+        return ExternalDisplayManager.shared.isControlSurfaceActive
+        #endif
     }
 
     required init?(coder: NSCoder) {
@@ -56,7 +68,8 @@ final class EmptyStateView: UIView {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if window != nil, UIApplication.shared.applicationState != .background {
+        if window != nil, UIApplication.shared.applicationState != .background,
+           mayClaimFirstResponder {
             becomeFirstResponder()
         }
     }

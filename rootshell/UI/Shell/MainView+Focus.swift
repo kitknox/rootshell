@@ -585,10 +585,25 @@ extension MainView {
         // another window is never mistaken for ours; released with a settle
         // window on close, and the re-show refreshes geometry if it changed.
         if owns {
-            KeyboardTracker.shared.beginOverlayKeyboardPreservation(
-                owner: tabsModel,
-                window: overlayPreservationHostWindow
-            )
+            let hostWindow = overlayPreservationHostWindow
+            #if !targetEnvironment(macCatalyst)
+            // A nil host window with every tab on the external display would
+            // arm the latch unresolved (true for EVERY window). Parked external
+            // content has no device keyboard to preserve either; only control
+            // mode does. The general nil-window fallback stays for cold start.
+            let externalActive = ExternalDisplayManager.shared.isExternalSessionActive
+            let skipArming =
+                (hostWindow == nil && externalActive && terminals.isEmpty) ||
+                (isExternalDisplayWindow && !ExternalDisplayManager.shared.isControlSurfaceActive)
+            #else
+            let skipArming = false
+            #endif
+            if !skipArming {
+                KeyboardTracker.shared.beginOverlayKeyboardPreservation(
+                    owner: tabsModel,
+                    window: hostWindow
+                )
+            }
         } else {
             KeyboardTracker.shared.endOverlayKeyboardPreservation(owner: tabsModel)
         }

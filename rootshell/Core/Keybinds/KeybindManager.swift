@@ -144,6 +144,8 @@ final class KeybindManager: ObservableObject {
             Keybind(key: .m, modifiers: [.command, .shift], action: .toggle_mouse_capture),
             Keybind(key: .b, modifiers: [.command, .control], action: .brightness_boost),
             Keybind(key: .space, modifiers: [.command, .shift], action: .cycle_input_source),
+            Keybind(key: .o, modifiers: .command, action: .focus_external_display),
+            Keybind(key: .o, modifiers: [.command, .option], action: .move_tab_to_external_display),
 
             // Navigation
             Keybind(key: .up, modifiers: .command, action: .scroll_page_up),

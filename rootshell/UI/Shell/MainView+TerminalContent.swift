@@ -434,10 +434,11 @@ extension MainView {
     }
 
     private func activateWindowIfPossible(windowId: String) {
+        // The external window has no activatable scene of its own.
         guard windowId != self.windowId,
+              windowId != ExternalDisplay.windowId,
               let sceneSessionId = TerminalWindowRegistry.sceneSessionId(for: windowId),
-              let scene = UIApplication.shared.connectedScenes
-                  .compactMap({ $0 as? UIWindowScene })
+              let scene = UIApplication.shared.deviceWindowScenes
                   .first(where: { $0.session.persistentIdentifier == sceneSessionId })
         else { return }
         UIApplication.shared.requestSceneSessionActivation(
@@ -604,6 +605,8 @@ extension MainView {
         containerBottomSafeAreaExpansion: CGFloat
     ) -> CGFloat {
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        // The device keyboard never covers the external display.
+        if isExternalDisplayWindow { return 0 }
         let isDocked = effectManager.isKeyboardDocked
         let containerFrame = geometry.frame(in: .global)
         let isPhone = UIDevice.current.userInterfaceIdiom == .phone
@@ -1151,6 +1154,8 @@ extension MainView {
         #if os(visionOS) || targetEnvironment(macCatalyst)
         return 0
         #else
+        // The device keyboard never covers the external display.
+        if isExternalDisplayWindow { return 0 }
         // Register the SwiftUI dependency so keyboard show/hide, toolbar
         // collapse, and drawer-height changes re-evaluate this (same
         // mechanism terminalTabsView uses for the terminal's own padding).

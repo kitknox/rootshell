@@ -1551,7 +1551,15 @@ extension Ghostty {
 #else
             self.contentScaleFactor = UIScreen.main.scale
 #endif
-            
+
+#if !targetEnvironment(macCatalyst)
+            // UIKit re-derives contentScaleFactor from traits on its own schedule;
+            // turn a silent revert of the external scale into a re-assert + re-push.
+            registerForTraitChanges([UITraitDisplayScale.self]) { (view: TerminalView, _) in
+                view.noteEffectiveScaleChanged()
+            }
+#endif
+
             // Log display properties
             Ghostty.logger.info("Display properties:")
             Ghostty.logger.info("   contentScaleFactor: \(self.contentScaleFactor) (set to match screen)")
@@ -2122,8 +2130,32 @@ extension Ghostty {
         }
         
         // MARK: - Window Focus Management
-        
+
+        #if !targetEnvironment(macCatalyst)
+        /// External content is genuinely focusable only in control mode, where
+        /// it lives in the key ControlSurfaceWindow.
+        private func externalContentWindowIsActive() -> Bool {
+            guard let window, window is ControlSurfaceWindow else { return false }
+            return window.isKeyWindow && ExternalDisplayManager.shared.isControlSurfaceActive
+        }
+
+        /// Called by ExternalDisplayManager when typing focus returns to the
+        /// device: heal a windowActiveOverride stuck false, then run the normal
+        /// focus path so first responder and the software keyboard come back.
+        func restoreDeviceFocusAfterExternalForwarding() {
+            guard !isExternalDisplayTerminal, window != nil else { return }
+            if !windowIsActiveForFocus(), windowGenuineFocusSignal() {
+                setWindowActive(true)
+            }
+            if !isLogicallyFocused { isLogicallyFocused = true }
+            _ = focusDidChange(true)
+        }
+        #endif
+
         private func windowIsActiveForFocus() -> Bool {
+            #if !targetEnvironment(macCatalyst)
+            if isExternalDisplayTerminal { return externalContentWindowIsActive() }
+            #endif
             // The override may only NARROW focus, never claim it while the scene
             // is not foreground-active. `updateWindowFocusState` leaves it armed
             // across an app transition to preserve the software keyboard, and a
@@ -2155,6 +2187,9 @@ extension Ghostty {
         /// Catalyst keeps `isKeyWindow` (reliable there, matching MainView).
         private func windowGenuineFocusSignal() -> Bool {
             guard let window = window else { return false }
+            #if !targetEnvironment(macCatalyst)
+            if isExternalDisplayTerminal { return externalContentWindowIsActive() }
+            #endif
             if let scene = window.windowScene, scene.activationState != .foregroundActive {
                 return false
             }
@@ -2444,6 +2479,11 @@ extension Ghostty {
             if PaddingManager.shared.extendUnderHomeIndicator { return 0 }
             #endif
             guard let window = self.window else { return 0 }
+            #if !targetEnvironment(macCatalyst)
+            // External content renders on a screen with no home indicator; in
+            // control mode the zoom container already keeps it clear.
+            if isExternalDisplayTerminal { return 0 }
+            #endif
             let safeBottom = window.safeAreaInsets.bottom
             guard safeBottom > 0 else { return 0 }
             let frameInWindow = self.convert(self.bounds, to: window)
@@ -2513,6 +2553,24 @@ extension Ghostty {
             }
         }
 
+        #if !targetEnvironment(macCatalyst)
+        /// The external terminal this view's input is forwarded to while the
+        /// external display owns typing focus. Nil for external terminals
+        /// themselves (they are the target).
+        var externalInputRedirectTarget: Ghostty.TerminalView? {
+            guard !isExternalDisplayTerminal else { return nil }
+            let target = ExternalDisplayManager.shared.redirectTarget()
+            guard target !== self else { return nil }
+            return target
+        }
+
+        /// Cursor-focus visuals for a parked external terminal receiving
+        /// forwarded input; never touches first responder.
+        func setRemoteInputFocus(_ focused: Bool) {
+            applyGhosttyFocus(focused)
+        }
+        #endif
+
         private func applyGhosttyFocus(_ focused: Bool) {
             guard let surface = surface else { return }
 
@@ -2544,7 +2602,17 @@ extension Ghostty {
         }
 
         func selectionHandlesCanBePresented() -> Bool {
-            isTabVisible
+            // Parked external terminals never hold UIKit focus; follow the
+            // manager's remote-focus oracle instead.
+            if isExternalDisplayTerminal,
+               !ExternalDisplayManager.shared.isControlSurfaceActive {
+                return isTabVisible
+                    && isLogicallyFocused
+                    && ExternalDisplayManager.shared.remoteFocusApplies(to: self)
+                    && window != nil
+                    && !selectionUIIsOccluded()
+            }
+            return isTabVisible
                 && isLogicallyFocused
                 && windowIsActiveForFocus()
                 && window != nil
@@ -2887,6 +2955,16 @@ extension Ghostty {
         }
 
         private func syncFocusForWindowStateChange(sceneIsDeactivating: Bool = false) {
+            #if !targetEnvironment(macCatalyst)
+            // Parked external: cursor follows the remote-focus oracle; no first
+            // responder or KeyboardTracker interaction. Control mode falls through.
+            if isExternalDisplayTerminal,
+               !ExternalDisplayManager.shared.isControlSurfaceActive {
+                applyGhosttyFocus(ExternalDisplayManager.shared.remoteFocusApplies(to: self))
+                syncSelectionHandlesForSurfaceActivity()
+                return
+            }
+            #endif
             let windowActive = windowIsActiveForFocus()
             #if !targetEnvironment(macCatalyst)
             if (!windowActive || sceneIsDeactivating),
@@ -3253,12 +3331,18 @@ extension Ghostty {
 
             Ghostty.logger.info("didMoveToWindow: surface=\(self.surface != nil), isLogicallyFocused=\(self.isLogicallyFocused), shouldBecomeFirstResponderWhenReady=\(self.shouldBecomeFirstResponderWhenReady)")
 
+            #if !targetEnvironment(macCatalyst)
+            // Align scale BEFORE surface creation: the renderer freezes its layer
+            // contentsScale from the scale_factor passed to ghostty_surface_new.
+            let scaleChangedOnWindowMove = applyEffectiveContentScale()
+            #endif
+
             // If we have a surface but it's not created yet (deferred), create it now
             if surface == nil {
                 Ghostty.logger.info("View added to window, creating Ghostty surface now...")
                 createSurface()
             }
-            
+
             syncFocusForWindowStateChange()
 
             // Defense-in-depth for cold start: if this terminal should be focused
@@ -3284,9 +3368,25 @@ extension Ghostty {
             syncSelectionHandlesForSurfaceActivity()
             #endif
 
+            #if !targetEnvironment(macCatalyst)
+            // Boundary = content moving between device and external presentation.
+            // ExternalWindow <-> ControlSurfaceWindow shares size and scale: not a
+            // boundary. SplitTreeHostingView inserts before assigning the final
+            // frame, so never push `frame.size` here; defer to layoutSubviews.
+            let crossed = isExternalDisplayTerminal != lastWasExternalPresentation
+            lastWasExternalPresentation = isExternalDisplayTerminal
+            if crossed || scaleChangedOnWindowMove {
+                surfaceController.invalidateCachedSize()
+                pendingWindowTransitionSync = true
+                setNeedsLayout()
+            } else {
+                sizeDidChange(frame.size)
+            }
+            #else
             sizeDidChange(frame.size)
+            #endif
         }
-        
+
         // MARK: - First Frame Readiness
 
         /// True once the renderer has presented at least one frame for the
@@ -3323,7 +3423,44 @@ extension Ghostty {
         private func createSurface() {
             surfaceController.createSurfaceIfNeeded()
         }
-        
+
+        #if !targetEnvironment(macCatalyst)
+        // MARK: - Effective Content Scale (external display)
+
+        /// Content-based presentation of the previous didMoveToWindow.
+        private var lastWasExternalPresentation = false
+        /// Where the IME preedit last rendered while forwarding (nil = locally).
+        weak var lastExternalPreeditTarget: Ghostty.TerminalView?
+        /// Armed on a presentation boundary or scale change; consumed by the
+        /// first layout pass whose sizeDidChange actually reached the surface.
+        private var pendingWindowTransitionSync = false
+
+        /// Aligns contentScaleFactor and the renderer layer's contentsScale.
+        /// Returns true when the view scale changed.
+        @discardableResult
+        private func applyEffectiveContentScale() -> Bool {
+            let target = ExternalDisplayManager.shared.effectiveScale(
+                isExternalContent: isExternalDisplayTerminal, window: window)
+            var changed = false
+            if contentScaleFactor != target {
+                contentScaleFactor = target
+                changed = true
+            }
+            surfaceController.updateRendererLayerContentsScale(target)
+            return changed
+        }
+
+        /// Live scale change in the same window (zoom preference, trait revert).
+        func noteEffectiveScaleChanged() {
+            guard window != nil else { return }
+            if applyEffectiveContentScale() {
+                surfaceController.invalidateCachedSize()
+                pendingWindowTransitionSync = true
+                setNeedsLayout()
+            }
+        }
+        #endif
+
         override func layoutSubviews() {
             super.layoutSubviews()
 
@@ -3360,10 +3497,39 @@ extension Ghostty {
             // growing into the strip and snapping back. Deduped internally.
             updateBottomInset()
 
+            #if !targetEnvironment(macCatalyst)
+            if pendingWindowTransitionSync {
+                // Re-assert scale (UIKit may have trait-reverted it), push the
+                // paired scale+size against the FINAL bounds, then apply the
+                // external font preference after that push. If a gate dropped
+                // the push the cache stays nil and the flag stays armed.
+                applyEffectiveContentScale()
+                let isExternal = isExternalDisplayTerminal
+                if bounds.width > 1 { sizeDidChange(bounds.size) }
+                if bounds.width > 1, !surfaceController.hasPendingScaleSync {
+                    pendingWindowTransitionSync = false
+                    notifyOnFirstFrame { [weak self] in
+                        guard let self, self.window != nil,
+                              self.isExternalDisplayTerminal == isExternal else { return }
+                        if isExternal {
+                            ExternalDisplayManager.shared.applyExternalFontSizeIfNeeded(to: self)
+                        } else {
+                            ExternalDisplayManager.shared.clearExternalFontSizeIfNeeded(from: self)
+                        }
+                    }
+                }
+            } else {
+                // sizeDidChange itself gates on KeyboardTracker.isKeyboardAnimating
+                // so interpolated bounds during keyboard show/hide are skipped here
+                // and re-applied once the animation settles.
+                sizeDidChange(bounds.size)
+            }
+            #else
             // sizeDidChange itself gates on KeyboardTracker.isKeyboardAnimating
             // so interpolated bounds during keyboard show/hide are skipped here
             // and re-applied once the animation settles.
             sizeDidChange(bounds.size)
+            #endif
 
             #if targetEnvironment(macCatalyst)
             CATransaction.commit()
@@ -3392,6 +3558,14 @@ extension Ghostty {
         }
         
         override var canBecomeFirstResponder: Bool {
+            #if !targetEnvironment(macCatalyst)
+            // Parked external terminals never take first responder: the keyboard
+            // would attach to the non-interactive external window.
+            if isExternalDisplayTerminal,
+               !ExternalDisplayManager.shared.isControlSurfaceActive {
+                return false
+            }
+            #endif
             return true
         }
 
@@ -3407,6 +3581,15 @@ extension Ghostty {
 
         @discardableResult
         override func becomeFirstResponder() -> Bool {
+            #if !targetEnvironment(macCatalyst)
+            // See canBecomeFirstResponder: refuse while parked on the external
+            // display; legitimate in control mode (key ControlSurfaceWindow).
+            if isExternalDisplayTerminal,
+               !ExternalDisplayManager.shared.isControlSurfaceActive {
+                return false
+            }
+            #endif
+
             // Gate: while a keyboard-owning overlay (tab sidebar, connection
             // sidebar, any sheet) is up in this window, the terminal must not
             // hold first responder — the overlay's own field owns the keyboard.
@@ -3714,6 +3897,19 @@ extension Ghostty {
             // Sentinel key names are not text. Drop before any flag is consumed.
             if KeyCode.isUIKeyInputSentinel(text) { return }
 
+            #if !targetEnvironment(macCatalyst)
+            // External display forwarding: the device terminal keeps the
+            // keyboard; keystrokes act on the external terminal (or VNC pane).
+            if let redirect = externalInputRedirectTarget {
+                redirect.insertText(text)
+                return
+            }
+            if !isExternalDisplayTerminal,
+               ExternalDisplayManager.shared.inputProxy.forwardInsertTextToVNC(text) {
+                return
+            }
+            #endif
+
             // Skip if we already handled this key in pressesBegan (OPTION+key on Catalyst)
             // The text input system sends composed characters (e.g., 'å' for Option+a) separately
             if didHandleOptionKey {
@@ -3984,6 +4180,17 @@ extension Ghostty {
         }
         
         func deleteBackward() {
+            #if !targetEnvironment(macCatalyst)
+            if let redirect = externalInputRedirectTarget {
+                redirect.deleteBackward()
+                return
+            }
+            if !isExternalDisplayTerminal,
+               ExternalDisplayManager.shared.inputProxy.forwardDeleteBackwardToVNC() {
+                return
+            }
+            #endif
+
             if handleKoreanCompositionDeleteIfNeeded() {
                 return
             }
@@ -4282,6 +4489,17 @@ extension Ghostty {
             // Update mouse capture state when focus changes to ensure scroll handling
             // has accurate state for this terminal (fixes split view mouse capture scrolling)
             updateMouseCaptureState()
+
+            #if !targetEnvironment(macCatalyst)
+            // Parked external: never bump MainView.focusGeneration (process-global;
+            // a bump cancels the device terminal's pending first-responder retry).
+            if isExternalDisplayTerminal,
+               !ExternalDisplayManager.shared.isControlSurfaceActive {
+                applyGhosttyFocus(focused && ExternalDisplayManager.shared.remoteFocusApplies(to: self))
+                syncSelectionHandlesForSurfaceActivity()
+                return true
+            }
+            #endif
 
             // Drive the iOS status-bar "scroll to top" gesture: only the single
             // globally-focused pane should opt in, otherwise the system finds

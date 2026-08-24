@@ -111,23 +111,32 @@ extension MainView {
     /// The add and settings buttons for the tab bar.
     @ViewBuilder
     func tabBarActionButtons(theme: ResolvedTabBarTheme) -> some View {
-        Button(action: addNewTab) {
-            Image(systemName: "plus")
-                .font(.system(size: 18, weight: .medium))
-                .foregroundColor(theme.tabText)
-                .frame(width: TabMetrics.tabBarHeight, height: TabMetrics.tabBarHeight)
+        #if !targetEnvironment(macCatalyst)
+        if !isExternalDisplayWindow {
+            ExternalDisplayTabBarButton(tint: theme.tabText, windowId: windowId)
         }
-        .layoutPriority(1)
+        #endif
 
-        Button(action: {
-            requestSettingsPresentation()
-        }) {
-            Image(systemName: "gearshape")
-                .font(.system(size: 18, weight: .medium))
-                .foregroundColor(theme.tabText)
-                .frame(width: TabMetrics.tabBarHeight, height: TabMetrics.tabBarHeight)
+        // External window: settings and new connections are device-side.
+        if !isExternalDisplayWindow {
+            Button(action: addNewTab) {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(theme.tabText)
+                    .frame(width: TabMetrics.tabBarHeight, height: TabMetrics.tabBarHeight)
+            }
+            .layoutPriority(1)
+
+            Button(action: {
+                requestSettingsPresentation()
+            }) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(theme.tabText)
+                    .frame(width: TabMetrics.tabBarHeight, height: TabMetrics.tabBarHeight)
+            }
+            .layoutPriority(1)
         }
-        .layoutPriority(1)
     }
 
     // MARK: - Tab Bar Leading Spacer

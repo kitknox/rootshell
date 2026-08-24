@@ -1013,13 +1013,21 @@ final class AgentPaneMonitor {
     /// containing tab selected, this pane focused, and the pane's window key.
     /// A visible sibling split does not consume another pane's unread result.
     func isViewedNow() -> Bool {
-        AgentPaneVisibility.isViewed(
+        var isKeyWindow = terminal?.window?.isKeyWindow ?? false
+        #if !targetEnvironment(macCatalyst)
+        // External-display terminals are never in a key window while parked;
+        // the big screen being presented counts as viewed.
+        if terminal?.windowId == ExternalDisplay.windowId {
+            isKeyWindow = ExternalDisplayManager.shared.isExternalWindowViewed
+        }
+        #endif
+        return AgentPaneVisibility.isViewed(
             appBackgrounded: Ghostty.isAppBackgrounded,
             selectedTabID: tabsModel?.selectedTabID,
             containingTabID: tab?.id,
             focusedPaneID: tab?.focusedPane?.uuid,
             paneID: paneUUID,
-            isKeyWindow: terminal?.window?.isKeyWindow ?? false
+            isKeyWindow: isKeyWindow
         )
     }
 }

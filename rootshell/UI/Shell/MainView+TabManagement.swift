@@ -895,6 +895,10 @@ extension MainView {
             }
             #endif
 
+            // External window: the empty state stays (sheet would land on
+            // a screen the user cannot touch).
+            guard !isExternalDisplayWindow else { return }
+
             // Auto-show connection sheet (same as first launch)
             // since there's no UI to recover from empty state
             addNewTab()

@@ -563,8 +563,7 @@ struct DebugSettingsView: View {
     private func presentShareSheet(for url: URL) {
         let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
 
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let rootVC = windowScene.windows.first?.rootViewController else { return }
+        guard let rootVC = UIApplication.shared.deviceKeyWindow?.rootViewController else { return }
 
         // Walk up to the topmost presented VC so the share sheet presents correctly
         // when deep in a navigation/sheet stack.

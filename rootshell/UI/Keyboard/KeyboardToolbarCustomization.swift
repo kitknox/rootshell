@@ -76,6 +76,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
     case aiAgent
     case brightnessBoost
     case clipboardManager
+    case externalDisplay
 
     // Toggles (1)
     case drawerToggle
@@ -137,6 +138,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .aiAgent: return String(localized: "AI Agent")
         case .brightnessBoost: return String(localized: "Brightness Boost")
         case .clipboardManager: return String(localized: "Clipboard Manager")
+        case .externalDisplay: return String(localized: "External Display")
         case .drawerToggle: return String(localized: "Drawer Toggle")
         }
     }
@@ -169,6 +171,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .aiAgent: return "sparkles"
         case .brightnessBoost: return "sun.max"
         case .clipboardManager: return "list.clipboard"
+        case .externalDisplay: return "tv"
         case .drawerToggle: return "ellipsis"
         default: return nil
         }
@@ -230,6 +233,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .aiAgent: return "__aiAgent__"
         case .brightnessBoost: return "__brightnessBoost__"
         case .clipboardManager: return "__clipboardManager__"
+        case .externalDisplay: return "__externalDisplay__"
         case .drawerToggle: return "__extraDrawer__"
         }
     }
@@ -262,6 +266,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .aiAgent: return .aiAgent
         case .brightnessBoost: return .brightnessBoost
         case .clipboardManager: return .clipboardManager
+        case .externalDisplay: return .externalDisplay
         case .drawerToggle: return .extraKeysDrawerToggle
         default:
             // All symbol keys use single-text display
@@ -285,7 +290,8 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .arrowDrawerToggle, .arrowUp, .arrowDown, .arrowLeft, .arrowRight: return .navigation
         case .dismiss, .tabSwitcher, .compose, .toolbarSettings, .paste, .voiceAgent,
              .toggleFullScreen, .toggleTabBar, .newConnection, .appSettings,
-             .toggleMouseCapture, .aiAgent, .brightnessBoost, .clipboardManager: return .action
+             .toggleMouseCapture, .aiAgent, .brightnessBoost, .clipboardManager,
+             .externalDisplay: return .action
         case .drawerToggle: return .toggle
         default: return .symbol
         }

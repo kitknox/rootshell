@@ -21,6 +21,8 @@ import UIKit
 
 struct WindowSceneReporter: UIViewRepresentable {
     let onUpdate: (UIWindowScene?, UIEdgeInsets, Bool) -> Void
+    /// External MainView: never key, never touches WindowFocusRegistry.
+    var suppressesFocusRegistry: Bool = false
     /// Catalyst: reports this window's current system frame on every layout pass
     /// (covers resize + initial appearance), so the frame is tracked continuously
     /// rather than only at save time.
@@ -30,12 +32,14 @@ struct WindowSceneReporter: UIViewRepresentable {
         let view = WindowSceneReportingView()
         view.onUpdate = onUpdate
         view.onFrameUpdate = onFrameUpdate
+        view.suppressesFocusRegistry = suppressesFocusRegistry
         return view
     }
 
     func updateUIView(_ uiView: WindowSceneReportingView, context: Context) {
         uiView.onUpdate = onUpdate
         uiView.onFrameUpdate = onFrameUpdate
+        uiView.suppressesFocusRegistry = suppressesFocusRegistry
     }
 }
 
@@ -48,7 +52,15 @@ final class WindowSceneReportingView: UIView {
 
     var onUpdate: ((UIWindowScene?, UIEdgeInsets, Bool) -> Void)?
     var onFrameUpdate: ((CGRect) -> Void)?
+    var suppressesFocusRegistry = false
+    private var lastSnapshotSkippedRegistry = false
     private var windowObserverTokens: [NSObjectProtocol] = []
+
+    /// External-presentation windows share the device scene session; letting
+    /// them report would overwrite the device window's registry slot.
+    private var skipsFocusRegistry: Bool {
+        suppressesFocusRegistry || window?.isExternalDisplayPresentation == true
+    }
     private var cachedKeyState: Bool?
     private var lastSceneSnapshot: SceneSnapshot?
     private var lastTopSafeAreaInset: CGFloat?
@@ -110,7 +122,7 @@ final class WindowSceneReportingView: UIView {
     deinit {
         safeAreaDebounceWorkItem?.cancel()
         let sceneSessionID = lastSceneSnapshot?.sceneSessionID
-        if let sceneSessionID {
+        if let sceneSessionID, !suppressesFocusRegistry, !lastSnapshotSkippedRegistry {
             Task { @MainActor in
                 WindowFocusRegistry.shared.remove(sceneSessionId: sceneSessionID)
             }
@@ -121,7 +133,8 @@ final class WindowSceneReportingView: UIView {
     func notifyScene() {
         let scene = window?.windowScene
         let sceneSessionID = scene?.session.persistentIdentifier
-        let isKey = currentWindowIsKey()
+        let skipsRegistry = skipsFocusRegistry
+        let isKey = skipsRegistry ? false : currentWindowIsKey()
         let insets = window?.safeAreaInsets ?? .zero
         let snapshot = SceneSnapshot(
             sceneSessionID: sceneSessionID,
@@ -133,8 +146,10 @@ final class WindowSceneReportingView: UIView {
 
         let previousSnapshot = lastSceneSnapshot
         lastSceneSnapshot = snapshot
+        lastSnapshotSkippedRegistry = skipsRegistry
 
-        if previousSnapshot?.sceneSessionID != sceneSessionID ||
+        if !skipsRegistry,
+           previousSnapshot?.sceneSessionID != sceneSessionID ||
             previousSnapshot?.isKey != isKey {
             Task { @MainActor in
                 if let sceneSessionID {
