@@ -75,6 +75,7 @@ private struct WindowConfigSignature: Equatable {
     var tabsInTitlebar: Bool
     var tabBarHidden: Bool
     var hideTitleBar: Bool
+    var topTabStyle: TopTabStyle
 }
 #endif
 
@@ -436,7 +437,10 @@ private class TransparentWindowView: UIView {
             tabCount: SessionTracker.shared.tabCount(forSceneSessionId: sceneSessionId),
             tabsInTitlebar: tabsInTitlebar,
             tabBarHidden: UserDefaults.standard.bool(forKey: "tabBarHidden"),
-            hideTitleBar: UserDefaults.standard.bool(forKey: "hideWindowTitleBar")
+            hideTitleBar: UserDefaults.standard.bool(forKey: "hideWindowTitleBar"),
+            topTabStyle: TopTabStyle.resolve(
+                UserDefaults.standard.string(forKey: TopTabStyle.storageKey) ?? TopTabStyle.pills.rawValue
+            )
         )
     }
 
@@ -1342,6 +1346,13 @@ private class TransparentWindowView: UIView {
         let tabsInTitlebar = UserDefaults.standard.object(forKey: "tabsInTitlebarEnabled") == nil
             ? true : UserDefaults.standard.bool(forKey: "tabsInTitlebarEnabled")
         let tabBarHidden = UserDefaults.standard.bool(forKey: "tabBarHidden")
+        let topTabStyle = TopTabStyle.resolve(
+            UserDefaults.standard.string(forKey: TopTabStyle.storageKey) ?? TopTabStyle.pills.rawValue
+        )
+        configureTitlebarSeparator(
+            for: window,
+            hidden: topTabStyle == .integrated && tabsInTitlebar && !tabBarHidden
+        )
         configureWindowDragging(
             for: window,
             tabsInTitlebar: tabsInTitlebar,
@@ -1382,11 +1393,32 @@ private class TransparentWindowView: UIView {
         }
     }
 
+    /// AppKit draws its titlebar separator above Catalyst's SwiftUI content,
+    /// so an active tab cannot visually bridge across it. Integrated titlebar
+    /// tabs own that boundary and suppress the native rule; all other layouts
+    /// restore AppKit's automatic behavior.
+    private func configureTitlebarSeparator(for window: NSObject, hidden: Bool) {
+        let selector = NSSelectorFromString("setTitlebarSeparatorStyle:")
+        guard window.responds(to: selector) else { return }
+
+        let method = window.method(for: selector)
+        typealias SetSeparatorStyle = @convention(c) (AnyObject, Selector, Int) -> Void
+        let setSeparatorStyle = unsafeBitCast(method, to: SetSeparatorStyle.self)
+        // NSTitlebarSeparatorStyleAutomatic = 0, None = 1.
+        setSeparatorStyle(window, selector, hidden ? 1 : 0)
+    }
+
     /// Configures window dragging behavior for titlebar tabs mode
     /// Adds an invisible overlay to the titlebar container to block window dragging
     /// Only blocks dragging when there are multiple tabs to reorder and tab bar is visible
     /// Always adds drag handle for hand cursor affordance when tabs are in titlebar
-    private func configureWindowDragging(for window: NSObject, tabsInTitlebar: Bool, tabCount: Int, tabBarHidden: Bool, hideTitleBar: Bool) {
+    private func configureWindowDragging(
+        for window: NSObject,
+        tabsInTitlebar: Bool,
+        tabCount: Int,
+        tabBarHidden: Bool,
+        hideTitleBar: Bool
+    ) {
         // Get the content view and its superview (theme frame)
         guard let contentView = window.value(forKey: "contentView") as? NSObject,
               let themeFrame = contentView.value(forKey: "superview") as? NSObject else {

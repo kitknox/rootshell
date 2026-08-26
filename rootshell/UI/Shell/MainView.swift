@@ -181,6 +181,10 @@ struct MainView: View {
     @AppStorage("tabBarHidden") var tabBarHidden: Bool = false
     @AppStorage("showTabShortcutIndicators") var showTabShortcutIndicators: Bool = false
     @AppStorage("tabBarAnimationsDisabled") var tabBarAnimationsDisabled: Bool = false
+    @AppStorage(TopTabStyle.storageKey) var topTabStyleRawValue: String = TopTabStyle.pills.rawValue
+    @AppStorage(UserPreferences.showTabScopeMenuKey) var showTabScopeMenu: Bool = true
+
+    var topTabStyle: TopTabStyle { TopTabStyle.resolve(topTabStyleRawValue) }
 
 #if !targetEnvironment(macCatalyst) && !os(visionOS)
     @AppStorage("fullScreenModeEnabled") var fullScreenModeEnabled: Bool = false
@@ -402,6 +406,12 @@ struct MainView: View {
                             // actually performs, so no manual refresh signal
                             // is needed.
                             tabBarContent(in: geometry, theme: resolvedTheme)
+                                .frame(
+                                    width: topTabStyle == .integrated
+                                        ? integratedTabTrackWidth(in: geometry)
+                                        : nil,
+                                    alignment: .leading
+                                )
                                 .layoutPriority(-1)
                                 // Toggling grouped mode changes `navigationTabs`,
                                 // which can flip the tab-bar display mode (e.g.
@@ -421,12 +431,18 @@ struct MainView: View {
                                 .blockWindowDrag(when: usesTitlebarTabs)
 #endif
 
-                            Spacer(minLength: 0)
-                            tabBarActionButtons(theme: resolvedTheme)
+                            if topTabStyle == .integrated {
+                                tabBarAddButton(theme: resolvedTheme)
+                                integratedTabBarDragRegion()
+                                tabBarSettingsButton(theme: resolvedTheme)
+                            } else {
+                                Spacer(minLength: 0)
+                                tabBarActionButtons(theme: resolvedTheme)
+                            }
                         }
                         .frame(height: TabMetrics.tabBarHeight)
                         .frame(maxWidth: .infinity)
-                        .background(resolvedTheme.tabBarBackground)
+                        .background(tabBarChromeBackground(resolvedTheme))
                         .modifier(ContainerCornerModifier())
 #if targetEnvironment(macCatalyst)
                         .catalystCursorRegion()

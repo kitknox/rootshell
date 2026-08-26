@@ -22,9 +22,10 @@ extension MainView {
     /// `themeOverrideManager.resolveTheme` → `themeManager` on every read).
     @ViewBuilder
     func fullBleedBackground(geometry: GeometryProxy, theme: ResolvedTabBarTheme) -> some View {
+        let chromeBackground = tabBarChromeBackground(theme)
         #if targetEnvironment(macCatalyst)
         VStack(spacing: 0) {
-            theme.tabBarBackground
+            chromeBackground
                 .frame(height: (hideWindowTitleBar && tabBarHidden) ? 0 : max(44, geometry.safeAreaInsets.top))
             Spacer()
         }
@@ -33,7 +34,7 @@ extension MainView {
         ZStack {
             theme.tabBarBackground
             VStack(spacing: 0) {
-                theme.tabBarBackground
+                chromeBackground
                     .frame(height: windowSafeAreaInsets.top + (tabBarHidden ? 0 : TabMetrics.tabBarHeight))
                 Spacer()
                 if effectManager.terminalBottomInsetFraction == 0 {
@@ -108,9 +109,15 @@ extension MainView {
 
     // MARK: - Tab Bar Action Buttons
 
-    /// The add and settings buttons for the tab bar.
+    /// The add and settings buttons for the legacy pill tab bar.
     @ViewBuilder
     func tabBarActionButtons(theme: ResolvedTabBarTheme) -> some View {
+        tabBarAddButton(theme: theme)
+        tabBarSettingsButton(theme: theme)
+    }
+
+    @ViewBuilder
+    func tabBarAddButton(theme: ResolvedTabBarTheme) -> some View {
         Button(action: addNewTab) {
             Image(systemName: "plus")
                 .font(.system(size: 18, weight: .medium))
@@ -118,7 +125,11 @@ extension MainView {
                 .frame(width: TabMetrics.tabBarHeight, height: TabMetrics.tabBarHeight)
         }
         .layoutPriority(1)
+        .accessibilityLabel("New Tab")
+    }
 
+    @ViewBuilder
+    func tabBarSettingsButton(theme: ResolvedTabBarTheme) -> some View {
         Button(action: {
             requestSettingsPresentation()
         }) {
@@ -128,6 +139,24 @@ extension MainView {
                 .frame(width: TabMetrics.tabBarHeight, height: TabMetrics.tabBarHeight)
         }
         .layoutPriority(1)
+        .accessibilityLabel("Settings")
+    }
+
+    @ViewBuilder
+    func integratedTabBarDragRegion() -> some View {
+        #if targetEnvironment(macCatalyst)
+        if usesTitlebarTabs || hideWindowTitleBar {
+            CatalystWindowDragRegion()
+                .frame(minWidth: Self.integratedCatalystDragWidth, maxWidth: .infinity)
+                .frame(height: TabMetrics.tabBarHeight)
+                .catalystCursorRegion(.openHand, priority: .titlebar)
+                .accessibilityHidden(true)
+        } else {
+            Spacer(minLength: 0)
+        }
+        #else
+        Spacer(minLength: 0)
+        #endif
     }
 
     // MARK: - Tab Bar Leading Spacer
@@ -136,8 +165,11 @@ extension MainView {
     @ViewBuilder
     func tabBarLeadingSpacer(geometry: GeometryProxy, theme: ResolvedTabBarTheme) -> some View {
         #if targetEnvironment(macCatalyst)
-        let spacerWidth = (usesTitlebarTabs && !hideWindowTitleBar) ? max(100, titlebarLayoutManager.leadingInset) : 8
-        theme.tabBarBackground
+        let titlebarMinimum: CGFloat = 100
+        let spacerWidth = (usesTitlebarTabs && !hideWindowTitleBar)
+            ? max(titlebarMinimum, titlebarLayoutManager.leadingInset)
+            : 8
+        tabBarChromeBackground(theme)
             .frame(width: spacerWidth, height: 44)
         #endif
     }

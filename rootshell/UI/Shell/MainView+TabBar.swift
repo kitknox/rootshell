@@ -9,6 +9,10 @@
 import SwiftUI
 import os
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 // MARK: - Tab Bar Display Mode
 
 extension MainView {
@@ -23,12 +27,55 @@ extension MainView {
     /// Width reserved for action buttons (plus + settings)
     static let actionButtonsWidth: CGFloat = TabMetrics.tabBarHeight * 2
 
+    static let integratedMaximumTabWidth: CGFloat = 240
+    static let integratedCatalystDragWidth: CGFloat = 42
+
     /// Usable width for tab items after fixed leading chrome and trailing
     /// action buttons are reserved. Per-tab display mode decisions live in
     /// `TabBar`, where reading title/badge/health metadata does not invalidate
     /// `MainView.body`.
     func availableTabBarWidth(in geometry: GeometryProxy) -> CGFloat {
         max(0, geometry.size.width - Self.actionButtonsWidth - tabBarLeadingPadding)
+    }
+
+    /// Width of the integrated tab viewport. Capped tabs leave real flexible
+    /// space after the new-tab button instead of stretching across the window.
+    func integratedTabTrackWidth(in geometry: GeometryProxy) -> CGFloat {
+        let tabCount = tabsModel.navigationTabs.count
+        guard tabCount > 0 else { return 0 }
+
+        let scopeWidth = integratedScopeMenuWidth
+        let preferred = CGFloat(tabCount) * Self.integratedMaximumTabWidth + scopeWidth
+        let capacity = max(
+            0,
+            geometry.size.width
+                - tabBarLeadingPadding
+                - Self.actionButtonsWidth
+                - integratedMinimumDragWidth
+        )
+        return min(preferred, capacity)
+    }
+
+    private var integratedScopeMenuWidth: CGFloat {
+        guard showTabScopeMenu,
+              tabsModel.orderProjection.mode != .flat,
+              let title = tabsModel.orderProjection.activeScopeTitle else { return 0 }
+        #if canImport(UIKit)
+        let font = UIFont.systemFont(ofSize: 11, weight: .semibold)
+        return min(170, max(66, ceil((title as NSString).size(withAttributes: [.font: font]).width) + 46))
+        #else
+        return min(170, max(66, CGFloat(title.count * 7) + 46))
+        #endif
+    }
+
+    var integratedMinimumDragWidth: CGFloat {
+        #if targetEnvironment(macCatalyst)
+        return (usesTitlebarTabs || hideWindowTitleBar)
+            ? Self.integratedCatalystDragWidth
+            : 0
+        #else
+        return 0
+        #endif
     }
 }
 
@@ -69,7 +116,10 @@ extension MainView {
     func tabBarContent(in geometry: GeometryProxy, theme: ResolvedTabBarTheme) -> some View {
         TabBar(
             theme: theme,
-            availableWidth: availableTabBarWidth(in: geometry),
+            availableWidth: topTabStyle == .integrated
+                ? integratedTabTrackWidth(in: geometry)
+                : availableTabBarWidth(in: geometry),
+            style: topTabStyle,
             tabsModel: tabsModel,
             selectedTabIndex: Binding(
                 get: { selectedTabIndex },
@@ -78,7 +128,7 @@ extension MainView {
                 }
             ),
             windowId: windowId,
-            usesTitlebarTabs: usesTitlebarTabs,
+            usesTitlebarTabs: topTabBarAttachedToWindow,
             sshHealthMonitoringEnabled: sshHealthMonitoringEnabled,
             tabNamespace: tabNamespace,
             canAcceptWindowTransferDrop: tabTransferDropOverlayVisible,

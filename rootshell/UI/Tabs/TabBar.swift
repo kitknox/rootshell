@@ -46,9 +46,44 @@ enum TabBarSizingPolicy {
         let scrollingTabWidth: CGFloat
     }
 
-    static func decision(availableWidth: CGFloat, items: [Item]) -> Decision {
+    static func decision(
+        availableWidth: CGFloat,
+        items: [Item],
+        style: TopTabStyle = .pills
+    ) -> Decision {
         guard let first = items.first else {
             return Decision(mode: .singleTab, equalTabWidth: 0, singleTabWidth: 0, scrollingTabWidth: 0)
+        }
+
+        if style == .integrated {
+            let tabCount = CGFloat(items.count)
+            let equalWidth = availableWidth / max(tabCount, 1)
+            let resolvedWidth = min(240, equalWidth)
+
+            if items.count == 1 {
+                return Decision(
+                    mode: .singleTab,
+                    equalTabWidth: resolvedWidth,
+                    singleTabWidth: resolvedWidth,
+                    scrollingTabWidth: min(240, max(integratedMinimumFloorWidth, resolvedWidth))
+                )
+            }
+
+            if equalWidth >= integratedMinimumFloorWidth {
+                return Decision(
+                    mode: .equalWidth,
+                    equalTabWidth: resolvedWidth,
+                    singleTabWidth: 0,
+                    scrollingTabWidth: resolvedWidth
+                )
+            }
+
+            return Decision(
+                mode: .scrolling,
+                equalTabWidth: 0,
+                singleTabWidth: 0,
+                scrollingTabWidth: min(240, integratedMinimumFloorWidth)
+            )
         }
 
         if items.count == 1 {
@@ -105,6 +140,14 @@ enum TabBarSizingPolicy {
         return 120
         #else
         return UIDevice.current.userInterfaceIdiom == .phone ? 160 : 120
+        #endif
+    }
+
+    private static var integratedMinimumFloorWidth: CGFloat {
+        #if os(visionOS)
+        return 180
+        #else
+        return 120
         #endif
     }
 
@@ -210,6 +253,7 @@ struct TabBar: View {
 
     let theme: ResolvedTabBarTheme
     let availableWidth: CGFloat
+    let style: TopTabStyle
 
     // MARK: - Structural / references
 
@@ -338,7 +382,8 @@ struct TabBar: View {
         }
         return TabBarSizingPolicy.decision(
             availableWidth: max(0, availableWidth - activeScopeMenuWidth),
-            items: items
+            items: items,
+            style: style
         )
     }
 
@@ -377,7 +422,8 @@ struct TabBar: View {
         for tab: TabModel,
         index: Int,
         isOnly: Bool,
-        gatewayOwnerIDs: [UUID]
+        gatewayOwnerIDs: [UUID],
+        tabWidth: CGFloat
     ) -> TabBarItem {
         let tmuxBadge = TmuxTabBadgeResolver.badge(for: tab, gatewayOwnerIDs: gatewayOwnerIDs)
         return TabBarItem(
@@ -406,6 +452,8 @@ struct TabBar: View {
             // Cmd+N to the active group, and hidden tmux windows are skipped.
             keyboardShortcut: keyboardShortcut(tabsModel.navigationIndex(of: tab.id) ?? index),
             usesTitlebarTabs: usesTitlebarTabs,
+            style: style,
+            tabWidth: tabWidth,
             hasThemeOverride: tabHasThemeOverride(tab.id),
             onTap: {
                 if !isOnly { onSelectTab(index) }
@@ -696,7 +744,7 @@ struct TabBar: View {
         if let tab = tabsModel.navigationTabs.first {
             let rawIndex = tabsModel.index(of: tab.id) ?? 0
             let gatewayOwnerIDs = TmuxTabBadgeResolver.activeGatewayOwnerIDs(in: tabsModel.tabs)
-            let tabWidth = TabBarSizingPolicy.singleTabWidth(
+            let tabWidth = style == .integrated ? fallbackWidth : TabBarSizingPolicy.singleTabWidth(
                 availableWidth: max(0, availableWidth - activeScopeMenuWidth),
                 item: sizingItem(for: tab, index: rawIndex, gatewayOwnerIDs: gatewayOwnerIDs),
                 title: tab.title,
@@ -704,9 +752,15 @@ struct TabBar: View {
                 healthRTTMilliseconds: tab.connectionHealth?.rttMilliseconds
             )
             let resolvedWidth = tabWidth > 0 ? tabWidth : fallbackWidth
-            HStack(spacing: 4) {
+            HStack(spacing: style == .integrated ? 0 : 4) {
                 activeScopeMenu
-                tabItem(for: tab, index: rawIndex, isOnly: true, gatewayOwnerIDs: gatewayOwnerIDs)
+                tabItem(
+                    for: tab,
+                    index: rawIndex,
+                    isOnly: true,
+                    gatewayOwnerIDs: gatewayOwnerIDs,
+                    tabWidth: resolvedWidth
+                )
                     .frame(width: resolvedWidth)
                     .contextMenu {
                         // Full shared menu — a lone visible tab can still be a
@@ -720,7 +774,10 @@ struct TabBar: View {
                         )
                     }
             }
-            .frame(maxWidth: .infinity)
+            .frame(
+                maxWidth: .infinity,
+                alignment: style == .integrated ? .leading : .center
+            )
         }
     }
 
@@ -739,14 +796,20 @@ struct TabBar: View {
         // reused for every tab (O(n)), and baked into each item so equality can
         // compare the resolved badge.
         let gatewayOwnerIDs = TmuxTabBadgeResolver.activeGatewayOwnerIDs(in: tabs)
-        HStack(spacing: 4) {
+        HStack(spacing: style == .integrated ? 0 : 4) {
             activeScopeMenu
             ForEach(navigationTabs) { tab in
                 let index = tabsModel.index(of: tab.id) ?? 0
                 let moveLeftTarget = moveTargetRawIndex(for: tab, delta: -1)
                 let moveRightTarget = moveTargetRawIndex(for: tab, delta: 1)
                 equalWidthTabFrame(width: tabWidth) {
-                    tabItem(for: tab, index: index, isOnly: false, gatewayOwnerIDs: gatewayOwnerIDs)
+                    tabItem(
+                        for: tab,
+                        index: index,
+                        isOnly: false,
+                        gatewayOwnerIDs: gatewayOwnerIDs,
+                        tabWidth: tabWidth
+                    )
                         .equatable()
                 }
                     .contentShape(Rectangle())
@@ -808,13 +871,19 @@ struct TabBar: View {
         // equalWidthView.
         let gatewayOwnerIDs = TmuxTabBadgeResolver.activeGatewayOwnerIDs(in: tabs)
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: style == .integrated ? 0 : 8) {
                 activeScopeMenu
                 ForEach(navigationTabs) { tab in
                     let index = tabsModel.index(of: tab.id) ?? 0
                     let moveLeftTarget = moveTargetRawIndex(for: tab, delta: -1)
                     let moveRightTarget = moveTargetRawIndex(for: tab, delta: 1)
-                    tabItem(for: tab, index: index, isOnly: false, gatewayOwnerIDs: gatewayOwnerIDs)
+                    tabItem(
+                        for: tab,
+                        index: index,
+                        isOnly: false,
+                        gatewayOwnerIDs: gatewayOwnerIDs,
+                        tabWidth: tabWidth
+                    )
                         .equatable()
                         .frame(width: tabWidth)
                         .contentShape(Rectangle())
@@ -831,7 +900,7 @@ struct TabBar: View {
                         }
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, style == .integrated ? 0 : 8)
             .contentShape(Rectangle())
             .modifier(GlassEffectContainerModifier())
             // Scoped animation for the selection slide. See equalWidthView.
@@ -856,7 +925,7 @@ struct TabBar: View {
         width: CGFloat,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        if shouldPinEqualWidthTabs {
+        if style == .integrated || shouldPinEqualWidthTabs {
             content()
                 .frame(width: width)
                 .frame(maxHeight: .infinity)
@@ -1025,6 +1094,8 @@ struct TabBarItem: View, Equatable {
     let sshHealthMonitoringEnabled: Bool
     let keyboardShortcut: String?
     let usesTitlebarTabs: Bool
+    let style: TopTabStyle
+    let tabWidth: CGFloat
     let hasThemeOverride: Bool
     let onTap: () -> Void
     let onClose: () -> Void
@@ -1055,7 +1126,13 @@ struct TabBarItem: View, Equatable {
             && lhs.keyboardShortcut == rhs.keyboardShortcut
             && lhs.sshHealthMonitoringEnabled == rhs.sshHealthMonitoringEnabled
             && lhs.usesTitlebarTabs == rhs.usesTitlebarTabs
+            && lhs.style == rhs.style
+            && lhs.tabWidth == rhs.tabWidth
             && lhs.theme.isLight == rhs.theme.isLight
+            && lhs.theme.baseColor == rhs.theme.baseColor
+            && lhs.theme.terminalSurfaceBackground == rhs.theme.terminalSurfaceBackground
+            && lhs.theme.terminalSurfaceIsTransparent == rhs.theme.terminalSurfaceIsTransparent
+            && lhs.theme.tabBarBackground == rhs.theme.tabBarBackground
             && lhs.theme.selectedBackground == rhs.theme.selectedBackground
             && lhs.theme.unselectedBackground == rhs.theme.unselectedBackground
             && lhs.theme.tabText == rhs.theme.tabText
@@ -1067,7 +1144,9 @@ struct TabBarItem: View, Equatable {
             id: tab.id,
             title: tab.title,
             isSelected: isOnly || isSelected,
-            selectedBackgroundColor: theme.selectedBackground,
+            selectedBackgroundColor: style == .integrated
+                ? (theme.terminalSurfaceBackground ?? theme.selectedBackground)
+                : theme.selectedBackground,
             unselectedBackgroundColor: theme.unselectedBackground,
             textColor: theme.tabText,
             secondaryTextColor: theme.tabSecondaryText,
@@ -1086,7 +1165,10 @@ struct TabBarItem: View, Equatable {
             roamProtocol: tab.activeRoamProtocol,
             tmuxBadge: tmuxBadge,
             tmuxBadgePalette: TmuxTabBadgePalette(theme: theme),
-            attentionBadge: attentionBadge
+            attentionBadge: attentionBadge,
+            style: style,
+            tabWidth: tabWidth,
+            usesTitlebarTabs: usesTitlebarTabs
         )
     }
 }

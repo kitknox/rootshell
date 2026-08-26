@@ -222,6 +222,7 @@ struct WindowSettingsView: View {
     @AppStorage("showTabShortcutIndicators") private var showTabShortcutIndicators: Bool = false
     @AppStorage(UserPreferences.showTabScopeMenuKey) private var showTabScopeMenu: Bool = true
     @AppStorage("tabBarAnimationsDisabled") private var tabBarAnimationsDisabled: Bool = false
+    @AppStorage(TopTabStyle.storageKey) private var topTabStyleRawValue: String = TopTabStyle.pills.rawValue
     @AppStorage(TabExposeSettings.showsCaptionsKey) private var tabExposeShowsCaptions: Bool = true
     @AppStorage("tabSidebarTranslucent") private var tabSidebarTranslucent: Bool = true
     @AppStorage("tabSidebarAutoHideOnSelect") private var tabSidebarAutoHideOnSelect: Bool = false
@@ -306,6 +307,14 @@ struct WindowSettingsView: View {
                     get: { !tabBarHidden },
                     set: { tabBarHidden = !$0 }
                 ))
+                .themedRow()
+
+                Picker("Tab Style", selection: $topTabStyleRawValue) {
+                    ForEach(TopTabStyle.allCases) { style in
+                        Text(style.displayName).tag(style.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
                 .themedRow()
 
                 DescribedToggle(

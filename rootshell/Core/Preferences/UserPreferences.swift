@@ -7,6 +7,29 @@
 
 import Foundation
 
+/// Visual treatment for the horizontal tab bar. Pills preserves the existing
+/// Rootshell appearance; Integrated connects the selected tab to the terminal
+/// and uses browser-style sizing and controls.
+enum TopTabStyle: String, CaseIterable, Identifiable {
+    case pills
+    case integrated
+
+    static let storageKey = "topTabStyle"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .pills: return String(localized: "Pills")
+        case .integrated: return String(localized: "Integrated")
+        }
+    }
+
+    static func resolve(_ rawValue: String) -> TopTabStyle {
+        TopTabStyle(rawValue: rawValue) ?? .pills
+    }
+}
+
 /// Namespace for user preferences that affect prompts and SSH defaults
 nonisolated enum UserPreferences {
 

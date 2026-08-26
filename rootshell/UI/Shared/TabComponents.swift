@@ -331,6 +331,9 @@ struct TabButton: View {
     var tmuxBadge: TmuxTabBadge? = nil  // tmux control-mode gateway/window badge
     var tmuxBadgePalette: TmuxTabBadgePalette = .fallback
     var attentionBadge: AgentAttentionStatus? = nil  // agent attention dot (id=agent-attention)
+    var style: TopTabStyle = .pills
+    var tabWidth: CGFloat = 240
+    var usesTitlebarTabs: Bool = false
 
     @State private var isHovered: Bool = false
     @Environment(\.colorScheme) private var colorScheme
@@ -361,10 +364,21 @@ struct TabButton: View {
     /// - Mac Catalyst: hover only
     /// - iPad: hover OR selected tab (touch fallback)
     private var shouldShowCloseButton: Bool {
+        if style == .integrated {
+            return isSelected || isHovered || tabWidth >= integratedInactiveCloseThreshold
+        }
         #if targetEnvironment(macCatalyst)
         return isHovered
         #else
         return isHovered || isSelected
+        #endif
+    }
+
+    private var integratedInactiveCloseThreshold: CGFloat {
+        #if os(visionOS)
+        return 220
+        #else
+        return 160
         #endif
     }
 
@@ -428,14 +442,80 @@ struct TabButton: View {
             Image(systemName: "xmark")
                 .font(.system(size: TabMetrics.closeIconSize, weight: .medium))
                 .foregroundColor(isSelected ? textColor : secondaryTextColor)
-                .frame(width: TabMetrics.closeButtonSize, height: TabMetrics.closeButtonSize)
+                .frame(
+                    width: style == .integrated ? 44 : TabMetrics.closeButtonSize,
+                    height: style == .integrated ? TabMetrics.tabBarHeight : TabMetrics.closeButtonSize
+                )
+                .offset(y: style == .integrated ? 2 : 0)
         }
         .opacity(shouldShowCloseButton ? 1 : 0)
+        .allowsHitTesting(shouldShowCloseButton)
+        .accessibilityHidden(!shouldShowCloseButton)
         .animation(.easeInOut(duration: 0.15), value: shouldShowCloseButton)
         .fixedSize()
+        .accessibilityLabel("Close \(title)")
     }
 
     var body: some View {
+        Group {
+            if style == .integrated {
+                HStack(spacing: 4) {
+                    titleContent
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .offset(y: 2)
+                    closeButton
+                }
+                .transaction { $0.animation = nil }
+                // The browser silhouette consumes its first 10pt with the
+                // lower shoulder. Start content inside the vertical body,
+                // rather than at the outer shoulder edge.
+                .padding(.leading, TabMetrics.horizontalPadding + 8)
+                .padding(.trailing, 4)
+                .frame(maxWidth: .infinity, maxHeight: TabMetrics.tabBarHeight)
+                .background {
+                    IntegratedTabBackground(
+                        isSelected: isSelected,
+                        isHovered: isHovered,
+                        selectedColor: selectedBackgroundColor,
+                        hoverColor: unselectedBackgroundColor
+                    )
+                }
+                .contentShape(Rectangle())
+            } else {
+                pillContent
+            }
+        }
+        .background(
+            Group {
+                if trackFrame {
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: TabFramePreferenceKey.self,
+                            value: [id: geo.frame(in: .global)]
+                        )
+                    }
+                }
+            }
+        )
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .onTapGesture(perform: onTap)
+        .onHover { hovering in
+            // Keep the hover state change itself immediate. The inactive-tab
+            // background owns its small opacity animation so entering a tab
+            // does not animate or rebuild the entire button subtree.
+            isHovered = hovering
+            onHoverChange?(hovering)
+        }
+        .offset(x: isWiggling ? 3 : 0)
+        .animation(
+            isWiggling
+                ? .spring(response: 0.06, dampingFraction: 0.15).repeatCount(6, autoreverses: true)
+                : .default,
+            value: isWiggling
+        )
+    }
+
+    private var pillContent: some View {
         Group {
             #if os(visionOS)
             // visionOS: HStack layout so close button takes explicit space and never overlaps title
@@ -484,33 +564,78 @@ struct TabButton: View {
         .contentShape(.hoverEffect, Capsule())
         .hoverEffect(.highlight)
         #endif
-        .background(
-            Group {
-                if trackFrame {
-                    GeometryReader { geo in
-                        Color.clear.preference(
-                            key: TabFramePreferenceKey.self,
-                            value: [id: geo.frame(in: .global)]
-                        )
-                    }
+    }
+}
+
+/// Chrome-like selected tab silhouette: rounded at the top, with lower
+/// shoulders that widen into the terminal edge. The bottom remains open and
+/// flush, so matching the terminal background reads as one connected surface.
+private struct BrowserTabShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        // Chrome leaves a narrow strip of the frame visible above the active
+        // tab, then uses roughly equal upper radii and lower shoulder curves.
+        // Keeping the shoulders inside the tab's allocation avoids overlap
+        // with neighboring close buttons while preserving the same silhouette.
+        let topInset = min(5, rect.height * 0.12)
+        let tabRect = CGRect(
+            x: rect.minX,
+            y: rect.minY + topInset,
+            width: rect.width,
+            height: max(0, rect.height - topInset)
+        )
+        let shoulder = min(10, tabRect.width * 0.08)
+        let radius = min(10, tabRect.height * 0.28)
+        var path = Path()
+        path.move(to: CGPoint(x: tabRect.minX, y: tabRect.maxY))
+        path.addCurve(
+            to: CGPoint(x: tabRect.minX + shoulder, y: tabRect.maxY - shoulder),
+            control1: CGPoint(x: tabRect.minX + shoulder * 0.55, y: tabRect.maxY),
+            control2: CGPoint(x: tabRect.minX + shoulder, y: tabRect.maxY - shoulder * 0.45)
+        )
+        path.addLine(to: CGPoint(x: tabRect.minX + shoulder, y: tabRect.minY + radius))
+        path.addQuadCurve(
+            to: CGPoint(x: tabRect.minX + shoulder + radius, y: tabRect.minY),
+            control: CGPoint(x: tabRect.minX + shoulder, y: tabRect.minY)
+        )
+        path.addLine(to: CGPoint(x: tabRect.maxX - shoulder - radius, y: tabRect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: tabRect.maxX - shoulder, y: tabRect.minY + radius),
+            control: CGPoint(x: tabRect.maxX - shoulder, y: tabRect.minY)
+        )
+        path.addLine(to: CGPoint(x: tabRect.maxX - shoulder, y: tabRect.maxY - shoulder))
+        path.addCurve(
+            to: CGPoint(x: tabRect.maxX, y: tabRect.maxY),
+            control1: CGPoint(x: tabRect.maxX - shoulder, y: tabRect.maxY - shoulder * 0.45),
+            control2: CGPoint(x: tabRect.maxX - shoulder * 0.55, y: tabRect.maxY)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct IntegratedTabBackground: View {
+    let isSelected: Bool
+    let isHovered: Bool
+    let selectedColor: Color
+    let hoverColor: Color
+
+    var body: some View {
+        ZStack {
+            if isSelected {
+                BrowserTabShape().fill(selectedColor)
+                Rectangle()
+                    .fill(selectedColor)
+                    .frame(height: 1)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+            } else {
+                if isHovered {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(hoverColor.opacity(0.55))
+                        .padding(.vertical, 4)
                 }
             }
-        )
-        .onTapGesture(perform: onTap)
-        .onHover { hovering in
-            // Keep the hover state change itself immediate. The inactive-tab
-            // background owns its small opacity animation so entering a tab
-            // does not animate or rebuild the entire button subtree.
-            isHovered = hovering
-            onHoverChange?(hovering)
         }
-        .offset(x: isWiggling ? 3 : 0)
-        .animation(
-            isWiggling
-                ? .spring(response: 0.06, dampingFraction: 0.15).repeatCount(6, autoreverses: true)
-                : .default,
-            value: isWiggling
-        )
+        .animation(.easeOut(duration: 0.12), value: isHovered)
     }
 }
 

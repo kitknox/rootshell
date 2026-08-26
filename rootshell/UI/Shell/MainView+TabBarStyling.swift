@@ -25,6 +25,15 @@ import UIKit
 struct ResolvedTabBarTheme {
     let themeColors: ThemeManager.ThemeInfo.ThemeColors?
     let baseColor: Color?
+    /// Theme background composited the same way as the terminal surface at
+    /// the user's current background opacity. Integrated tabs use this rather
+    /// than the opaque theme swatch so their active edge actually connects to
+    /// the visible terminal.
+    let terminalSurfaceBackground: Color?
+    /// Catalyst can composite the terminal over the window backdrop. The
+    /// existing theme-derived strip already has strong contrast in that case;
+    /// opaque Catalyst and iOS need a larger deliberate separation.
+    let terminalSurfaceIsTransparent: Bool
     let isLight: Bool
     let adaptivePrimaryBlend: CGFloat
     let adaptiveSecondaryBlend: CGFloat
@@ -42,6 +51,8 @@ struct ResolvedTabBarTheme {
     static let fallback = ResolvedTabBarTheme(
         themeColors: nil,
         baseColor: nil,
+        terminalSurfaceBackground: nil,
+        terminalSurfaceIsTransparent: false,
         isLight: false,
         adaptivePrimaryBlend: 0,
         adaptiveSecondaryBlend: 0,
@@ -64,6 +75,27 @@ struct ResolvedTabBarTheme {
     var tabBarBackground: Color {
         if let override = overrideTabBarBackground { return override }
         return baseColor ?? Color(uiColor: .systemBackground)
+    }
+
+    /// Integrated tabs need a distinct frame behind transparent inactive tabs.
+    /// Honor an explicit tab-bar override. Translucent Catalyst keeps the
+    /// theme-derived frame that already contrasts with the composited terminal;
+    /// opaque Catalyst and iOS use a stronger separation because both surfaces
+    /// otherwise resolve to nearly the same color.
+    var integratedStripBackground: Color {
+        if let override = overrideTabBarBackground { return override }
+        guard let baseColor else { return Color(uiColor: .systemBackground) }
+        if terminalSurfaceIsTransparent {
+            return isLight
+                ? baseColor.blendedWithBlack(0.08)
+                : baseColor.darkenedPreservingHue(0.12)
+        }
+
+        let terminalColor = terminalSurfaceBackground ?? baseColor
+        if isLight {
+            return terminalColor.blendedWithBlack(0.12)
+        }
+        return terminalColor.blendedWithWhite(0.12)
     }
 
     var selectedBackground: Color {
@@ -196,6 +228,8 @@ extension MainView {
             return ResolvedTabBarTheme(
                 themeColors: themeColors,
                 baseColor: nil,
+                terminalSurfaceBackground: nil,
+                terminalSurfaceIsTransparent: false,
                 isLight: false,
                 adaptivePrimaryBlend: 0,
                 adaptiveSecondaryBlend: 0,
@@ -206,9 +240,22 @@ extension MainView {
                 overrideTabSecondaryText: nil
             )
         }
+        #if targetEnvironment(macCatalyst)
+        let terminalSurfaceIsTransparent = transparencyManager.backgroundOpacity < 0.999
+        let terminalSurfaceBackground = baseColor.blendedWithWhite(
+            1 - CGFloat(transparencyManager.backgroundOpacity)
+        )
+        #else
+        // The iOS/visionOS terminal is composited over the same theme-colored
+        // root fill, so opacity does not change its visible base color.
+        let terminalSurfaceIsTransparent = false
+        let terminalSurfaceBackground = baseColor
+        #endif
         return ResolvedTabBarTheme(
             themeColors: themeColors,
             baseColor: baseColor,
+            terminalSurfaceBackground: terminalSurfaceBackground,
+            terminalSurfaceIsTransparent: terminalSurfaceIsTransparent,
             isLight: baseColor.isLight,
             adaptivePrimaryBlend: baseColor.adaptivePrimaryBlend,
             adaptiveSecondaryBlend: baseColor.adaptiveSecondaryBlend,
@@ -292,14 +339,32 @@ extension MainView {
         #endif
     }
 
+    /// Whether the horizontal row physically occupies the window's top edge.
+    /// Hidden-titlebar mode is top-attached even when the separate
+    /// "Tabs in Title Bar" preference is off.
+    var topTabBarAttachedToWindow: Bool {
+        #if targetEnvironment(macCatalyst)
+        return usesTitlebarTabs || hideWindowTitleBar
+        #else
+        return false
+        #endif
+    }
+
+    func tabBarChromeBackground(_ theme: ResolvedTabBarTheme) -> Color {
+        topTabStyle == .integrated
+            ? theme.integratedStripBackground
+            : theme.tabBarBackground
+    }
+
     /// Leading padding for tab bar content (accounts for window controls on Catalyst)
     var tabBarLeadingPadding: CGFloat {
         #if targetEnvironment(macCatalyst)
         let basePadding: CGFloat = 8
         if usesTitlebarTabs && !hideWindowTitleBar {
-            // Use measured inset from window buttons, with a sensible minimum
-            // Standard macOS window buttons (close, minimize, zoom) need ~78pt clearance
-            let titlebarMinimum: CGFloat = 78
+            // The measured value arrives after AppKit creates the buttons.
+            // Keep enough launch-time clearance for the larger Catalyst
+            // traffic-light geometry seen on current macOS releases.
+            let titlebarMinimum: CGFloat = 100
             let measuredInset = titlebarLayoutManager.leadingInset
             return max(titlebarMinimum, measuredInset)
         }

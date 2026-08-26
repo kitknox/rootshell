@@ -338,6 +338,9 @@ extension MainView {
             .onChange(of: tabsInTitlebarEnabled) { _, _ in
                 handleTabsInTitlebarEnabledChange()
             }
+            .onChange(of: topTabStyleRawValue) { _, _ in
+                handleTabsInTitlebarEnabledChange()
+            }
             .onChange(of: hideWindowTitleBar) { _, _ in
                 // Same layout consequence as moving tabs in/out of the
                 // titlebar: surfaces must resize into/out of the top strip.
