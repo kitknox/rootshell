@@ -567,13 +567,13 @@ struct TabButton: View {
     }
 }
 
-/// Chrome-like selected tab silhouette: rounded at the top, with lower
+/// Integrated selected-tab silhouette: rounded at the top, with lower
 /// shoulders that widen into the terminal edge. The bottom remains open and
 /// flush, so matching the terminal background reads as one connected surface.
 private struct BrowserTabShape: Shape {
     func path(in rect: CGRect) -> Path {
-        // Chrome leaves a narrow strip of the frame visible above the active
-        // tab, then uses roughly equal upper radii and lower shoulder curves.
+        // Leave a narrow strip of the frame visible above the active tab, then
+        // use roughly equal upper radii and lower shoulder curves.
         // Keeping the shoulders inside the tab's allocation avoids overlap
         // with neighboring close buttons while preserving the same silhouette.
         let topInset = min(5, rect.height * 0.12)
@@ -583,30 +583,53 @@ private struct BrowserTabShape: Shape {
             width: rect.width,
             height: max(0, rect.height - topInset)
         )
-        let shoulder = min(10, tabRect.width * 0.08)
+        // The lower shoulder is wider than it is tall. That shallow ellipse
+        // makes the active surface appear to flow into the content; a 1:1
+        // corner reads as a sharp hook at Retina pixel scale.
+        let shoulderWidth = min(16, tabRect.width * 0.12)
+        let shoulderHeight = min(10, tabRect.height * 0.28)
         let radius = min(10, tabRect.height * 0.28)
+        let bezierKappa: CGFloat = 0.552_284_8
         var path = Path()
         path.move(to: CGPoint(x: tabRect.minX, y: tabRect.maxY))
         path.addCurve(
-            to: CGPoint(x: tabRect.minX + shoulder, y: tabRect.maxY - shoulder),
-            control1: CGPoint(x: tabRect.minX + shoulder * 0.55, y: tabRect.maxY),
-            control2: CGPoint(x: tabRect.minX + shoulder, y: tabRect.maxY - shoulder * 0.45)
+            to: CGPoint(
+                x: tabRect.minX + shoulderWidth,
+                y: tabRect.maxY - shoulderHeight
+            ),
+            control1: CGPoint(
+                x: tabRect.minX + shoulderWidth * bezierKappa,
+                y: tabRect.maxY
+            ),
+            control2: CGPoint(
+                x: tabRect.minX + shoulderWidth,
+                y: tabRect.maxY - shoulderHeight * (1 - bezierKappa)
+            )
         )
-        path.addLine(to: CGPoint(x: tabRect.minX + shoulder, y: tabRect.minY + radius))
+        path.addLine(to: CGPoint(x: tabRect.minX + shoulderWidth, y: tabRect.minY + radius))
         path.addQuadCurve(
-            to: CGPoint(x: tabRect.minX + shoulder + radius, y: tabRect.minY),
-            control: CGPoint(x: tabRect.minX + shoulder, y: tabRect.minY)
+            to: CGPoint(x: tabRect.minX + shoulderWidth + radius, y: tabRect.minY),
+            control: CGPoint(x: tabRect.minX + shoulderWidth, y: tabRect.minY)
         )
-        path.addLine(to: CGPoint(x: tabRect.maxX - shoulder - radius, y: tabRect.minY))
+        path.addLine(to: CGPoint(x: tabRect.maxX - shoulderWidth - radius, y: tabRect.minY))
         path.addQuadCurve(
-            to: CGPoint(x: tabRect.maxX - shoulder, y: tabRect.minY + radius),
-            control: CGPoint(x: tabRect.maxX - shoulder, y: tabRect.minY)
+            to: CGPoint(x: tabRect.maxX - shoulderWidth, y: tabRect.minY + radius),
+            control: CGPoint(x: tabRect.maxX - shoulderWidth, y: tabRect.minY)
         )
-        path.addLine(to: CGPoint(x: tabRect.maxX - shoulder, y: tabRect.maxY - shoulder))
+        path.addLine(to: CGPoint(
+            x: tabRect.maxX - shoulderWidth,
+            y: tabRect.maxY - shoulderHeight
+        ))
         path.addCurve(
             to: CGPoint(x: tabRect.maxX, y: tabRect.maxY),
-            control1: CGPoint(x: tabRect.maxX - shoulder, y: tabRect.maxY - shoulder * 0.45),
-            control2: CGPoint(x: tabRect.maxX - shoulder * 0.55, y: tabRect.maxY)
+            control1: CGPoint(
+                x: tabRect.maxX - shoulderWidth,
+                y: tabRect.maxY - shoulderHeight * (1 - bezierKappa)
+            ),
+            control2: CGPoint(
+                x: tabRect.maxX - shoulderWidth * bezierKappa,
+                y: tabRect.maxY
+            )
         )
         path.closeSubpath()
         return path
@@ -623,10 +646,6 @@ private struct IntegratedTabBackground: View {
         ZStack {
             if isSelected {
                 BrowserTabShape().fill(selectedColor)
-                Rectangle()
-                    .fill(selectedColor)
-                    .frame(height: 1)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
             } else {
                 if isHovered {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
