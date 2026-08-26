@@ -752,33 +752,67 @@ struct TabBar: View {
                 healthRTTMilliseconds: tab.connectionHealth?.rttMilliseconds
             )
             let resolvedWidth = tabWidth > 0 ? tabWidth : fallbackWidth
-            HStack(spacing: style == .integrated ? 0 : 4) {
-                activeScopeMenu
-                tabItem(
-                    for: tab,
-                    index: rawIndex,
-                    isOnly: true,
-                    gatewayOwnerIDs: gatewayOwnerIDs,
-                    tabWidth: resolvedWidth
-                )
-                    .frame(width: resolvedWidth)
-                    .contextMenu {
-                        // Full shared menu — a lone visible tab can still be a
-                        // tmux gateway/window. No move targets with one tab.
-                        tabContextMenu(
-                            for: tab,
-                            index: rawIndex,
-                            moveLeftTarget: nil,
-                            moveRightTarget: nil,
-                            includeThemeOverrideClear: true
-                        )
-                    }
+            HStack(spacing: 0) {
+                if style == .pills {
+                    singleTabFlexibleMargin()
+                }
+
+                HStack(spacing: style == .integrated ? 0 : 4) {
+                    activeScopeMenu
+                    tabItem(
+                        for: tab,
+                        index: rawIndex,
+                        isOnly: true,
+                        gatewayOwnerIDs: gatewayOwnerIDs,
+                        tabWidth: resolvedWidth
+                    )
+                        .frame(width: resolvedWidth)
+                        .contextMenu {
+                            // Full shared menu — a lone visible tab can still be a
+                            // tmux gateway/window. No move targets with one tab.
+                            tabContextMenu(
+                                for: tab,
+                                index: rawIndex,
+                                moveLeftTarget: nil,
+                                moveRightTarget: nil,
+                                includeThemeOverrideClear: true
+                            )
+                        }
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(1)
+
+                if style == .pills {
+                    singleTabFlexibleMargin()
+                }
             }
             .frame(
                 maxWidth: .infinity,
                 alignment: style == .integrated ? .leading : .center
             )
         }
+    }
+
+    /// A single Pills tab is intentionally narrower than the available row
+    /// and centered. On Catalyst those otherwise-empty centering margins are
+    /// useful titlebar real estate, so make them native drag targets instead
+    /// of inert SwiftUI space.
+    @ViewBuilder
+    private func singleTabFlexibleMargin() -> some View {
+        #if targetEnvironment(macCatalyst)
+        if usesTitlebarTabs {
+            CatalystWindowDragRegion()
+                .frame(minWidth: 0, maxWidth: .infinity)
+                .frame(height: TabMetrics.tabBarHeight)
+                .layoutPriority(-1)
+                .catalystCursorRegion(.openHand, priority: .titlebar)
+                .accessibilityHidden(true)
+        } else {
+            Spacer(minLength: 0)
+        }
+        #else
+        Spacer(minLength: 0)
+        #endif
     }
 
     // MARK: - Equal-width tabs

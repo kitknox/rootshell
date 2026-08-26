@@ -147,7 +147,7 @@ extension MainView {
         #if targetEnvironment(macCatalyst)
         if usesTitlebarTabs || hideWindowTitleBar {
             CatalystWindowDragRegion()
-                .frame(minWidth: Self.integratedCatalystDragWidth, maxWidth: .infinity)
+                .frame(minWidth: Self.catalystWindowDragWidth, maxWidth: .infinity)
                 .frame(height: TabMetrics.tabBarHeight)
                 .catalystCursorRegion(.openHand, priority: .titlebar)
                 .accessibilityHidden(true)
@@ -165,12 +165,17 @@ extension MainView {
     @ViewBuilder
     func tabBarLeadingSpacer(geometry: GeometryProxy, theme: ResolvedTabBarTheme) -> some View {
         #if targetEnvironment(macCatalyst)
-        let titlebarMinimum: CGFloat = 100
-        let spacerWidth = (usesTitlebarTabs && !hideWindowTitleBar)
-            ? max(titlebarMinimum, titlebarLayoutManager.leadingInset)
-            : 8
+        let dragWidth = topTabBarAttachedToWindow ? Self.catalystWindowDragWidth : 0
         tabBarChromeBackground(theme)
-            .frame(width: spacerWidth, height: 44)
+            .frame(width: tabBarLeadingPadding, height: 44)
+            .overlay(alignment: .trailing) {
+                if dragWidth > 0 {
+                    CatalystWindowDragRegion()
+                        .frame(width: dragWidth, height: TabMetrics.tabBarHeight)
+                        .catalystCursorRegion(.openHand, priority: .titlebar)
+                        .accessibilityHidden(true)
+                }
+            }
         #endif
     }
 }

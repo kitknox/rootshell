@@ -360,15 +360,19 @@ extension MainView {
     var tabBarLeadingPadding: CGFloat {
         #if targetEnvironment(macCatalyst)
         let basePadding: CGFloat = 8
+        let controlClearance: CGFloat
         if usesTitlebarTabs && !hideWindowTitleBar {
             // The measured value arrives after AppKit creates the buttons.
             // Keep enough launch-time clearance for the larger Catalyst
             // traffic-light geometry seen on current macOS releases.
             let titlebarMinimum: CGFloat = 100
             let measuredInset = titlebarLayoutManager.leadingInset
-            return max(titlebarMinimum, measuredInset)
+            controlClearance = max(titlebarMinimum, measuredInset)
+        } else {
+            controlClearance = basePadding
         }
-        return basePadding
+        let dragClearance = topTabBarAttachedToWindow ? Self.catalystWindowDragWidth : 0
+        return controlClearance + dragClearance
         #else
         return 0
         #endif

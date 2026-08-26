@@ -28,7 +28,7 @@ extension MainView {
     static let actionButtonsWidth: CGFloat = TabMetrics.tabBarHeight * 2
 
     static let integratedMaximumTabWidth: CGFloat = 240
-    static let integratedCatalystDragWidth: CGFloat = 42
+    static let catalystWindowDragWidth: CGFloat = 42
 
     /// Usable width for tab items after fixed leading chrome and trailing
     /// action buttons are reserved. Per-tab display mode decisions live in
@@ -71,7 +71,7 @@ extension MainView {
     var integratedMinimumDragWidth: CGFloat {
         #if targetEnvironment(macCatalyst)
         return (usesTitlebarTabs || hideWindowTitleBar)
-            ? Self.integratedCatalystDragWidth
+            ? Self.catalystWindowDragWidth
             : 0
         #else
         return 0
