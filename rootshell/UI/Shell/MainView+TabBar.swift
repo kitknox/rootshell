@@ -112,13 +112,46 @@ extension MainView {
     /// (varying frames; common root: scene-update transactions blow the
     /// 10s/30s FrontBoard budget when MainView re-evaluates) hinges on
     /// this decoupling.
+    /// The integrated track is flexible from zero up to its preferred width.
+    /// Measuring inside that allocated slot is critical: the sizing policy must
+    /// see the width left *after* the fixed action buttons, so it switches to
+    /// scrolling before those controls can be pushed outside the window.
     @ViewBuilder
-    func tabBarContent(in geometry: GeometryProxy, theme: ResolvedTabBarTheme) -> some View {
+    func tabBarTrack(in geometry: GeometryProxy, theme: ResolvedTabBarTheme) -> some View {
+        if topTabStyle == .integrated {
+            let preferredWidth = integratedTabTrackWidth(in: geometry)
+            GeometryReader { trackGeometry in
+                tabBarContent(
+                    availableWidth: trackGeometry.size.width,
+                    theme: theme
+                )
+            }
+            .frame(
+                minWidth: 0,
+                idealWidth: preferredWidth,
+                maxWidth: preferredWidth,
+                minHeight: TabMetrics.tabBarHeight,
+                idealHeight: TabMetrics.tabBarHeight,
+                maxHeight: TabMetrics.tabBarHeight,
+                alignment: .leading
+            )
+            .clipped()
+        } else {
+            tabBarContent(
+                availableWidth: availableTabBarWidth(in: geometry),
+                theme: theme
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func tabBarContent(
+        availableWidth: CGFloat,
+        theme: ResolvedTabBarTheme
+    ) -> some View {
         TabBar(
             theme: theme,
-            availableWidth: topTabStyle == .integrated
-                ? integratedTabTrackWidth(in: geometry)
-                : availableTabBarWidth(in: geometry),
+            availableWidth: availableWidth,
             style: topTabStyle,
             tabsModel: tabsModel,
             selectedTabIndex: Binding(

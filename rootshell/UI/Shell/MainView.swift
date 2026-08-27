@@ -405,14 +405,8 @@ struct MainView: View {
                             // re-evaluates only on the property reads it
                             // actually performs, so no manual refresh signal
                             // is needed.
-                            tabBarContent(in: geometry, theme: resolvedTheme)
-                                .frame(
-                                    width: topTabStyle == .integrated
-                                        ? integratedTabTrackWidth(in: geometry)
-                                        : nil,
-                                    alignment: .leading
-                                )
-                                .layoutPriority(-1)
+                            tabBarTrack(in: geometry, theme: resolvedTheme)
+                                .layoutPriority(0)
                                 // Toggling grouped mode changes `navigationTabs`,
                                 // which can flip the tab-bar display mode (e.g.
                                 // equalWidth→singleTab when two tabs live in
@@ -434,6 +428,7 @@ struct MainView: View {
                             if topTabStyle == .integrated {
                                 tabBarAddButton(theme: resolvedTheme)
                                 integratedTabBarDragRegion()
+                                    .layoutPriority(-1)
                                 tabBarSettingsButton(theme: resolvedTheme)
                             } else {
                                 Spacer(minLength: 0)

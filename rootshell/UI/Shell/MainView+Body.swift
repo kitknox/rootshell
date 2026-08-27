@@ -133,6 +133,8 @@ extension MainView {
                     .accessibilityHidden(true)
             }
         }
+        .frame(width: TabMetrics.tabBarHeight, height: TabMetrics.tabBarHeight)
+        .fixedSize()
         .layoutPriority(1)
         .accessibilityLabel("New Tab")
     }
@@ -147,6 +149,8 @@ extension MainView {
                 .foregroundColor(theme.tabText)
                 .frame(width: TabMetrics.tabBarHeight, height: TabMetrics.tabBarHeight)
         }
+        .frame(width: TabMetrics.tabBarHeight, height: TabMetrics.tabBarHeight)
+        .fixedSize()
         .layoutPriority(1)
         .accessibilityLabel("Settings")
     }

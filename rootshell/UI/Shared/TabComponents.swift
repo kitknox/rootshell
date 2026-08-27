@@ -336,6 +336,7 @@ struct TabButton: View {
     var usesTitlebarTabs: Bool = false
 
     @State private var isHovered: Bool = false
+    @State private var isCloseHovered: Bool = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -440,14 +441,29 @@ struct TabButton: View {
 
     private var closeButton: some View {
         Button(action: onClose) {
-            Image(systemName: "xmark")
-                .font(.system(size: TabMetrics.closeIconSize, weight: .medium))
-                .foregroundColor(isSelected ? textColor : secondaryTextColor)
-                .frame(
-                    width: style == .integrated ? 44 : TabMetrics.closeButtonSize,
-                    height: style == .integrated ? TabMetrics.tabBarHeight : TabMetrics.closeButtonSize
-                )
-                .offset(y: style == .integrated ? 2 : 0)
+            ZStack {
+                if style == .integrated {
+                    Circle()
+                        .fill((isSelected ? textColor : secondaryTextColor).opacity(isLightTheme ? 0.10 : 0.14))
+                        .frame(width: 20, height: 20)
+                        .opacity(isCloseHovered ? 1 : 0)
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.10), value: isCloseHovered)
+                }
+
+                Image(systemName: "xmark")
+                    .font(.system(size: TabMetrics.closeIconSize, weight: .medium))
+                    .foregroundColor(isSelected ? textColor : secondaryTextColor)
+            }
+            .frame(
+                width: style == .integrated ? 44 : TabMetrics.closeButtonSize,
+                height: style == .integrated ? TabMetrics.tabBarHeight : TabMetrics.closeButtonSize
+            )
+            .offset(y: style == .integrated ? 2 : 0)
+        }
+        .onHover { hovering in
+            if style == .integrated {
+                isCloseHovered = hovering
+            }
         }
         .opacity(shouldShowCloseButton ? 1 : 0)
         .allowsHitTesting(shouldShowCloseButton)
@@ -476,7 +492,7 @@ struct TabButton: View {
                 // lower shoulder. Start content inside the vertical body,
                 // rather than at the outer shoulder edge.
                 .padding(.leading, TabMetrics.horizontalPadding + 8)
-                .padding(.trailing, 4)
+                .padding(.trailing, 6)
                 .frame(maxWidth: .infinity, maxHeight: TabMetrics.tabBarHeight)
                 .background {
                     IntegratedTabBackground(
@@ -512,6 +528,9 @@ struct TabButton: View {
             // background owns its small opacity animation so entering a tab
             // does not animate or rebuild the entire button subtree.
             isHovered = hovering
+            if !hovering {
+                isCloseHovered = false
+            }
             onHoverChange?(hovering)
         }
         .offset(x: isWiggling ? 3 : 0)
@@ -658,7 +677,7 @@ private struct IntegratedTabBackground: View {
                 selectedBackground
             } else {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(hoverColor.opacity(0.55))
+                    .fill(hoverColor.opacity(0.45))
                     .padding(.vertical, 4)
                     .opacity(isHovered ? 1 : 0)
             }
