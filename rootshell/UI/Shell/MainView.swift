@@ -437,7 +437,10 @@ struct MainView: View {
                         }
                         .frame(height: TabMetrics.tabBarHeight)
                         .frame(maxWidth: .infinity)
-                        .background(tabBarChromeBackground(resolvedTheme))
+                        .background {
+                            tabBarChromeBackground(resolvedTheme)
+                                .tabStyleSwitchContextMenu(selection: $topTabStyleRawValue)
+                        }
                         .modifier(ContainerCornerModifier())
 #if targetEnvironment(macCatalyst)
                         .catalystCursorRegion()

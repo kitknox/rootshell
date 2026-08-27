@@ -934,6 +934,44 @@ extension View {
     }
 }
 
+// MARK: - Tab Style Context Menu
+
+/// Adds the lightweight Pills/Integrated switcher to otherwise non-tab chrome.
+/// The nearest per-tab context menu still owns secondary clicks on real tabs.
+struct TabStyleSwitchContextMenuModifier: ViewModifier {
+    @Binding var selectedStyleRawValue: String
+
+    private var selectedStyle: TopTabStyle {
+        TopTabStyle.resolve(selectedStyleRawValue)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(Rectangle())
+            .contextMenu {
+                styleButton(.pills, systemImage: "capsule")
+                styleButton(.integrated, systemImage: "rectangle.topthird.inset.filled")
+            }
+    }
+
+    private func styleButton(_ style: TopTabStyle, systemImage: String) -> some View {
+        Button {
+            selectedStyleRawValue = style.rawValue
+        } label: {
+            Label(
+                style.displayName,
+                systemImage: selectedStyle == style ? "checkmark" : systemImage
+            )
+        }
+    }
+}
+
+extension View {
+    func tabStyleSwitchContextMenu(selection: Binding<String>) -> some View {
+        modifier(TabStyleSwitchContextMenuModifier(selectedStyleRawValue: selection))
+    }
+}
+
 // MARK: - Tab Animation Constants
 
 /// Shared animation parameters for tab transitions

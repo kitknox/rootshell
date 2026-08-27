@@ -135,6 +135,7 @@ extension MainView {
         }
         .frame(width: TabMetrics.tabBarHeight, height: TabMetrics.tabBarHeight)
         .fixedSize()
+        .tabStyleSwitchContextMenu(selection: $topTabStyleRawValue)
         .layoutPriority(1)
         .accessibilityLabel("New Tab")
     }
@@ -151,6 +152,7 @@ extension MainView {
         }
         .frame(width: TabMetrics.tabBarHeight, height: TabMetrics.tabBarHeight)
         .fixedSize()
+        .tabStyleSwitchContextMenu(selection: $topTabStyleRawValue)
         .layoutPriority(1)
         .accessibilityLabel("Settings")
     }
@@ -162,6 +164,7 @@ extension MainView {
             CatalystWindowDragRegion()
                 .frame(minWidth: Self.catalystWindowDragWidth, maxWidth: .infinity)
                 .frame(height: TabMetrics.tabBarHeight)
+                .tabStyleSwitchContextMenu(selection: $topTabStyleRawValue)
                 .catalystCursorRegion(.openHand, priority: .titlebar)
                 .accessibilityHidden(true)
         } else {
@@ -189,6 +192,7 @@ extension MainView {
                         .accessibilityHidden(true)
                 }
             }
+            .tabStyleSwitchContextMenu(selection: $topTabStyleRawValue)
         #endif
     }
 }
