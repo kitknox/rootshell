@@ -677,7 +677,7 @@ private struct IntegratedTabBackground: View {
                 selectedBackground
             } else {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(hoverColor.opacity(0.45))
+                    .fill(hoverColor.opacity(0.75))
                     .padding(.vertical, 4)
                     .opacity(isHovered ? 1 : 0)
             }
@@ -786,7 +786,7 @@ struct GlassTabBackgroundModifier: ViewModifier {
     private var inactiveHoverBackground: some View {
         Capsule()
             .fill(unselectedBackgroundColor)
-            .opacity(isHovered ? (avoidsMaterials ? 1 : 0.5) : 0)
+            .opacity(isHovered ? (avoidsMaterials ? 1 : 0.75) : 0)
             .animation(
                 reduceMotion ? nil : .easeOut(duration: 0.12),
                 value: isHovered

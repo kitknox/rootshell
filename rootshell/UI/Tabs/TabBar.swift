@@ -1218,7 +1218,7 @@ struct TabBarItem: View, Equatable {
             selectedBackgroundColor: style == .integrated
                 ? (theme.terminalSurfaceBackground ?? theme.selectedBackground)
                 : theme.selectedBackground,
-            unselectedBackgroundColor: theme.unselectedBackground,
+            unselectedBackgroundColor: theme.inactiveHoverBackground(for: style),
             textColor: theme.tabText,
             secondaryTextColor: theme.tabSecondaryText,
             isLightTheme: theme.isLight,

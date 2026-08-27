@@ -116,6 +116,21 @@ struct ResolvedTabBarTheme {
         return baseColor.lightenedPreservingHue(adaptiveSecondaryBlend)
     }
 
+    /// Hovering an inactive tab needs to remain visible even when the theme's
+    /// derived unselected color nearly matches the surface behind it (for
+    /// example, Tango Dark over the integrated tab strip). Derive the default
+    /// from the surface that is actually under the tab so the fill always
+    /// moves a consistent distance darker or lighter. An explicit theme UI
+    /// override remains authoritative.
+    func inactiveHoverBackground(for style: TopTabStyle) -> Color {
+        if let override = overrideUnselectedBackground { return override }
+        guard baseColor != nil else { return unselectedBackground }
+        let surface = style == .integrated ? integratedStripBackground : tabBarBackground
+        return isLight
+            ? surface.blendedWithBlack(0.16)
+            : surface.blendedWithWhite(0.16)
+    }
+
     var tabText: Color {
         if let override = overrideTabText { return override }
         guard baseColor != nil else { return .primary }
