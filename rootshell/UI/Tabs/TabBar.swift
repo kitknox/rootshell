@@ -49,13 +49,14 @@ enum TabBarSizingPolicy {
     static func decision(
         availableWidth: CGFloat,
         items: [Item],
-        style: TopTabStyle = .pills
+        style: TopTabStyle = .pills,
+        usesCompactSpacing: Bool = false
     ) -> Decision {
         guard let first = items.first else {
             return Decision(mode: .singleTab, equalTabWidth: 0, singleTabWidth: 0, scrollingTabWidth: 0)
         }
 
-        if style == .integrated {
+        if style == .integrated || usesCompactSpacing {
             let tabCount = CGFloat(items.count)
             let equalWidth = availableWidth / max(tabCount, 1)
             let resolvedWidth = min(integratedMaximumWidth, equalWidth)
@@ -279,6 +280,7 @@ struct TabBar: View {
     let theme: ResolvedTabBarTheme
     let availableWidth: CGFloat
     let style: TopTabStyle
+    let usesCompactSpacing: Bool
 
     // MARK: - Structural / references
 
@@ -360,7 +362,10 @@ struct TabBar: View {
                 scrollingView(tabWidth: decision.scrollingTabWidth)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // GeometryReader places an intrinsic-height child at its top edge.
+        // Fill the 44pt track and use `.leading` (vertically centered) so a
+        // 32pt pill aligns with the full-height add/settings controls.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .tmuxTabDialogs(coordinator: tmuxDialogs, controller: tmuxController)
         .overlay {
             if canAcceptWindowTransferDrop {
@@ -409,7 +414,8 @@ struct TabBar: View {
         return TabBarSizingPolicy.decision(
             availableWidth: max(0, availableWidth - activeScopeMenuWidth),
             items: items,
-            style: style
+            style: style,
+            usesCompactSpacing: usesCompactSpacing
         )
     }
 
@@ -770,7 +776,7 @@ struct TabBar: View {
         if let tab = tabsModel.navigationTabs.first {
             let rawIndex = tabsModel.index(of: tab.id) ?? 0
             let gatewayOwnerIDs = TmuxTabBadgeResolver.activeGatewayOwnerIDs(in: tabsModel.tabs)
-            let tabWidth = style == .integrated ? fallbackWidth : TabBarSizingPolicy.singleTabWidth(
+            let tabWidth = usesCompactSpacing ? fallbackWidth : TabBarSizingPolicy.singleTabWidth(
                 availableWidth: max(0, availableWidth - activeScopeMenuWidth),
                 item: sizingItem(for: tab, index: rawIndex, gatewayOwnerIDs: gatewayOwnerIDs),
                 title: tab.title,
@@ -779,11 +785,11 @@ struct TabBar: View {
             )
             let resolvedWidth = tabWidth > 0 ? tabWidth : fallbackWidth
             HStack(spacing: 0) {
-                if style == .pills {
+                if !usesCompactSpacing {
                     singleTabFlexibleMargin()
                 }
 
-                HStack(spacing: style == .integrated ? 0 : 4) {
+                HStack(spacing: usesCompactSpacing ? 0 : 4) {
                     activeScopeMenu
                     tabItem(
                         for: tab,
@@ -808,13 +814,13 @@ struct TabBar: View {
                 .fixedSize(horizontal: true, vertical: false)
                 .layoutPriority(1)
 
-                if style == .pills {
+                if !usesCompactSpacing {
                     singleTabFlexibleMargin()
                 }
             }
             .frame(
                 maxWidth: .infinity,
-                alignment: style == .integrated ? .leading : .center
+                alignment: usesCompactSpacing ? .leading : .center
             )
         }
     }
@@ -856,7 +862,7 @@ struct TabBar: View {
         // reused for every tab (O(n)), and baked into each item so equality can
         // compare the resolved badge.
         let gatewayOwnerIDs = TmuxTabBadgeResolver.activeGatewayOwnerIDs(in: tabs)
-        HStack(spacing: style == .integrated ? 0 : 4) {
+        HStack(spacing: usesCompactSpacing ? 0 : 4) {
             activeScopeMenu
             ForEach(navigationTabs) { tab in
                 let index = tabsModel.index(of: tab.id) ?? 0
@@ -933,7 +939,7 @@ struct TabBar: View {
         // equalWidthView.
         let gatewayOwnerIDs = TmuxTabBadgeResolver.activeGatewayOwnerIDs(in: tabs)
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: style == .integrated ? 0 : 8) {
+            HStack(spacing: usesCompactSpacing ? 0 : 8) {
                 activeScopeMenu
                 ForEach(navigationTabs) { tab in
                     let index = tabsModel.index(of: tab.id) ?? 0
@@ -962,7 +968,7 @@ struct TabBar: View {
                         }
                 }
             }
-            .padding(.horizontal, style == .integrated ? 0 : 8)
+            .padding(.horizontal, usesCompactSpacing ? 0 : 8)
             .contentShape(Rectangle())
             .modifier(GlassEffectContainerModifier())
             // Scoped animation for the selection slide. See equalWidthView.
@@ -989,7 +995,7 @@ struct TabBar: View {
         width: CGFloat,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        if style == .integrated || shouldPinEqualWidthTabs {
+        if usesCompactSpacing || shouldPinEqualWidthTabs {
             content()
                 .frame(width: width)
                 .frame(maxHeight: .infinity)

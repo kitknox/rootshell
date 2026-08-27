@@ -182,9 +182,13 @@ struct MainView: View {
     @AppStorage("showTabShortcutIndicators") var showTabShortcutIndicators: Bool = false
     @AppStorage("tabBarAnimationsDisabled") var tabBarAnimationsDisabled: Bool = false
     @AppStorage(TopTabStyle.storageKey) var topTabStyleRawValue: String = TopTabStyle.pills.rawValue
+    @AppStorage(UserPreferences.compactPillTabSpacingKey) var compactPillTabSpacing: Bool = false
     @AppStorage(UserPreferences.showTabScopeMenuKey) var showTabScopeMenu: Bool = true
 
     var topTabStyle: TopTabStyle { TopTabStyle.resolve(topTabStyleRawValue) }
+    var usesCompactTabSpacing: Bool {
+        topTabStyle == .integrated || compactPillTabSpacing
+    }
 
 #if !targetEnvironment(macCatalyst) && !os(visionOS)
     @AppStorage("fullScreenModeEnabled") var fullScreenModeEnabled: Bool = false
@@ -425,7 +429,7 @@ struct MainView: View {
                                 .blockWindowDrag(when: usesTitlebarTabs)
 #endif
 
-                            if topTabStyle == .integrated {
+                            if usesCompactTabSpacing {
                                 tabBarAddButton(theme: resolvedTheme)
                                 integratedTabBarDragRegion()
                                     .layoutPriority(-1)

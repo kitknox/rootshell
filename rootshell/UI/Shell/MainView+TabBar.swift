@@ -38,7 +38,7 @@ extension MainView {
         max(0, geometry.size.width - Self.actionButtonsWidth - tabBarLeadingPadding)
     }
 
-    /// Width of the integrated tab viewport. Capped tabs leave real flexible
+    /// Width of the compact tab viewport. Capped tabs leave real flexible
     /// space after the new-tab button instead of stretching across the window.
     func integratedTabTrackWidth(in geometry: GeometryProxy) -> CGFloat {
         let tabCount = tabsModel.navigationTabs.count
@@ -112,13 +112,13 @@ extension MainView {
     /// (varying frames; common root: scene-update transactions blow the
     /// 10s/30s FrontBoard budget when MainView re-evaluates) hinges on
     /// this decoupling.
-    /// The integrated track is flexible from zero up to its preferred width.
-    /// Measuring inside that allocated slot is critical: the sizing policy must
-    /// see the width left *after* the fixed action buttons, so it switches to
-    /// scrolling before those controls can be pushed outside the window.
+    /// The compact track uses a preferred width already clamped to the space
+    /// left after fixed controls. Giving that width to the GeometryReader
+    /// directly prevents SwiftUI from needlessly compressing a lone pill while
+    /// the adjacent titlebar drag region expands into otherwise unused space.
     @ViewBuilder
     func tabBarTrack(in geometry: GeometryProxy, theme: ResolvedTabBarTheme) -> some View {
-        if topTabStyle == .integrated {
+        if usesCompactTabSpacing {
             let preferredWidth = integratedTabTrackWidth(in: geometry)
             GeometryReader { trackGeometry in
                 tabBarContent(
@@ -127,15 +127,10 @@ extension MainView {
                 )
             }
             .frame(
-                minWidth: 0,
-                idealWidth: preferredWidth,
-                maxWidth: preferredWidth,
-                minHeight: TabMetrics.tabBarHeight,
-                idealHeight: TabMetrics.tabBarHeight,
-                maxHeight: TabMetrics.tabBarHeight,
+                width: preferredWidth,
+                height: TabMetrics.tabBarHeight,
                 alignment: .leading
             )
-            .clipped()
         } else {
             tabBarContent(
                 availableWidth: availableTabBarWidth(in: geometry),
@@ -153,6 +148,7 @@ extension MainView {
             theme: theme,
             availableWidth: availableWidth,
             style: topTabStyle,
+            usesCompactSpacing: usesCompactTabSpacing,
             tabsModel: tabsModel,
             selectedTabIndex: Binding(
                 get: { selectedTabIndex },

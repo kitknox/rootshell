@@ -934,33 +934,43 @@ extension View {
     }
 }
 
-// MARK: - Tab Style Context Menu
+// MARK: - Tab Layout Context Menu
 
-/// Adds the lightweight Pills/Integrated switcher to otherwise non-tab chrome.
+/// Adds the lightweight Pills/Compact Pills/Integrated switcher to otherwise
+/// non-tab chrome.
 /// The nearest per-tab context menu still owns secondary clicks on real tabs.
 struct TabStyleSwitchContextMenuModifier: ViewModifier {
     @Binding var selectedStyleRawValue: String
+    @AppStorage(UserPreferences.compactPillTabSpacingKey) private var compactPillTabSpacing: Bool = false
 
     private var selectedStyle: TopTabStyle {
         TopTabStyle.resolve(selectedStyleRawValue)
+    }
+
+    private var selectedLayout: TopTabLayout {
+        TopTabLayout.resolve(style: selectedStyle, compactPills: compactPillTabSpacing)
     }
 
     func body(content: Content) -> some View {
         content
             .contentShape(Rectangle())
             .contextMenu {
-                styleButton(.pills, systemImage: "capsule")
-                styleButton(.integrated, systemImage: "rectangle.topthird.inset.filled")
+                layoutButton(.pills, systemImage: "capsule")
+                layoutButton(.compactPills, systemImage: "capsule.fill")
+                layoutButton(.integrated, systemImage: "rectangle.topthird.inset.filled")
             }
     }
 
-    private func styleButton(_ style: TopTabStyle, systemImage: String) -> some View {
+    private func layoutButton(_ layout: TopTabLayout, systemImage: String) -> some View {
         Button {
-            selectedStyleRawValue = style.rawValue
+            selectedStyleRawValue = layout.style.rawValue
+            if layout.style == .pills {
+                compactPillTabSpacing = layout.usesCompactPillSpacing
+            }
         } label: {
             Label(
-                style.displayName,
-                systemImage: selectedStyle == style ? "checkmark" : systemImage
+                layout.displayName,
+                systemImage: selectedLayout == layout ? "checkmark" : systemImage
             )
         }
     }

@@ -223,6 +223,7 @@ struct WindowSettingsView: View {
     @AppStorage(UserPreferences.showTabScopeMenuKey) private var showTabScopeMenu: Bool = true
     @AppStorage("tabBarAnimationsDisabled") private var tabBarAnimationsDisabled: Bool = false
     @AppStorage(TopTabStyle.storageKey) private var topTabStyleRawValue: String = TopTabStyle.pills.rawValue
+    @AppStorage(UserPreferences.compactPillTabSpacingKey) private var compactPillTabSpacing: Bool = false
     @AppStorage(TabExposeSettings.showsCaptionsKey) private var tabExposeShowsCaptions: Bool = true
     @AppStorage("tabSidebarTranslucent") private var tabSidebarTranslucent: Bool = true
     @AppStorage("tabSidebarAutoHideOnSelect") private var tabSidebarAutoHideOnSelect: Bool = false
@@ -285,6 +286,23 @@ struct WindowSettingsView: View {
         return true
         #endif
     }
+
+    private var topTabLayout: Binding<TopTabLayout> {
+        Binding(
+            get: {
+                TopTabLayout.resolve(
+                    style: TopTabStyle.resolve(topTabStyleRawValue),
+                    compactPills: compactPillTabSpacing
+                )
+            },
+            set: { layout in
+                topTabStyleRawValue = layout.style.rawValue
+                if layout.style == .pills {
+                    compactPillTabSpacing = layout.usesCompactPillSpacing
+                }
+            }
+        )
+    }
     #if !targetEnvironment(macCatalyst) && !os(visionOS)
     @AppStorage("fullScreenModeEnabled") private var fullScreenModeEnabled: Bool = false
     @Bindable private var alwaysOnDisplayManager = AlwaysOnDisplayManager.shared
@@ -309,9 +327,9 @@ struct WindowSettingsView: View {
                 ))
                 .themedRow()
 
-                Picker("Tab Style", selection: $topTabStyleRawValue) {
-                    ForEach(TopTabStyle.allCases) { style in
-                        Text(style.displayName).tag(style.rawValue)
+                Picker("Tab Style", selection: topTabLayout) {
+                    ForEach(TopTabLayout.allCases) { layout in
+                        Text(layout.displayName).tag(layout)
                     }
                 }
                 .pickerStyle(.menu)
