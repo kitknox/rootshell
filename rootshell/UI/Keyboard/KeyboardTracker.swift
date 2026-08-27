@@ -30,6 +30,14 @@ class KeyboardTracker {
     @MainActor
     private(set) var isHardwareKeyboard: Bool = false
 
+    /// True while a real Control key-down event has been observed without a
+    /// matching key-up. GCKeyboard's polled `isPressed` state can report
+    /// Control as held when it is not, which would make a bare arrow emit a
+    /// Ctrl-modified sequence on top of the one `handleArrowKey` already sent.
+    /// A phantom held state delivers no key event, so edge tracking rejects it.
+    @MainActor
+    private var ctrlHeldFromKeyEvents = false
+
     /// True if the on-screen (software) keyboard is currently visible
     @MainActor
     private(set) var isSoftwareKeyboardVisible: Bool = false
@@ -355,6 +363,8 @@ class KeyboardTracker {
     #if targetEnvironment(macCatalyst)
     @MainActor
     @objc private func appDidBecomeActive(_ notification: Notification) {
+        // A Control key-up can be missed while inactive; do not stay latched.
+        ctrlHeldFromKeyEvents = false
         // On Mac Catalyst, the GCKeyboard instance can change during sleep/wake
         // or other system events without firing connect/disconnect notifications.
         // Reinstall the handler to ensure Ctrl+key handling continues to work.
@@ -646,6 +656,9 @@ class KeyboardTracker {
                                 keyCode == .leftAlt || keyCode == .rightAlt
             if isModifierKey {
                 Task { @MainActor in
+                    if keyCode == .leftControl || keyCode == .rightControl {
+                        self?.ctrlHeldFromKeyEvents = pressed
+                    }
                     self?.notifyModifierKeyChange(keyCode: keyCode, pressed: pressed)
                 }
                 return
@@ -900,6 +913,10 @@ class KeyboardTracker {
 
     @MainActor
     private func sendCtrlArrowSequence(_ keyCode: GCKeyCode) {
+        // Only emit when a real Control key-down was seen. Without this, a
+        // phantom polled Control state doubles every bare arrow press.
+        guard ctrlHeldFromKeyEvents else { return }
+
         // Find the key window and active TerminalView
         guard let keyWindow = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
