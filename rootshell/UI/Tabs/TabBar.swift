@@ -58,18 +58,29 @@ enum TabBarSizingPolicy {
         if style == .integrated {
             let tabCount = CGFloat(items.count)
             let equalWidth = availableWidth / max(tabCount, 1)
-            let resolvedWidth = min(240, equalWidth)
+            let resolvedWidth = min(integratedMaximumWidth, equalWidth)
+            let requiredWidth = min(
+                integratedMaximumWidth,
+                max(
+                    integratedMinimumFloorWidth,
+                    items.map(integratedReadableMinimumWidth(for:)).max()
+                        ?? integratedMinimumFloorWidth
+                )
+            )
 
             if items.count == 1 {
                 return Decision(
                     mode: .singleTab,
                     equalTabWidth: resolvedWidth,
                     singleTabWidth: resolvedWidth,
-                    scrollingTabWidth: min(240, max(integratedMinimumFloorWidth, resolvedWidth))
+                    scrollingTabWidth: min(
+                        integratedMaximumWidth,
+                        max(requiredWidth, resolvedWidth)
+                    )
                 )
             }
 
-            if equalWidth >= integratedMinimumFloorWidth {
+            if equalWidth >= requiredWidth {
                 return Decision(
                     mode: .equalWidth,
                     equalTabWidth: resolvedWidth,
@@ -82,7 +93,7 @@ enum TabBarSizingPolicy {
                 mode: .scrolling,
                 equalTabWidth: 0,
                 singleTabWidth: 0,
-                scrollingTabWidth: min(240, integratedMinimumFloorWidth)
+                scrollingTabWidth: requiredWidth
             )
         }
 
@@ -146,10 +157,14 @@ enum TabBarSizingPolicy {
     private static var integratedMinimumFloorWidth: CGFloat {
         #if os(visionOS)
         return 180
-        #else
+        #elseif targetEnvironment(macCatalyst)
         return 120
+        #else
+        return 160
         #endif
     }
+
+    private static let integratedMaximumWidth: CGFloat = 240
 
     private static var readableTitleBudget: CGFloat {
         #if os(visionOS)
@@ -173,6 +188,16 @@ enum TabBarSizingPolicy {
 
     private static func readableMinimumWidth(for item: Item) -> CGFloat {
         ceil(chromeWidth + metadataWidth(for: item) + readableTitleBudget)
+    }
+
+    private static func integratedReadableMinimumWidth(for item: Item) -> CGFloat {
+        ceil(integratedChromeWidth + metadataWidth(for: item) + readableTitleBudget)
+    }
+
+    /// Fixed integrated-tab layout outside the title itself: leading inset,
+    /// title/close spacing, the 44pt close target, and trailing inset.
+    private static var integratedChromeWidth: CGFloat {
+        (TabMetrics.horizontalPadding + 8) + 4 + 44 + 4
     }
 
     private static var chromeWidth: CGFloat {

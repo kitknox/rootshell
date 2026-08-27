@@ -463,10 +463,15 @@ struct TabButton: View {
                     titleContent
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .offset(y: 2)
-                    closeButton
+                    // Hidden controls must not continue consuming their 44pt
+                    // target in compact tabs; that space belongs to the title
+                    // until the close affordance is actually visible.
+                    if shouldShowCloseButton {
+                        closeButton
+                    }
                 }
                 .transaction { $0.animation = nil }
-                // The browser silhouette consumes its first 10pt with the
+                // The selected silhouette consumes its first 10pt with the
                 // lower shoulder. Start content inside the vertical body,
                 // rather than at the outer shoulder edge.
                 .padding(.leading, TabMetrics.horizontalPadding + 8)
