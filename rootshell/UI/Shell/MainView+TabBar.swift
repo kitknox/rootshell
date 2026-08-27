@@ -139,7 +139,7 @@ extension MainView {
             onMoveTab: { from, to in moveTab(from: from, to: to) },
             onSelectTab: { index in
                 guard index != selectedTabIndex else { return }
-                if tabBarAnimationsDisabled {
+                if tabBarAnimationsDisabled || UIAccessibility.isReduceMotionEnabled {
                     selectedTabIndex = index
                 } else {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {

@@ -124,6 +124,15 @@ extension MainView {
                 .foregroundColor(theme.tabText)
                 .frame(width: TabMetrics.tabBarHeight, height: TabMetrics.tabBarHeight)
         }
+        .overlay(alignment: .leading) {
+            if topTabStyle == .integrated {
+                Rectangle()
+                    .fill(theme.tabText.opacity(theme.isLight ? 0.16 : 0.22))
+                    .frame(width: 0.5, height: 18)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
         .layoutPriority(1)
         .accessibilityLabel("New Tab")
     }

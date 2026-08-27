@@ -337,6 +337,7 @@ struct TabButton: View {
 
     @State private var isHovered: Bool = false
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// iOS 27 / macOS 27 desaturate saturated content drawn on Liquid Glass (the
     /// colored tab badges) ONLY when the effective appearance is Light. In Dark
@@ -482,7 +483,9 @@ struct TabButton: View {
                         isSelected: isSelected,
                         isHovered: isHovered,
                         selectedColor: selectedBackgroundColor,
-                        hoverColor: unselectedBackgroundColor
+                        hoverColor: unselectedBackgroundColor,
+                        namespace: namespace,
+                        reduceMotion: reduceMotion
                     )
                 }
                 .contentShape(Rectangle())
@@ -646,20 +649,33 @@ private struct IntegratedTabBackground: View {
     let isHovered: Bool
     let selectedColor: Color
     let hoverColor: Color
+    let namespace: Namespace.ID?
+    let reduceMotion: Bool
 
     var body: some View {
         ZStack {
             if isSelected {
-                BrowserTabShape().fill(selectedColor)
+                selectedBackground
             } else {
-                if isHovered {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(hoverColor.opacity(0.55))
-                        .padding(.vertical, 4)
-                }
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(hoverColor.opacity(0.55))
+                    .padding(.vertical, 4)
+                    .opacity(isHovered ? 1 : 0)
             }
         }
-        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovered)
+    }
+
+    @ViewBuilder
+    private var selectedBackground: some View {
+        let background = BrowserTabShape().fill(selectedColor)
+
+        if let namespace {
+            background
+                .matchedGeometryEffect(id: "integratedSelectedTab", in: namespace)
+        } else {
+            background
+        }
     }
 }
 

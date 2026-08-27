@@ -334,6 +334,7 @@ struct TabBar: View {
 
     @AppStorage("tabBarAnimationsDisabled") private var tabBarAnimationsDisabled: Bool = false
     @AppStorage(UserPreferences.showTabScopeMenuKey) private var showTabScopeMenu: Bool = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // MARK: - Dialog state
 
@@ -894,7 +895,9 @@ struct TabBar: View {
         // not leak into the terminal-content `ForEach`'s opacity flip in
         // `MainViewTerminalContent`, which must be instant.
         .animation(
-            tabBarAnimationsDisabled || suppressSelectionAnimation ? nil : .spring(response: 0.3, dampingFraction: 0.7),
+            tabBarAnimationsDisabled || suppressSelectionAnimation || reduceMotion
+                ? nil
+                : .spring(response: 0.3, dampingFraction: 0.7),
             value: tabsModel.selectedTabID
         )
     }
@@ -964,7 +967,9 @@ struct TabBar: View {
             .modifier(GlassEffectContainerModifier())
             // Scoped animation for the selection slide. See equalWidthView.
             .animation(
-                tabBarAnimationsDisabled || suppressSelectionAnimation ? nil : .spring(response: 0.3, dampingFraction: 0.7),
+                tabBarAnimationsDisabled || suppressSelectionAnimation || reduceMotion
+                    ? nil
+                    : .spring(response: 0.3, dampingFraction: 0.7),
                 value: tabsModel.selectedTabID
             )
         }
@@ -1016,6 +1021,7 @@ private struct ScrollingTabBarHandlersModifier: ViewModifier {
     /// would still scroll back to the original pending tab because the
     /// captured `selectedTabID` was stale.
     let tabsModel: TabsModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
@@ -1029,7 +1035,7 @@ private struct ScrollingTabBarHandlersModifier: ViewModifier {
             .onChange(of: selectedTabIndex) { _, newValue in
                 guard tabs.indices.contains(newValue),
                       renderedTabIDs.contains(tabs[newValue].id) else { return }
-                withAnimation(.easeInOut(duration: 0.3)) {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
                     proxy.scrollTo(tabs[newValue].id, anchor: .center)
                 }
             }
@@ -1068,7 +1074,7 @@ private struct ScrollingTabBarHandlersModifier: ViewModifier {
                 return
             }
 
-            withAnimation(.easeInOut(duration: 0.3)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
                 proxy.scrollTo(targetID, anchor: .center)
             }
         }
@@ -1099,7 +1105,7 @@ private struct ScrollingTabBarHandlersModifier: ViewModifier {
                 return
             }
             if attempt == 5 {
-                withAnimation(.easeInOut(duration: 0.3)) {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
                     proxy.scrollTo(targetID, anchor: .center)
                 }
             } else {
