@@ -791,6 +791,7 @@ struct TabBar: View {
 
                 HStack(spacing: usesCompactSpacing ? 0 : 4) {
                     activeScopeMenu
+                    compactScopeMenuSpacer
                     tabItem(
                         for: tab,
                         index: rawIndex,
@@ -864,6 +865,7 @@ struct TabBar: View {
         let gatewayOwnerIDs = TmuxTabBadgeResolver.activeGatewayOwnerIDs(in: tabs)
         HStack(spacing: usesCompactSpacing ? 0 : 4) {
             activeScopeMenu
+            compactScopeMenuSpacer
             ForEach(navigationTabs) { tab in
                 let index = tabsModel.index(of: tab.id) ?? 0
                 let moveLeftTarget = moveTargetRawIndex(for: tab, delta: -1)
@@ -941,6 +943,7 @@ struct TabBar: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: usesCompactSpacing ? 0 : 8) {
                 activeScopeMenu
+                compactScopeMenuSpacer
                 ForEach(navigationTabs) { tab in
                     let index = tabsModel.index(of: tab.id) ?? 0
                     let moveLeftTarget = moveTargetRawIndex(for: tab, delta: -1)
@@ -980,6 +983,18 @@ struct TabBar: View {
             )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Compact pills intentionally abut one another, but the scope menu is a
+    /// separate control and should retain the small visual break used by the
+    /// regular pill layout.
+    @ViewBuilder
+    private var compactScopeMenuSpacer: some View {
+        if usesCompactSpacing,
+           style == .pills,
+           activeScopeMenuWidth > 0 {
+            Color.clear.frame(width: 4)
+        }
     }
 
     private var shouldPinEqualWidthTabs: Bool {
