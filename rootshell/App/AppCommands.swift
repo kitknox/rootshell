@@ -93,19 +93,14 @@ struct AppCommands: Commands {
     @ObservedObject var shortcutState = MenuShortcutState.shared
 
     var body: some Commands {
-        // FileCommands and EditCommands use CommandGroup to modify existing system menus
-        // These work reliably on all macOS versions
-        FileCommands(shortcutState: shortcutState)
-        EditCommands(shortcutState: shortcutState)
-
-        // AppViewCommands uses CommandGroup to inject into the system View menu
-        // This works reliably on all macOS versions (like File/Edit)
-        AppViewCommands(shortcutState: shortcutState)
-
-        // Terminal, Shell, and Tabs menus use CommandMenu to create NEW top-level menus
-        // CommandMenu only works reliably on macOS 26+ / iOS 26+
-        // On older versions, CatalystAppDelegate.buildMenu(with:) handles these via UIMenuBuilder
+        // All of these are 26+ only. Before that CatalystAppDelegate.buildMenu(with:)
+        // builds every menu via UIMenuBuilder, and running both sources put duplicate
+        // commands in File/Edit/View — UIKit then refuses to display a menu that
+        // repeats an action, so the legacy insertions were silently dropped.
         if #available(macCatalyst 26.0, iOS 26.0, *) {
+            FileCommands(shortcutState: shortcutState)
+            EditCommands(shortcutState: shortcutState)
+            AppViewCommands(shortcutState: shortcutState)
             TerminalCommands(shortcutState: shortcutState)
             ShellCommands(shortcutState: shortcutState)
             WindowCommands(shortcutState: shortcutState)

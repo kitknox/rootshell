@@ -11,7 +11,7 @@ import ObjectiveC
 
 #if targetEnvironment(macCatalyst)
 
-private let logger = Logger(subsystem: "com.mitchellh.ghostty", category: "CatalystAppDelegate")
+private let logger = Logger(subsystem: "com.rootshell", category: "CatalystAppDelegate")
 
 // MARK: - UIApplication Menu Actions Extension
 // These methods are on UIApplication to ensure they're always in the responder chain.
@@ -224,10 +224,20 @@ extension UIApplication {
         sendAction(#selector(Ghostty.TerminalView.menuDetachOtherClients(_:)), to: nil, from: sender, for: nil)
     }
 
-    @objc func ghostty_selectTab(_ sender: UIKeyCommand) {
-        // Legacy: tab selection uses propertyList to pass tab index
-        // Route to the appropriate menuSelectTabN method based on index
-        guard let index = sender.propertyList as? Int else { return }
+    // One selector per tab: UIKit refuses to display a menu that repeats an
+    // action, so a single ghostty_selectTab: shared by Tab 1-9 silently dropped
+    // the whole Tabs menu.
+    @objc func ghostty_selectTab1(_ sender: Any?) { ghostty_selectTab(1, sender) }
+    @objc func ghostty_selectTab2(_ sender: Any?) { ghostty_selectTab(2, sender) }
+    @objc func ghostty_selectTab3(_ sender: Any?) { ghostty_selectTab(3, sender) }
+    @objc func ghostty_selectTab4(_ sender: Any?) { ghostty_selectTab(4, sender) }
+    @objc func ghostty_selectTab5(_ sender: Any?) { ghostty_selectTab(5, sender) }
+    @objc func ghostty_selectTab6(_ sender: Any?) { ghostty_selectTab(6, sender) }
+    @objc func ghostty_selectTab7(_ sender: Any?) { ghostty_selectTab(7, sender) }
+    @objc func ghostty_selectTab8(_ sender: Any?) { ghostty_selectTab(8, sender) }
+    @objc func ghostty_selectTab9(_ sender: Any?) { ghostty_selectTab(9, sender) }
+
+    private func ghostty_selectTab(_ index: Int, _ sender: Any?) {
         let selector: Selector
         switch index {
         case 1: selector = #selector(Ghostty.TerminalView.menuSelectTab1(_:))
@@ -774,15 +784,25 @@ class CatalystAppDelegate: AppDelegate {
             return
         }
 
-        // Legacy (macOS 15 and earlier): Build all menus manually
+        // Legacy (macOS 15 and earlier): Build all menus manually.
+        //
+        // CRITICAL: UIKit silently refuses to insert a menu holding a key
+        // equivalent a system menu already owns, dropping the whole menu. Format >
+        // Text owns ⌘{ / ⌘} (Align Left/Right), which killed the entire Tabs menu,
+        // and Find owns ⇧⌘G (Find Previous), which killed the View toggles. Neither
+        // menu is meaningful in a terminal.
+        builder.remove(menu: .format)
+        builder.remove(menu: .find)
+
         buildFileMenu(builder)
         buildEditMenu(builder)
         buildViewMenuItems(builder)
-        // Chain insertions: each references the previously-inserted menu
-        // Result: View, Terminal, Shell, Tabs, Window
-        buildTerminalMenu(builder)
-        buildShellMenu(builder)
+        // Each custom menu anchors to `.view`, a system menu, rather than to the
+        // previously inserted custom one, so one failed lookup cannot silently
+        // drop every menu after it. Reverse order gives View, Terminal, Shell, Tabs.
         buildTabsMenu(builder)
+        buildShellMenu(builder)
+        buildTerminalMenu(builder)
     }
 
     // MARK: - Legacy Menu Builders (pre-macOS 26)
@@ -1146,7 +1166,7 @@ class CatalystAppDelegate: AppDelegate {
         )
         #endif
 
-        builder.insertSibling(shellMenu, afterMenu: UIMenu.Identifier("com.rootshell.terminal"))
+        builder.insertSibling(shellMenu, afterMenu: .view)
     }
 
     private func buildTabsMenu(_ builder: UIMenuBuilder) {
@@ -1210,18 +1230,25 @@ class CatalystAppDelegate: AppDelegate {
             toggleTabSwitcher, toggleTabExpose, previousTab, nextTab, previousGroup, nextGroup, tmuxSessions, detachOtherClients
         ])
 
-        // Tab selection (1-9)
-        var tabCommands: [UIKeyCommand] = []
-        for index in 1...9 {
-            let command = UIKeyCommand(
+        // Tab selection (1-9), each with its own action (see ghostty_selectTabN).
+        let tabSelectors: [Selector] = [
+            #selector(UIApplication.ghostty_selectTab1(_:)),
+            #selector(UIApplication.ghostty_selectTab2(_:)),
+            #selector(UIApplication.ghostty_selectTab3(_:)),
+            #selector(UIApplication.ghostty_selectTab4(_:)),
+            #selector(UIApplication.ghostty_selectTab5(_:)),
+            #selector(UIApplication.ghostty_selectTab6(_:)),
+            #selector(UIApplication.ghostty_selectTab7(_:)),
+            #selector(UIApplication.ghostty_selectTab8(_:)),
+            #selector(UIApplication.ghostty_selectTab9(_:)),
+        ]
+        let tabCommands: [UIKeyCommand] = (1...9).map { index in
+            UIKeyCommand(
                 title: String(localized: "Tab \(index)"),
-                image: nil,
-                action: #selector(UIApplication.ghostty_selectTab(_:)),
+                action: tabSelectors[index - 1],
                 input: String(index),
-                modifierFlags: [.command],
-                propertyList: index
+                modifierFlags: [.command]
             )
-            tabCommands.append(command)
         }
 
         let tabSelectGroup = UIMenu(title: "", options: .displayInline, children: tabCommands)
@@ -1232,7 +1259,12 @@ class CatalystAppDelegate: AppDelegate {
             children: [navGroup, tabSelectGroup]
         )
 
-        builder.insertSibling(tabsMenu, afterMenu: UIMenu.Identifier("com.rootshell.shell"))
+        builder.insertSibling(tabsMenu, afterMenu: .view)
+        // insertSibling reports nothing, and UIKit drops a whole menu whose key
+        // equivalent a system menu owns. Without this the loss is invisible.
+        if builder.menu(for: UIMenu.Identifier("com.rootshell.tabs")) == nil {
+            logger.error("Tabs menu was rejected; check for a system key-equivalent conflict")
+        }
     }
 
     // MARK: - About Dialog
