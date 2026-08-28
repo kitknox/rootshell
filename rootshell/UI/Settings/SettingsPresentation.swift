@@ -81,11 +81,14 @@ struct SettingsSplitView: View {
     /// is presented so a second press closes it — mirrors the tab sidebar's
     /// `toggleShortcutCatcher`. The terminal has resigned first responder
     /// behind the cover, so its UIKeyCommand can't catch the second press.
+    /// Skipped where a menu bar exists: `.openSettings` toggles both ways from
+    /// the menu item, and a duplicate shortcut would blank that item's glyph.
     /// Single-chord bindings only (sequence bindings keep working through the
     /// normal KeySequenceTracker path).
     @ViewBuilder
     private var toggleShortcutCatcher: some View {
-        if let binding = KeybindManager.shared.activeBindings
+        if !MenuShortcutState.menuRailOwnsShortcuts,
+           let binding = KeybindManager.shared.activeBindings
             .first(where: { $0.action == .open_settings }),
            !binding.sequence.isSequence,
            let shortcut = menuShortcuts.shortcuts[.open_settings] {

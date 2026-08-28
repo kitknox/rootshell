@@ -613,9 +613,15 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
              .brightness_boost:
             return true
 
-        // These actions don't have menu entries, or (group navigation) have
-        // menu entries but keep the shortcut on a prioritized UIKeyCommand.
-        case .reset_terminal, .send_text, .send_esc, .send_csi, .previous_group, .next_group:
+        // Group navigation: the menu owns ⌘⌥[ / ⌘⌥] from 26 so the items can
+        // show their glyph. `needsSystemPriority` still covers the pre-26 rail,
+        // where the UIKeyCommand is generated and must beat the terminal's
+        // Alt-[ encoding.
+        case .previous_group, .next_group:
+            return true
+
+        // These actions don't have menu entries.
+        case .reset_terminal, .send_text, .send_esc, .send_csi:
             return false
 
         // Control characters are handled separately

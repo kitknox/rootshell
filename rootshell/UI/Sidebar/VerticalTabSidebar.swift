@@ -717,6 +717,13 @@ struct VerticalTabSidebar: View {
         }
     }
 
+    /// Only where no menu bar carries these chords. `menuToggleTabSwitcher` and
+    /// `menuToggleGroupMode` both post notifications rather than walking the
+    /// responder chain, so the menu items already fire with the sidebar focused.
+    private var needsShortcutCatchers: Bool {
+        !MenuShortcutState.menuRailOwnsShortcuts
+    }
+
     /// Hidden buttons for shortcuts that must keep working while the floating
     /// sidebar owns first responder (see `menuShortcuts`).
     ///
@@ -728,7 +735,8 @@ struct VerticalTabSidebar: View {
     @ViewBuilder
     private var sidebarShortcutCatchers: some View {
         ZStack {
-            if isPanelVisible,
+            if needsShortcutCatchers,
+               isPanelVisible,
                hasSingleChordBinding(for: .toggle_tab_switcher),
                let shortcut = menuShortcuts.shortcuts[.toggle_tab_switcher] {
                 Button("") { onDismiss() }
@@ -737,7 +745,8 @@ struct VerticalTabSidebar: View {
                     .accessibilityHidden(true)
             }
 
-            if isPanelVisible,
+            if needsShortcutCatchers,
+               isPanelVisible,
                hasSingleChordBinding(for: .toggle_group_mode),
                let shortcut = menuShortcuts.shortcuts[.toggle_group_mode] {
                 Button("") {
