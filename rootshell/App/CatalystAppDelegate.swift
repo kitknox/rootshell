@@ -1070,10 +1070,13 @@ class CatalystAppDelegate: AppDelegate {
         ])
 
         // Toggle Compose
+        // ⇧⌘K, matching the toggle_compose default. This read ⇧⌘C, which both
+        // misreported the shortcut and collided with the Edit menu's Clipboard
+        // Manager, silently dropping the whole Terminal menu.
         let toggleCompose = UIKeyCommand(
             title: String(localized: "Toggle Compose"),
             action: #selector(UIApplication.ghostty_toggleCompose(_:)),
-            input: "c",
+            input: "k",
             modifierFlags: [.command, .shift]
         )
 
