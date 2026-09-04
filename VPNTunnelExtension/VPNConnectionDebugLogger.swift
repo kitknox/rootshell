@@ -22,7 +22,7 @@ nonisolated final class VPNConnectionDebugLogger: @unchecked Sendable {
     /// is visible to the extension process.
     static let enabledKey = "vpnConnectionDebugLoggingEnabled"
 
-    private static let appGroupID = "group.com.kk2.ghostty"
+    private static let appGroupID = AppIdentifiers.defaultAppGroupID
     private static let logFilename = "vpn_connection_debug.log"
     private static let rotatedLogFilename = "vpn_connection_debug.1.log"
     private static let maxFileSize: UInt64 = 512 * 1024  // 512KB before rotation

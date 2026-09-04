@@ -33,7 +33,7 @@ enum VPNCredentialResolverError: LocalizedError {
 enum VPNCredentialResolver {
     private static let logger = Logger(subsystem: "com.rootshell", category: "VPNCredentialResolver")
 
-    private static let accessGroup = "D97ZME3ET2.com.kk2.ghostty-ios"
+    private static let accessGroup = AppIdentifiers.keychainAccessGroup
     private static let privateKeyService = "com.ghostty.ssh.privatekey"
     private static let passphraseService = "com.ghostty.ssh.passphrase"
     private static let passwordService = "com.ghostty.ssh.password"

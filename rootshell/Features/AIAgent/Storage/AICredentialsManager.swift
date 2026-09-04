@@ -1460,7 +1460,7 @@ final class AICredentialsManager {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
-            kSecAttrAccessGroup as String: "D97ZME3ET2.com.kk2.ghostty-ios"
+            kSecAttrAccessGroup as String: AppIdentifiers.keychainAccessGroup
         ]
 
         switch storageLevel {
@@ -1493,7 +1493,7 @@ final class AICredentialsManager {
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecAttrAccessGroup as String: "D97ZME3ET2.com.kk2.ghostty-ios",
+            kSecAttrAccessGroup as String: AppIdentifiers.keychainAccessGroup,
             kSecAttrSynchronizable as String: kSecAttrSynchronizableAny
         ]
 
@@ -1520,7 +1520,7 @@ final class AICredentialsManager {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecAttrAccessGroup as String: "D97ZME3ET2.com.kk2.ghostty-ios",
+            kSecAttrAccessGroup as String: AppIdentifiers.keychainAccessGroup,
             kSecAttrSynchronizable as String: kSecAttrSynchronizableAny
         ]
 
@@ -1537,7 +1537,7 @@ final class AICredentialsManager {
             kSecAttrService as String: service,
             kSecReturnAttributes as String: true,
             kSecMatchLimit as String: kSecMatchLimitAll,
-            kSecAttrAccessGroup as String: "D97ZME3ET2.com.kk2.ghostty-ios",
+            kSecAttrAccessGroup as String: AppIdentifiers.keychainAccessGroup,
             kSecAttrSynchronizable as String: kSecAttrSynchronizableAny
         ]
 

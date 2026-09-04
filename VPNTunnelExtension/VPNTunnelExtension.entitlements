@@ -8,11 +8,11 @@
 	</array>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.kk2.ghostty</string>
+		<string>$(ROOTSHELL_DEFAULT_APP_GROUP)</string>
 	</array>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)com.kk2.ghostty-ios</string>
+		<string>$(AppIdentifierPrefix)$(ROOTSHELL_KEYCHAIN_GROUP_SUFFIX)</string>
 	</array>
 </dict>
 </plist>

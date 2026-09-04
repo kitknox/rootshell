@@ -234,7 +234,7 @@ enum SocketProtocolError: Error, LocalizedError {
 nonisolated struct AppGroupHelper {
     /// This is already provisioned for the sandboxed Catalyst application. The
     /// full helper app carries the same entitlement and provisioning profile.
-    static let groupIdentifier = "group.com.kk2.ghostty"
+    static let groupIdentifier = AppIdentifiers.defaultAppGroupID
 
     /// Set from --app-group argv so the spawning app stays authoritative.
     static var overrideGroupIdentifier: String?

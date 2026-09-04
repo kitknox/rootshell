@@ -748,7 +748,7 @@ final class VPNManager {
     /// Read the last error written by the VPN extension via app group.
     private static func readExtensionError() -> String? {
         guard let containerURL = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: "group.com.kk2.ghostty"
+            forSecurityApplicationGroupIdentifier: AppIdentifiers.defaultAppGroupID
         ) else { return nil }
 
         let fileURL = containerURL.appendingPathComponent("vpn_last_error.txt")

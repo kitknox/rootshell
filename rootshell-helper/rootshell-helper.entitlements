@@ -20,7 +20,7 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.kk2.ghostty</string>
+		<string>$(ROOTSHELL_DEFAULT_APP_GROUP)</string>
 	</array>
 </dict>
 </plist>

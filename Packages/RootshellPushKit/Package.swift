@@ -20,7 +20,10 @@ let package = Package(
                 "CXWing",
                 .product(name: "_CryptoExtras", package: "swift-crypto"),
             ],
-            resources: [.copy("Resources")]
+            resources: [
+                .copy("Resources/ClaudeLogo.png"),
+                .copy("Resources/CodexLogo.png"),
+            ]
         ),
         .testTarget(
             name: "RootshellPushKitTests",

@@ -4,11 +4,11 @@
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.kk2.ghostty</string>
+		<string>$(ROOTSHELL_APP_GROUP)</string>
 	</array>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>D97ZME3ET2.com.kk2.ghostty-ios</string>
+		<string>$(ROOTSHELL_KEYCHAIN_ACCESS_GROUP)</string>
 	</array>
 </dict>
 </plist>

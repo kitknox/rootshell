@@ -174,11 +174,11 @@ struct VPNTunnelStatusResponse: Codable, Sendable {
 
 /// Control socket lives in the shared App Group container alongside the
 /// rootshell-helper `commands.sock`. Kept short to stay under the 104-char
-/// `sockaddr_un.sun_path` limit. Resolved inline (not via `AppGroupHelper`,
-/// which isn't compiled into the extension target) so this contract stays
-/// self-contained across every target that shares it.
+/// `sockaddr_un.sun_path` limit. Named here rather than reached for via
+/// `AppGroupHelper`, which isn't compiled into the extension targets, so this
+/// contract stays self-contained across every target that shares it.
 nonisolated enum VPNControlPaths {
-    static let appGroupIdentifier = "group.com.kk2.ghostty"
+    static let appGroupIdentifier = AppIdentifiers.defaultAppGroupID
 
     static var containerURL: URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)

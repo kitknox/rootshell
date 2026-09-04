@@ -260,6 +260,13 @@ cd rootshell
 open rootshell.xcodeproj
 ```
 
+The project builds for the Simulator as-is, signed ad-hoc under upstream's
+identifiers — no signing setup needed. Building to a device, or anything that
+needs real entitlements, has to be signed under your own Apple Developer team.
+Run `scripts/setup-dev-signing.sh` and see
+[`docs/contributor-signing.md`](docs/contributor-signing.md); do not edit
+`project.pbxproj` to change the team.
+
 Use the `rootshell-AppStore` scheme for sandboxed App Store builds or `rootshell-Standalone` for the unsandboxed Mac Catalyst build. For example, build for the iOS Simulator with:
 
 ```bash

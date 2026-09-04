@@ -7,7 +7,7 @@ ENABLE_HARDENED_RUNTIME = YES
 // App Store entitlements (platform-specific)
 // iOS/iPadOS/visionOS: includes NFC for YubiKey PIV
 // Mac Catalyst: excludes NFC (not supported on macOS)
-CODE_SIGN_ENTITLEMENTS = rootshell/Entitlements/AppStore.entitlements
+CODE_SIGN_ENTITLEMENTS = rootshell/Entitlements/AppStore$(ROOTSHELL_APP_ENTITLEMENTS_SUFFIX).entitlements
 CODE_SIGN_ENTITLEMENTS[sdk=macosx*] = rootshell/Entitlements/AppStore-MacCatalyst.entitlements
 
 // Exclude the bundled rootshell-helper app for App Store builds.

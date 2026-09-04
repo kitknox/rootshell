@@ -5,7 +5,13 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.kk2.rootshell-helper</string>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>RootshellAppBundleIdentifier</key>
+	<string>$(ROOTSHELL_ORG_IDENTIFIER).rootshell</string>
+	<key>RootshellDevelopmentTeam</key>
+	<string>$(ROOTSHELL_DEVELOPMENT_TEAM)</string>
+	<key>RootshellDefaultAppGroup</key>
+	<string>$(ROOTSHELL_DEFAULT_APP_GROUP)</string>
 	<key>CFBundleName</key>
 	<string>Rootshell Helper</string>
 	<key>CFBundlePackageType</key>

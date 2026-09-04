@@ -10,8 +10,28 @@ import Foundation
 import Security
 
 private enum HelperPeerTrust {
-    private static let appRequirement =
-        "identifier \"com.kk2.rootshell\" and anchor apple generic and certificate leaf[subject.OU] = \"D97ZME3ET2\""
+    /// The app identity this helper will accept, read from our own Info.plist
+    /// so both halves track whatever team and org identifier this copy was
+    /// built with. The values are substituted at build time from
+    /// `Configuration/Identity.xcconfig`; the literals below are a safety net
+    /// for a bundle that somehow lost the keys.
+    ///
+    /// Same requirement as before these became variables: the peer must be the
+    /// app, signed by our team under Apple's anchor. `subject.OU` carries the
+    /// team ID for Developer ID, Apple Development, and App Store signing
+    /// alike, and is nothing an attacker can obtain.
+    private static let appRequirement: String = {
+        let identifier = plist("RootshellAppBundleIdentifier") ?? "com.kk2.rootshell"
+        let team = plist("RootshellDevelopmentTeam") ?? "D97ZME3ET2"
+        return "identifier \"\(identifier)\" and anchor apple generic "
+            + "and certificate leaf[subject.OU] = \"\(team)\""
+    }()
+
+    private static func plist(_ key: String) -> String? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+              !value.isEmpty else { return nil }
+        return value
+    }
 
     static func isAppClientTrusted(fd: Int32) -> Bool {
         var token = audit_token_t()
