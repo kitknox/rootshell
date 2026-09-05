@@ -3538,7 +3538,14 @@ extension Ghostty {
             // keyboard never flashes on tab switch or overlay dismissal.
             keyboardAccessoryController?.reconcileWithHideIntent()
 
-            let result = super.becomeFirstResponder()
+            // Tmux focus reconciliation may reassert focus on the current
+            // responder. Its input session is already installed.
+            let result: Bool
+            if isFirstResponder {
+                result = true
+            } else {
+                result = super.becomeFirstResponder()
+            }
 
             if result {
                 // Consume the one-shot focus hint on EVERY successful
@@ -4463,7 +4470,8 @@ extension Ghostty {
                         #if !targetEnvironment(macCatalyst)
                         syncSelectionHandlesForSurfaceActivity()
                         #endif
-                        reloadInputViews()
+                        // Acquiring first responder already installs the input
+                        // views. Reloading here repeats the keyboard handoff.
                         return true
                     }
                 }
@@ -4488,7 +4496,6 @@ extension Ghostty {
                         #if !targetEnvironment(macCatalyst)
                         self.syncSelectionHandlesForSurfaceActivity()
                         #endif
-                        self.reloadInputViews()
                     }
                 }
                 return false

@@ -537,11 +537,19 @@ final class TerminalKeyboardAccessoryController: NSObject {
             .store(in: &cancellables)
 
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
-        EffectManager.shared.keyboardStateDidChange
+        EffectManager.shared.keyboardEnvironmentDidChange
             .debounce(for: .milliseconds(50), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 Task { @MainActor [weak self] in
                     self?.host?.keyboardReloadInputViews()
+                }
+            }
+            .store(in: &cancellables)
+
+        EffectManager.shared.keyboardStateDidChange
+            .debounce(for: .milliseconds(50), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
                     self?.updateCollapsedKeyboardToolbarButtonLayout()
                 }
             }
