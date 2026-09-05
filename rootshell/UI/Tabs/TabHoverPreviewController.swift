@@ -469,10 +469,10 @@ private extension TabHoverPreviewActivation {
     func isSatisfied(by flags: UIKeyModifierFlags) -> Bool {
         switch self {
         case .always: return true
-        case .shift: return flags.contains(.shift)
-        case .command: return flags.contains(.command)
-        case .option: return flags.contains(.alternate)
-        case .control: return flags.contains(.control)
+        case .shift: return flags == .shift
+        case .command: return flags == .command
+        case .option: return flags == .alternate
+        case .control: return flags == .control
         }
     }
 }
