@@ -349,7 +349,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
 
     // MARK: - Defaults
 
-    static let currentVersion = 13
+    static let currentVersion = 14
 
     static func defaultConfig(for idiom: UIUserInterfaceIdiom) -> ToolbarLayoutConfig {
         switch idiom {
@@ -422,19 +422,11 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
 
     static let iPadDefault = ToolbarLayoutConfig(
         version: currentVersion,
-        mainRow: [
-            .builtIn(.dismiss),
-            .builtIn(.tabSwitcher),
-            .builtIn(.esc),
-            .builtIn(.ctrl),
+        // Keep the initial keys in the same order on both devices, including
+        // narrow iPad windows where the remaining keys overflow into the drawer.
+        mainRow: iPhoneDefault.mainRow + [
             .builtIn(.alt),
-            .builtIn(.shift),
             .builtIn(.cmd),
-            .builtIn(.writingAssistance),
-            .builtIn(.tab),
-            .builtIn(.arrowDrawerToggle),
-            .builtIn(.drawerToggle),
-            .builtIn(.toolbarSettings),
             .builtIn(.backtick),
             .builtIn(.dash),
             .builtIn(.slash),
@@ -496,17 +488,27 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
         // placement. Compare the complete layout so custom placements stay intact.
         var previousDefaults = defaults
         previousDefaults.version = saved.version
-        previousDefaults.mainRow = previousDefaults.mainRow.map {
-            $0 == .builtIn(.writingAssistance) ? .builtIn(.compose) : $0
+        if idiom == .pad {
+            // Reconstruct the iPad order shipped through v13 before comparing
+            // saved defaults. Do not reorder user-customized layouts.
+            previousDefaults.mainRow.removeAll { $0 == .builtIn(.alt) || $0 == .builtIn(.cmd) }
+            previousDefaults.mainRow.insert(.builtIn(.alt), at: 4)
+            previousDefaults.mainRow.removeAll { $0 == .builtIn(.writingAssistance) }
+            previousDefaults.mainRow.insert(contentsOf: [.builtIn(.cmd), .builtIn(.writingAssistance)], at: 6)
         }
-        for row in previousDefaults.drawerRows.indices {
-            previousDefaults.drawerRows[row].removeAll { $0 == .builtIn(.compose) }
+        if saved.version < 13 {
+            previousDefaults.mainRow = previousDefaults.mainRow.map {
+                $0 == .builtIn(.writingAssistance) ? .builtIn(.compose) : $0
+            }
+            for row in previousDefaults.drawerRows.indices {
+                previousDefaults.drawerRows[row].removeAll { $0 == .builtIn(.compose) }
+            }
+            if saved.version == 12,
+               let composeIndex = previousDefaults.mainRow.firstIndex(of: .builtIn(.compose)) {
+                previousDefaults.mainRow.insert(.builtIn(.writingAssistance), at: composeIndex + 1)
+            }
         }
-        if saved.version == 12,
-           let composeIndex = previousDefaults.mainRow.firstIndex(of: .builtIn(.compose)) {
-            previousDefaults.mainRow.insert(.builtIn(.writingAssistance), at: composeIndex + 1)
-        }
-        if (11...12).contains(saved.version), saved == previousDefaults {
+        if (11...13).contains(saved.version), saved == previousDefaults {
             return defaults
         }
 
