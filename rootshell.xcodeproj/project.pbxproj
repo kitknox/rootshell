@@ -613,6 +613,7 @@
 		47VPN0042F460000BBCC0004 /* Exceptions for "rootshell" folder in "VPNTunnelExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Core/Shell/LoginShellCommand.swift,
 				Core/Terminal/Reconnect/InitialConnectRetry.swift,
 				Features/PortForwarding/SOCKS5Handler.swift,
 				Features/SSH/HostTrust/SSHHostKeyFormatter.swift,
@@ -636,6 +637,7 @@
 		47VPNT0100000000000000A1 /* Exceptions for "rootshell" folder in "tunnel" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Core/Shell/LoginShellCommand.swift,
 				Core/Terminal/Reconnect/InitialConnectRetry.swift,
 				Features/PortForwarding/SOCKS5Handler.swift,
 				Features/SSH/Agent/External/ExternalAgentNIOSSHKeys.swift,

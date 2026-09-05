@@ -398,8 +398,7 @@ final class HostFingerprintCollector {
     /// Uses $SHELL -l -c 'command' pattern
     private func runLoginShellCommand(_ command: String) async throws -> String {
         let prefixedCommand = SSHConfig.command(command, applying: .prependPATH)
-        let escapedCommand = prefixedCommand.replacingOccurrences(of: "'", with: "'\\''")
-        let wrappedCommand = "$SHELL -l -c '\(escapedCommand)'"
+        let wrappedCommand = "$SHELL -l -c \(LoginShellCommand.singleQuoted(prefixedCommand))"
         return try await runCommand(wrappedCommand)
     }
 

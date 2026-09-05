@@ -201,7 +201,7 @@ struct TrzszConfig: Codable, Hashable, Sendable {
     /// That PATH prefix is a POSIX-sh script (`VAR=`, `export`, `for`), but
     /// `sshd` runs exec-channel commands through the client's *login* shell
     /// (`$SHELL -c '<command>'`), which on fish or csh rejects that syntax
-    /// outright. `RemoteLoginShell.wrapForLoginShell` routes it through `sh -c`
+    /// outright. `LoginShellCommand.runInPOSIXShell` routes it through `sh -c`
     /// so it runs the same on every login shell.
     func serverCommand() -> String {
         let binary = serverPath ?? "tsshd"
@@ -231,7 +231,7 @@ struct TrzszConfig: Codable, Hashable, Sendable {
         // signals/EOF still reach tsshd directly rather than an intermediate
         // shell.
         if serverPath == nil {
-            return RemoteLoginShell.wrapForLoginShell("\(SSHConfig.remoteExecPathPrefix)exec \(binary)\(args)")
+            return LoginShellCommand.runInPOSIXShell("\(SSHConfig.remoteExecPathPrefix)exec \(binary)\(args)")
         }
 
         return "\(binary)\(args)"

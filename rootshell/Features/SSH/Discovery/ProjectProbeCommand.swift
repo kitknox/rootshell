@@ -191,8 +191,18 @@ nonisolated enum ProjectProbeCommand {
     /// Wraps a string in single quotes for `sh`, escaping any it contains.
     /// A path is remote, user-controlled input, so this is a correctness
     /// requirement rather than a nicety.
+    ///
+    /// Forwards to `LoginShellCommand.singleQuoted`, which is Foundation-only
+    /// just like this file — so this file's standalone-test-package
+    /// symlinkability is preserved — and produces the `'"'"'` idiom rather
+    /// than `'\''`. That matters here specifically: this helper is applied at
+    /// two levels (once per probed path inside the script, once again around
+    /// the whole script at the call site above), and `'\''` only round-trips
+    /// correctly through one level of `sh -c '...'` nesting. A probed path
+    /// containing an apostrophe used to produce a string fish's login shell
+    /// rejected outright.
     static func singleQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        LoginShellCommand.singleQuoted(value)
     }
 
     /// Parses the probe output. Tolerant by design: a host missing `git`, a

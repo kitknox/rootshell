@@ -442,13 +442,23 @@ final class AIAgentExecutor {
     /// Wrap command in user's login shell to get full environment (PATH, aliases, functions)
     /// Uses $SHELL -l -c 'command' pattern with stderr redirected to stdout
     /// The `|| true` ensures the command always exits 0 so Citadel doesn't throw CommandFailed
+    ///
+    /// The PATH prelude has to run in `sh`, not inside the login shell: `$SHELL`
+    /// may be fish/csh, which can't parse the POSIX `export PATH=...` snippet.
+    /// So `sh -c` runs the prelude and then `exec`s the user's login shell to
+    /// run their command, rather than nesting the prelude text inside a
+    /// `$SHELL -l -c '...'` string. One behavioral consequence: previously the
+    /// prelude ran *after* the login shell sourced its profile, so the app's
+    /// PATH entries won outright; now `sh` exports them first and the login
+    /// shell's profile is read afterwards, so a profile that overwrites PATH
+    /// wholesale could shadow them (fish's `fish_add_path` prepends and
+    /// preserves, so entries survive in practice).
     private func wrapForLoginShell(_ command: String) -> String {
         let shell = sessionShell ?? "/bin/sh"
-        let prefixedCommand = SSHConfig.command(command, applying: .prependPATH)
-        let escapedCommand = prefixedCommand.shellEscapedForSingleQuotes
+        let script = "\(SSHConfig.remoteExecPathPrefix)exec \(shell) -l -c \(LoginShellCommand.singleQuoted(command))"
         // Redirect stderr to stdout so both streams are captured
         // Use || true to ensure exit code 0 (Citadel throws on non-zero exit)
-        return "\(shell) -l -c '\(escapedCommand)' 2>&1 || true"
+        return LoginShellCommand.runInPOSIXShell(script) + " 2>&1 || true"
     }
 
     /// Decode UTF-8 from buffer, leaving incomplete sequences for next packet
@@ -498,17 +508,6 @@ final class AIAgentExecutor {
         }
         // Keep last N characters with truncation indicator
         return "... (truncated)\n" + String(output.suffix(Self.maxDisplayLength - 20))
-    }
-}
-
-// MARK: - Shell Escaping
-
-extension String {
-    /// Escape a string for safe use inside single quotes
-    /// Single-quoted strings in shell only need to escape single quotes themselves
-    /// The pattern ' → '\'' closes the quote, adds an escaped quote, reopens the quote
-    var shellEscapedForSingleQuotes: String {
-        self.replacingOccurrences(of: "'", with: "'\\''")
     }
 }
 #endif

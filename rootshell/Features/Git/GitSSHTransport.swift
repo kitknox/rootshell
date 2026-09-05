@@ -579,14 +579,16 @@ private func parseSSHURL(_ url: String) -> (host: String, port: Int, username: S
 
 /// Determine the git command to execute based on the service type.
 private func gitCommandForService(_ service: Int32, path: String) -> String {
-    let escapedPath = path.replacingOccurrences(of: "'", with: "'\\''")
+    // Routed through the shared helper for consistency, not to fix a live bug:
+    // a single level of escaping parses identically in fish and POSIX sh.
+    let quotedPath = LoginShellCommand.singleQuoted(path)
     switch service {
     case 1, 2:  // GIT_SERVICE_UPLOADPACK_LS, GIT_SERVICE_UPLOADPACK
-        return "git-upload-pack '\(escapedPath)'"
+        return "git-upload-pack \(quotedPath)"
     case 3, 4:  // GIT_SERVICE_RECEIVEPACK_LS, GIT_SERVICE_RECEIVEPACK
-        return "git-receive-pack '\(escapedPath)'"
+        return "git-receive-pack \(quotedPath)"
     default:
-        return "git-upload-pack '\(escapedPath)'"
+        return "git-upload-pack \(quotedPath)"
     }
 }
 

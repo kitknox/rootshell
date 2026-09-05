@@ -641,8 +641,11 @@ final class UDPHolePuncher {
             }
         }
 
-        // Execute the command
-        let streams = try await client.executeCommandStream(command)
+        // `sshd` runs exec-channel commands as `$SHELL -c '<command>'` — the
+        // remote user's login shell, not a fixed POSIX shell — so the
+        // `if`/`command -v` script built above must be wrapped for `sh` or a
+        // fish/csh login shell rejects it before any punch attempt runs.
+        let streams = try await client.executeCommandStream(LoginShellCommand.runInPOSIXShell(command))
 
         var stdout = ""
         var stderr = ""

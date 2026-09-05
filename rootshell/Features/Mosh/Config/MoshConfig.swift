@@ -196,7 +196,7 @@ struct MoshConfig: Codable, Hashable, Sendable {
     /// The whole thing is a POSIX-sh script (`export`, `[ ... ]`), but `sshd`
     /// runs exec-channel commands through the client's *login* shell
     /// (`$SHELL -c '<command>'`), which on fish or csh rejects that syntax
-    /// outright. `RemoteLoginShell.wrapForLoginShell` routes it through `sh -c`
+    /// outright. `LoginShellCommand.runInPOSIXShell` routes it through `sh -c`
     /// so it runs the same on every login shell; `exec` before the server
     /// binary keeps the process tree the same depth as before this fix.
     ///
@@ -234,7 +234,7 @@ struct MoshConfig: Codable, Hashable, Sendable {
         // Command to run inside mosh.
         cmd += " -- \(moshSessionCommandWithTerm)"
 
-        return RemoteLoginShell.wrapForLoginShell(cmd)
+        return LoginShellCommand.runInPOSIXShell(cmd)
     }
 
     /// The post-`--` command, with `TERM` forced when the user asked for a value

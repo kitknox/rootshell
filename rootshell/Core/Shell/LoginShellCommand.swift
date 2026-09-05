@@ -1,24 +1,34 @@
 //
-//  RemoteLoginShell.swift
+//  LoginShellCommand.swift
 //  rootshell
 //
-//  POSIX-sh snippets and quoting for non-interactive SSH exec requests.
+//  POSIX-sh snippets and quoting for handing a command to somebody else's
+//  shell — SSH exec-channel requests, the AI agent's local `$SHELL -l -c`
+//  wrapper, the VPN tunnel extension, local probe commands. This is unrelated
+//  to `ShellInterpreter.swift` and friends elsewhere in this directory, which
+//  is this app's *own* POSIX shell implementation, not a helper for talking
+//  to one.
 //  Dependency-free (Foundation only) so a standalone SwiftPM test package can
 //  symlink this file in directly and syntax-check what remote shells parse.
 //
 
 import Foundation
 
-/// Shell snippets and quoting helpers shared by every exec-channel command
-/// builder (`TrzszConfig.serverCommand()`, `MoshConfig.serverCommand(shell:)`,
-/// `SSHConfig`'s tmux/herdr/zmx exec lines, session discovery, ...).
+/// Shell snippets and quoting helpers shared by every site that builds a
+/// command line for a POSIX shell to run and that command line may pass
+/// through, or be interpreted directly by, a login shell that is not POSIX
+/// (fish, csh, ...). Used by SSH exec-channel command builders
+/// (`TrzszConfig.serverCommand()`, `MoshConfig.serverCommand(shell:)`,
+/// `SSHConfig`'s tmux/herdr/zmx exec lines, session discovery, ...), the AI
+/// agent's local `$SHELL -l -c` wrapper, the VPN tunnel extension, and local
+/// probe commands.
 ///
 /// `sshd` runs an exec-channel command as `$SHELL -c '<command>'` — the
 /// client's *login* shell, not a fixed POSIX shell. A bare `VAR=`/`export`/
 /// `for` script is only valid syntax to a POSIX-family shell, so anything
-/// built here that is not routed through `wrapForLoginShell` will be parsed
+/// built here that is not routed through `runInPOSIXShell` will be parsed
 /// (and rejected) by fish, csh, and friends before it ever reaches `sh`.
-nonisolated enum RemoteLoginShell {
+nonisolated enum LoginShellCommand {
     /// Tool locations for non-interactive SSH exec requests, searched ahead of
     /// the system directories without depending on shell startup files.
     static let toolPathEntries = [
@@ -86,16 +96,51 @@ nonisolated enum RemoteLoginShell {
         "'\(string.replacingOccurrences(of: "'", with: "'\"'\"'"))'"
     }
 
-    /// Wraps a POSIX-sh script so it survives a remote login shell that is not
-    /// POSIX. `sshd` runs exec-channel commands as `$SHELL -c '<command>'`, so a
-    /// bare `VAR=`/`export`/`for` script is parsed by fish or csh and rejected
-    /// before `sh` ever sees it. `sh -c` hands it to a POSIX shell everywhere.
+    /// Double-quotes `value` for embedding in a POSIX-sh command line,
+    /// backslash-escaping `\`, `"`, `$` and `` ` `` — the four characters
+    /// still special inside POSIX double quotes.
+    ///
+    /// The fish/POSIX divergence documented on `singleQuoted` is specific to
+    /// backslash *inside single quotes*: fish reads `\'` as an escaped quote
+    /// there, POSIX shells don't. Inside double quotes the two agree on `\\`,
+    /// `\"` and `\$`, but not on `` \` ``: fish has no backtick substitution
+    /// (it spells that `()`), so it leaves the backslash in place where a
+    /// POSIX shell strips it. That is harmless here only because every caller
+    /// hands the result to `runInPOSIXShell`, so `sh` — never the login shell
+    /// — parses the double-quoted region. Do not emit this into a string a
+    /// non-POSIX shell will parse directly.
+    static func doubleQuoted(_ value: String) -> String {
+        var out = "\""
+        for ch in value {
+            switch ch {
+            case "\"", "\\", "$", "`": out.append("\\"); out.append(ch)
+            default: out.append(ch)
+            }
+        }
+        out.append("\"")
+        return out
+    }
+
+    /// Wraps a POSIX-sh script so it survives a login shell that is not
+    /// POSIX. `sshd` runs exec-channel commands as `$SHELL -c '<command>'` —
+    /// the remote user's login shell, not a fixed POSIX shell — so a bare
+    /// `VAR=`/`export`/`for` script is parsed by fish or csh and rejected
+    /// before `sh` ever sees it; the same is true of any other site that
+    /// hands a script to somebody's `$SHELL` rather than invoking `sh`
+    /// directly. `sh -c` hands it to a POSIX shell everywhere.
+    ///
+    /// Pass `login: true` for call sites that need the remote user's profile
+    /// sourced — e.g. login-shell discovery probes that depend on PATH or
+    /// environment set up by `.profile`/`.zprofile` — which get `sh -lc`
+    /// instead. Most callers don't need this: it costs a profile read and,
+    /// unlike the plain `sh -c` form, its output can include startup-file
+    /// noise the caller then has to filter.
     ///
     /// The `'"'"'` escaping `singleQuoted` produces is understood identically
     /// by sh, bash, zsh AND fish, so nesting this inside another
     /// single-quoted context (or nesting another `sh -c '...'` inside
     /// `script`) round-trips correctly to arbitrary depth.
-    static func wrapForLoginShell(_ script: String) -> String {
-        "sh -c \(singleQuoted(script))"
+    static func runInPOSIXShell(_ script: String, login: Bool = false) -> String {
+        "sh \(login ? "-lc" : "-c") \(singleQuoted(script))"
     }
 }

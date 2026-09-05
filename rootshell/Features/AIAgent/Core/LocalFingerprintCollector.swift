@@ -126,8 +126,7 @@ final class LocalFingerprintCollector {
 
     /// Run a command in the user's login shell to get full environment
     private func runLoginShellCommand(_ command: String) async throws -> String {
-        let escapedCommand = command.replacingOccurrences(of: "'", with: "'\\''")
-        let wrappedCommand = "$SHELL -l -c '\(escapedCommand)'"
+        let wrappedCommand = "$SHELL -l -c \(LoginShellCommand.singleQuoted(command))"
         return try await runCommand(wrappedCommand)
     }
 

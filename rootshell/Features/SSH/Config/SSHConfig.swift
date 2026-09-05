@@ -85,18 +85,18 @@ struct SSHConfig: Codable, Hashable {
     }
 
     /// Tool locations for non-interactive SSH exec requests. See
-    /// `RemoteLoginShell` (dependency-free, symlinked into the SwiftPM test
+    /// `LoginShellCommand` (dependency-free, symlinked into the SwiftPM test
     /// package) for the entries and the Darwin/autofs #391 reasoning.
-    nonisolated static let remoteExecToolPathEntries = RemoteLoginShell.toolPathEntries
+    nonisolated static let remoteExecToolPathEntries = LoginShellCommand.toolPathEntries
 
-    /// Linux-only tool locations. See `RemoteLoginShell.linuxPathEntries`.
-    nonisolated static let remoteExecLinuxPathEntries = RemoteLoginShell.linuxPathEntries
+    /// Linux-only tool locations. See `LoginShellCommand.linuxPathEntries`.
+    nonisolated static let remoteExecLinuxPathEntries = LoginShellCommand.linuxPathEntries
 
-    nonisolated static let remoteExecSystemPathEntries = RemoteLoginShell.systemPathEntries
+    nonisolated static let remoteExecSystemPathEntries = LoginShellCommand.systemPathEntries
 
     /// Shell snippet that prepends the entries above that exist on the target,
-    /// in order, preserving its existing PATH. See `RemoteLoginShell.pathPrefix`.
-    nonisolated static let remoteExecPathPrefix = RemoteLoginShell.pathPrefix
+    /// in order, preserving its existing PATH. See `LoginShellCommand.pathPrefix`.
+    nonisolated static let remoteExecPathPrefix = LoginShellCommand.pathPrefix
 
     /// The hostname or IP address to connect to
     var host: String
@@ -883,7 +883,7 @@ struct SSHConfig: Codable, Hashable {
         }
     }
 
-    static func shellSingleQuote(_ string: String) -> String { RemoteLoginShell.singleQuoted(string) }
+    static func shellSingleQuote(_ string: String) -> String { LoginShellCommand.singleQuoted(string) }
 
     var initialLaunchCommand: String? {
         guard launchCommandMode == .initialCommandWithPTY,
