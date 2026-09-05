@@ -193,6 +193,13 @@ struct MoshConfig: Codable, Hashable, Sendable {
     /// We check the charmap value rather than the exit code because `locale charmap`
     /// returns 0 even for invalid locales on many systems - it just outputs ASCII charset.
     ///
+    /// The whole thing is a POSIX-sh script (`export`, `[ ... ]`), but `sshd`
+    /// runs exec-channel commands through the client's *login* shell
+    /// (`$SHELL -c '<command>'`), which on fish or csh rejects that syntax
+    /// outright. `RemoteLoginShell.wrapForLoginShell` routes it through `sh -c`
+    /// so it runs the same on every login shell; `exec` before the server
+    /// binary keeps the process tree the same depth as before this fix.
+    ///
     /// - Parameter shell: The shell to run (default: $SHELL)
     func serverCommand(shell: String = "$SHELL") -> String {
         // Set LANG with fallback: check if locale charmap is UTF-8, else use C.UTF-8
@@ -204,6 +211,7 @@ struct MoshConfig: Codable, Hashable, Sendable {
             // No locale override — ensure at least a UTF-8 locale for mosh-server
             cmd += "[ \"$(locale charmap 2>/dev/null)\" = \"UTF-8\" ] || export LANG=C.UTF-8; "
         }
+        cmd += "exec "
         cmd += serverPath ?? "mosh-server"
         cmd += " new"
 
@@ -226,7 +234,7 @@ struct MoshConfig: Codable, Hashable, Sendable {
         // Command to run inside mosh.
         cmd += " -- \(moshSessionCommandWithTerm)"
 
-        return cmd
+        return RemoteLoginShell.wrapForLoginShell(cmd)
     }
 
     /// The post-`--` command, with `TERM` forced when the user asked for a value

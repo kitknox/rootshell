@@ -84,44 +84,19 @@ struct SSHConfig: Codable, Hashable {
         }
     }
 
-    /// Tool locations for non-interactive SSH exec requests, searched ahead of
-    /// the system directories without depending on shell startup files.
-    nonisolated static let remoteExecToolPathEntries = [
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        "$HOME/go/bin",
-        "/usr/local/go/bin"
-    ]
+    /// Tool locations for non-interactive SSH exec requests. See
+    /// `RemoteLoginShell` (dependency-free, symlinked into the SwiftPM test
+    /// package) for the entries and the Darwin/autofs #391 reasoning.
+    nonisolated static let remoteExecToolPathEntries = RemoteLoginShell.toolPathEntries
 
-    /// Linux-only tool locations, searched after the ones above. Never even
-    /// stat'd on Darwin: /home is an autofs trigger there, so each lookup costs
-    /// an automountd/opendirectoryd round trip (#391).
-    nonisolated static let remoteExecLinuxPathEntries = [
-        "/home/linuxbrew/.linuxbrew/bin",
-        "/snap/bin"
-    ]
+    /// Linux-only tool locations. See `RemoteLoginShell.linuxPathEntries`.
+    nonisolated static let remoteExecLinuxPathEntries = RemoteLoginShell.linuxPathEntries
 
-    nonisolated static let remoteExecSystemPathEntries = [
-        "/usr/bin",
-        "/bin",
-        "/usr/sbin",
-        "/sbin"
-    ]
+    nonisolated static let remoteExecSystemPathEntries = RemoteLoginShell.systemPathEntries
 
     /// Shell snippet that prepends the entries above that exist on the target,
-    /// in order, preserving its existing PATH. Existence is checked once here
-    /// so nonexistent directories never reach a child's PATH search.
-    nonisolated static let remoteExecPathPrefix: String = {
-        func words(_ entries: [String]) -> String {
-            entries.map { $0.contains("$") ? "\"\($0)\"" : $0 }.joined(separator: " ")
-        }
-        let linux = remoteExecLinuxPathEntries.joined(separator: " ")
-        let list = "\(words(remoteExecToolPathEntries)) $_rsl \(words(remoteExecSystemPathEntries))"
-        // Absolute path: the incoming PATH is exactly what this snippet fixes.
-        // Darwin always has it; a Linux host without it falls into the Linux branch.
-        return "_rsp=; _rsl=; [ \"$(/usr/bin/uname -s 2>/dev/null)\" = Darwin ] || _rsl=\"\(linux)\"; "
-            + "for _rsd in \(list); do [ -d \"$_rsd\" ] && _rsp=\"$_rsp$_rsd:\"; done; export PATH=\"$_rsp$PATH\"; "
-    }()
+    /// in order, preserving its existing PATH. See `RemoteLoginShell.pathPrefix`.
+    nonisolated static let remoteExecPathPrefix = RemoteLoginShell.pathPrefix
 
     /// The hostname or IP address to connect to
     var host: String
@@ -908,9 +883,7 @@ struct SSHConfig: Codable, Hashable {
         }
     }
 
-    static func shellSingleQuote(_ string: String) -> String {
-        "'\(string.replacingOccurrences(of: "'", with: "'\\''"))'"
-    }
+    static func shellSingleQuote(_ string: String) -> String { RemoteLoginShell.singleQuoted(string) }
 
     var initialLaunchCommand: String? {
         guard launchCommandMode == .initialCommandWithPTY,

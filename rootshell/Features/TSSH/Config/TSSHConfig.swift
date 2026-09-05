@@ -197,6 +197,12 @@ struct TrzszConfig: Codable, Hashable, Sendable {
     /// When no custom `serverPath` is set, the command prepends common Go binary
     /// locations to PATH. `go install` places binaries in `~/go/bin` by default,
     /// which is often not in PATH for non-login SSH shells.
+    ///
+    /// That PATH prefix is a POSIX-sh script (`VAR=`, `export`, `for`), but
+    /// `sshd` runs exec-channel commands through the client's *login* shell
+    /// (`$SHELL -c '<command>'`), which on fish or csh rejects that syntax
+    /// outright. `RemoteLoginShell.wrapForLoginShell` routes it through `sh -c`
+    /// so it runs the same on every login shell.
     func serverCommand() -> String {
         let binary = serverPath ?? "tsshd"
 
@@ -219,9 +225,13 @@ struct TrzszConfig: Codable, Hashable, Sendable {
 
         // When using the default binary name (no custom path), prepend common
         // Homebrew and Go install locations so tsshd is found in non-interactive
-        // SSH exec shells.
+        // SSH exec shells. `exec` keeps the process tree the same depth as
+        // before this fix (the login shell now execs `sh`, which execs tsshd
+        // as the last command of its own `-c` string), so the SSH channel's
+        // signals/EOF still reach tsshd directly rather than an intermediate
+        // shell.
         if serverPath == nil {
-            return "\(SSHConfig.remoteExecPathPrefix)\(binary)\(args)"
+            return RemoteLoginShell.wrapForLoginShell("\(SSHConfig.remoteExecPathPrefix)exec \(binary)\(args)")
         }
 
         return "\(binary)\(args)"
