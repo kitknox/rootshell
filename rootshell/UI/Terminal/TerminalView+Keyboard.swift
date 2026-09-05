@@ -488,6 +488,10 @@ extension Ghostty.TerminalView {
         }
         #endif
 
+        if key.keyCode == .keyboardEscape, enclosingSplitHost?.cancelPaneDrag() == true {
+            return (true, true)
+        }
+
         // A presented overlay (tab exposé) owns navigation keys while up; it
         // must see Escape before the tmux-detach and AI-agent handlers below.
         if let overlayHandler = presentedOverlayKeyHandler, overlayHandler(OverlayKeyEvent(key)) {
@@ -1789,6 +1793,10 @@ extension Ghostty.TerminalView {
     }
 
     @objc func handleEscapeKey(_ command: UIKeyCommand) {
+        if enclosingSplitHost?.cancelPaneDrag() == true {
+            keysConsumedByOverlayAction.insert(.keyboardEscape)
+            return
+        }
         // The reserved Cmd+Period system-cancel chord can arrive as a
         // translated plain Escape. Give a cmd+period binding first refusal; a
         // twin of a chord delivery already handled on another rail is

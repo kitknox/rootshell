@@ -59,6 +59,11 @@ extension MainView {
         // is a no-op when no overlay is up.
         pane?.setOverlayOwnsKeyboard(isAnySheetPresented)
         if let current, let pane, current === pane {
+            // Logical focus can survive while UIKit focus is lost (for example
+            // when a pane is reparented after a drop). Reacquire it even when
+            // the focused-pane pointer did not change.
+            pane.isLogicallyFocused = true
+            _ = pane.focusDidChange(true)
             // Same-pane re-focus (e.g. tapping the already-focused tmux pane):
             // still re-assert tmux's active window/pane. With the core's
             // automatic select-pane echo gone, this is the user's only way to
