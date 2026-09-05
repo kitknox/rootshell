@@ -3,7 +3,7 @@
 import Foundation
 
 /// Progress flags shared by Git commands that expose libgit2 callbacks.
-struct GitProgressControl: Sendable {
+nonisolated struct GitProgressControl: Sendable {
     private(set) var quiet = false
     private var explicitProgress: Bool?
 
@@ -64,10 +64,10 @@ extension GitProgressSubcommand {
 /// Limits terminal repaint traffic while preserving useful byte-count updates
 /// during a long percentage step. The latest suppressed update is flushed by
 /// `finish()` so a command never ends on stale progress.
-final class GitProgressReporter: @unchecked Sendable {
+nonisolated final class GitProgressReporter: @unchecked Sendable {
     typealias Clock = @Sendable () -> UInt64
 
-    private struct Update: Equatable {
+    private nonisolated struct Update: Equatable {
         let phase: String
         let label: String
         let current: Int
@@ -179,8 +179,8 @@ final class GitProgressReporter: @unchecked Sendable {
 /// Keeping these beside the reporter lets the app exercise the production
 /// implementation without requiring a network clone or a separate app test
 /// target.
-enum GitProgressSelfTest {
-    private final class TestClock: @unchecked Sendable {
+nonisolated enum GitProgressSelfTest {
+    private nonisolated final class TestClock: @unchecked Sendable {
         private let lock = NSLock()
         private var value: UInt64 = 0
 
@@ -197,7 +197,7 @@ enum GitProgressSelfTest {
         }
     }
 
-    private final class Capture: @unchecked Sendable {
+    private nonisolated final class Capture: @unchecked Sendable {
         private let lock = NSLock()
         private var values: [String] = []
 

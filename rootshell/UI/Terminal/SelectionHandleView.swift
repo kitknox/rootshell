@@ -227,6 +227,9 @@ extension Ghostty {
             reticleHaloView.alpha = 0
             reticleView.alpha = 0
 
+            registerForTraitChanges(UITraitCollection.systemTraitsAffectingColorAppearance) { (view: SelectionMagnifierView, _: UITraitCollection) in
+                view.updateChromeColors()
+            }
             updateChromeColors()
         }
 
@@ -260,11 +263,6 @@ extension Ghostty {
                     cornerRadius: Self.cornerRadius
                 ).cgPath
             }
-        }
-
-        override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-            super.traitCollectionDidChange(previousTraitCollection)
-            updateChromeColors()
         }
 
         func resetPlacement() {
