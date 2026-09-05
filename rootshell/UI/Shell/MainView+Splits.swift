@@ -14,6 +14,60 @@ import os
 
 extension MainView {
 
+    func handlePaneMove(tabID: UUID, source: SplitPaneView, destination: SplitPaneView, zone: PaneDropZone) {
+        guard let index = terminals.firstIndex(where: { $0.id == tabID }),
+              index == selectedTabIndex, !isAnySheetPresented, appTabSwipeState == nil,
+              !tabExpose.isActive, tabsModel.fullScreenPaneID == nil else { return }
+        let tab = terminals[index]
+        guard !tab.paneMove.isPending, tab.splitTree.zoomed == nil,
+              tab.splitTree.contains(source), tab.splitTree.contains(destination),
+              !tab.splitTree.contains(where: { $0.isDetachedForFullScreen }),
+              PaneMoveEligibility.allows(source, destination) else { return }
+
+        if let binding = source.asTerminal?.tmuxPaneBinding {
+            guard let targetBinding = destination.asTerminal?.tmuxPaneBinding,
+                  let controller = TmuxController.controller(forOwnerSurface: binding.parentSurface),
+                  let command = zone.tmuxMoveCommand(
+                    source: .init(ownerID: binding.parentUUID, windowID: binding.windowId, paneID: binding.paneId),
+                    destination: .init(ownerID: targetBinding.parentUUID, windowID: targetBinding.windowId, paneID: targetBinding.paneId)
+                  ),
+                  let requestID = tab.paneMove.begin() else { return }
+            let focusRevision = tab.paneFocusRevision
+            let selectionRevision = tabsModel.selectionRevision
+            Task { @MainActor in
+                do {
+                    _ = try await controller.sendCommandWithReply(command)
+                    tab.paneMove.finish(requestID)
+                    // tmux owns the tree; %layout-change will move the existing
+                    // surfaces. This is only the user's one-shot focus request.
+                    guard tabsModel.selectionRevision == selectionRevision,
+                          tab.paneFocusRevision == focusRevision,
+                          let currentIndex = terminals.firstIndex(where: { $0 === tab }),
+                          currentIndex == selectedTabIndex,
+                          !isAnySheetPresented, isWindowFocused,
+                          tab.splitTree.contains(source),
+                          source.asTerminal?.tmuxPaneBinding?.parentUUID == binding.parentUUID,
+                          source.asTerminal?.tmuxPaneBinding?.windowId == binding.windowId else { return }
+                    setFocusedPane(source, inTab: currentIndex)
+                } catch {
+                    tab.paneMove.finish(requestID, error: String(localized: "Couldn’t move pane: \(error.localizedDescription)"))
+                    Ghostty.logger.error("Pane move failed: \(error.localizedDescription)")
+                }
+            }
+            return
+        }
+
+        // A native tree may include terminals and nonterminal panes, but never
+        // edit a server-owned window or a mixed tree with bound tmux leaves.
+        guard !tab.isTmuxWindow, !tab.splitTree.terminalLeaves.contains(where: { $0.isTmuxPane }) else { return }
+        do {
+            tab.splitTree = try tab.splitTree.moving(view: source, to: destination, direction: zone.direction)
+            setFocusedPane(source, inTab: index)
+        } catch {
+            Ghostty.logger.error("Invalid native pane move: \(error.localizedDescription)")
+        }
+    }
+
     func handleSplitResize(tabIndex: Int, node: SplitTree<SplitPaneView>.Node, ratio: Double) {
         guard tabIndex < terminals.count else { return }
 

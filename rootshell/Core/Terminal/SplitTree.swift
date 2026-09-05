@@ -81,6 +81,7 @@ struct SplitTree<ViewType: UIView & Identifiable> {
 
     enum SplitError: Error {
         case viewNotFound
+        case invalidMove
     }
 
     enum NewDirection {
@@ -135,6 +136,16 @@ extension SplitTree {
         return .init(
             root: try root.insert(view: view, at: at, direction: direction),
             zoomed: nil)
+    }
+
+    /// Relocate a live leaf without ever publishing a tree missing that leaf.
+    /// Removing first also collapses its old parent before splitting the target.
+    func moving(view: ViewType, to destination: ViewType, direction: NewDirection) throws -> Self {
+        guard view !== destination, zoomed == nil else { throw SplitError.invalidMove }
+        guard contains(view), contains(destination), let source = root?.node(view: view) else {
+            throw SplitError.viewNotFound
+        }
+        return try remove(source).insert(view: view, at: destination, direction: direction)
     }
 
     /// Find a node containing a view with the specified ID.

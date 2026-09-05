@@ -1200,7 +1200,9 @@ extension Ghostty.TerminalView {
         }
     }
 
-    private func loadPastedNonFileURL(
+    // NSItemProvider invokes its callbacks off the main actor. This helper and
+    // its local URL/fallback functions only process provider data, never UI.
+    private nonisolated func loadPastedNonFileURL(
         from provider: NSItemProvider,
         completion: @escaping (URL?) -> Void
     ) {
