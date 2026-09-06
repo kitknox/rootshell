@@ -39,6 +39,9 @@ extension Ghostty.TerminalView {
         // so no in-app overlay is needed here.
         InputSourceCatalog.catalystSwitch(toPrimaryLanguage: target)
         #else
+        // This preference (and our textInputMode override) reflects a request,
+        // not the source UIKit selected through Globe or its language picker.
+        // Reapply explicit requests even when the stored preference matches.
         preferredInputLanguage = target
         showInputModeOverlay(displayName(forPrimaryLanguage: target))
 

@@ -428,11 +428,11 @@ extension Ghostty.TerminalView {
             virtualModifier: virtualModifier
         )
 
-        // On iPadOS, certain reserved shortcuts can arrive with Command stripped
-        // from UIKey.modifierFlags even though the key is physically held.
-        // Recover only that missing Command bit, and only when the GCKeyboard
-        // snapshot is trustworthy after any prior focus loss.
-        effectiveModifiers = mergeHardwareCommandModifierFromGCKeyboard(
+        // Changing input language during a focus handoff can strip the entire
+        // chord from UIKit events until the modifiers are released. Recover it
+        // from live hardware transitions shared across terminal responders.
+        let modifiersBeforeHardwareRecovery = effectiveModifiers
+        effectiveModifiers = mergeHardwareCommandChordFromGCKeyboard(
             into: effectiveModifiers,
             hardwareModifiers: hardwareModifiers
         )
@@ -576,13 +576,31 @@ extension Ghostty.TerminalView {
 
         commitKoreanCompositionIfNeeded(external: true)
 
+        let hardwareTrigger = KeyCode(hidUsage: key.keyCode).map {
+            KeyTrigger(key: $0, modifiers: KeybindModifiers(uiModifierFlags: effectiveModifiers))
+        }
+        let bindingTrigger = hardwareTrigger.map { trigger in
+            guard effectiveModifiers != modifiersBeforeHardwareRecovery,
+                  effectiveModifiers.contains(.command),
+                  let symbolTrigger = trigger.shiftedSymbolEquivalent else { return trigger }
+            let manager = KeybindManager.shared
+            let pending = KeySequenceTracker.shared
+            @MainActor
+            func isClaimed(_ candidate: KeyTrigger) -> Bool {
+                if pending.isAwaitingSecondKey {
+                    return pending.possibleBindings.contains { $0.sequence.triggers.last == candidate }
+                }
+                return manager.keybind(for: candidate) != nil || manager.isSequencePrefix(candidate)
+            }
+            // Explicit physical-key bindings take precedence over symbol aliases.
+            return !isClaimed(trigger) && isClaimed(symbolTrigger) ? symbolTrigger : trigger
+        }
+
         // Early custom binding check: if the user has a non-default binding for this
         // key combo (from external config or in-app override), execute it immediately.
         // This takes priority over all hardcoded special-case handlers below (Cmd+arrow,
         // modified Return, Cmd+backspace, etc.) so that custom keybindings always win.
-        if let keyCode = KeyCode(hidUsage: key.keyCode) {
-            let trigger = KeyTrigger(key: keyCode, modifiers: KeybindModifiers(uiModifierFlags: effectiveModifiers))
-
+        if let trigger = bindingTrigger {
             // Let KeySequenceTracker claim the press first so the second key of a
             // pending sequence (which may itself be an unmodified letter that
             // would otherwise reach the terminal) gets captured.
@@ -812,10 +830,8 @@ extension Ghostty.TerminalView {
 
         // Handle other key combinations via KeybindManager
         // Note: Ctrl+A-Z are handled via GCKeyboard in KeyboardTracker on all platforms
-        if let keyCode = KeyCode(hidUsage: key.keyCode),
-           let keybind = KeybindManager.shared.keybind(
-            for: KeyTrigger(key: keyCode, modifiers: KeybindModifiers(uiModifierFlags: effectiveModifiers))
-           ) {
+        if let trigger = bindingTrigger,
+           let keybind = KeybindManager.shared.keybind(for: trigger) {
 
             // Skip control characters - handled by fast path above (iOS) or GCKeyboard (all platforms)
             if keybind.action.isControlCharacter {
@@ -1346,8 +1362,9 @@ extension Ghostty.TerminalView {
 
     /// iPadOS can strip the Command modifier from certain reserved shortcuts
     /// (for example Cmd+. "cancel") before the key reaches pressesBegan.
-    /// Recover only that missing Command bit from GCKeyboard, and only when
-    /// the GameController snapshot is trustworthy. On Mac Catalyst, do not use
+    /// Recover the whole Command chord when current GC state agrees with live
+    /// modifier transitions; otherwise retain the existing Command-only fallback
+    /// when the per-view GameController snapshot is trustworthy. On Mac Catalyst, do not use
     /// GCKeyboard for modifier recovery: its state can remain latched after
     /// system shortcuts like Cmd+H, causing false Command-modified input.
     ///
@@ -1355,13 +1372,27 @@ extension Ghostty.TerminalView {
     /// a fresh key event whose UIKit modifiers overlap with the GCKeyboard state.
     /// That overlap tells us the snapshot is live again rather than a stale
     /// latched modifier from before deactivation.
-    func mergeHardwareCommandModifierFromGCKeyboard(
+    func mergeHardwareCommandChordFromGCKeyboard(
         into modifiers: UIKeyModifierFlags,
         hardwareModifiers: UIKeyModifierFlags
     ) -> UIKeyModifierFlags {
         #if os(visionOS) || targetEnvironment(macCatalyst)
         return modifiers
         #else
+        if window?.windowScene?.activationState == .foregroundActive {
+            // Both a down callback in this activation and a current physical
+            // snapshot must agree. A tab switch resets per-view trust, but does
+            // not invalidate these app-level transitions. Never use this on
+            // Catalyst, where system shortcuts can leave GC state latched.
+            let liveModifiers = KeyboardTracker.shared.shortcutRecoveryModifierFlags
+                .intersection(currentModifierFlagsFromGCKeyboard(input: GCKeyboard.coalesced?.keyboardInput))
+            if liveModifiers.contains(.command) {
+                return normalizedHardwareModifierFlags(
+                    modifiers.union(liveModifiers), virtualModifier: virtualModTapModifier
+                )
+            }
+        }
+
         guard !modifiers.contains(.command),
               let input = GCKeyboard.coalesced?.keyboardInput else {
             return modifiers
