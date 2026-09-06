@@ -118,15 +118,17 @@ final class SSHCopyID {
         onProgress?("Connected. Checking existing keys...")
         log.append("Connected successfully.")
 
+        let targetPath = parsedCommand.targetPath
+        let quotedPath = quotedTargetPath(targetPath)
+
         // Step 3: Check existing keys (unless force mode)
         var keysToInstall = keyLines
         var skippedKeys: [String] = []
 
         if !parsedCommand.force {
-            let targetPath = parsedCommand.targetPath
             let existingContent = try await executeRemoteCommand(
                 client: client,
-                command: "cat \(shellEscape(targetPath)) 2>/dev/null || true"
+                command: "cat \(quotedPath) 2>/dev/null || true"
             )
 
             if !existingContent.isEmpty {
@@ -178,25 +180,16 @@ final class SSHCopyID {
 
         // Step 5: Install keys
         onProgress?("Installing \(keysToInstall.count) key(s)...")
-        let targetPath = parsedCommand.targetPath
 
         // Build the key content to append
         let newKeyLines = keysToInstall.map(\.line).joined(separator: "\n")
 
-        // Shell command matching openssh ssh-copy-id behavior:
-        // - Create .ssh directory with correct permissions
-        // - Append key(s) to authorized_keys
-        // - Set correct permissions on authorized_keys
-        //
-        // No sh -c wrapper needed — Citadel's executeCommand runs in a shell.
-        // Replace ~ with $HOME so tilde expands inside double-quoted paths.
-        let expandedPath = expandTilde(targetPath)
         let installCommand = """
         umask 077; \
-        mkdir -p "$(dirname "\(expandedPath)")" && \
-        printf '%s\\n' \(shellEscapeForPrintf(newKeyLines)) >> "\(expandedPath)" && \
-        chmod 600 "\(expandedPath)" && \
-        chmod 700 "$(dirname "\(expandedPath)")"
+        mkdir -p "$(dirname \(quotedPath))" && \
+        printf '%s\\n' \(shellEscapeForPrintf(newKeyLines)) >> \(quotedPath) && \
+        chmod 600 \(quotedPath) && \
+        chmod 700 "$(dirname \(quotedPath))"
         """
 
         let installOutput = try await executeRemoteCommand(client: client, command: installCommand)
@@ -212,7 +205,7 @@ final class SSHCopyID {
         onProgress?("Verifying installation...")
         let verifyContent = try await executeRemoteCommand(
             client: client,
-            command: "cat \(shellEscape(targetPath)) 2>/dev/null"
+            command: "cat \(quotedPath) 2>/dev/null"
         )
 
         var allVerified = true
@@ -247,36 +240,22 @@ final class SSHCopyID {
 
     /// Execute a command on the remote server and return its output
     private func executeRemoteCommand(client: SSHClient, command: String) async throws -> String {
-        let outputBuffer = try await client.executeCommand(command)
+        let outputBuffer = try await client.executeCommand(LoginShellCommand.runInPOSIXShell(command))
         let data = Data(buffer: outputBuffer)
         return String(data: data, encoding: .utf8) ?? ""
     }
 
-    /// Replace leading ~ with $HOME so paths expand inside double-quoted shell strings
-    private func expandTilde(_ path: String) -> String {
+    /// Expands only the current user's home prefix; the rest is a literal path.
+    private func quotedTargetPath(_ path: String) -> String {
+        if path == "~" { return "\"$HOME\"" }
         if path.hasPrefix("~/") {
-            return "$HOME/" + String(path.dropFirst(2))
+            return "\"$HOME\"/" + LoginShellCommand.singleQuoted(String(path.dropFirst(2)))
         }
-        if path == "~" {
-            return "$HOME"
-        }
-        return path
+        return LoginShellCommand.singleQuoted(path.hasPrefix("/") ? path : "./" + path)
     }
 
-    /// Shell-escape a string for use in single quotes
-    private func shellEscape(_ str: String) -> String {
-        // For use inside double-quoted strings in shell
-        str.replacingOccurrences(of: "\\", with: "\\\\")
-           .replacingOccurrences(of: "\"", with: "\\\"")
-           .replacingOccurrences(of: "$", with: "\\$")
-           .replacingOccurrences(of: "`", with: "\\`")
-    }
-
-    /// Shell-escape key content for printf argument
     private func shellEscapeForPrintf(_ str: String) -> String {
-        // Wrap each line in single quotes, escaping internal single quotes
-        let escaped = str.replacingOccurrences(of: "'", with: "'\\''")
-        return "'\(escaped)'"
+        LoginShellCommand.singleQuoted(str)
     }
 
     /// Clean up SSH connections

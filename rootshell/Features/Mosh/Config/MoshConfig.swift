@@ -204,6 +204,7 @@ struct MoshConfig: Codable, Hashable, Sendable {
             // No locale override — ensure at least a UTF-8 locale for mosh-server
             cmd += "[ \"$(locale charmap 2>/dev/null)\" = \"UTF-8\" ] || export LANG=C.UTF-8; "
         }
+        cmd += "exec "
         cmd += serverPath ?? "mosh-server"
         cmd += " new"
 
@@ -226,7 +227,7 @@ struct MoshConfig: Codable, Hashable, Sendable {
         // Command to run inside mosh.
         cmd += " -- \(moshSessionCommandWithTerm)"
 
-        return cmd
+        return LoginShellCommand.runInPOSIXShell(cmd)
     }
 
     /// The post-`--` command, with `TERM` forced when the user asked for a value

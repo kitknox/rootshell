@@ -69,9 +69,9 @@ struct OpenConnectionProfileIntent: AppIntent {
         }
     }
 
-    /// POSIX single-quoting; an embedded `'` becomes `'\''`.
+    /// POSIX single-quoting for a login shell that may not be POSIX (fish, csh).
     static func shellQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        LoginShellCommand.singleQuoted(value)
     }
 
     enum IntentError: Swift.Error, CustomLocalizedStringResourceConvertible {

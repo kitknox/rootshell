@@ -205,15 +205,9 @@ final class CatalystLocalExecutor {
 
     // MARK: - Private Helpers
 
-    /// Wrap command in user's login shell to get full environment (PATH, aliases, functions)
-    /// Uses $SHELL -l -c 'command' pattern with stderr redirected to stdout
-    /// The `|| true` ensures the command always exits 0 to avoid error throws
+    /// Captures stderr and suppresses nonzero status so command output is returned.
     private func wrapForLoginShell(_ command: String) -> String {
-        let shell = sessionShell ?? "/bin/sh"
-        let escapedCommand = command.shellEscapedForSingleQuotes
-        // Redirect stderr to stdout so both streams are captured
-        // Use || true to ensure exit code 0 (avoid throwing on non-zero)
-        return "\(shell) -l -c '\(escapedCommand)' 2>&1 || true"
+        LoginShellCommand.runInLoginShell(command, shell: sessionShell ?? "/bin/sh") + " 2>&1 || true"
     }
 
     /// Truncate output for display (keep most recent characters)

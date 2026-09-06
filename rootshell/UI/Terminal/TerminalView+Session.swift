@@ -13,22 +13,9 @@ import GhosttyKit
 private extension String {
     /// Escapes characters that remain active inside shell double quotes.
     var shellEscapedForDoubleQuotes: String {
-        var escaped = ""
-        escaped.reserveCapacity(count)
-
-        for character in self {
-            if character == "\\" || character == "\"" || character == "$" || character == "`" {
-                escaped.append("\\")
-            }
-            escaped.append(character)
-        }
-
-        return escaped
+        let quoted = LoginShellCommand.doubleQuoted(self)
+        return String(quoted.dropFirst().dropLast())
     }
-}
-
-private func shellEscapeForSingleQuotes(_ string: String) -> String {
-    string.replacingOccurrences(of: "'", with: "'\\''")
 }
 
 private extension Ghostty.TerminalView {
@@ -953,7 +940,7 @@ extension Ghostty.TerminalView {
 
     private func multiplexerAttachInputLine(_ attachCommand: String) -> String {
         let script = "\(SSHConfig.remoteExecPathPrefix)\(attachCommand)"
-        return "sh -c '\(shellEscapeForSingleQuotes(script))'\n"
+        return LoginShellCommand.runInPOSIXShell(script) + "\n"
     }
 }
 

@@ -188,11 +188,9 @@ nonisolated enum ProjectProbeCommand {
         return (script, nonce)
     }
 
-    /// Wraps a string in single quotes for `sh`, escaping any it contains.
-    /// A path is remote, user-controlled input, so this is a correctness
-    /// requirement rather than a nicety.
+    /// Quotes a remote path or script for the login shell.
     static func singleQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        LoginShellCommand.singleQuoted(value)
     }
 
     /// Parses the probe output. Tolerant by design: a host missing `git`, a
