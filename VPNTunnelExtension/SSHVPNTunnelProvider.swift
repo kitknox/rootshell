@@ -1195,35 +1195,16 @@ class SSHVPNTunnelProvider: NEPacketTunnelProvider {
     ) async throws -> VPNTunnelConfig.TSSHServerInfo {
         let modeFlag = mode.lowercased() == "quic" ? "--quic" : "--kcp"
         let mtuArg = mtu.map { " --mtu \($0)" } ?? ""
-        let debugFlag = VPNConnectionDebugLogger.shared.isEnabled ? " --debug" : ""
         let binary = serverPath ?? "tsshd"
-        // When the user specified an absolute path, invoke it directly so we don't
-        // shadow it with the PATH-prepend fallback.
-        //
-        // `sshd` runs exec-channel commands through the client's *login*
-        // shell (`$SHELL -c '<command>'`), not a fixed POSIX shell, so a
-        // hand-rolled POSIX-sh fragment here is at the mercy of whatever
-        // that login shell's grammar happens to accept — this used to be
-        // `export PATH="$PATH:$HOME/go/bin:/usr/local/go/bin" && ...`,
-        // appending those two locations after the inherited PATH, which
-        // breaks outright on non-POSIX login shells (fish, csh) that don't
-        // parse `VAR=value`/`for ... done` syntax at all.
-        // `LoginShellCommand.pathPrefix` does the same job but prepends the
-        // equivalent locations (plus Homebrew) after checking each one
-        // exists, and `runInPOSIXShell` routes the whole script through
-        // `sh -c` first so it runs the same on every login shell — deliberate,
-        // and consistent with this app's own tsshd bootstrap in
-        // `TrzszConfig.serverCommand()`. `exec` keeps the process tree the
-        // same depth so the SSH channel's signals and EOF still reach tsshd
-        // directly rather than an intermediate shell.
-        let command: String
-        if serverPath == nil {
-            command = LoginShellCommand.runInPOSIXShell(
-                "\(LoginShellCommand.pathPrefix)exec \(binary) --port \(udpPortMin)-\(udpPortMax)\(mtuArg) \(modeFlag)\(debugFlag)"
-            )
-        } else {
-            command = "\(binary) --port \(udpPortMin)-\(udpPortMax)\(mtuArg) \(modeFlag)\(debugFlag)"
-        }
+        let command = TsshdServerCommand.command(
+            serverPath: serverPath,
+            portMin: udpPortMin,
+            portMax: udpPortMax,
+            mtu: mtu,
+            quic: mode.lowercased() == "quic",
+            attachable: false,
+            debug: VPNConnectionDebugLogger.shared.isEnabled
+        )
 
         Self.logger.info("Executing: \(binary) \(modeFlag)\(mtuArg)")
 

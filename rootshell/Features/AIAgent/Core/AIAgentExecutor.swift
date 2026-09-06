@@ -245,7 +245,11 @@ final class AIAgentExecutor {
     ///   - timeout: Maximum execution time (defaults to 30 seconds)
     /// - Returns: The command execution result
     /// - Throws: AIAgentExecutorError if execution fails
-    func execute(command: String, timeout: TimeInterval = defaultTimeout) async throws -> CommandExecutionResult {
+    func execute(
+        command: String,
+        timeout: TimeInterval = defaultTimeout,
+        prependPATH: Bool = true
+    ) async throws -> CommandExecutionResult {
         guard let client = client, isConnected else {
             throw AIAgentExecutorError.notConnected
         }
@@ -253,7 +257,7 @@ final class AIAgentExecutor {
         let startTime = Date()
 
         // Wrap command in login shell to get full user environment (PATH, aliases, etc.)
-        let finalCommand = wrapForLoginShell(command)
+        let finalCommand = wrapForLoginShell(command, prependPATH: prependPATH)
 
         Self.logger.info("Executing command: \(finalCommand.prefix(100))...")
 
@@ -439,26 +443,9 @@ final class AIAgentExecutor {
         SSHConnectionHelper.buildHostKeyValidator(for: host, port: port, onValidation: onHostKeyValidation)
     }
 
-    /// Wrap command in user's login shell to get full environment (PATH, aliases, functions)
-    /// Uses $SHELL -l -c 'command' pattern with stderr redirected to stdout
-    /// The `|| true` ensures the command always exits 0 so Citadel doesn't throw CommandFailed
-    ///
-    /// The PATH prelude has to run in `sh`, not inside the login shell: `$SHELL`
-    /// may be fish/csh, which can't parse the POSIX `export PATH=...` snippet.
-    /// So `sh -c` runs the prelude and then `exec`s the user's login shell to
-    /// run their command, rather than nesting the prelude text inside a
-    /// `$SHELL -l -c '...'` string. One behavioral consequence: previously the
-    /// prelude ran *after* the login shell sourced its profile, so the app's
-    /// PATH entries won outright; now `sh` exports them first and the login
-    /// shell's profile is read afterwards, so a profile that overwrites PATH
-    /// wholesale could shadow them (fish's `fish_add_path` prepends and
-    /// preserves, so entries survive in practice).
-    private func wrapForLoginShell(_ command: String) -> String {
-        let shell = sessionShell ?? "/bin/sh"
-        let script = "\(SSHConfig.remoteExecPathPrefix)exec \(shell) -l -c \(LoginShellCommand.singleQuoted(command))"
-        // Redirect stderr to stdout so both streams are captured
-        // Use || true to ensure exit code 0 (Citadel throws on non-zero exit)
-        return LoginShellCommand.runInPOSIXShell(script) + " 2>&1 || true"
+    /// Captures stderr and suppresses nonzero status so command output is returned.
+    private func wrapForLoginShell(_ command: String, prependPATH: Bool = true) -> String {
+        LoginShellCommand.runInLoginShell(command, shell: sessionShell ?? "/bin/sh", prependPATH: prependPATH) + " 2>&1 || true"
     }
 
     /// Decode UTF-8 from buffer, leaving incomplete sequences for next packet

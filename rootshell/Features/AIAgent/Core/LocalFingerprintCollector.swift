@@ -124,10 +124,10 @@ final class LocalFingerprintCollector {
         return result.output
     }
 
-    /// Run a command in the user's login shell to get full environment
-    private func runLoginShellCommand(_ command: String) async throws -> String {
-        let wrappedCommand = "$SHELL -l -c \(LoginShellCommand.singleQuoted(command))"
-        return try await runCommand(wrappedCommand)
+    /// Fingerprinting runs before the executor knows the user's shell.
+    private func runPOSIXProbe(_ command: String) async throws -> String {
+        let probe = LoginShellCommand.runInPOSIXShell(command)
+        return try await runCommand(LoginShellCommand.runInLoginShell(probe))
     }
 
     private func detectDistro() async throws -> String? {
@@ -161,7 +161,7 @@ final class LocalFingerprintCollector {
     /// Collect environment variables from the local machine using login shell
     private func collectEnvironment() async -> EnvironmentParser.ParseResult {
         do {
-            let envOutput = try await runLoginShellCommand("env 2>/dev/null")
+            let envOutput = try await runPOSIXProbe("env 2>/dev/null")
             return EnvironmentParser.parse(envOutput, filterSensitive: true)
         } catch {
             Self.logger.warning("Failed to collect environment: \(error.localizedDescription)")
@@ -182,7 +182,7 @@ final class LocalFingerprintCollector {
             do {
                 let toolList = toolBatch.joined(separator: " ")
                 let script = "for cmd in \(toolList); do command -v \"$cmd\" >/dev/null 2>&1 && echo \"$cmd\"; done"
-                let result = try await runLoginShellCommand(script)
+                let result = try await runPOSIXProbe(script)
 
                 let found = result.split(separator: "\n")
                     .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -249,7 +249,7 @@ final class LocalFingerprintCollector {
             guard available.contains(tool) else { continue }
 
             do {
-                let output = try await runLoginShellCommand(command)
+                let output = try await runPOSIXProbe(command)
                 if let version = parser(output), !version.isEmpty {
                     versions[tool] = version
                 }

@@ -183,58 +183,17 @@ struct TrzszConfig: Codable, Hashable, Sendable {
 
     // MARK: - Server Command Generation
 
-    /// Generates the tsshd command to execute via SSH
-    ///
-    /// Format: tsshd [--quic|--kcp] --port <port-range>
-    ///
-    /// Options:
-    /// - `--quic`: Use QUIC transport (default)
-    /// - `--kcp`: Use KCP transport
-    /// - `--port <min>-<max>`: UDP port range
-    ///
-    /// The server outputs JSON with connection info to stdout.
-    ///
-    /// When no custom `serverPath` is set, the command prepends common Go binary
-    /// locations to PATH. `go install` places binaries in `~/go/bin` by default,
-    /// which is often not in PATH for non-login SSH shells.
-    ///
-    /// That PATH prefix is a POSIX-sh script (`VAR=`, `export`, `for`), but
-    /// `sshd` runs exec-channel commands through the client's *login* shell
-    /// (`$SHELL -c '<command>'`), which on fish or csh rejects that syntax
-    /// outright. `LoginShellCommand.runInPOSIXShell` routes it through `sh -c`
-    /// so it runs the same on every login shell.
+    /// Builds the tsshd bootstrap with terminal-session flags.
     func serverCommand() -> String {
-        let binary = serverPath ?? "tsshd"
-
-        var args = " --attachable --port \(udpPortMin)-\(udpPortMax)"
-
-        if mtu > 0 {
-            args += " --mtu \(mtu)"
-        }
-
-        switch transportMode {
-        case .kcp, .auto:
-            args += " --kcp"
-        case .quic:
-            args += " --quic"
-        }
-
-        if ResumeDebugLogger.shared.isEnabled {
-            args += " --debug"
-        }
-
-        // When using the default binary name (no custom path), prepend common
-        // Homebrew and Go install locations so tsshd is found in non-interactive
-        // SSH exec shells. `exec` keeps the process tree the same depth as
-        // before this fix (the login shell now execs `sh`, which execs tsshd
-        // as the last command of its own `-c` string), so the SSH channel's
-        // signals/EOF still reach tsshd directly rather than an intermediate
-        // shell.
-        if serverPath == nil {
-            return LoginShellCommand.runInPOSIXShell("\(SSHConfig.remoteExecPathPrefix)exec \(binary)\(args)")
-        }
-
-        return "\(binary)\(args)"
+        TsshdServerCommand.command(
+            serverPath: serverPath,
+            portMin: udpPortMin,
+            portMax: udpPortMax,
+            mtu: mtu > 0 ? mtu : nil,
+            quic: transportMode == .quic,
+            attachable: true,
+            debug: ResumeDebugLogger.shared.isEnabled
+        )
     }
 
     // MARK: - Split Support

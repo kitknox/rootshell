@@ -394,12 +394,15 @@ final class HostFingerprintCollector {
         return result.output
     }
 
-    /// Run a command in the user's login shell to get full environment
-    /// Uses $SHELL -l -c 'command' pattern
-    private func runLoginShellCommand(_ command: String) async throws -> String {
-        let prefixedCommand = SSHConfig.command(command, applying: .prependPATH)
-        let wrappedCommand = "$SHELL -l -c \(LoginShellCommand.singleQuoted(prefixedCommand))"
-        return try await runCommand(wrappedCommand)
+    /// Fingerprinting runs before the executor knows the user's shell.
+    private func runPOSIXProbe(_ command: String) async throws -> String {
+        let probe = LoginShellCommand.runInPOSIXShell(command)
+        let result = try await executor.execute(
+            command: LoginShellCommand.runInLoginShell(probe, prependPATH: true),
+            timeout: 10,
+            prependPATH: false
+        )
+        return result.output
     }
 
     private func detectDistro() async throws -> String? {
@@ -481,7 +484,7 @@ final class HostFingerprintCollector {
     private func collectEnvironment() async -> EnvironmentParser.ParseResult {
         do {
             // Use login shell to get full environment (PATH, aliases, etc.)
-            let envOutput = try await runLoginShellCommand("env 2>/dev/null")
+            let envOutput = try await runPOSIXProbe("env 2>/dev/null")
             return EnvironmentParser.parse(envOutput, filterSensitive: true)
         } catch {
             Self.logger.warning("Failed to collect environment: \(error.localizedDescription)")
@@ -507,7 +510,7 @@ final class HostFingerprintCollector {
                 // Run in login shell to find tools in user's full PATH
                 let toolList = toolBatch.joined(separator: " ")
                 let script = "for cmd in \(toolList); do command -v \"$cmd\" >/dev/null 2>&1 && echo \"$cmd\"; done"
-                let result = try await runLoginShellCommand(script)
+                let result = try await runPOSIXProbe(script)
 
                 let found = result.split(separator: "\n")
                     .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -605,7 +608,7 @@ final class HostFingerprintCollector {
 
             do {
                 // Use login shell to ensure tools in user's PATH are found
-                let output = try await runLoginShellCommand(command)
+                let output = try await runPOSIXProbe(command)
                 if let version = parser(output), !version.isEmpty {
                     versions[tool] = version
                 }

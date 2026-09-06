@@ -84,18 +84,6 @@ struct SSHConfig: Codable, Hashable {
         }
     }
 
-    /// Tool locations for non-interactive SSH exec requests. See
-    /// `LoginShellCommand` (dependency-free, symlinked into the SwiftPM test
-    /// package) for the entries and the Darwin/autofs #391 reasoning.
-    nonisolated static let remoteExecToolPathEntries = LoginShellCommand.toolPathEntries
-
-    /// Linux-only tool locations. See `LoginShellCommand.linuxPathEntries`.
-    nonisolated static let remoteExecLinuxPathEntries = LoginShellCommand.linuxPathEntries
-
-    nonisolated static let remoteExecSystemPathEntries = LoginShellCommand.systemPathEntries
-
-    /// Shell snippet that prepends the entries above that exist on the target,
-    /// in order, preserving its existing PATH. See `LoginShellCommand.pathPrefix`.
     nonisolated static let remoteExecPathPrefix = LoginShellCommand.pathPrefix
 
     /// The hostname or IP address to connect to
@@ -879,7 +867,7 @@ struct SSHConfig: Codable, Hashable {
         case .verbatim:
             return command
         case .prependPATH:
-            return remoteExecPathPrefix + command
+            return LoginShellCommand.runInPOSIXShell(remoteExecPathPrefix + command)
         }
     }
 
@@ -931,7 +919,8 @@ struct SSHConfig: Codable, Hashable {
     /// Returns the command mosh-server should run inside the mosh session.
     var effectiveMoshSessionCommand: String {
         if let remoteCommand, !remoteCommand.isEmpty {
-            return "sh -lc \(Self.shellSingleQuote(Self.command(remoteCommand, applying: remoteCommandPolicy)))"
+            let script = remoteCommandPolicy == .prependPATH ? Self.remoteExecPathPrefix + remoteCommand : remoteCommand
+            return LoginShellCommand.runInPOSIXShell(script, login: true)
         }
         if let initialLaunchCommand {
             return "sh -lc \(Self.shellSingleQuote(initialLaunchCommand))"

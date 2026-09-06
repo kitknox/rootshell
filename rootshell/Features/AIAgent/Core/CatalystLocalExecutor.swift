@@ -205,21 +205,9 @@ final class CatalystLocalExecutor {
 
     // MARK: - Private Helpers
 
-    /// Wrap command in user's login shell to get full environment (PATH, aliases, functions)
-    /// Uses $SHELL -l -c 'command' pattern with stderr redirected to stdout
-    /// The `|| true` ensures the command always exits 0 to avoid error throws
-    ///
-    /// No PATH prelude is involved here (unlike `AIAgentExecutor`'s SSH path),
-    /// so there's no `sh -c` wrap to add — just fish-safe quoting. Note this
-    /// produces a deliberate-looking double `-l -c`: `rootshell-helper`'s
-    /// ProcessExecutor.m already execs `[loginShell, "-l", "-c", cmd]`, so the
-    /// login shell ends up invoked twice (once here, once by the helper). That
-    /// predates this fix and is left alone.
+    /// Captures stderr and suppresses nonzero status so command output is returned.
     private func wrapForLoginShell(_ command: String) -> String {
-        let shell = sessionShell ?? "/bin/sh"
-        // Redirect stderr to stdout so both streams are captured
-        // Use || true to ensure exit code 0 (avoid throwing on non-zero)
-        return "\(shell) -l -c \(LoginShellCommand.singleQuoted(command)) 2>&1 || true"
+        LoginShellCommand.runInLoginShell(command, shell: sessionShell ?? "/bin/sh") + " 2>&1 || true"
     }
 
     /// Truncate output for display (keep most recent characters)

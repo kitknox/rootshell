@@ -579,8 +579,6 @@ private func parseSSHURL(_ url: String) -> (host: String, port: Int, username: S
 
 /// Determine the git command to execute based on the service type.
 private func gitCommandForService(_ service: Int32, path: String) -> String {
-    // Routed through the shared helper for consistency, not to fix a live bug:
-    // a single level of escaping parses identically in fish and POSIX sh.
     let quotedPath = LoginShellCommand.singleQuoted(path)
     switch service {
     case 1, 2:  // GIT_SERVICE_UPLOADPACK_LS, GIT_SERVICE_UPLOADPACK

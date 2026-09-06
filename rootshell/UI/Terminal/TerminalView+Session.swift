@@ -12,8 +12,6 @@ import GhosttyKit
 
 private extension String {
     /// Escapes characters that remain active inside shell double quotes.
-    /// Forwards to `LoginShellCommand.doubleQuoted`, stripping the surrounding
-    /// quotes it adds, since every call site here supplies its own `"..."`.
     var shellEscapedForDoubleQuotes: String {
         let quoted = LoginShellCommand.doubleQuoted(self)
         return String(quoted.dropFirst().dropLast())
