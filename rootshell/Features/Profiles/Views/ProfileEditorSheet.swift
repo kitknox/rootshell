@@ -2652,6 +2652,10 @@ struct FolderPickerSheet: View {
 
     private var profileManager: ConnectionProfileManager { ConnectionProfileManager.shared }
 
+    private var normalizedNewFolderPath: String {
+        ConnectionProfile.normalizeFolderPath(newFolderName.trimmingCharacters(in: .whitespaces))
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -2704,13 +2708,12 @@ struct FolderPickerSheet: View {
                             TextField("Folder name", text: $newFolderName)
                                 .autocapitalization(.words)
                             Button("Create") {
-                                let trimmed = newFolderName.trimmingCharacters(in: .whitespaces)
-                                if !trimmed.isEmpty {
-                                    selectedPath = trimmed
+                                if !normalizedNewFolderPath.isEmpty {
+                                    selectedPath = normalizedNewFolderPath
                                     dismiss()
                                 }
                             }
-                            .disabled(newFolderName.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .disabled(normalizedNewFolderPath.isEmpty)
                         }
                         .themedRow()
                     } else {
