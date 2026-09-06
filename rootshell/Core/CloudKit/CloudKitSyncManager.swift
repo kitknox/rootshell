@@ -945,7 +945,7 @@ final class CloudKitSyncManager {
 
         // Apply to local store
         let records = allRecords.compactMap { T.from($0) }
-        try await applyRemoteRecords(records, type: type)
+        try applyRemoteRecords(records, type: type)
         return true
     }
 
@@ -1156,26 +1156,26 @@ final class CloudKitSyncManager {
             case SSHConnectionHistoryEntry.recordType:
                 guard isHistorySyncEnabled else { continue }
                 if let entry = SSHConnectionHistoryEntry.from(record) {
-                    try await applyRemoteRecords([entry], type: SSHConnectionHistoryEntry.self)
+                    try applyRemoteRecords([entry], type: SSHConnectionHistoryEntry.self)
                 }
             case KnownHost.recordType:
                 guard isKnownHostsSyncEnabled else { continue }
                 if let host = KnownHost.from(record) {
-                    try await applyRemoteRecords([host], type: KnownHost.self)
+                    try applyRemoteRecords([host], type: KnownHost.self)
                 }
             case ConnectionProfile.recordType:
                 guard isProfilesSyncEnabled else { continue }
                 if let theme = ProfileThemeRecord.from(record) {
                     try ConnectionProfileManager.shared.applyRemoteTheme(theme)
                 } else if let profile = ConnectionProfile.from(record) {
-                    try await applyRemoteRecords([profile], type: ConnectionProfile.self)
+                    try applyRemoteRecords([profile], type: ConnectionProfile.self)
                 }
             default:
                 Self.logger.warning("Unknown record type: \(record.recordType)")
             }
         }
         if !settingRecords.isEmpty {
-            try await applyRemoteRecords(settingRecords, type: AppSettingRecord.self)
+            try applyRemoteRecords(settingRecords, type: AppSettingRecord.self)
         }
         appliedAll = true
     }
@@ -1231,7 +1231,13 @@ final class CloudKitSyncManager {
     }
 
     /// Apply remote records to local stores
-    private func applyRemoteRecords<T: CloudKitSyncable>(_ records: [T], type: T.Type) async throws {
+    private func applyRemoteRecords<T: CloudKitSyncable>(_ records: [T], type: T.Type) throws {
+        // Standalone pushes also apply server-wins conflicts here. Restore the
+        // caller's state on success or failure so they cannot leave sync active.
+        // Keep this synchronous on the main actor: no other sync can change the
+        // state between capturing it and restoring it.
+        let previousState = syncState
+        defer { syncState = previousState }
         syncState = .applyingChanges
 
         switch T.recordType {
@@ -1340,7 +1346,7 @@ final class CloudKitSyncManager {
             }
         } else {
             // Server is newer - accept server record and update local store
-            try await applyRemoteRecords([serverModel], type: T.self)
+            try applyRemoteRecords([serverModel], type: T.self)
         }
     }
 
