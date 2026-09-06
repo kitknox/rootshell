@@ -274,7 +274,7 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
         // Ordinary VNC hardware input is always active for the focused pane.
         // The user-facing toggle chooses the destination for four reserved
         // host chords; its own shortcut always remains local.
-        self.keyboardCapture = VNCKeyboardCapture(
+        let keyboardCapture = VNCKeyboardCapture(
             isCaptured: true,
             automaticallyCapturesOnInteraction: true,
             reservedHostShortcuts: [
@@ -286,6 +286,11 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
                 VNCHostKeyboardShortcut(input: "]", modifiers: [.command, .shift]),
             ]
         )
+        keyboardCapture.controlOptionAsCommand = SettingsStore.shared.value(
+            Settings.ScreenSharing.controlOptionAsCommandDefault)
+        keyboardCapture.routeReservedHostShortcutsToVNC(SettingsStore.shared.value(
+            Settings.ScreenSharing.routeReservedShortcutsToVNCDefault))
+        self.keyboardCapture = keyboardCapture
         self.displayTitle = config.displayName
         self.windowId = windowId
         super.init(uuid: uuid, frame: .zero)

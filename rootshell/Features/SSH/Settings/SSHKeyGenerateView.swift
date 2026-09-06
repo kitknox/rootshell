@@ -116,76 +116,79 @@ struct SSHKeyGenerateView: View {
                 // Security options (collapsible)
                 Section {
                     DisclosureGroup("Security Options", isExpanded: $showSecurityOptions) {
-                        // Storage level
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Key Storage")
-                                .font(.subheadline.bold())
+                        // Keep the divider inside one content row instead of a separate Form row.
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Storage level
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Key Storage")
+                                    .font(.subheadline.bold())
 
-                            if selection.isSecureEnclave {
-                                // Secure Enclave keys are device-bound by
-                                // construction: no backup, no iCloud sync.
-                                HStack {
-                                    Label("This Device Only", systemImage: "iphone")
-                                    Spacer()
-                                    Image(systemName: "lock.fill")
-                                        .foregroundStyle(.secondary)
+                                if selection.isSecureEnclave {
+                                    // Secure Enclave keys are device-bound by
+                                    // construction: no backup, no iCloud sync.
+                                    HStack {
+                                        Label("This Device Only", systemImage: "iphone")
+                                        Spacer()
+                                        Image(systemName: "lock.fill")
+                                            .foregroundStyle(.secondary)
+                                            .font(.caption)
+                                    }
+                                    Text("Secure Enclave keys are bound to this device and cannot be backed up or synced.")
                                         .font(.caption)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Picker("Key Storage", selection: $storageLevel) {
+                                        ForEach(KeyStorageLevel.allCases, id: \.self) { level in
+                                            Label(level.displayName, systemImage: level.iconName)
+                                                .tag(level)
+                                        }
+                                    }
+                                    .pickerStyle(.menu)
+
+                                    Text(storageLevel.description)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
                                 }
-                                Text("Secure Enclave keys are bound to this device and cannot be backed up or synced.")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            } else {
-                                Picker("Key Storage", selection: $storageLevel) {
-                                    ForEach(KeyStorageLevel.allCases, id: \.self) { level in
-                                        Label(level.displayName, systemImage: level.iconName)
-                                            .tag(level)
+                            }
+                            .padding(.vertical, 4)
+
+                            Divider()
+
+                            // Auth requirement picker
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Require Authentication")
+                                    .font(.subheadline.bold())
+
+                                Picker("Authentication", selection: $authRequirement) {
+                                    ForEach(KeyAuthRequirement.allCases, id: \.self) { req in
+                                        Label(req.displayName, systemImage: req.iconName)
+                                            .tag(req)
                                     }
                                 }
                                 .pickerStyle(.menu)
 
-                                Text(storageLevel.description)
+                                Text(authRequirement.description)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
+
+                                if authRequirement != .none {
+                                    HStack {
+                                        Image(systemName: SSHKeyAuthManager.shared.biometricIconName)
+                                            .foregroundColor(.blue)
+                                        Text("Uses \(SSHKeyAuthManager.shared.biometricTypeName) or device passcode")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+
+                                    if storageLevel == .iCloudSync {
+                                        Text(KeyAuthRequirement.iCloudAuthenticationAdvisory)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
                             }
+                            .padding(.vertical, 4)
                         }
-                        .padding(.vertical, 4)
-
-                        Divider()
-
-                        // Auth requirement picker
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Require Authentication")
-                                .font(.subheadline.bold())
-
-                            Picker("Authentication", selection: $authRequirement) {
-                                ForEach(KeyAuthRequirement.allCases, id: \.self) { req in
-                                    Label(req.displayName, systemImage: req.iconName)
-                                        .tag(req)
-                                }
-                            }
-                            .pickerStyle(.menu)
-
-                            Text(authRequirement.description)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-
-                            if authRequirement != .none {
-                                HStack {
-                                    Image(systemName: SSHKeyAuthManager.shared.biometricIconName)
-                                        .foregroundColor(.blue)
-                                    Text("Uses \(SSHKeyAuthManager.shared.biometricTypeName) or device passcode")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-
-                                if storageLevel == .iCloudSync {
-                                    Text(KeyAuthRequirement.iCloudAuthenticationAdvisory)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 4)
                     }
                     .themedRow()
                 } footer: {

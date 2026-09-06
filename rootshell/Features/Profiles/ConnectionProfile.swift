@@ -106,7 +106,17 @@ struct ConnectionProfile: Codable, Identifiable, Hashable, SyncableRecord {
     // MARK: - Organization
 
     /// Hierarchical folder path (e.g., "Work/Production" or "" for root)
-    var folderPath: String
+    var folderPath: String {
+        didSet {
+            folderPath = Self.normalizeFolderPath(folderPath)
+        }
+    }
+
+    /// Empty path components cannot be reached by the folder browser.
+    /// A path containing only separators represents the root folder.
+    static func normalizeFolderPath(_ path: String) -> String {
+        path.split(separator: "/").joined(separator: "/")
+    }
 
     /// Multi-tag support for flexible categorization
     var tags: Set<String>
@@ -216,7 +226,7 @@ struct ConnectionProfile: Codable, Identifiable, Hashable, SyncableRecord {
         self.notes = notes
         self.iconName = iconName
         self.colorTag = colorTag
-        self.folderPath = folderPath
+        self.folderPath = Self.normalizeFolderPath(folderPath)
         self.tags = tags
         self.vpnEnabled = vpnEnabled
         self.vpnDNSServers = vpnDNSServers
@@ -269,7 +279,7 @@ struct ConnectionProfile: Codable, Identifiable, Hashable, SyncableRecord {
         self.notes = notes
         self.iconName = iconName
         self.colorTag = colorTag
-        self.folderPath = folderPath
+        self.folderPath = Self.normalizeFolderPath(folderPath)
         self.tags = tags
         self.vpnEnabled = vpnEnabled
         self.vpnDNSServers = vpnDNSServers
@@ -305,7 +315,9 @@ struct ConnectionProfile: Codable, Identifiable, Hashable, SyncableRecord {
         iconName = try container.decodeIfPresent(String.self, forKey: .iconName)
         colorTag = try container.decodeIfPresent(ProfileColorTag.self, forKey: .colorTag)
 
-        folderPath = try container.decodeIfPresent(String.self, forKey: .folderPath) ?? ""
+        folderPath = Self.normalizeFolderPath(
+            try container.decodeIfPresent(String.self, forKey: .folderPath) ?? ""
+        )
         tags = try container.decodeIfPresent(Set<String>.self, forKey: .tags) ?? []
 
         sshConfig = try container.decode(SSHConfig.self, forKey: .sshConfig)

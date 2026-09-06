@@ -110,21 +110,12 @@ nonisolated enum MuxScript {
     /// `sh -lc` wrapper with the app's PATH prefix; `body` uses double quotes only.
     static func wrap(_ body: String, nonce: String) -> String {
         let script = "echo \"\(begin(nonce))\"; \(body); echo \"\(end(nonce))\"; exit 0"
-        let escaped = script.replacingOccurrences(of: "'", with: "'\\''")
-        return "sh -lc '\(SSHConfig.remoteExecPathPrefix)\(escaped)'"
+        return LoginShellCommand.runInPOSIXShell(SSHConfig.remoteExecPathPrefix + script, login: true)
     }
 
     /// A double-quoted shell word.
     static func dq(_ value: String) -> String {
-        var out = "\""
-        for ch in value {
-            switch ch {
-            case "\"", "\\", "$", "`": out.append("\\"); out.append(ch)
-            default: out.append(ch)
-            }
-        }
-        out.append("\"")
-        return out
+        LoginShellCommand.doubleQuoted(value)
     }
 
     /// `printf` line announcing a pane section: `::MX_P_n:<id>:<extra>::`.

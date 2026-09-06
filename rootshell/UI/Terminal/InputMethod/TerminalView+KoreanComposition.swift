@@ -143,14 +143,9 @@ extension Ghostty.TerminalView {
     private func commitKoreanText(_ text: String, external: Bool) {
         guard !text.isEmpty else { return }
 
-        documentBuffer.append(text)
-        if documentBuffer.count > 4096 {
-            documentBuffer = String(documentBuffer.suffix(2048))
-        }
-
         NotificationCenter.default.post(name: .ghosttyDidReceiveInput, object: self)
         if let data = text.data(using: .utf8) {
-            sendUserInput(data)
+            sendUserInput(data, documentMutation: .text(text, eligible: false))
         }
 
         if external {

@@ -84,25 +84,7 @@ struct SSHConfig: Codable, Hashable {
         }
     }
 
-    /// Common PATH entries that should be available for non-interactive SSH exec
-    /// requests. This covers Homebrew on macOS, Linuxbrew, Go-installed tools,
-    /// and common system locations without depending on shell startup files.
-    nonisolated static let remoteExecPathEntries = [
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        "$HOME/go/bin",
-        "/usr/local/go/bin",
-        "/home/linuxbrew/.linuxbrew/bin",
-        "/snap/bin",
-        "/usr/bin",
-        "/bin",
-        "/usr/sbin",
-        "/sbin"
-    ]
-
-    /// Shell snippet that prepends common tool locations while preserving the
-    /// remote host's existing PATH.
-    nonisolated static let remoteExecPathPrefix = "export PATH=\"\(remoteExecPathEntries.joined(separator: ":")):$PATH\"; "
+    nonisolated static let remoteExecPathPrefix = LoginShellCommand.pathPrefix
 
     /// The hostname or IP address to connect to
     var host: String
@@ -885,13 +867,11 @@ struct SSHConfig: Codable, Hashable {
         case .verbatim:
             return command
         case .prependPATH:
-            return remoteExecPathPrefix + command
+            return LoginShellCommand.runInPOSIXShell(remoteExecPathPrefix + command)
         }
     }
 
-    static func shellSingleQuote(_ string: String) -> String {
-        "'\(string.replacingOccurrences(of: "'", with: "'\\''"))'"
-    }
+    static func shellSingleQuote(_ string: String) -> String { LoginShellCommand.singleQuoted(string) }
 
     var initialLaunchCommand: String? {
         guard launchCommandMode == .initialCommandWithPTY,
@@ -939,7 +919,8 @@ struct SSHConfig: Codable, Hashable {
     /// Returns the command mosh-server should run inside the mosh session.
     var effectiveMoshSessionCommand: String {
         if let remoteCommand, !remoteCommand.isEmpty {
-            return "sh -lc \(Self.shellSingleQuote(Self.command(remoteCommand, applying: remoteCommandPolicy)))"
+            let script = remoteCommandPolicy == .prependPATH ? Self.remoteExecPathPrefix + remoteCommand : remoteCommand
+            return LoginShellCommand.runInPOSIXShell(script, login: true)
         }
         if let initialLaunchCommand {
             return "sh -lc \(Self.shellSingleQuote(initialLaunchCommand))"

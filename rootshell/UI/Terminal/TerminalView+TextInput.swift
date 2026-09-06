@@ -5,7 +5,7 @@
 //  UITextInput conformance for dictation and CJK IME composition support.
 //  The terminal is a byte stream with no editable document, but iOS dictation
 //  requires accurate cursor position tracking to function correctly.
-//  We maintain a lightweight `documentBuffer` (in TerminalView) that tracks
+//  The pure correction context owns the committed document and tracks
 //  what iOS thinks the text field contains, so position/range queries return
 //  correct values and `replace(_:withText:)` can compute proper diffs.
 //
@@ -16,7 +16,13 @@ import UIKit
 
 class TerminalTextPosition: UITextPosition {
     let offset: Int
-    init(_ offset: Int) { self.offset = offset }
+    let generation: UInt64?
+    let assistanceGeneration: UInt64?
+    init(_ offset: Int, generation: UInt64? = nil, assistanceGeneration: UInt64? = nil) {
+        self.offset = offset
+        self.generation = generation
+        self.assistanceGeneration = assistanceGeneration
+    }
 }
 
 class TerminalTextRange: UITextRange {
@@ -32,9 +38,10 @@ class TerminalTextRange: UITextRange {
         _end = end
     }
 
-    init(location: Int, length: Int) {
-        _start = TerminalTextPosition(location)
-        _end = TerminalTextPosition(location + length)
+    init(location: Int, length: Int, generation: UInt64? = nil, assistanceGeneration: UInt64? = nil) {
+        _start = TerminalTextPosition(location, generation: generation, assistanceGeneration: assistanceGeneration)
+        let (end, overflow) = location.addingReportingOverflow(length)
+        _end = TerminalTextPosition(overflow ? -1 : end, generation: generation, assistanceGeneration: assistanceGeneration)
     }
 }
 
@@ -67,13 +74,6 @@ extension Ghostty.TerminalView {
         return (String(text[..<tokenEnd]), String(text[tokenEnd...]))
     }
 
-    private func boundedDocumentBuffer(_ text: String) -> String {
-        if text.count > 4096 {
-            return String(text.suffix(2048))
-        }
-        return text
-    }
-
     func handleThirdPartyKeyboardInsert(_ incomingText: String) -> Bool {
         guard isLikelyThirdPartyKeyboard,
               markedTextString == nil,
@@ -104,11 +104,9 @@ extension Ghostty.TerminalView {
 
         NotificationCenter.default.post(name: .ghosttyDidReceiveInput, object: self)
         if !payload.isEmpty {
-            sendUserInput(payload)
+            sendUserInput(payload, documentMutation: .legacyDocument(bufferPrefix + incomingToken + delimiter))
         }
 
-        let updatedBuffer = bufferPrefix + incomingToken + delimiter
-        documentBuffer = boundedDocumentBuffer(updatedBuffer)
         return true
     }
 
@@ -116,7 +114,7 @@ extension Ghostty.TerminalView {
         return false
     }
 
-    private var isLikelySystemDictationActive: Bool {
+    var hasExplicitDictationSource: Bool {
         if isHandlingDictationResult || !pendingDictationPlaceholderTokens.isEmpty {
             return true
         }
@@ -129,16 +127,13 @@ extension Ghostty.TerminalView {
                 return true
             }
         }
-        if let lastBulkTextInputAt,
-           Date().timeIntervalSince(lastBulkTextInputAt) < 2.0 {
-            return true
-        }
-        guard let lastDictationActivityAt else { return false }
-        return Date().timeIntervalSince(lastDictationActivityAt) < 2.0
+        return false
     }
 
-    private var allowsCommittedTextReplacement: Bool {
-        isLikelySystemDictationActive || !isLikelyThirdPartyKeyboard
+    var isLikelySystemDictationActive: Bool {
+        if hasExplicitDictationSource { return true }
+        guard let lastDictationActivityAt else { return false }
+        return Date().timeIntervalSince(lastDictationActivityAt) < 2.0
     }
 
     // MARK: Preedit (inline composition display)
@@ -161,6 +156,7 @@ extension Ghostty.TerminalView {
     // MARK: Marked text (composition / dictation)
 
     func setMarkedText(_ markedText: String?, selectedRange: NSRange) {
+        invalidateWritingAssistance()
         #if targetEnvironment(macCatalyst)
         if koreanCompositionModel.hasActiveComposition,
            markedText?.isEmpty != false {
@@ -175,9 +171,11 @@ extension Ghostty.TerminalView {
         markedTextString = normalized
         markedTextSelectedRange = selectedRange
         syncIMEPreedit(normalized)
+        refreshWritingAssistanceTraits()
     }
 
     func unmarkText() {
+        defer { refreshWritingAssistanceTraits() }
         #if targetEnvironment(macCatalyst)
         // Match macOS Ghostty: marked text is preedit only. Committed text
         // must arrive through insertText; unmarkText just clears preedit.
@@ -202,12 +200,8 @@ extension Ghostty.TerminalView {
         // then calling unmarkText(). Flush the composed text to the terminal
         // before clearing, otherwise the candidate is silently dropped.
         if let text = markedTextString, !text.isEmpty {
-            documentBuffer.append(text)
-            if documentBuffer.count > 4096 {
-                documentBuffer = String(documentBuffer.suffix(2048))
-            }
             if let data = text.data(using: .utf8) {
-                sendUserInput(data)
+                sendUserInput(data, documentMutation: .text(text, eligible: false))
             }
         }
         markedTextString = nil
@@ -219,25 +213,82 @@ extension Ghostty.TerminalView {
     var markedTextRange: UITextRange? {
         let activeMarkedText = markedTextString ?? koreanPreeditTextForTextInput
         guard let text = activeMarkedText, !text.isEmpty else { return nil }
-        let start = usesIsolatedKoreanTextInputDocument ? 0 : documentBuffer.count
-        return TerminalTextRange(location: start, length: text.count)
+        let start = usesIsolatedKoreanTextInputDocument ? 0 : documentBuffer.utf16.count
+        return inputDocumentRange(location: start, length: text.utf16.count)
     }
 
     // MARK: Selected text
 
     var selectedTextRange: UITextRange? {
         get {
+            if let selection = writingAssistanceSelection { return selection }
             // Cursor is always at the end of committed + marked text
-            let committedCount = usesIsolatedKoreanTextInputDocument ? 0 : documentBuffer.count
+            let committedCount = usesIsolatedKoreanTextInputDocument ? 0 : documentBuffer.utf16.count
             let pos = committedCount
-                + (markedTextString?.count ?? 0)
-                + (koreanPreeditTextForTextInput?.count ?? 0)
-            return TerminalTextRange(location: pos, length: 0)
+                + (markedTextString?.utf16.count ?? 0)
+                + (koreanPreeditTextForTextInput?.utf16.count ?? 0)
+            return inputDocumentRange(location: pos, length: 0)
         }
-        set { /* ignored — terminal cursor is always at end */ }
+        set {
+            // QuickType can use selection + insertText instead of replace.
+            // Remember the range with its original safety generation, without
+            // moving the remote cursor or granting any new rewrite authority.
+            guard let newValue else {
+                writingAssistanceSelection = nil
+                return
+            }
+            guard let range = newValue as? TerminalTextRange,
+                  let start = range.start as? TerminalTextPosition,
+                  let end = range.end as? TerminalTextPosition,
+                  start.generation == correctionContext.documentGeneration,
+                  end.generation == start.generation,
+                  start.offset >= 0, end.offset >= start.offset,
+                  end.offset <= fullDocument.utf16.count,
+                  TerminalCorrectionContext.range(NSRange(location: start.offset, length: end.offset - start.offset), in: fullDocument) != nil else {
+                invalidateWritingAssistance()
+                return
+            }
+            if writingAssistanceMode != .off, eligibleWritingAssistanceSource != nil,
+               markedTextString == nil, !usesIsolatedKoreanTextInputDocument,
+               start.offset < end.offset, end.offset <= documentBuffer.utf16.count {
+                writingAssistanceSelection = range
+            } else {
+                writingAssistanceSelection = nil
+            }
+        }
     }
 
     // MARK: Text reading / writing
+
+    /// A selection is only a correction request while its document positions
+    /// still describe this document. Stale positions must not eat plain typing.
+    func consumeWritingAssistanceSelection(with text: String) -> Bool {
+        guard let selection = writingAssistanceSelection else { return false }
+        writingAssistanceSelection = nil
+        guard let start = selection.start as? TerminalTextPosition,
+              let end = selection.end as? TerminalTextPosition,
+              start.generation == correctionContext.documentGeneration,
+              end.generation == correctionContext.documentGeneration,
+              start.offset >= 0, end.offset > start.offset,
+              end.offset <= documentBuffer.utf16.count,
+              TerminalCorrectionContext.range(NSRange(location: start.offset, length: end.offset - start.offset),
+                                               in: documentBuffer) != nil else { return false }
+        // Invalidation clears pending selections before ordinary insertion.
+        // Explicit replacements still validate their original authority; a
+        // rejected correction must not be retried as appended text.
+        replace(selection, withText: text)
+        return true
+    }
+
+    private func isRecentBulkDictationReplacement(_ range: NSRange) -> Bool {
+        guard let lastBulkTextInputAt, let bulkDictationRange,
+              bulkDictationDocumentGeneration == correctionContext.documentGeneration,
+              range.length > 0,
+              range.location >= bulkDictationRange.location,
+              NSMaxRange(range) <= NSMaxRange(bulkDictationRange) else { return false }
+        let age = Date().timeIntervalSince(lastBulkTextInputAt)
+        return age >= 0 && age < 2
+    }
 
     /// The full "document" iOS sees: committed buffer + any marked/composition text.
     private var fullDocument: String {
@@ -253,25 +304,33 @@ extension Ghostty.TerminalView {
               let start = range.start as? TerminalTextPosition,
               let end = range.end as? TerminalTextPosition else { return nil }
         let doc = fullDocument
-        guard start.offset >= 0, end.offset <= doc.count, start.offset <= end.offset else {
+        guard start.offset >= 0, end.offset <= doc.utf16.count, start.offset <= end.offset,
+              start.generation == correctionContext.documentGeneration,
+              end.generation == correctionContext.documentGeneration,
+              let indices = TerminalCorrectionContext.range(NSRange(location: start.offset, length: end.offset - start.offset), in: doc) else {
             return nil
         }
-        let startIdx = doc.index(doc.startIndex, offsetBy: start.offset)
-        let endIdx = doc.index(doc.startIndex, offsetBy: end.offset)
-        return String(doc[startIdx..<endIdx])
+        return String(doc[indices])
     }
 
     func replace(_ range: UITextRange, withText text: String) {
+        writingAssistanceSelection = nil
+        _ = refreshWritingAssistanceTraits()
         let text = text.precomposedStringWithCanonicalMapping
         guard let range = range as? TerminalTextRange,
               let rangeStart = range.start as? TerminalTextPosition,
-              let rangeEnd = range.end as? TerminalTextPosition else {
-            insertText(text)
+              let rangeEnd = range.end as? TerminalTextPosition,
+              rangeStart.offset >= 0, rangeEnd.offset >= rangeStart.offset,
+              rangeEnd.offset <= fullDocument.utf16.count,
+              rangeStart.generation == correctionContext.documentGeneration,
+              rangeEnd.generation == correctionContext.documentGeneration,
+              TerminalCorrectionContext.range(NSRange(location: rangeStart.offset, length: rangeEnd.offset - rangeStart.offset), in: fullDocument) != nil else {
+            rejectWritingAssistanceReplacement()
             return
         }
 
         let usesIsolatedKoreanDocument = usesIsolatedKoreanTextInputDocument
-        let bufCount = usesIsolatedKoreanDocument ? 0 : documentBuffer.count
+        let bufCount = usesIsolatedKoreanDocument ? 0 : documentBuffer.utf16.count
 
         // If replacing beyond the committed buffer, this is either real UIKit
         // marked text or our synthetic Korean preedit. Do not treat insertions at
@@ -281,7 +340,7 @@ extension Ghostty.TerminalView {
             if markedTextString == nil,
                let koreanPreedit = koreanPreeditTextForTextInput,
                !koreanPreedit.isEmpty {
-                let preeditEnd = bufCount + koreanPreedit.count
+                let preeditEnd = bufCount + koreanPreedit.utf16.count
                 let replacesKoreanPreedit = rangeStart.offset == bufCount
                     && rangeEnd.offset <= preeditEnd
                 if replacesKoreanPreedit {
@@ -307,48 +366,44 @@ extension Ghostty.TerminalView {
                 return
             }
 
+            if markedTextString == nil {
+                insertText(text)
+                return
+            }
+
             clearKoreanCompositionIfNeeded(external: false)
             markedTextString = nil
             markedTextSelectedRange = NSRange(location: NSNotFound, length: 0)
             syncIMEPreedit(nil)
             if !text.isEmpty {
-                documentBuffer.append(text)
-                if documentBuffer.count > 4096 {
-                    documentBuffer = String(documentBuffer.suffix(2048))
-                }
                 if let data = text.data(using: .utf8) {
-                    sendUserInput(data)
+                    sendUserInput(data, documentMutation: .text(text, eligible: false))
                 }
             }
             return
         }
 
-        // Replacing committed text: send backspaces to erase from cursor back
-        // to the start of the replaced range, then re-type the replacement +
-        // any text that was after the replaced range.
-        guard allowsCommittedTextReplacement else {
+        guard rangeEnd.offset <= bufCount else {
+            rejectWritingAssistanceReplacement()
             return
         }
-
-        let replaceEnd = min(rangeEnd.offset, bufCount)
-        let startIdx = documentBuffer.index(documentBuffer.startIndex, offsetBy: rangeStart.offset)
-        let endIdx = documentBuffer.index(documentBuffer.startIndex, offsetBy: replaceEnd)
-        let afterText = String(documentBuffer[endIdx...])
-
-        let backspaceCount = bufCount - rangeStart.offset
-
-        // Rebuild buffer
-        documentBuffer = String(documentBuffer[..<startIdx]) + text + afterText
-
-        // Send backspaces + replacement as a single payload for atomicity.
-        // This ensures the TUI receives the complete correction in one read,
-        // avoiding partial states where the input is empty before replacement arrives.
-        var payload = Data(repeating: 0x7F, count: backspaceCount)
-        let newContent = (text + afterText).replacingOccurrences(of: "\n", with: "\r")
-        if let textData = newContent.data(using: .utf8) {
-            payload.append(textData)
+        let committedRange = NSRange(location: rangeStart.offset, length: rangeEnd.offset - rangeStart.offset)
+        if isLikelySystemDictationActive || isRecentBulkDictationReplacement(committedRange) {
+            guard let replacement = correctionContext.replacement(in: committedRange, with: text,
+                                                                 generation: correctionContext.generation,
+                                                                 dictation: true) else {
+                rejectWritingAssistanceReplacement()
+                return
+            }
+            sendUserInput(replacement.payload, documentMutation: .correction(replacement))
+        } else {
+            guard let generation = rangeStart.assistanceGeneration,
+                  generation == rangeEnd.assistanceGeneration else {
+                rejectWritingAssistanceReplacement()
+                return
+            }
+            applyWritingAssistanceReplacement(committedRange, text: text, generation: generation)
         }
-        sendUserInput(payload)
     }
 
     func insertDictationResult(_ dictationResult: [UIDictationPhrase]) {
@@ -407,23 +462,32 @@ extension Ghostty.TerminalView {
 
     func textRange(from fromPosition: UITextPosition, to toPosition: UITextPosition) -> UITextRange? {
         guard let from = fromPosition as? TerminalTextPosition,
-              let to = toPosition as? TerminalTextPosition else { return nil }
+              let to = toPosition as? TerminalTextPosition,
+              from.generation == correctionContext.documentGeneration, to.generation == from.generation,
+              from.offset >= 0, to.offset >= from.offset, to.offset <= fullDocument.utf16.count else { return nil }
         return TerminalTextRange(start: from, end: to)
     }
 
     func position(from position: UITextPosition, offset: Int) -> UITextPosition? {
         guard let pos = position as? TerminalTextPosition else { return nil }
-        let newOffset = pos.offset + offset
-        guard newOffset >= 0, newOffset <= fullDocument.count else { return nil }
-        return TerminalTextPosition(newOffset)
+        let (newOffset, overflow) = pos.offset.addingReportingOverflow(offset)
+        guard !overflow, pos.generation == correctionContext.documentGeneration,
+              newOffset >= 0, newOffset <= fullDocument.utf16.count else { return nil }
+        return TerminalTextPosition(newOffset, generation: pos.generation, assistanceGeneration: pos.assistanceGeneration)
     }
 
     func position(from position: UITextPosition, in direction: UITextLayoutDirection, offset: Int) -> UITextPosition? {
+        guard offset != Int.min else { return nil }
         return self.position(from: position, offset: (direction == .left || direction == .up) ? -offset : offset)
     }
 
-    var beginningOfDocument: UITextPosition { TerminalTextPosition(0) }
-    var endOfDocument: UITextPosition { TerminalTextPosition(fullDocument.count) }
+    private func inputDocumentRange(location: Int, length: Int) -> TerminalTextRange {
+        TerminalTextRange(location: location, length: length, generation: correctionContext.documentGeneration,
+                          assistanceGeneration: correctionContext.generation)
+    }
+
+    var beginningOfDocument: UITextPosition { inputDocumentRange(location: 0, length: 0).start }
+    var endOfDocument: UITextPosition { inputDocumentRange(location: fullDocument.utf16.count, length: 0).end }
 
     func compare(_ position: UITextPosition, to other: UITextPosition) -> ComparisonResult {
         guard let a = position as? TerminalTextPosition,
@@ -436,7 +500,8 @@ extension Ghostty.TerminalView {
     func offset(from: UITextPosition, to toPosition: UITextPosition) -> Int {
         guard let a = from as? TerminalTextPosition,
               let b = toPosition as? TerminalTextPosition else { return 0 }
-        return b.offset - a.offset
+        let (distance, overflow) = b.offset.subtractingReportingOverflow(a.offset)
+        return overflow ? 0 : distance
     }
 
     func position(within range: UITextRange, farthestIn direction: UITextLayoutDirection) -> UITextPosition? {
@@ -445,7 +510,23 @@ extension Ghostty.TerminalView {
     }
 
     func characterRange(byExtending position: UITextPosition, in direction: UITextLayoutDirection) -> UITextRange? {
-        return TerminalTextRange(location: 0, length: 0)
+        let document = fullDocument
+        guard let position = position as? TerminalTextPosition,
+              position.generation == correctionContext.documentGeneration,
+              let point = TerminalCorrectionContext.range(NSRange(location: position.offset, length: 0), in: document) else { return nil }
+        let lower: String.Index
+        let upper: String.Index
+        if direction == .left || direction == .up {
+            guard point.lowerBound > document.startIndex else { return nil }
+            upper = point.lowerBound
+            lower = document.index(before: upper)
+        } else {
+            guard point.lowerBound < document.endIndex else { return nil }
+            lower = point.lowerBound
+            upper = document.index(after: lower)
+        }
+        let range = NSRange(lower..<upper, in: document)
+        return inputDocumentRange(location: range.location, length: range.length)
     }
 
     // MARK: Writing direction
@@ -673,16 +754,15 @@ extension Ghostty.TerminalView {
     }
 
     func closestPosition(to point: CGPoint) -> UITextPosition? {
-        return TerminalTextPosition(fullDocument.count)
+        return endOfDocument
     }
 
     func closestPosition(to point: CGPoint, within range: UITextRange) -> UITextPosition? {
-        return TerminalTextPosition(fullDocument.count)
+        return endOfDocument
     }
 
     func characterRange(at point: CGPoint) -> UITextRange? {
-        let pos = fullDocument.count
-        return TerminalTextRange(location: pos, length: 0)
+        return inputDocumentRange(location: fullDocument.utf16.count, length: 0)
     }
 
     // MARK: Floating cursor (long-press spacebar trackpad)
@@ -695,6 +775,7 @@ extension Ghostty.TerminalView {
     // and DECCKM-aware TUIs all see the right encoding.
 
     func beginFloatingCursor(at point: CGPoint) {
+        invalidateWritingAssistance()
         floatingCursorStartPoint = point
         floatingCursorCumulativeCol = 0
         floatingCursorCumulativeRow = 0

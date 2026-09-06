@@ -1373,8 +1373,13 @@ extension MainView {
         // flip the gate. New bytes from then on flow normally; the existing
         // chunked replay infrastructure handles the per-terminal @Published
         // catch-up.
-        let trzszSessions: [TrzszSession] = terminals.flatMap { $0.splitTree.terminalLeaves }
-            .compactMap { $0.session as? TrzszSession }
+        // Drain the visible tab's roaming transport first. For a tmux gateway
+        // this may be a direct TrzszSession or a shell-launched tssh session
+        // embedded in LocalShellSession; use the same resolver as discard
+        // recovery so both shapes get the active-first latency path. De-dupe by
+        // identity because a projected tmux window can expose multiple leaves
+        // backed by the same gateway transport.
+        let trzszSessions = uniqueGatewayTrzszSessions(from: [visibleSplits, otherSplits])
         LifecycleDebugLogger.shared.checkpoint("FG.drain.scheduled", ms: nil, [
             ("trzszSessions", trzszSessions.count),
             ("resumeBody_ms", String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - resumeStart) * 1000)),
@@ -1386,6 +1391,35 @@ extension MainView {
         // above proved no BG happened between schedule and now, so it equals
         // the live value.)
         drainTrzszSessionsThenOpenGate(remaining: trzszSessions, bodyEpoch: scheduledAtBgEpoch)
+    }
+
+    /// Resolve direct and shell-embedded tssh transports in group order while
+    /// returning each shared gateway session once. Passing visible leaves as the
+    /// first group preserves the foreground critical-path ordering.
+    @MainActor
+    private func uniqueGatewayTrzszSessions(
+        from groups: [[Ghostty.TerminalView]]
+    ) -> [TrzszSession] {
+        var seen = Set<ObjectIdentifier>()
+        return groups.flatMap { leaves in
+            leaves.compactMap { leaf in
+                let gateway: Ghostty.TerminalView
+                if let binding = leaf.tmuxPaneBinding {
+                    // Projected panes intentionally have no TerminalSession.
+                    // Resolve their owning gateway through the pointer-value
+                    // registry, then verify its stable UUID to reject a stale
+                    // parentSurface whose address has been reused.
+                    guard let parent = ghosttyApp.surfaceView(for: binding.parentSurface),
+                          parent.uuid == binding.parentUUID else { return nil }
+                    gateway = parent
+                } else {
+                    gateway = leaf
+                }
+                guard let session = TmuxController.gatewayTrzszSession(for: gateway.session),
+                      seen.insert(ObjectIdentifier(session)).inserted else { return nil }
+                return session
+            }
+        }
     }
 
     /// Drain one tssh session per runloop tick, then flip the background
@@ -1473,7 +1507,9 @@ extension MainView {
             // method doc on `replayBackgroundPathIfAny()`.
             NetworkReachabilityMonitor.shared.replayBackgroundPathIfAny()
 
-            for session in self.terminals.flatMap({ $0.splitTree.terminalLeaves }).compactMap({ $0.session as? TrzszSession }) {
+            for session in self.uniqueGatewayTrzszSessions(
+                from: [self.terminals.flatMap { $0.splitTree.terminalLeaves }]
+            ) {
                 session.flushBackgroundedOutputFully()
             }
 

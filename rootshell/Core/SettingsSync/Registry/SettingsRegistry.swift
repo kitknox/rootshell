@@ -60,7 +60,7 @@ nonisolated final class SettingsRegistry: Sendable {
 
     /// Lookup by text-config name (`font-size`, `tab-bar-hidden`).
     func definition(forConfigKey configKey: String) -> AnySettingDefinition? {
-        byConfigKey[configKey]
+        byConfigKey[configKey == "tmux-new-tab-action" ? "new-tab-action" : configKey]
     }
 
     /// Keys the text config overlay can carry, ordered by group then name.

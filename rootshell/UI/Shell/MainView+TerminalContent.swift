@@ -1016,6 +1016,12 @@ extension MainView {
                         onResize: { node, ratio in
                             handleSplitResize(tabIndex: index, node: node, ratio: ratio)
                         },
+                        onMove: { source, destination, zone in
+                            handlePaneMove(tabID: tab.id, source: source, destination: destination, zone: zone)
+                        },
+                        allowsPaneRearrangement: !tab.paneMove.isPending && !isAnySheetPresented
+                            && appTabSwipeState == nil && !tabExpose.isActive
+                            && tabsModel.fullScreenPaneID == nil,
                         isActive: index == selectedTabIndex,
                         focusedPane: tab.focusedPane,
                         terminalEffectsEnabled: terminalEffectsEnabled,
@@ -1038,6 +1044,17 @@ extension MainView {
                     // view". Combining the stable tab UUID keeps the rebuild-on-
                     // structure-change behavior the tmux reconcile depends on.
                     .id(TabSplitTreeIdentity(tabID: tab.id, tree: tab.splitTree.structuralIdentity))
+                    .overlay(alignment: .top) {
+                        if let message = tab.paneMove.errorMessage {
+                            Text(message)
+                                .font(.callout)
+                                .padding(10)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                                .padding(8)
+                                .allowsHitTesting(false)
+                                .accessibilityLabel(message)
+                        }
+                    }
                     // Visibility keys off the lagging displayedTabID (not the
                     // selection) so a freshly opened tab stays hidden, and the
                     // previous tab stays on screen, until its renderer has

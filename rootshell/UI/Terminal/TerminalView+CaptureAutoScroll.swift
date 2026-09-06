@@ -185,6 +185,7 @@ extension Ghostty.TerminalView {
     }
 
     private func sendCaptureAutoScrollTick(deltaY: CGFloat) {
+        invalidateWritingAssistance()
         guard let surface else { return }
         guard abs(deltaY) > 0.1 else { return }
 

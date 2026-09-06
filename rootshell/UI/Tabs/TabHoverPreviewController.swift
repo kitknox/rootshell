@@ -47,6 +47,8 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
     // MARK: Host hooks (closures read MainView state live)
 
     @ObservationIgnored var isEnabled: () -> Bool = { true }
+    /// Whether hover alone is enough or a physical modifier must also be held.
+    @ObservationIgnored var activation: () -> TabHoverPreviewActivation = { .always }
     /// No exposé, sheet, tab drag or app-tab swipe in flight. Takes the
     /// surface: the floating sidebar is a sheet to a top-bar card but not to
     /// its own rows.
@@ -69,11 +71,15 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
     @ObservationIgnored private var card: TabHoverPreviewView?
     @ObservationIgnored private var hoveredTabID: UUID?
     @ObservationIgnored private var hoveredSource: TabHoverPreviewSource = .topBar
+    @ObservationIgnored private var hoverBeganAt: CFTimeInterval?
     @ObservationIgnored private var previewedSource: TabHoverPreviewSource = .topBar
     @ObservationIgnored private var pointerInsideCard = false
     @ObservationIgnored private var isHandingOff = false
     @ObservationIgnored private var showTask: Task<Void, Never>?
     @ObservationIgnored private var hideTask: Task<Void, Never>?
+    @ObservationIgnored private var modifierObservationTask: Task<Void, Never>?
+    @ObservationIgnored private var settingsObservationTask: Task<Void, Never>?
+    @ObservationIgnored private var hardwareModifierFlags: UIKeyModifierFlags = []
     @ObservationIgnored private var displayLink: CADisplayLink?
     @ObservationIgnored private var pinch: UIPinchGestureRecognizer?
     @ObservationIgnored private weak var pinchWindow: UIWindow?
@@ -86,6 +92,8 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
     deinit {
         showTask?.cancel()
         hideTask?.cancel()
+        modifierObservationTask?.cancel()
+        settingsObservationTask?.cancel()
         displayLink?.invalidate()
     }
 
@@ -108,12 +116,42 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
 
     // MARK: - Hover input
 
+    /// Observe both inputs to the activation predicate. Idempotent because
+    /// MainView's host can appear more than once during its lifetime.
+    func startObservingActivationInputs() {
+        if modifierObservationTask == nil {
+            let stream = KeyboardTracker.shared.hardwareModifierStateDidChangeStream()
+            modifierObservationTask = Task { @MainActor [weak self] in
+                for await flags in stream {
+                    guard !Task.isCancelled, let self else { return }
+                    self.hardwareModifiersChanged(flags)
+                }
+            }
+        }
+
+        if settingsObservationTask == nil {
+            let changes = SettingsStore.shared.changes()
+            settingsObservationTask = Task { @MainActor [weak self] in
+                for await change in changes {
+                    guard !Task.isCancelled, let self else { return }
+                    if change.keys.contains(Settings.Tabs.hoverPreviews.name)
+                        || change.keys.contains(Settings.Tabs.hoverPreviewActivation.name) {
+                        self.reevaluateActivation()
+                    }
+                }
+            }
+        }
+    }
+
     /// A tab button / sidebar row's pointer hover changed.
     func handleHover(tabID: UUID, source: TabHoverPreviewSource, isHovered: Bool) {
         guard !isHandingOff else { return }
         if isHovered {
             hideTask?.cancel()
             hideTask = nil
+            if hoveredTabID != tabID || hoveredSource != source {
+                hoverBeganAt = CACurrentMediaTime()
+            }
             hoveredTabID = tabID
             hoveredSource = source
             if previewedTabID == tabID, previewedSource == source {
@@ -122,26 +160,69 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
                 return
             }
             showTask?.cancel()
+            guard activationIsSatisfied else {
+                showTask = nil
+                if previewedTabID != nil { hide(animated: true) }
+                return
+            }
             if previewedTabID != nil {
                 // Already up: slide to the neighbor without a delay.
                 showTask = nil
                 present(tabID, source: source)
                 return
             }
-            guard isEnabled(), canPresent(source) else { return }
-            showTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: Self.showDelay)
-                guard !Task.isCancelled, let self else { return }
-                self.showTask = nil
-                guard self.hoveredTabID == tabID, self.hoveredSource == source else { return }
-                self.present(tabID, source: source)
-            }
+            scheduleShow(tabID: tabID, source: source)
         } else {
             guard hoveredTabID == tabID, hoveredSource == source else { return }
             hoveredTabID = nil
+            hoverBeganAt = nil
             showTask?.cancel()
             showTask = nil
             scheduleHide()
+        }
+    }
+
+    private var activationIsSatisfied: Bool {
+        activation().isSatisfied(by: hardwareModifierFlags)
+    }
+
+    private func hardwareModifiersChanged(_ flags: UIKeyModifierFlags) {
+        let wasSatisfied = activationIsSatisfied
+        hardwareModifierFlags = flags
+        guard wasSatisfied != activationIsSatisfied else { return }
+        reevaluateActivation()
+    }
+
+    private func reevaluateActivation() {
+        guard !isHandingOff else { return }
+        guard isEnabled(), activationIsSatisfied else {
+            showTask?.cancel()
+            showTask = nil
+            if previewedTabID != nil { hide(animated: true) }
+            return
+        }
+
+        guard previewedTabID == nil, let tabID = hoveredTabID else { return }
+        scheduleShow(tabID: tabID, source: hoveredSource)
+    }
+
+    private func scheduleShow(tabID: UUID, source: TabHoverPreviewSource) {
+        showTask?.cancel()
+        showTask = nil
+        guard isEnabled(), canPresent(source), activationIsSatisfied else { return }
+        let elapsed = hoverBeganAt.map { max(0, CACurrentMediaTime() - $0) } ?? 0
+        let delay = max(0, Double(Self.showDelay) / 1_000_000_000 - elapsed)
+        if delay == 0 {
+            present(tabID, source: source)
+            return
+        }
+        showTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            self.showTask = nil
+            guard self.hoveredTabID == tabID, self.hoveredSource == source,
+                  self.activationIsSatisfied else { return }
+            self.present(tabID, source: source)
         }
     }
 
@@ -171,7 +252,8 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
     // MARK: - Presentation
 
     private func present(_ tabID: UUID, source: TabHoverPreviewSource) {
-        guard isEnabled(), canPresent(source), let tabsModel, let tab = tabsModel.tab(withID: tabID),
+        guard isEnabled(), activationIsSatisfied, canPresent(source),
+              let tabsModel, let tab = tabsModel.tab(withID: tabID),
               tabsModel.selectedTabID != tabID,
               let anchor = anchors.windowFrame(for: tabID, source: source) else {
             if previewedTabID != nil, !isHandingOff { hide(animated: true) }
@@ -291,7 +373,8 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
         // Anything that makes the card wrong takes it down: the tab got
         // selected or closed, a sheet / exposé / drag started, the setting
         // flipped, or the anchor left the screen.
-        guard isEnabled(), canPresent(previewedSource), let tabsModel, tabsModel.selectedTabID != id,
+        guard isEnabled(), activationIsSatisfied, canPresent(previewedSource),
+              let tabsModel, tabsModel.selectedTabID != id,
               tabsModel.tab(withID: id) != nil,
               let anchor = anchors.windowFrame(for: id, source: previewedSource),
               anchor.window === card.window,
@@ -379,5 +462,17 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
         shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
     ) -> Bool {
         true
+    }
+}
+
+private extension TabHoverPreviewActivation {
+    func isSatisfied(by flags: UIKeyModifierFlags) -> Bool {
+        switch self {
+        case .always: return true
+        case .shift: return flags == .shift
+        case .command: return flags == .command
+        case .option: return flags == .alternate
+        case .control: return flags == .control
+        }
     }
 }

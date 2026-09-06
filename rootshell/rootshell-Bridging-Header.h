@@ -84,6 +84,9 @@ int ghostty_surface_response_read_fd(void* surface);
 /// When false, arrow keys should send CSI sequences (\x1b[A, etc.)
 bool ghostty_surface_cursor_key_mode(void* surface);
 
+/// Returns whether focus event reporting (DEC mode 1004) is active.
+bool ghostty_surface_focus_event_mode(void* surface);
+
 /// Returns the total number of rows in the primary screen (including scrollback).
 uintptr_t ghostty_surface_total_rows(void* surface);
 

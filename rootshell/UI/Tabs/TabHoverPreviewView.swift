@@ -185,7 +185,7 @@ final class TabHoverPreviewView: UIView {
         let finish = {
             guard self.generation == gen else { return }
             self.removeFromSuperview()
-            self.mirror.tab = nil
+            self.mirror.releaseContents()
             // The caption retains the tab (and the title line's tab list);
             // the card outlives the preview, so drop it now.
             self.caption = nil

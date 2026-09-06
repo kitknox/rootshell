@@ -55,22 +55,12 @@ final class EffectManager {
     private(set) var isKeyboardDocked: Bool = false
 
     /// Version counter that increments on keyboard state changes to force SwiftUI re-render
-    private(set) var keyboardStateVersion: Int = 0 {
-        didSet {
-            // `@Observable` doesn't expose a Combine publisher per property
-            // (no `$keyboardStateVersion`), so bridge to a PassthroughSubject
-            // for the (currently sole) Combine consumer in `TerminalView`
-            // that wants debounced keyboard-state notifications.
-            keyboardStateDidChange.send()
-        }
-    }
+    private(set) var keyboardStateVersion: Int = 0
 
     /// Version counter that increments when a surface's cell size changes, so
     /// SwiftUI re-evaluates layout that depends on grid metrics (the terminal's
     /// top grid-alignment padding). Deliberately separate from
-    /// `keyboardStateVersion`: that one also feeds `keyboardStateDidChange`,
-    /// which reloads input views in every accessory controller — churn a
-    /// pinch-zoom's stream of cell-size changes must not drive.
+    /// `keyboardStateVersion`: grid changes do not change keyboard geometry.
     private(set) var gridMetricsVersion: Int = 0
 
     /// Whether the effect has been toggled off (for toggle_background_effect action)
@@ -94,10 +84,14 @@ final class EffectManager {
     /// Emits when active effect or its configuration changes
     @ObservationIgnored let effectDidChange = PassthroughSubject<Void, Never>()
 
-    /// Emits when `keyboardStateVersion` increments. Bridges to Combine for
-    /// `TerminalView`'s debounced `reloadInputViews()` subscription, which
-    /// `@Observable` cannot serve directly (no per-property publisher).
+    /// Keyboard and toolbar geometry changes, including responder handoffs.
     @ObservationIgnored let keyboardStateDidChange = PassthroughSubject<Void, Never>()
+
+    /// Actual keyboard environment changes that may require new input views.
+    /// Toolbar layout/focus notifications only invalidate SwiftUI geometry;
+    /// feeding those back into reloadInputViews rebuilds UIKit's input set
+    /// again after every first-responder handoff.
+    @ObservationIgnored let keyboardEnvironmentDidChange = PassthroughSubject<Void, Never>()
 
     // MARK: - Private Properties
 
@@ -142,7 +136,7 @@ final class EffectManager {
         hardwareKeyboardTask = Task { @MainActor [weak self] in
             for await isHardware in KeyboardTracker.shared.hardwareKeyboardStateDidChangeStream() {
                 guard let self else { continue }
-                self.keyboardStateVersion += 1
+                self.notifyKeyboardEnvironmentChanged()
                 if isHardware {
                     if self.keyboardHeight != 0 { self.keyboardHeight = 0 }
                 } else {
@@ -154,7 +148,7 @@ final class EffectManager {
         softwareKeyboardVisibilityTask = Task { @MainActor [weak self] in
             for await _ in KeyboardTracker.shared.softwareKeyboardVisibilityDidChangeStream() {
                 guard let self else { continue }
-                self.keyboardStateVersion += 1
+                self.notifyKeyboardEnvironmentChanged()
             }
         }
 
@@ -179,6 +173,13 @@ final class EffectManager {
 
     func notifyKeyboardToolbarLayoutChanged() {
         keyboardStateVersion += 1
+        keyboardStateDidChange.send()
+    }
+
+    private func notifyKeyboardEnvironmentChanged() {
+        keyboardStateVersion += 1
+        keyboardStateDidChange.send()
+        keyboardEnvironmentDidChange.send()
     }
 
     func notifyGridMetricsChanged() {
@@ -196,7 +197,7 @@ final class EffectManager {
             changed = true
         }
         if changed {
-            keyboardStateVersion += 1
+            notifyKeyboardEnvironmentChanged()
         }
     }
 
@@ -396,7 +397,7 @@ final class EffectManager {
         let newDockedState = isKeyboardFrameDocked(keyboardFrame)
         if newDockedState != isKeyboardDocked {
             isKeyboardDocked = newDockedState
-            keyboardStateVersion += 1
+            notifyKeyboardEnvironmentChanged()
         }
         #endif
 

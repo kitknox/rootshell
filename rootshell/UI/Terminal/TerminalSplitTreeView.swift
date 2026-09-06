@@ -13,6 +13,8 @@ import os
 struct TerminalSplitTreeView: UIViewRepresentable {
     let tree: SplitTree<SplitPaneView>
     let onResize: (SplitTree<SplitPaneView>.Node, Double) -> Void
+    var onMove: ((SplitPaneView, SplitPaneView, PaneDropZone) -> Void)?
+    var allowsPaneRearrangement: Bool = true
     /// Whether this tab is the visible one. Only the active tab drives the tmux
     /// client size.
     var isActive: Bool = true
@@ -33,6 +35,8 @@ struct TerminalSplitTreeView: UIViewRepresentable {
         uiView.dividerColor = UIColor.separator
         uiView.highlightColor = uiView.tintColor ?? UIColor.systemBlue
         uiView.onResize = onResize
+        uiView.onMove = onMove
+        uiView.allowsPaneRearrangement = allowsPaneRearrangement
         uiView.isActiveTab = isActive
         uiView.terminalEffectsEnabled = terminalEffectsEnabled
         uiView.routesFocusedProgressToIntegratedEdge = routesFocusedProgressToIntegratedEdge
@@ -60,6 +64,21 @@ final class SplitTreeHostingView: UIView {
 
     var minSplitSize: CGFloat = 100
     var onResize: ((SplitTree<SplitPaneView>.Node, Double) -> Void)?
+    var onMove: ((SplitPaneView, SplitPaneView, PaneDropZone) -> Void)?
+    var allowsPaneRearrangement = true
+    private lazy var paneRearrangement = SplitPaneRearrangementController(host: self)
+
+    @discardableResult
+    func cancelPaneDrag() -> Bool { paneRearrangement.cancelDrag() }
+
+    override var keyCommands: [UIKeyCommand]? {
+        guard paneRearrangement.isDragging else { return super.keyCommands }
+        let cancel = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(cancelPaneDragCommand))
+        cancel.wantsPriorityOverSystemBehavior = true
+        return (super.keyCommands ?? []) + [cancel]
+    }
+
+    @objc private func cancelPaneDragCommand(_ command: UIKeyCommand) { cancelPaneDrag() }
 
     /// Whether this hosting view is rendering the currently-visible tab. Only the
     /// active tab drives the tmux client size (background tabs share the same
@@ -89,6 +108,8 @@ final class SplitTreeHostingView: UIView {
     private let dividerTouchThickness: CGFloat = 24
     private var tree: SplitTree<SplitPaneView>?
     private var focusedPane: SplitPaneView?
+    private var needsFocusRestoration = false
+    private var focusRestorationGeneration: UInt64 = 0
 
     private var dividerViews: [SplitDividerHandleView] = []
     private var dividerReuseIndex: Int = 0
@@ -169,6 +190,7 @@ final class SplitTreeHostingView: UIView {
     }
 
     func update(tree: SplitTree<SplitPaneView>, focusedPane: SplitPaneView?) {
+        paneRearrangement.update(tree: tree, enabled: isActiveTab && allowsPaneRearrangement && onMove != nil)
         // SwiftUI calls this on every MainView body evaluation. Only a real
         // tree or focus change may relayout every attached pane.
         let treeChanged = self.tree?.root != tree.root || self.tree?.zoomed != tree.zoomed
@@ -176,6 +198,8 @@ final class SplitTreeHostingView: UIView {
         self.tree = tree
         self.focusedPane = focusedPane
         guard treeChanged || focusChanged else { return }
+        needsFocusRestoration = true
+        focusRestorationGeneration &+= 1
         updateTerminalEffectsEligibility()
         recomputeBorderEligibility()
         refreshProgressBarRouting()
@@ -198,6 +222,9 @@ final class SplitTreeHostingView: UIView {
     /// dismantle runs before the new host adopts them, and a pane checked out for
     /// full screen lives under the takeover container.
     func detachAllPanes() {
+        needsFocusRestoration = false
+        focusRestorationGeneration &+= 1
+        paneRearrangement.detach()
         for (_, container) in attachedContainers where container.superview === self {
             (container as? Ghostty.TerminalScrollView)?
                 .setProgressBarPresentationSuppressed(false)
@@ -268,6 +295,31 @@ final class SplitTreeHostingView: UIView {
         pushTmuxClientSizeIfNeeded()
         // Frost the dead margin (single- AND multi-pane) over `bounds − contentRect`.
         updateDeadMarginOverlay(contentRect: contentRect)
+        // Overlay chrome follows actual pane frames, including tmux's dead margin.
+        paneRearrangement.update(tree: tree, enabled: isActiveTab && allowsPaneRearrangement && onMove != nil)
+        paneRearrangement.layout()
+        restoreFocusAfterLayoutIfNeeded()
+    }
+
+    /// A structural edit replaces this hosting view. Focus acquired by the
+    /// drop handler (or didMoveToWindow during attachment) can be resigned as
+    /// UIKit finishes removing the old hierarchy. Reassert it after layout,
+    /// from the surviving host, without sending another tmux select command.
+    private func restoreFocusAfterLayoutIfNeeded() {
+        guard needsFocusRestoration else { return }
+        needsFocusRestoration = false
+        guard isActiveTab, let pane = focusedPane, pane.isLogicallyFocused else { return }
+        let generation = focusRestorationGeneration
+        DispatchQueue.main.async { [weak self, weak pane] in
+            guard let self, let pane,
+                  self.focusRestorationGeneration == generation,
+                  self.isActiveTab, self.window?.isKeyWindow == true,
+                  self.focusedPane === pane, pane.isLogicallyFocused,
+                  !pane.isDetachedForFullScreen,
+                  pane.enclosingSplitHost === self,
+                  !pane.isFirstResponder else { return }
+            _ = pane.focusDidChange(true)
+        }
     }
 
     /// Drive a MULTI-pane tmux window's size from this container's actual bounds.
@@ -636,6 +688,7 @@ final class SplitTreeHostingView: UIView {
                 return
             }
             insertSubview(container, at: 0)
+            if pane === focusedPane { needsFocusRestoration = true }
         }
 
         container.frame = frame
@@ -768,6 +821,9 @@ final class SplitTreeHostingView: UIView {
         }
         dividerView.onResizeEnd = { [weak self] node, ratio in
             self?.commitDividerToTmux(node: node, ratio: ratio)
+        }
+        dividerView.onTouchTap = { [weak self] in
+            self?.paneRearrangement.revealTouchHandles()
         }
 
         bringSubviewToFront(dividerView)
@@ -906,6 +962,7 @@ final class SplitTreeHostingView: UIView {
 // MARK: - Divider Handle
 
 private final class SplitDividerHandleView: UIView {
+    var onTouchTap: (() -> Void)?
     var onResize: ((SplitTree<SplitPaneView>.Node, Double) -> Void)?
     /// Fired once when the drag finishes (commit point), so a tmux split can push
     /// the final boundary to tmux.
@@ -935,6 +992,12 @@ private final class SplitDividerHandleView: UIView {
         addGestureRecognizer(doubleTap)
 
         pan.require(toFail: doubleTap)
+
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTouchTap(_:)))
+        tap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+        tap.require(toFail: doubleTap)
+        tap.require(toFail: pan)
+        addGestureRecognizer(tap)
     }
 
     required init?(coder: NSCoder) {
@@ -1025,6 +1088,10 @@ private final class SplitDividerHandleView: UIView {
     @objc private func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
         guard let node else { return }
         NotificationCenter.default.post(name: .equalizeSplits, object: node.leftmostLeaf())
+    }
+
+    @objc private func handleTouchTap(_ recognizer: UITapGestureRecognizer) {
+        if recognizer.state == .ended { onTouchTap?() }
     }
 
     private func ratio(for point: CGPoint) -> Double {

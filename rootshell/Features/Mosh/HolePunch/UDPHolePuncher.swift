@@ -641,8 +641,7 @@ final class UDPHolePuncher {
             }
         }
 
-        // Execute the command
-        let streams = try await client.executeCommandStream(command)
+        let streams = try await client.executeCommandStream(LoginShellCommand.runInPOSIXShell(command))
 
         var stdout = ""
         var stderr = ""
@@ -762,7 +761,8 @@ final class UDPHolePuncher {
         // Bash /dev/udp doesn't support source port binding, but we try anyway
         // This creates a connection from an ephemeral port, which may not match mosh-server's port
         // However, some firewalls track by destination rather than full 5-tuple
-        return "exec 3>/dev/udp/\(clientIP)/\(clientPort) && echo -n 'P' >&3 && exec 3>&-"
+        let script = "exec 3>/dev/udp/\(clientIP)/\(clientPort) && echo -n 'P' >&3 && exec 3>&-"
+        return "bash -c \(LoginShellCommand.singleQuoted(script))"
     }
 
     /// Builds auto-detect command that tries multiple methods
@@ -800,8 +800,8 @@ final class UDPHolePuncher {
           echo -n 'P' | nc \(ncIPv6)-u -w 1 \(clientIP) \(clientPort) && exit 0
         fi
         \(ipv6Flag ? "" : """
-        if [ -e /dev/udp/127.0.0.1/1 ] 2>/dev/null || true; then
-          exec 3>/dev/udp/\(clientIP)/\(clientPort) && echo -n 'P' >&3 && exec 3>&- && exit 0
+        if command -v bash >/dev/null 2>&1; then
+          \(buildBashUDPCommand(clientIP: clientIP, clientPort: clientPort, moshPort: moshPort)) && exit 0
         fi
         """)
         echo 'No UDP hole-punch method available' >&2

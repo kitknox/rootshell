@@ -103,10 +103,9 @@ final class TabPreviewMirrorView: UIView {
             mirror.placeholder?.position = CGPoint(x: frame.midX, y: frame.midY)
         }
 
-        for (key, mirror) in mirrors where !seen.contains(key) {
-            mirror.layer.removeFromSuperlayer()
-            mirror.vncSnapshot?.removeFromSuperview()
-            mirrors[key] = nil
+        for key in Array(mirrors.keys) where !seen.contains(key) {
+            guard let mirror = mirrors.removeValue(forKey: key) else { continue }
+            removeMirror(mirror)
         }
     }
 
@@ -156,11 +155,30 @@ final class TabPreviewMirrorView: UIView {
         setNeedsLayout()
     }
 
+    /// Drop every reference to the source frame immediately. Removing a layer
+    /// from the hierarchy is not sufficient: Core Animation can keep the
+    /// IOSurface assigned to `contents` alive after the preview disappears.
+    func releaseContents() {
+        tab = nil
+        removeAllMirrors()
+    }
+
+    private func removeMirror(_ mirror: PaneMirror) {
+        mirror.layer.contents = nil
+        mirror.layer.removeFromSuperlayer()
+        mirror.vncSnapshot?.removeFromSuperview()
+        mirror.vncSnapshot = nil
+        mirror.placeholder?.contents = nil
+        mirror.placeholder?.removeFromSuperlayer()
+        mirror.placeholder = nil
+    }
+
     private func removeAllMirrors() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
         for mirror in mirrors.values {
-            mirror.layer.removeFromSuperlayer()
-            mirror.vncSnapshot?.removeFromSuperview()
-            mirror.placeholder?.removeFromSuperlayer()
+            removeMirror(mirror)
         }
         mirrors.removeAll()
     }

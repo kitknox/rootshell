@@ -22,7 +22,7 @@ import UIKit
 /// independently re-resolves the override theme and re-extracts UIColor RGB
 /// components for `isLight`/blend factors. Computing once per body and passing
 /// the bundle through is byte-identical to the per-call path.
-struct ResolvedTabBarTheme {
+struct ResolvedTabBarTheme: Equatable {
     let themeColors: ThemeManager.ThemeInfo.ThemeColors?
     let baseColor: Color?
     /// Theme background composited the same way as the terminal surface at

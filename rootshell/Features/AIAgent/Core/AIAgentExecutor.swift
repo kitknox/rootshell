@@ -245,7 +245,11 @@ final class AIAgentExecutor {
     ///   - timeout: Maximum execution time (defaults to 30 seconds)
     /// - Returns: The command execution result
     /// - Throws: AIAgentExecutorError if execution fails
-    func execute(command: String, timeout: TimeInterval = defaultTimeout) async throws -> CommandExecutionResult {
+    func execute(
+        command: String,
+        timeout: TimeInterval = defaultTimeout,
+        prependPATH: Bool = true
+    ) async throws -> CommandExecutionResult {
         guard let client = client, isConnected else {
             throw AIAgentExecutorError.notConnected
         }
@@ -253,7 +257,7 @@ final class AIAgentExecutor {
         let startTime = Date()
 
         // Wrap command in login shell to get full user environment (PATH, aliases, etc.)
-        let finalCommand = wrapForLoginShell(command)
+        let finalCommand = wrapForLoginShell(command, prependPATH: prependPATH)
 
         Self.logger.info("Executing command: \(finalCommand.prefix(100))...")
 
@@ -439,16 +443,9 @@ final class AIAgentExecutor {
         SSHConnectionHelper.buildHostKeyValidator(for: host, port: port, onValidation: onHostKeyValidation)
     }
 
-    /// Wrap command in user's login shell to get full environment (PATH, aliases, functions)
-    /// Uses $SHELL -l -c 'command' pattern with stderr redirected to stdout
-    /// The `|| true` ensures the command always exits 0 so Citadel doesn't throw CommandFailed
-    private func wrapForLoginShell(_ command: String) -> String {
-        let shell = sessionShell ?? "/bin/sh"
-        let prefixedCommand = SSHConfig.command(command, applying: .prependPATH)
-        let escapedCommand = prefixedCommand.shellEscapedForSingleQuotes
-        // Redirect stderr to stdout so both streams are captured
-        // Use || true to ensure exit code 0 (Citadel throws on non-zero exit)
-        return "\(shell) -l -c '\(escapedCommand)' 2>&1 || true"
+    /// Captures stderr and suppresses nonzero status so command output is returned.
+    private func wrapForLoginShell(_ command: String, prependPATH: Bool = true) -> String {
+        LoginShellCommand.runInLoginShell(command, shell: sessionShell ?? "/bin/sh", prependPATH: prependPATH) + " 2>&1 || true"
     }
 
     /// Decode UTF-8 from buffer, leaving incomplete sequences for next packet
@@ -498,17 +495,6 @@ final class AIAgentExecutor {
         }
         // Keep last N characters with truncation indicator
         return "... (truncated)\n" + String(output.suffix(Self.maxDisplayLength - 20))
-    }
-}
-
-// MARK: - Shell Escaping
-
-extension String {
-    /// Escape a string for safe use inside single quotes
-    /// Single-quoted strings in shell only need to escape single quotes themselves
-    /// The pattern ' → '\'' closes the quote, adds an escaped quote, reopens the quote
-    var shellEscapedForSingleQuotes: String {
-        self.replacingOccurrences(of: "'", with: "'\\''")
     }
 }
 #endif

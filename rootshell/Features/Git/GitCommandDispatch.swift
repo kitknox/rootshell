@@ -3,7 +3,7 @@
 import Foundation
 
 /// Protocol for all git subcommand implementations.
-protocol GitSubcommand {
+protocol GitSubcommand: SendableMetatype {
     /// Help text shown when the user passes `-h` or `--help` to this subcommand.
     static var helpText: String { get }
 
@@ -24,13 +24,13 @@ protocol GitSubcommand {
 
 /// Central dispatch table mapping subcommand names to implementations.
 enum GitCommandDispatch {
-    enum RepoRequirement {
+    nonisolated enum RepoRequirement: Sendable {
         case required    // Fail if not in a repo
         case optional    // Try to open, pass nil if not found
         case none        // Don't try to open
     }
 
-    struct CommandEntry {
+    nonisolated struct CommandEntry: Sendable {
         let name: String
         let repoRequirement: RepoRequirement
         let handler: GitSubcommand.Type
@@ -45,7 +45,7 @@ enum GitCommandDispatch {
         }
     }
 
-    static let commands: [CommandEntry] = [
+    nonisolated static let commands: [CommandEntry] = [
         CommandEntry(name: "add",          repoRequirement: .required, handler: GitAdd.self),
         CommandEntry(name: "apply",        repoRequirement: .required, handler: GitApply.self),
         CommandEntry(name: "blame",        repoRequirement: .required, handler: GitBlame.self),
@@ -88,7 +88,7 @@ enum GitCommandDispatch {
         CommandEntry(name: "worktree",     repoRequirement: .required, handler: GitWorktree.self),
     ]
 
-    static func supportsProgress(_ subcommand: String) -> Bool {
+    nonisolated static func supportsProgress(_ subcommand: String) -> Bool {
         commands.first(where: { $0.name == subcommand })?.handler is GitProgressSubcommand.Type
     }
 

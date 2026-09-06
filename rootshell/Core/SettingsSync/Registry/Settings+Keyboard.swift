@@ -9,10 +9,15 @@ import Foundation
 
 extension Ghostty.OptionKeyAsAlt: SettingValue {}
 extension DrawerToggleMode: SettingValue {}
+extension TerminalWritingAssistanceMode: SettingValue {}
 extension KeyboardArrowJoystickButton.Mode: SettingValue {}
 
 nonisolated extension Settings {
     enum Keyboard {
+        static let writingAssistance = SettingKey(
+            "terminalWritingAssistanceMode", default: TerminalWritingAssistanceMode.off, group: .keyboard,
+            configKey: "terminal-writing-assistance",
+            title: String(localized: "Writing Assistance", comment: "Direct terminal typing setting"))
         static let optionKeyAsAlt = SettingKey(
             "optionKeyAsAlt", default: Ghostty.OptionKeyAsAlt.off, group: .keyboard,
             configKey: "macos-option-as-alt",
@@ -29,6 +34,7 @@ nonisolated extension Settings {
 
         static let all: [AnySettingDefinition] = [
             optionKeyAsAlt.erased, forceASCIIKeyboard.erased, doubleSpaceForPeriod.erased, composeAutocorrect.erased,
+            writingAssistance.erased,
         ]
     }
 

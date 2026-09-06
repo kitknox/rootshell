@@ -750,6 +750,8 @@ extension Ghostty.TerminalView {
     /// triggering `keyCallback` → `modsChanged` → `mouseRefreshLinks` in the
     /// Zig backend to update link detection without requiring mouse movement.
     func handleModifierKeyChange(keyCode: GCKeyCode, pressed: Bool) {
+        lastHardwareTextInputTime = ProcessInfo.processInfo.systemUptime
+        invalidateWritingAssistance()
         guard let surface = surface else { return }
 
         // A live modifier transition from GCKeyboard means its snapshot is fresh
@@ -1198,7 +1200,9 @@ extension Ghostty.TerminalView {
         }
     }
 
-    private func loadPastedNonFileURL(
+    // NSItemProvider invokes its callbacks off the main actor. This helper and
+    // its local URL/fallback functions only process provider data, never UI.
+    private nonisolated func loadPastedNonFileURL(
         from provider: NSItemProvider,
         completion: @escaping (URL?) -> Void
     ) {
@@ -1374,6 +1378,7 @@ extension Ghostty.TerminalView {
     /// applies bracketed-paste markers when the running program requests them.
     @discardableResult
     func insertPastedText(_ text: String, recordHistory: Bool = true) -> Bool {
+        invalidateWritingAssistance(resetDocument: true)
         guard let surface, !text.isEmpty else { return false }
 
         if recordHistory {
@@ -1496,7 +1501,33 @@ extension Ghostty.TerminalView {
 extension Ghostty.TerminalView {
 
     /// Sends user input to the appropriate destination based on platform
-    func sendUserInput(_ data: Data) {
+    func sendUserInput(_ data: Data, documentMutation: TerminalCorrectionContext.Mutation? = nil) {
+        // Input and UIKit document mutations are serialized on the main actor.
+        // Rendering output is not an edit to an application's logical input.
+        if let documentMutation {
+            if case .invalidate = documentMutation {
+                // Unlike a UIKit source transition, this mutation accompanies
+                // real terminal bytes (for example an arrow/control sequence).
+                clearBulkDictationFallback()
+            }
+            if case .correction(let replacement) = documentMutation {
+                guard replacement.generation == correctionContext.generation,
+                      replacement.payload == data else {
+                    invalidateWritingAssistance()
+                    return
+                }
+            }
+            guard mutateInputDocument(documentMutation) else {
+                invalidateWritingAssistance()
+                return
+            }
+        } else {
+            invalidateWritingAssistance()
+        }
+        forwardUserInput(data)
+    }
+
+    private func forwardUserInput(_ data: Data) {
         // Raw/synthesized Escape sources do not all pass through UIKit's key
         // handlers. Keep this final input boundary as the cross-platform safety
         // net, before typing state, tmux detach, or terminal forwarding.
@@ -2253,6 +2284,7 @@ extension Ghostty.TerminalView {
     }
 
     func handleMouseDown(at point: CGPoint, isRightClick: Bool = false) {
+        invalidateWritingAssistance()
         stopCaptureAutoScroll()
         guard let surface = surface else { return }
 

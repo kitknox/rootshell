@@ -1667,6 +1667,7 @@ extension LocalShellSession {
     /// only for this set so self-referential ios_system aliases (`ls='ls --color'`)
     /// still expand exactly once inside ios_system.
     private static let aliasPreExpansionCommandNames: Set<String> = [
+        "clear", "exit", "logout",
         "ssh", "scp", "sftp", "ssh-copy-id",
         "mosh", "roam",
         "tssh", "trzsz",

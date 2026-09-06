@@ -64,6 +64,8 @@ extension MainView {
                 (UIDevice.current.userInterfaceIdiom == .phone || clipboardManagerKeyboardMode)) ||
             connectionInfoToShow != nil ||
             tmuxDashboardRequest != nil ||
+            pendingNewTabRequest != nil ||
+            unavailableNewTabRequest != nil ||
             trzszTransferOriginRequest != nil ||
             trzszTransferIncomingOffer != nil
         #if !CHINA_BUILD
@@ -192,22 +194,54 @@ extension MainView {
             } message: {
                 Text("Choose what to do with this tmux control-mode tab.")
             }
-            // "Ask Each Time" tmux new-tab (⌘T) action sheet. (id=tmux-new-tab-action)
             .confirmationDialog(
                 "New Tab",
                 isPresented: Binding(
-                    get: { pendingTmuxNewTabTabID != nil },
-                    set: { if !$0 { pendingTmuxNewTabTabID = nil } }
+                    get: { pendingNewTabRequest != nil },
+                    set: { if !$0 { pendingNewTabRequest = nil } }
                 ),
-                titleVisibility: .visible
-            ) {
-                Button("Local Shell") { runPendingTmuxNewTab(local: true) }
-                    .keyboardShortcut(.defaultAction)
-                Button("New tmux Tab") { runPendingTmuxNewTab(local: false) }
-                Button("Cancel", role: .cancel) { pendingTmuxNewTabTabID = nil }
+                titleVisibility: .visible,
+                presenting: pendingNewTabRequest
+            ) { request in
+                Button("Local Shell") {
+                    pendingNewTabRequest = nil
+                    createLocalShellTab(for: request)
+                }
+                .keyboardShortcut(.defaultAction)
+                if let title = request.duplicateTitle {
+                    Button(title) {
+                        pendingNewTabRequest = nil
+                        runNewTabDuplicate(request)
+                    }
+                }
+                Button("Open Connections") {
+                    pendingNewTabRequest = nil
+                    addNewTab()
+                }
+                Button("Cancel", role: .cancel) { pendingNewTabRequest = nil }
                     .keyboardShortcut(.cancelAction)
-            } message: {
-                Text("Open a new local shell tab, or a new tmux window in the current session.")
+            } message: { _ in
+                Text("Choose what to open in a new tab.")
+            }
+            .alert(
+                "Session Unavailable",
+                isPresented: Binding(
+                    get: { unavailableNewTabRequest != nil },
+                    set: { if !$0 { unavailableNewTabRequest = nil } }
+                ),
+                presenting: unavailableNewTabRequest
+            ) { request in
+                Button("Local Shell") {
+                    unavailableNewTabRequest = nil
+                    createLocalShellTab(for: request)
+                }
+                Button("Open Connections") {
+                    unavailableNewTabRequest = nil
+                    addNewTab()
+                }
+                Button("Cancel", role: .cancel) { unavailableNewTabRequest = nil }
+            } message: { _ in
+                Text("The original tmux session is no longer available. Open a local shell or choose another connection.")
             }
             .sheet(item: $tmuxDashboardRequest) { request in
                 TmuxSessionDashboardView(controller: request.controller)

@@ -90,6 +90,10 @@ final class ScrollbackPersistenceManager {
         scrollbackDirectory.appendingPathComponent("\(uuid.uuidString).cursorkeys.enc")
     }
 
+    private func focusEventModeURL(for uuid: UUID) -> URL {
+        scrollbackDirectory.appendingPathComponent("\(uuid.uuidString).focusevent.enc")
+    }
+
     // MARK: - Init
 
     private init() {
@@ -250,6 +254,7 @@ final class ScrollbackPersistenceManager {
         let isAlternate: Bool
         let isMouseCaptured: Bool
         let isCursorKeyMode: Bool
+        let isFocusEventMode: Bool
     }
 
     /// Gather terminal references for background save. MainActor, no I/O.
@@ -266,6 +271,7 @@ final class ScrollbackPersistenceManager {
             let isAlternate = ghostty_surface_is_alternate_active(surface)
             let isMouseCaptured = ghostty_surface_mouse_captured(surface)
             let isCursorKeyMode = ghostty_surface_cursor_key_mode(surface)
+            let isFocusEventMode = ghostty_surface_focus_event_mode(surface)
 
             let isAtPrompt: Bool = {
                 #if targetEnvironment(macCatalyst)
@@ -285,7 +291,8 @@ final class ScrollbackPersistenceManager {
                 isAtPrompt: isAtPrompt,
                 isAlternate: isAlternate,
                 isMouseCaptured: isMouseCaptured,
-                isCursorKeyMode: isCursorKeyMode
+                isCursorKeyMode: isCursorKeyMode,
+                isFocusEventMode: isFocusEventMode
             ))
         }
 
@@ -342,6 +349,7 @@ final class ScrollbackPersistenceManager {
         hasher.combine(ref.isAtPrompt)
         hasher.combine(ref.isMouseCaptured)
         hasher.combine(ref.isCursorKeyMode)
+        hasher.combine(ref.isFocusEventMode)
         let contentHash = hasher.finalize()
         let alreadySaved = lastSavedHashes.withLock { $0[ref.uuid] == contentHash }
         guard !alreadySaved else { return }
@@ -352,6 +360,7 @@ final class ScrollbackPersistenceManager {
         let encryptedAtPromptFlag: Data?
         let encryptedMouseFlag: Data?
         let encryptedCursorKeyFlag: Data?
+        let encryptedFocusEventFlag: Data?
         do {
             encryptedData = try ScrollbackEncryptionManager.encrypt(data, using: encryptionKey)
             encryptedAltFlag = ref.isAlternate
@@ -364,6 +373,9 @@ final class ScrollbackPersistenceManager {
                 ? try ScrollbackEncryptionManager.encrypt(Data([1]), using: encryptionKey)
                 : nil
             encryptedCursorKeyFlag = ref.isCursorKeyMode
+                ? try ScrollbackEncryptionManager.encrypt(Data([1]), using: encryptionKey)
+                : nil
+            encryptedFocusEventFlag = ref.isFocusEventMode
                 ? try ScrollbackEncryptionManager.encrypt(Data([1]), using: encryptionKey)
                 : nil
         } catch {
@@ -380,6 +392,7 @@ final class ScrollbackPersistenceManager {
         let promptFlagURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).atprompt.enc")
         let mouseFlagURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).mousecapture.enc")
         let cursorKeyFlagURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).cursorkeys.enc")
+        let focusEventFlagURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).focusevent.enc")
 
         do {
             try FileManager.default.createDirectory(at: scrollbackDir, withIntermediateDirectories: true)
@@ -405,6 +418,11 @@ final class ScrollbackPersistenceManager {
                 try encryptedCursorKeyFlag.write(to: cursorKeyFlagURL, options: .atomic)
             } else {
                 try? FileManager.default.removeItem(at: cursorKeyFlagURL)
+            }
+            if let encryptedFocusEventFlag {
+                try encryptedFocusEventFlag.write(to: focusEventFlagURL, options: .atomic)
+            } else {
+                try? FileManager.default.removeItem(at: focusEventFlagURL)
             }
 
             // Record the hash only after the write succeeds — a failed save
@@ -473,6 +491,7 @@ final class ScrollbackPersistenceManager {
         let isAlternate = ghostty_surface_is_alternate_active(surface)
         let isMouseCaptured = ghostty_surface_mouse_captured(surface)
         let isCursorKeyMode = ghostty_surface_cursor_key_mode(surface)
+        let isFocusEventMode = ghostty_surface_focus_event_mode(surface)
 
         // Check if the local shell is at a prompt (for seamless restore)
         let isAtPrompt: Bool = {
@@ -522,6 +541,7 @@ final class ScrollbackPersistenceManager {
         hasher.combine(isAtPrompt)
         hasher.combine(isMouseCaptured)
         hasher.combine(isCursorKeyMode)
+        hasher.combine(isFocusEventMode)
         let contentHash = hasher.finalize()
         let alreadySaved = Self.lastSavedHashes.withLock { $0[uuid] == contentHash }
         guard !alreadySaved else { return }
@@ -532,6 +552,7 @@ final class ScrollbackPersistenceManager {
         let encryptedAtPromptFlag: Data?
         let encryptedMouseFlag: Data?
         let encryptedCursorKeyFlag: Data?
+        let encryptedFocusEventFlag: Data?
         do {
             encryptedData = try ScrollbackEncryptionManager.shared.encrypt(data)
             encryptedAltFlag = isAlternate
@@ -546,6 +567,9 @@ final class ScrollbackPersistenceManager {
             encryptedCursorKeyFlag = isCursorKeyMode
                 ? try ScrollbackEncryptionManager.shared.encrypt(Data([1]))
                 : nil
+            encryptedFocusEventFlag = isFocusEventMode
+                ? try ScrollbackEncryptionManager.shared.encrypt(Data([1]))
+                : nil
         } catch {
             Self.logger.warning("Encryption failed for \(uuid.uuidString.prefix(8)), skipping save: \(error.localizedDescription)")
             return
@@ -557,6 +581,7 @@ final class ScrollbackPersistenceManager {
         let atPromptFlagURL = atPromptFlagURL(for: uuid)
         let mouseFlagURL = mouseCaptureURL(for: uuid)
         let cursorKeyFlagURL = cursorKeyModeURL(for: uuid)
+        let focusEventFlagURL = focusEventModeURL(for: uuid)
 
         // Write atomically on a utility queue
         let directory = scrollbackDirectory
@@ -589,6 +614,12 @@ final class ScrollbackPersistenceManager {
                     try encryptedCursorKeyFlag.write(to: cursorKeyFlagURL, options: .atomic)
                 } else {
                     try? FileManager.default.removeItem(at: cursorKeyFlagURL)
+                }
+                // Save or remove encrypted focus event mode flag
+                if let encryptedFocusEventFlag {
+                    try encryptedFocusEventFlag.write(to: focusEventFlagURL, options: .atomic)
+                } else {
+                    try? FileManager.default.removeItem(at: focusEventFlagURL)
                 }
 
                 // Record the hash only after the write succeeds — failures
@@ -753,6 +784,21 @@ final class ScrollbackPersistenceManager {
         return data.first == 1
     }
 
+    // MARK: - Focus Event Mode Query
+
+    /// Check if focus event reporting (DEC mode 1004) was active when scrollback was last saved.
+    func wasFocusEventModeActive(for uuid: UUID) -> Bool {
+        let url = focusEventModeURL(for: uuid)
+        guard let combined = try? Data(contentsOf: url), !combined.isEmpty else {
+            return false
+        }
+        guard let data = try? ScrollbackEncryptionManager.shared.decrypt(combined) else {
+            try? FileManager.default.removeItem(at: url)
+            return false
+        }
+        return data.first == 1
+    }
+
     // MARK: - Cleanup
 
     /// Remove scrollback files for terminals not in the active set, if older than threshold.
@@ -777,6 +823,8 @@ final class ScrollbackPersistenceManager {
                 uuidString = String(filename.dropLast(".mousecapture.enc".count))
             } else if filename.hasSuffix(".cursorkeys.enc") {
                 uuidString = String(filename.dropLast(".cursorkeys.enc".count))
+            } else if filename.hasSuffix(".focusevent.enc") {
+                uuidString = String(filename.dropLast(".focusevent.enc".count))
             } else if filename.hasSuffix(".altscreen") {
                 // Legacy unencrypted flag
                 uuidString = String(filename.dropLast(".altscreen".count))

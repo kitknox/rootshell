@@ -24,6 +24,10 @@ extension MainView {
                 && SettingsStore.shared.value(Settings.Tabs.hoverPreviews)
             #endif
         }
+        previews.activation = {
+            SettingsStore.shared.value(Settings.Tabs.hoverPreviewActivation)
+        }
+        previews.startObservingActivationInputs()
         // The floating sidebar counts as a sheet, except to its own rows,
         // which are a preview surface; a top-bar card still yields to it.
         previews.canPresent = { source in

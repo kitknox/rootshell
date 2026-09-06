@@ -158,7 +158,7 @@ enum GitCommandParser {
     /// Tokenize a command string, respecting quotes.
     /// Quote-aware tokenization shared with local-shell Git classification.
     /// Returned values have shell quotes/escapes removed, matching argv.
-    static func tokenize(_ command: String) -> [String] {
+    nonisolated static func tokenize(_ command: String) -> [String] {
         var tokens: [String] = []
         var current = ""
         var inSingleQuote = false

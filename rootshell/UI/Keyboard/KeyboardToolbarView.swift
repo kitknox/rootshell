@@ -632,6 +632,8 @@ class KeyboardToolbarView: UIView {
             return createTabSwitcherButton()
         case .compose:
             return createComposeButton()
+        case .writingAssistance:
+            return KeyboardWritingAssistanceButton(sizes: sizes)
         case .toolbarSettings:
             return createToolbarSettingsButton()
         case .paste:

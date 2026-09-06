@@ -243,6 +243,8 @@ struct TransparencySettingsView: View {
 struct WindowSettingsView: View {
     @Setting(Settings.Tabs.topTabStyle) private var topTabStyle
     @Setting(Settings.Tabs.compactPillSpacing) private var compactPillTabSpacing
+    @Setting(Settings.Tabs.hoverPreviews) private var tabHoverPreviewsEnabled
+    @Setting(Settings.Tabs.hoverPreviewActivation) private var tabHoverPreviewActivation
     @Setting(Settings.Tabs.hoverPreviewZoom) private var tabHoverPreviewZoom
     @Setting(Settings.Sidebar.translucent) private var tabSidebarTranslucent
     @Setting(Settings.Sidebar.rowLines) private var tabSidebarRowLines
@@ -375,10 +377,25 @@ struct WindowSettingsView: View {
                 if UIDevice.current.userInterfaceIdiom != .phone {
                     SettingDescribedToggle(
                         Settings.Tabs.hoverPreviews,
+                        isOn: $tabHoverPreviewsEnabled,
                         title: "Tab Hover Previews",
-                        description: "Rest the pointer on a tab in the tab bar or sidebar to see a live preview. Pinch to resize it; click it to open Tab Exposé."
+                        description: "Rest the pointer on a tab to see a live preview. Optionally require a hardware modifier; pinch to resize or click to open Tab Exposé."
                     )
                     .themedRow()
+
+                    if tabHoverPreviewsEnabled {
+                        Picker(selection: $tabHoverPreviewActivation) {
+                            ForEach(TabHoverPreviewActivation.allCases, id: \.rawValue) { activation in
+                                Text(activation.displayName).tag(activation)
+                            }
+                        } label: {
+                            Text("Tab Hover Activation")
+                                .settingRow(Settings.Tabs.hoverPreviewActivation)
+                        }
+                        .pickerStyle(.menu)
+                        .disabled(SettingFileLock.isReadOnly(Settings.Tabs.hoverPreviewActivation.name))
+                        .themedRow()
+                    }
 
                     if tabHoverPreviewZoom != 1 {
                         Button {

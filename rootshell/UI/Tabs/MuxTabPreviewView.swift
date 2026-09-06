@@ -236,6 +236,14 @@ final class MuxTabPreviewView: UIView {
         preview.placeholder = symbol
     }
 
+    /// Dispose the offscreen Ghostty surfaces even if the model was already
+    /// cleared before this view left its window.
+    func releaseResources() {
+        tab = nil
+        feed = nil
+        removeAll()
+    }
+
     private func removeAll() {
         for preview in previews.values {
             preview.surface?.cleanup()

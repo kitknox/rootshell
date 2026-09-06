@@ -103,7 +103,7 @@ enum RemoteExecProbe {
         #if targetEnvironment(macCatalyst)
         if sessionOwner.connectionConfig.underlyingSSHConfig == nil { return true }
         #endif
-        if sessionOwner.session is TrzszSession { return true }
+        if TmuxController.gatewayTrzszSession(for: sessionOwner.session) != nil { return true }
         #if canImport(Citadel)
         if let citadel = sessionOwner.session as? CitadelSSHSession, citadel.client != nil {
             return true
@@ -160,7 +160,7 @@ enum RemoteExecProbe {
         // child of the same tsshd as the pane's shell. A separate connection
         // would cost an extra authentication and, worse, land outside that
         // process tree — where nothing can identify which pane it belongs to.
-        if let trzsz = sessionOwner.session as? TrzszSession {
+        if let trzsz = TmuxController.gatewayTrzszSession(for: sessionOwner.session) {
             // A timed-out call is released to the CALLER but keeps running on
             // the transport, so without this a stalled command would have
             // another queued behind it every retry, without bound. One

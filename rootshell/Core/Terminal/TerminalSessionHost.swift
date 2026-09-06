@@ -47,6 +47,7 @@ protocol TerminalSessionHost: AnyObject {
 
 @MainActor
 protocol TerminalSessionControllerHost: TerminalSessionHost, TerminalResponsePipelineHost {
+    func terminalSessionWillChange()
     var terminalUUID: UUID { get }
     var terminalContainingTabID: UUID? { get }
     var terminalWindowID: String { get }

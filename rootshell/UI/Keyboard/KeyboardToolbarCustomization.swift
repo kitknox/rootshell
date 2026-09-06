@@ -65,6 +65,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
     case dismiss
     case tabSwitcher
     case compose
+    case writingAssistance
     case toolbarSettings
     case paste
     case voiceAgent
@@ -126,6 +127,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .dismiss: return String(localized: "Dismiss Keyboard")
         case .tabSwitcher: return String(localized: "Tab Switcher")
         case .compose: return String(localized: "Compose")
+        case .writingAssistance: return String(localized: "Writing Assistance")
         case .toolbarSettings: return String(localized: "Toolbar Settings")
         case .paste: return String(localized: "Paste")
         case .voiceAgent: return String(localized: "Voice Agent")
@@ -158,6 +160,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .dismiss: return "chevron.down"
         case .tabSwitcher: return "rectangle.stack"
         case .compose: return "character.cursor.ibeam"
+        case .writingAssistance: return TerminalWritingAssistanceMode.toolbarIcon
         case .toolbarSettings: return "gearshape"
         case .paste: return "doc.on.clipboard"
         case .voiceAgent: return "waveform.circle"
@@ -219,6 +222,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .dismiss: return "__dismiss__"
         case .tabSwitcher: return "__tabswitcher__"
         case .compose: return "__compose__"
+        case .writingAssistance: return "__writingAssistance__"
         case .toolbarSettings: return "__toolbarSettings__"
         case .paste: return "__paste__"
         case .voiceAgent: return "__voiceAgent__"
@@ -251,6 +255,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .dismiss: return .dismiss
         case .tabSwitcher: return .tabSwitcher
         case .compose: return .compose
+        case .writingAssistance: return .text(keyValue)
         case .toolbarSettings: return .toolbarSettings
         case .paste: return .paste
         case .voiceAgent: return .voiceAgent
@@ -283,7 +288,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .esc, .ctrl, .alt, .shift, .cmd: return .modifier
         case .tab: return .special
         case .arrowDrawerToggle, .arrowUp, .arrowDown, .arrowLeft, .arrowRight: return .navigation
-        case .dismiss, .tabSwitcher, .compose, .toolbarSettings, .paste, .voiceAgent,
+        case .dismiss, .tabSwitcher, .compose, .writingAssistance, .toolbarSettings, .paste, .voiceAgent,
              .toggleFullScreen, .toggleTabBar, .newConnection, .appSettings,
              .toggleMouseCapture, .aiAgent, .brightnessBoost, .clipboardManager: return .action
         case .drawerToggle: return .toggle
@@ -344,7 +349,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
 
     // MARK: - Defaults
 
-    static let currentVersion = 11
+    static let currentVersion = 14
 
     static func defaultConfig(for idiom: UIUserInterfaceIdiom) -> ToolbarLayoutConfig {
         switch idiom {
@@ -362,7 +367,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
             .builtIn(.tabSwitcher),
             .builtIn(.esc),
             .builtIn(.ctrl),
-            .builtIn(.compose),
+            .builtIn(.writingAssistance),
             .builtIn(.shift),
             .builtIn(.tab),
             .builtIn(.arrowDrawerToggle),
@@ -401,6 +406,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
             .builtIn(.ampersand),
             .builtIn(.asterisk),
             .builtIn(.paste),
+            .builtIn(.compose),
             .builtIn(.voiceAgent),
             .builtIn(.toggleFullScreen),
             .builtIn(.toggleTabBar),
@@ -416,19 +422,11 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
 
     static let iPadDefault = ToolbarLayoutConfig(
         version: currentVersion,
-        mainRow: [
-            .builtIn(.dismiss),
-            .builtIn(.tabSwitcher),
-            .builtIn(.esc),
-            .builtIn(.ctrl),
+        // Keep the initial keys in the same order on both devices, including
+        // narrow iPad windows where the remaining keys overflow into the drawer.
+        mainRow: iPhoneDefault.mainRow + [
             .builtIn(.alt),
-            .builtIn(.shift),
             .builtIn(.cmd),
-            .builtIn(.compose),
-            .builtIn(.tab),
-            .builtIn(.arrowDrawerToggle),
-            .builtIn(.drawerToggle),
-            .builtIn(.toolbarSettings),
             .builtIn(.backtick),
             .builtIn(.dash),
             .builtIn(.slash),
@@ -460,6 +458,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
             .builtIn(.ampersand),
             .builtIn(.asterisk),
             .builtIn(.paste),
+            .builtIn(.compose),
             .builtIn(.voiceAgent),
             .builtIn(.toggleFullScreen),
             .builtIn(.toggleTabBar),
@@ -483,6 +482,35 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
 
         let defaults = defaultConfig(for: idiom)
         var migrated = saved
+        if migrated.drawerRows.isEmpty { migrated.drawerRows = [[]] }
+
+        // Saved defaults (including Reset to Defaults) should follow the new
+        // placement. Compare the complete layout so custom placements stay intact.
+        var previousDefaults = defaults
+        previousDefaults.version = saved.version
+        if idiom == .pad {
+            // Reconstruct the iPad order shipped through v13 before comparing
+            // saved defaults. Do not reorder user-customized layouts.
+            previousDefaults.mainRow.removeAll { $0 == .builtIn(.alt) || $0 == .builtIn(.cmd) }
+            previousDefaults.mainRow.insert(.builtIn(.alt), at: 4)
+            previousDefaults.mainRow.removeAll { $0 == .builtIn(.writingAssistance) }
+            previousDefaults.mainRow.insert(contentsOf: [.builtIn(.cmd), .builtIn(.writingAssistance)], at: 6)
+        }
+        if saved.version < 13 {
+            previousDefaults.mainRow = previousDefaults.mainRow.map {
+                $0 == .builtIn(.writingAssistance) ? .builtIn(.compose) : $0
+            }
+            for row in previousDefaults.drawerRows.indices {
+                previousDefaults.drawerRows[row].removeAll { $0 == .builtIn(.compose) }
+            }
+            if saved.version == 12,
+               let composeIndex = previousDefaults.mainRow.firstIndex(of: .builtIn(.compose)) {
+                previousDefaults.mainRow.insert(.builtIn(.writingAssistance), at: composeIndex + 1)
+            }
+        }
+        if (11...13).contains(saved.version), saved == previousDefaults {
+            return defaults
+        }
 
         // v2 → v3: Move toolbar settings from drawer to main row (after drawer toggle)
         if saved.version < 3 && !saved.hiddenKeys.contains(.toolbarSettings) {

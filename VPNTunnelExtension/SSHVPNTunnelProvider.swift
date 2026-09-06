@@ -1197,19 +1197,16 @@ class SSHVPNTunnelProvider: NEPacketTunnelProvider {
     ) async throws -> VPNTunnelConfig.TSSHServerInfo {
         let modeFlag = mode.lowercased() == "quic" ? "--quic" : "--kcp"
         let mtuArg = mtu.map { " --mtu \($0)" } ?? ""
-        let debugFlag = VPNConnectionDebugLogger.shared.isEnabled ? " --debug" : ""
         let binary = serverPath ?? "tsshd"
-        // When the user specified an absolute path, invoke it directly so we don't
-        // shadow it with the PATH-prepend fallback.
-        let command: String
-        if serverPath == nil {
-            command = """
-                export PATH="$PATH:$HOME/go/bin:/usr/local/go/bin" && \
-                \(binary) --port \(udpPortMin)-\(udpPortMax)\(mtuArg) \(modeFlag)\(debugFlag)
-                """
-        } else {
-            command = "\(binary) --port \(udpPortMin)-\(udpPortMax)\(mtuArg) \(modeFlag)\(debugFlag)"
-        }
+        let command = TsshdServerCommand.command(
+            serverPath: serverPath,
+            portMin: udpPortMin,
+            portMax: udpPortMax,
+            mtu: mtu,
+            quic: mode.lowercased() == "quic",
+            attachable: false,
+            debug: VPNConnectionDebugLogger.shared.isEnabled
+        )
 
         Self.logger.info("Executing: \(binary) \(modeFlag)\(mtuArg)")
 

@@ -30,6 +30,11 @@ class KeyboardTracker {
     @MainActor
     private(set) var isHardwareKeyboard: Bool = false
 
+    /// Physical hardware modifiers currently held. Kept here because
+    /// `GCKeyboardInput` has a single change handler shared by the whole app.
+    @MainActor
+    private(set) var hardwareModifierFlags: UIKeyModifierFlags = []
+
     /// True if the on-screen (software) keyboard is currently visible
     @MainActor
     private(set) var isSoftwareKeyboardVisible: Bool = false
@@ -121,6 +126,25 @@ class KeyboardTracker {
         }
     }
 
+    /// Stream factory for physical modifier changes (supports multiple subscribers).
+    /// Immediately yields the current snapshot, then yields on transitions.
+    @MainActor
+    func hardwareModifierStateDidChangeStream() -> AsyncStream<UIKeyModifierFlags> {
+        refreshHardwareModifierState()
+        let currentState = hardwareModifierFlags
+        return AsyncStream { continuation in
+            continuation.yield(currentState)
+
+            let id = UUID()
+            self.hardwareModifierStateContinuations[id] = continuation
+            continuation.onTermination = { _ in
+                Task { @MainActor in
+                    KeyboardTracker.shared.hardwareModifierStateContinuations[id] = nil
+                }
+            }
+        }
+    }
+
     /// Stream factory for software keyboard visibility changes (supports multiple subscribers)
     /// Immediately yields current state on subscription, then yields on changes
     @MainActor
@@ -164,6 +188,12 @@ class KeyboardTracker {
 
     @MainActor
     private var hardwareKeyboardStateContinuations: [UUID: AsyncStream<Bool>.Continuation] = [:]
+
+    @MainActor
+    private var hardwareModifierStateContinuations: [UUID: AsyncStream<UIKeyModifierFlags>.Continuation] = [:]
+
+    @MainActor
+    private var pressedHardwareModifierKeys: Set<GCKeyCode> = []
 
     @MainActor
     private var softwareKeyboardVisibilityContinuations: [UUID: AsyncStream<Bool>.Continuation] = [:]
@@ -371,6 +401,7 @@ class KeyboardTracker {
     @MainActor
     @objc private func hardwareKeyboardDidDisconnect(_ notification: Notification) {
         Ghostty.logger.debug("KeyboardTracker: GCKeyboard disconnected")
+        resetHardwareModifierState()
         updateHardwareKeyboardState(false)
     }
 
@@ -389,6 +420,9 @@ class KeyboardTracker {
 
     @MainActor
     @objc private func appWillResignActiveForKeyboard(_ notification: Notification) {
+        // Reserved system shortcuts can swallow key-up. Never carry a held
+        // modifier snapshot across an app activation boundary.
+        resetHardwareModifierState()
         beginAppTransitionKeyboardPreservationIfNeeded(autoClearIfAppStaysActive: false)
     }
 
@@ -424,6 +458,7 @@ class KeyboardTracker {
 
     @MainActor
     @objc private func appDidBecomeActiveForKeyboard(_ notification: Notification) {
+        refreshHardwareModifierState()
         scheduleAppTransitionKeyboardPreservationClear()
     }
 
@@ -668,6 +703,8 @@ class KeyboardTracker {
             return
         }
 
+        refreshHardwareModifierState()
+
         keyboardInput.keyChangedHandler = { [weak self] _, key, keyCode, pressed in
             // Detect modifier key changes to refresh link detection
             // (e.g., Cmd+hover should highlight links without requiring mouse movement)
@@ -676,8 +713,13 @@ class KeyboardTracker {
                                 keyCode == .leftShift || keyCode == .rightShift ||
                                 keyCode == .leftAlt || keyCode == .rightAlt
             if isModifierKey {
-                Task { @MainActor in
-                    self?.notifyModifierKeyChange(keyCode: keyCode, pressed: pressed)
+                // The main dispatch queue preserves edge order. Independent
+                // MainActor tasks may execute a rapid press/release out of
+                // order and leave the shared modifier snapshot latched.
+                DispatchQueue.main.async { [weak self] in
+                    MainActor.assumeIsolated {
+                        self?.notifyModifierKeyChange(keyCode: keyCode, pressed: pressed)
+                    }
                 }
                 return
             }
@@ -977,6 +1019,8 @@ class KeyboardTracker {
 
     @MainActor
     private func notifyModifierKeyChange(keyCode: GCKeyCode, pressed: Bool) {
+        updateHardwareModifierState(keyCode: keyCode, pressed: pressed)
+
         guard let keyWindow = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .flatMap({ $0.windows })
@@ -985,6 +1029,67 @@ class KeyboardTracker {
             return
         }
         terminalView.handleModifierKeyChange(keyCode: keyCode, pressed: pressed)
+    }
+
+    @MainActor
+    private func updateHardwareModifierState(keyCode: GCKeyCode, pressed: Bool) {
+        guard Self.isModifierKey(keyCode) else { return }
+        if pressed {
+            pressedHardwareModifierKeys.insert(keyCode)
+        } else {
+            pressedHardwareModifierKeys.remove(keyCode)
+        }
+        setHardwareModifierFlags(Self.modifierFlags(for: pressedHardwareModifierKeys))
+    }
+
+    @MainActor
+    private func refreshHardwareModifierState() {
+        #if os(visionOS)
+        resetHardwareModifierState()
+        #else
+        guard let input = GCKeyboard.coalesced?.keyboardInput else {
+            resetHardwareModifierState()
+            return
+        }
+        let keys = Self.modifierKeyCodes.filter {
+            input.button(forKeyCode: $0)?.isPressed == true
+        }
+        pressedHardwareModifierKeys = Set(keys)
+        setHardwareModifierFlags(Self.modifierFlags(for: pressedHardwareModifierKeys))
+        #endif
+    }
+
+    @MainActor
+    private func resetHardwareModifierState() {
+        pressedHardwareModifierKeys.removeAll()
+        setHardwareModifierFlags([])
+    }
+
+    @MainActor
+    private func setHardwareModifierFlags(_ flags: UIKeyModifierFlags) {
+        guard hardwareModifierFlags != flags else { return }
+        hardwareModifierFlags = flags
+        for continuation in hardwareModifierStateContinuations.values {
+            continuation.yield(flags)
+        }
+    }
+
+    private static let modifierKeyCodes: [GCKeyCode] = [
+        .leftGUI, .rightGUI, .leftControl, .rightControl,
+        .leftShift, .rightShift, .leftAlt, .rightAlt,
+    ]
+
+    private static func isModifierKey(_ keyCode: GCKeyCode) -> Bool {
+        modifierKeyCodes.contains(keyCode)
+    }
+
+    private static func modifierFlags(for keys: Set<GCKeyCode>) -> UIKeyModifierFlags {
+        var flags: UIKeyModifierFlags = []
+        if keys.contains(.leftGUI) || keys.contains(.rightGUI) { flags.insert(.command) }
+        if keys.contains(.leftControl) || keys.contains(.rightControl) { flags.insert(.control) }
+        if keys.contains(.leftShift) || keys.contains(.rightShift) { flags.insert(.shift) }
+        if keys.contains(.leftAlt) || keys.contains(.rightAlt) { flags.insert(.alternate) }
+        return flags
     }
 
     @MainActor

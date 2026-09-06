@@ -45,7 +45,8 @@ final class TerminalReconnectionController {
         }
         let configuredSessionID = ObjectIdentifier(session as AnyObject)
 
-        manager.onReconnectAttempt = {
+        manager.onReconnectAttempt = { [weak self] in
+            self?.host?.terminalSessionWillChange()
             try await reconnect()
         }
 
@@ -69,6 +70,7 @@ final class TerminalReconnectionController {
                 return
             }
             Ghostty.logger.info("Session disconnected: \(reason.description)")
+            self.host?.terminalSessionWillChange()
             self.manager?.handleDisconnect(reason: reason)
         }
 

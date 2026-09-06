@@ -233,6 +233,9 @@ nonisolated struct TabOrderProjection: Equatable, Sendable {
 final class TabModel: Identifiable {
     /// Stable identity for `ForEach` and reorder/cleanup operations.
     let id = UUID()
+    let paneMove = PaneMoveState()
+    /// Prevent a delayed move reply from overriding a newer focus choice.
+    @ObservationIgnored private(set) var paneFocusRevision: UInt64 = 0
 
     /// The window this tab belongs to. Used for window-aware drag and per-window
     /// theme override resolution.
@@ -355,6 +358,7 @@ final class TabModel: Identifiable {
     var focusedPane: SplitPaneView? {
         didSet {
             guard oldValue !== focusedPane else { return }
+            paneFocusRevision &+= 1
             groupingRevision &+= 1
             startObserving()
             AgentAttentionCenter.shared.visibilityDidChange()
@@ -845,6 +849,7 @@ final class TabModel: Identifiable {
 @MainActor
 @Observable
 final class TabsModel {
+    @ObservationIgnored private(set) var selectionRevision: UInt64 = 0
     /// All tabs in the window, in display order.
     var tabs: [TabModel] = [] {
         didSet {
@@ -865,6 +870,7 @@ final class TabsModel {
     var selectedTabID: UUID? {
         didSet {
             guard oldValue != selectedTabID else { return }
+            selectionRevision &+= 1
             beginTabSwitchAnimationGate()
             if let tab = selectedTab { rememberSelectionScope(of: tab) }
             if isGroupedModeEnabled, !isProjectGroupingActive,

@@ -58,8 +58,9 @@ extension LocalShellSession {
                     failures.append("non-output shell operator disabled Git terminal options")
                 }
             }
+            let succeeded = failures.isEmpty
             let lines: [String]
-            if failures.isEmpty {
+            if succeeded {
                 lines = ["git-progress: all checks passed\n"]
             } else {
                 lines = failures.map { "git-progress: FAIL — \($0)\n" }
@@ -69,8 +70,8 @@ extension LocalShellSession {
             }
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.lastCommandSucceeded = failures.isEmpty
-                self.scriptCommandExitCode = failures.isEmpty ? 0 : 1
+                self.lastCommandSucceeded = succeeded
+                self.scriptCommandExitCode = succeeded ? 0 : 1
                 self.recoverFromScriptExecution()
             }
             return

@@ -1280,17 +1280,10 @@ struct TabBarItem: View, Equatable {
             && lhs.usesTitlebarTabs == rhs.usesTitlebarTabs
             && lhs.style == rhs.style
             && lhs.tabWidth == rhs.tabWidth
-            && lhs.theme.isLight == rhs.theme.isLight
-            && lhs.theme.baseColor == rhs.theme.baseColor
-            && lhs.theme.terminalSurfaceBackground == rhs.theme.terminalSurfaceBackground
-            && lhs.theme.terminalSurfaceIsTransparent == rhs.theme.terminalSurfaceIsTransparent
-            && lhs.theme.integratedEdgePalette == rhs.theme.integratedEdgePalette
-            && lhs.theme.tabBarBackground == rhs.theme.tabBarBackground
-            && lhs.theme.selectedBackground == rhs.theme.selectedBackground
-            && lhs.theme.unselectedBackground == rhs.theme.unselectedBackground
-            && lhs.theme.tabText == rhs.theme.tabText
-            && lhs.theme.tabSecondaryText == rhs.theme.tabSecondaryText
-            && lhs.theme.ledgerIndicator == rhs.theme.ledgerIndicator
+            // Compare the stored theme inputs. Deriving colors here makes
+            // every unchanged tab parse the ANSI palette and resolve UIColors
+            // during SwiftUI diffing, even when Ledger isn't the active style.
+            && lhs.theme == rhs.theme
     }
 
     var body: some View {
@@ -1306,7 +1299,7 @@ struct TabBarItem: View, Equatable {
             secondaryTextColor: theme.tabSecondaryText,
             isLightTheme: theme.isLight,
             integratedEdgePalette: theme.integratedEdgePalette,
-            indicatorColor: theme.ledgerIndicator,
+            indicatorColor: style == .ledger ? theme.ledgerIndicator : theme.tabText,
             namespace: tabNamespace,
             onTap: onTap,
             onClose: onClose,

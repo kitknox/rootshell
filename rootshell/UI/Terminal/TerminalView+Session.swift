@@ -13,22 +13,9 @@ import GhosttyKit
 private extension String {
     /// Escapes characters that remain active inside shell double quotes.
     var shellEscapedForDoubleQuotes: String {
-        var escaped = ""
-        escaped.reserveCapacity(count)
-
-        for character in self {
-            if character == "\\" || character == "\"" || character == "$" || character == "`" {
-                escaped.append("\\")
-            }
-            escaped.append(character)
-        }
-
-        return escaped
+        let quoted = LoginShellCommand.doubleQuoted(self)
+        return String(quoted.dropFirst().dropLast())
     }
-}
-
-private func shellEscapeForSingleQuotes(_ string: String) -> String {
-    string.replacingOccurrences(of: "'", with: "'\\''")
 }
 
 private extension Ghostty.TerminalView {
@@ -196,9 +183,21 @@ extension Ghostty.TerminalView {
     /// their mode-restore sequences. The post-drain render+mouse-capture sync
     /// is also scheduled in that fallback path.
     func restoreScrollbackAfterAnimation(trailer: Data? = nil) {
+        if restoredWasTmuxGateway {
+            // The gateway is hidden while its projected panes are rebuilt from
+            // authoritative tmux captures. Do not replay its saved ANSI or mode
+            // trailer: pipe drain does not acknowledge parser consumption, so
+            // those bytes could cross the asynchronous control-mode boundary.
+            pendingScrollbackRestore = false
+            releaseRestoredTmuxOutputGateWhenViewerIsArmed()
+            return
+        }
         if pendingScrollbackRestore {
             pendingScrollbackRestore = false
-            ScrollbackPersistenceManager.shared.restoreScrollback(for: self, trailer: trailer)
+            ScrollbackPersistenceManager.shared.restoreScrollback(
+                for: self,
+                trailer: trailer
+            )
             return
         }
         if let trailer, !trailer.isEmpty {
@@ -241,6 +240,18 @@ extension Ghostty.TerminalView {
         let trailer = pendingResumeTrailer
         pendingResumeTrailer = nil
 
+        if restoredWasTmuxGateway {
+            // Projected panes own the useful persisted content. Keep remote
+            // control records gated, skip the hidden gateway's ANSI replay,
+            // and arm only once the embedded tssh session is running.
+            if embeddedTrzszReachedRunning {
+                releaseRestoredTmuxOutputGateWhenViewerIsArmed()
+            } else {
+                scrollbackWrittenAwaitingTrailer = true
+            }
+            return
+        }
+
         // Keep the gate open only when we expect a trailer to arrive later
         // (shellLaunchedTrzsz restoration, embedded trzsz hasn't reached
         // `.running` yet). If `.running` already fired, the trailer is in
@@ -259,25 +270,74 @@ extension Ghostty.TerminalView {
     }
 
     /// Build the mode-restoration trailer for a resumed trzsz session and inject
-    /// it via `restoreScrollbackAfterAnimation(trailer:)`. Also sends focus-in
-    /// to the remote so TUI apps un-grey their cursor.
+    /// it via `restoreScrollbackAfterAnimation(trailer:)`.
     ///
     /// The trailer carries the DECSETs the resumed remote TUI expects to be
-    /// active (alt screen, mouse capture, cursor key mode, bracketed paste,
-    /// cursor shape reset). Appended atomically to the saved scrollback inside
-    /// the restore gate, the byte stream becomes:
+    /// active (alt screen, mouse capture, cursor key mode, focus reporting,
+    /// bracketed paste, cursor shape reset). Appended atomically to the saved
+    /// scrollback inside the restore gate, the byte stream becomes:
     ///
     ///     saved-scrollback → trailer → buffered-live → live
     ///
     /// No live data can race ahead of the mode-set bytes, so by the time the
     /// server's redraw is parsed, ghostty's modes are already correct.
     ///
+    /// Focus is never injected directly: DECSET 1004 makes ghostty report the
+    /// surface's real focus state to the remote, so a `tail -f` shell (mode
+    /// off) receives nothing. A tmux gateway skips the trailer entirely; tmux
+    /// owns pane focus and raw bytes would corrupt its control channel.
+    ///
     /// Used by both the top-level `.trzsz` `.running` handler and the embedded
     /// `.shellLaunchedTrzsz` path (via `LocalShellSession.onEmbeddedTrzszReady`).
-    /// Always calls `restoreScrollbackAfterAnimation`, even when
-    /// `trzszSession.wasResumed == false`, so any pending scrollback restore
-    /// still completes for the fresh-attach case.
+    /// When transport resume falls back to a fresh spawn, abandons any restored
+    /// tmux projection and rejoins the ordinary saved-scrollback flow. Layout-
+    /// deferred restores remain deferred until the correctly sized callback.
+    /// A fresh shell must never be armed as a synthetic tmux control stream.
     func applyResumeTrailer(for trzszSession: TrzszSession) {
+        // A restored tmux projection is valid only when tssh actually resumed
+        // the old PTY. On fresh-spawn fallback the bytes already waiting in the
+        // restore gate are a normal shell banner/prompt, not tmux control
+        // records. Clear the gateway identity first so the ordinary restore
+        // path replays saved ANSI and then releases those live shell bytes.
+        // ROOTSHELL-TMUX (id=tmux-fresh-transport-fallback)
+        if restoredWasTmuxGateway && !trzszSession.wasResumed {
+            embeddedTrzszReachedRunning = true
+            tmuxResumeGateReleaseTask?.cancel()
+            tmuxResumeGateReleaseTask = nil
+            tmuxResumeGateReleaseScheduled = false
+            tmuxResumeWatchdog?.cancel()
+            tmuxResumeWatchdog = nil
+            removeAwaitingTmuxPlaceholders()
+            pendingResumeTrailer = nil
+            TmuxDebugLogger.shared.event(
+                "RESUME",
+                "transport fell back to fresh spawn; restoring as plain shell gw=\(uuid.uuidString.prefix(8))")
+
+            // The layout token remains true until a size callback claims it on
+            // the main actor. If `.running` wins that race, leave the gate and
+            // scrollback untouched; the sized callback will now take the normal
+            // (non-tmux) path exactly once. ROOTSHELL-TMUX
+            // (id=tmux-fresh-transport-fallback)
+            if pendingScrollbackRestoreForLayout {
+                scrollbackWrittenAwaitingTrailer = false
+                return
+            }
+
+            if scrollbackWrittenAwaitingTrailer {
+                // Layout already ran while the terminal still looked like a
+                // restored gateway, so it intentionally skipped hidden-gateway
+                // ANSI. We now know this is a fresh shell and can restore at
+                // the established dimensions before releasing its live bytes.
+                scrollbackWrittenAwaitingTrailer = false
+                ScrollbackPersistenceManager.shared.restoreScrollback(for: self)
+            } else {
+                // Top-level `.trzsz` restoration uses the non-layout pending
+                // flag; its ordinary helper atomically clears and finishes it.
+                restoreScrollbackAfterAnimation()
+            }
+            return
+        }
+
         var trailer: Data? = nil
         if trzszSession.wasResumed {
             var bytes = Data()
@@ -290,6 +350,13 @@ extension Ghostty.TerminalView {
             }
             if ScrollbackPersistenceManager.shared.wasCursorKeyModeActive(for: self.uuid) {
                 bytes.append(Data("\u{1b}[?1h".utf8))
+            }
+            // The live surface covers same-process reconnects whose flag was
+            // never persisted. Parsing 1004h makes ghostty emit focus-in/out.
+            let focusReporting = ScrollbackPersistenceManager.shared.wasFocusEventModeActive(for: self.uuid)
+                || (surface.map { ghostty_surface_focus_event_mode($0) } ?? false)
+            if focusReporting {
+                bytes.append(Data("\u{1b}[?1004h".utf8))
             }
             // Virtually all TUI apps that use alternate screen also enable bracketed paste.
             if wasAltScreen {
@@ -322,37 +389,29 @@ extension Ghostty.TerminalView {
             // then. Now we can write the trailer behind the scrollback and
             // finish the gate, producing the desired stream:
             //     saved-scrollback → trailer → buffered-server-output → live
-            if let trailer, !trailer.isEmpty {
+            if !restoredWasTmuxGateway, let trailer, !trailer.isEmpty {
                 outputPipeline.writeDirect(trailer)
             }
-            outputPipeline.finishScrollbackRestoreGate()
-            // Everything the gate buffered while we waited for `.running`
-            // lands now — hold the mute until it has actually drained.
-            TerminalBellSuppressor.suppress(uuid, untilDrained: outputPipeline)
-            didQueueScrollbackRestoreReplay()
             scrollbackWrittenAwaitingTrailer = false
+            if restoredWasTmuxGateway {
+                // The buffered server bytes are tmux control records. The core
+                // viewer must be armed before these records leave the gate.
+                releaseRestoredTmuxOutputGateWhenViewerIsArmed()
+            } else {
+                outputPipeline.finishScrollbackRestoreGate()
+                // Everything the gate buffered while we waited for `.running`
+                // lands now — hold the mute until it has actually drained.
+                TerminalBellSuppressor.suppress(uuid, untilDrained: outputPipeline)
+                didQueueScrollbackRestoreReplay()
+            }
         } else {
             // Top-level `.trzsz` (pendingScrollbackRestore-driven) or any
             // other path where the gate has already been flushed normally.
             restoreScrollbackAfterAnimation(trailer: trailer)
         }
-
-        // Send focus-in (\x1b[I) directly to the remote session. We can't use
-        // ghostty_surface_set_focus because the fresh surface doesn't have mode
-        // 1004 (focus reporting) enabled yet — all terminal modes reset on
-        // surface creation. Sending directly via sendInput bypasses the mode
-        // check and tells apps like Helix the terminal is focused, restoring
-        // their normal cursor. Goes via the input channel, not bufferedWriter,
-        // so it can't race with display output ordering.
-        if trzszSession.wasResumed {
-            trzszSession.sendInput(Data("\u{1b}[I".utf8))
-            // If this restored terminal was a tmux -CC control-mode gateway,
-            // re-enter control mode now that the live pty is reattached. No-op
-            // unless restoredWasTmuxGateway. This is the single trigger point for
-            // BOTH the direct-trzsz `.running` path and the embedded/
-            // shell-launched trzsz path (onEmbeddedTrzszReady) — all call this.
-            maybeResumeTmuxControlMode()
-        }
+        // A restored tmux gateway is armed by the scrollback-gate release path
+        // above, after its saved ANSI bytes drain and before buffered live
+        // control records are allowed into Ghostty.
     }
 
     /// Ensures the restore replay's final cursor positioning is rendered after
@@ -584,10 +643,12 @@ extension Ghostty.TerminalView {
                     Task { @MainActor [weak self] in
                         try? await Task.sleep(for: .milliseconds(500))
                         Ghostty.logger.info("Sending launch command (\(charCount) chars) after multiplexer delay")
+                        self?.invalidateWritingAssistance()
                         self?.session?.sendInput(data)
                     }
                 } else {
                     Ghostty.logger.info("Sending launch command (\(charCount) chars)")
+                    invalidateWritingAssistance()
                     session?.sendInput(data)
                 }
             }
@@ -878,9 +939,8 @@ extension Ghostty.TerminalView {
     }
 
     private func multiplexerAttachInputLine(_ attachCommand: String) -> String {
-        let pathPrefix = "PATH=\"$PATH:/usr/local/bin:/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:/snap/bin\""
-        let script = "\(pathPrefix) \(attachCommand)"
-        return "sh -c '\(shellEscapeForSingleQuotes(script))'\n"
+        let script = "\(SSHConfig.remoteExecPathPrefix)\(attachCommand)"
+        return LoginShellCommand.runInPOSIXShell(script) + "\n"
     }
 }
 

@@ -114,6 +114,14 @@ extension MainView {
         // (routed via the viewer-owner surface) can map windows->tabs here.
         TmuxWindowRegistry.register(tabsModel, windowId: windowId)
 
+        // Seed every existing pane from the selected-tab source of truth. This
+        // covers windows whose restored/attached selection remains unchanged,
+        // so SwiftUI never emits the selection onChange that would otherwise
+        // deliver the initial hidden state.
+        DispatchQueue.main.async { [self] in
+            reconcileSurfaceOcclusion(reason: "onAppear")
+        }
+
         // Agent inbox: the attention center reconciles its per-pane
         // monitors against every registered window's tabs.
         AgentAttentionCenter.shared.ensureStarted()
@@ -385,6 +393,7 @@ extension MainView {
         // A removed tab may have been the displayed one (mid-reveal) even when
         // the selection itself didn't move; re-reconcile the reveal state.
         tabsModel.syncDisplayedTab()
+        reconcileSurfaceOcclusion(reason: "terminalCount")
     }
 
     func handleSelectedTabChange(oldValue: Int, newValue: Int) {
@@ -418,6 +427,12 @@ extension MainView {
         for terminal in terminals[newValue].splitTree {
             terminal.setOcclusion(true)
         }
+
+        // The old/new fast path above keeps switching responsive. Follow it
+        // with an authoritative sweep so any other tab that missed an earlier
+        // lifecycle/topology update cannot remain renderer-visible until the
+        // user manually visits it.
+        reconcileSurfaceOcclusion(reason: "tabSelection")
 
         // Set up the focused pane reference
         var paneToFocus = terminals[newValue].focusedPane
@@ -536,6 +551,10 @@ extension MainView {
         // Ghostty focus was already set when the tab was created
         if oldValue == true && newValue == false {
             pendingBrowseSelection = nil  // Clear browse selection on dismissal
+            if authenticationRetryRequest != nil {
+                authenticationRetryRequest = nil
+                reconnectConfig = nil
+            }
 
             // Safety net: if no terminals exist and the tab bar is hidden,
             // re-show the sheet immediately. Without this, the user lands on an

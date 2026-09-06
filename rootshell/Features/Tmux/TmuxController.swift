@@ -3518,11 +3518,27 @@ final class TmuxController {
     /// already ~one-per-reconnect, so the unconditional call is cheap.
     func resetForDiscard(outputLines: Int, outputBytes: Int) {
         guard !ownerSurfaceFreed else { return }
+        let selectedWindowIds = windowTabs.keys.filter { isActiveWindow(windowId: $0) }
+        // A controller can project tmux windows into multiple app windows, each
+        // with its own selected tab. Prefer the one whose pane actually owns
+        // focus in the key UIWindow. If there is exactly one local selection it
+        // is unambiguous; otherwise let Ghostty fall back to tmux's server-active
+        // window rather than choosing an arbitrary Dictionary entry.
+        let focusedWindowIds = selectedWindowIds.filter { windowId in
+            guard let focusedPane = windowTabs[windowId]?.focusedPane else { return false }
+            return focusedPane.isFirstResponder
+                || (focusedPane.window?.isKeyWindow == true && focusedPane.isLogicallyFocused)
+        }
+        let preferredWindowId = focusedWindowIds.count == 1
+            ? focusedWindowIds[0]
+            : (selectedWindowIds.count == 1 ? selectedWindowIds[0] : nil)
         TmuxDebugLogger.shared.event(
             "RESET",
-            "discard-triggered reset outLines=\(outputLines) outBytes=\(outputBytes) gw=\(uuidPrefix)")
+            "discard-triggered reset outLines=\(outputLines) outBytes=\(outputBytes) "
+            + "preferredWindow=\(preferredWindowId.map(String.init) ?? "server-active") gw=\(uuidPrefix)")
         ResumeDebugLogger.shared.log(
-            "[\(uuidPrefix)] tmux -CC output discard (lines=\(outputLines) bytes=\(outputBytes)) → surface reset")
+            "[\(uuidPrefix)] tmux -CC output discard (lines=\(outputLines) bytes=\(outputBytes)) "
+            + "→ active-first surface reset preferredWindow=\(preferredWindowId.map(String.init) ?? "server-active")")
         // Full reset + pane recapture: every pane repaints on our order.
         // Suppressing the gateway covers the panes (they check parentUUID).
         TerminalBellSuppressor.suppress(
@@ -3532,7 +3548,11 @@ final class TmuxController {
         // their pre-outage state and would read the recapture's own churn as
         // a fresh "needs your input".
         TerminalBellSuppressor.suppressRebuild(ownerTerminalUUID)
-        ghostty_surface_tmux_reset(ownerSurface)
+        if let preferredWindowId, preferredWindowId >= 0 {
+            ghostty_surface_tmux_reset_prioritized(ownerSurface, UInt(preferredWindowId))
+        } else {
+            ghostty_surface_tmux_reset(ownerSurface)
+        }
     }
 
     /// Emit one STATE line (Swift-side counters) plus a ZIG line (the core
@@ -3691,6 +3711,21 @@ enum TmuxWindowRegistry {
             }
         }
         return nil
+    }
+
+    /// The one restored placeholder selected locally for this gateway. A cold
+    /// viewer has no controller/windowTabs yet, so this is the only point where
+    /// the persisted active tab can be carried into active-first recovery.
+    /// Multiple selected candidates across scenes are deliberately ambiguous.
+    static func selectedAwaitingWindow(ownerTerminalUUID owner: UUID) -> Int? {
+        let candidates = liveModels().compactMap { _, model -> Int? in
+            guard let selectedID = model.selectedTabID,
+                  let tab = model.tabs.first(where: { $0.id == selectedID }),
+                  tab.awaitingTmuxReconcile,
+                  tab.owningGatewayTerminalUUID == owner else { return nil }
+            return tab.pendingTmuxWindowId
+        }
+        return candidates.count == 1 ? candidates[0] : nil
     }
 
     @discardableResult
@@ -3992,6 +4027,87 @@ extension Ghostty.TerminalView {
         }
     }
 
+    /// Finish a restored gateway's output gate only after saved ANSI restoration
+    /// has drained and the Ghostty IO thread has entered tmux control mode.
+    @MainActor
+    func releaseRestoredTmuxOutputGateWhenViewerIsArmed() {
+        guard restoredWasTmuxGateway else {
+            outputPipeline.finishScrollbackRestoreGate()
+            TerminalBellSuppressor.suppress(uuid, untilDrained: outputPipeline)
+            didQueueScrollbackRestoreReplay()
+            return
+        }
+        guard !tmuxResumeGateReleaseScheduled else { return }
+        tmuxResumeGateReleaseScheduled = true
+
+        // Restored tmux gateways deliberately skip replaying their hidden
+        // gateway scrollback/mode trailer: projected panes are authoritatively
+        // rebuilt from tmux, and a pipe-drained byte is not necessarily parsed
+        // before this mailbox message. Arm immediately, wait for the IO thread's
+        // active flag, then release tssh bytes into the control parser.
+        tmuxResumeGateReleaseTask?.cancel()
+        tmuxResumeGateReleaseTask = Task { @MainActor [weak self] in
+            guard let self, !Task.isCancelled else { return }
+
+            self.maybeResumeTmuxControlMode()
+            // The foreground watchdog normally resolves this within ~12s. Use
+            // a much larger independent bound here so a wedged mailbox cannot
+            // leave a 5ms polling task alive forever. Poll slowly while the
+            // transport is frozen in the background to avoid needless wakeups.
+            let maxArmPolls = 12_000
+            var armPolls = 0
+            while !Task.isCancelled {
+                guard let surface = self.surface else {
+                    self.tmuxResumeGateReleaseScheduled = false
+                    self.tmuxResumeGateReleaseTask = nil
+                    return
+                }
+                if !self.tmuxResumeRequested {
+                    // Deferred user cancellation armed and immediately aborted
+                    // the viewer. Drop the held control records rather than
+                    // ever replaying them through the ordinary shell parser.
+                    self.outputPipeline.cancelScrollbackRestoreGate()
+                    self.tmuxResumeGateReleaseScheduled = false
+                    self.tmuxResumeGateReleaseTask = nil
+                    return
+                }
+                if ghostty_surface_tmux_active(surface) {
+                    TmuxDebugLogger.shared.event(
+                        "RESUME",
+                        "viewer armed; releasing gated tssh output gw=\(self.uuid.uuidString.prefix(8))")
+                    self.outputPipeline.finishScrollbackRestoreGate()
+                    TerminalBellSuppressor.suppress(self.uuid, untilDrained: self.outputPipeline)
+                    self.didQueueScrollbackRestoreReplay()
+                    self.scrollbackWrittenAwaitingTrailer = false
+                    self.tmuxResumeGateReleaseScheduled = false
+                    self.tmuxResumeGateReleaseTask = nil
+                    return
+                }
+                armPolls += 1
+                if armPolls >= maxArmPolls {
+                    let shortID = self.uuid.uuidString.prefix(8)
+                    Ghostty.logger.warning("tmux viewer arming poll timed out; reverting gateway \(shortID) to a plain shell")
+                    TmuxDebugLogger.shared.event(
+                        "RESUME",
+                        "ARM TIMEOUT; sending resume_abort gw=\(shortID)")
+                    ghostty_surface_tmux_resume_abort(surface)
+                    self.tmuxResumeWatchdog?.cancel()
+                    self.tmuxResumeWatchdog = nil
+                    self.removeAwaitingTmuxPlaceholders()
+                    self.outputPipeline.cancelScrollbackRestoreGate()
+                    self.tmuxResumeGateReleaseScheduled = false
+                    self.tmuxResumeGateReleaseTask = nil
+                    return
+                }
+                try? await Task.sleep(
+                    for: Ghostty.isTransportFrozenByBackground
+                        ? .milliseconds(100)
+                        : .milliseconds(5)
+                )
+            }
+        }
+    }
+
     /// Re-enter tmux control mode on a RESTORED gateway whose tssh session has
     /// just resumed the live pty. The live `tmux -CC` keeps streaming the control
     /// protocol, but this fresh surface never saw the `ESC P 1000 p` preamble, so
@@ -4005,8 +4121,8 @@ extension Ghostty.TerminalView {
     /// probe) until a reconcile arrives (which cancels the watchdog in
     /// `applyTmuxReconcile`), then give up: abort and drop the placeholder tabs so
     /// the gateway returns to a normal shell. One-shot via `tmuxResumeRequested`;
-    /// a no-op unless this terminal was a saved gateway. Called from BOTH the
-    /// top-level trzsz `.running` path and the embedded/shell-launched trzsz path.
+    /// a no-op unless this terminal was a saved gateway. Called after the saved
+    /// terminal stream drains but before its gated live tssh bytes are released.
     @MainActor
     func maybeResumeTmuxControlMode() {
         guard restoredWasTmuxGateway, !tmuxResumeRequested, let surface else { return }
@@ -4023,8 +4139,16 @@ extension Ghostty.TerminalView {
         }
 
         TmuxDebugLogger.shared.marker("RESUME START gw=\(uuid.uuidString.prefix(8))")
-        TmuxDebugLogger.shared.event("RESUME", "initial probe sent")
-        ghostty_surface_tmux_resume(surface)
+        let preferredWindow = TmuxWindowRegistry.selectedAwaitingWindow(
+            ownerTerminalUUID: uuid)
+        TmuxDebugLogger.shared.event(
+            "RESUME",
+            "initial probe sent preferredWindow=\(preferredWindow.map(String.init) ?? "server-active")")
+        if let preferredWindow, preferredWindow >= 0 {
+            ghostty_surface_tmux_resume_prioritized(surface, UInt(preferredWindow))
+        } else {
+            ghostty_surface_tmux_resume(surface)
+        }
 
         // Probe-retry watchdog: re-send the probe every 1.5s until a reconcile
         // arrives (tmuxController != nil) or we exhaust the attempts (~12s).

@@ -109,7 +109,10 @@ final class TabExposeTrayView: UIScrollView {
             }
             ordered.append(cell)
         }
-        for (_, stale) in byID { stale.removeFromSuperview() }
+        for (_, stale) in byID {
+            stale.prepareForRemoval()
+            stale.removeFromSuperview()
+        }
         cells = ordered
         tabIDs = ids
 
@@ -140,9 +143,17 @@ final class TabExposeTrayView: UIScrollView {
     }
 
     func removeAllCells() {
-        for cell in cells { cell.removeFromSuperview() }
+        for cell in cells {
+            cell.prepareForRemoval()
+            cell.removeFromSuperview()
+        }
         cells.removeAll()
         tabIDs.removeAll()
+    }
+
+    func discard() {
+        removeAllCells()
+        removeFromSuperview()
     }
 
     func applyAppearance(_ appearance: TabExposeView.Appearance) {

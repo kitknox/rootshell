@@ -3,6 +3,45 @@
 All notable changes to the rootshell app for iPhone, iPad, Vision Pro, and Mac, newest first.
 Versions are listed as `release-build`, matching the version shown in Settings, About.
 
+## 1.0.11-142 - September 4, 2026
+
+### Tabs
+
+- **Live Tab Hover Previews:** Hold Shift while hovering an inactive top tab or sidebar row on iPad or Mac for a live preview. Move across tabs to slide between previews, pinch to resize, or click to open Tab Exposé on that tab. Under Settings -> Appearance -> Window -> Tab Hover Previews, change activation to Always, Command, Option or Control.
+- **Resizable Tab Exposé Previews:** Pinch in Tab Exposé to resize its live thumbnails. The grid snaps to a clean column layout, remembers its size and offers a temporary Reset control.
+- **Clearer Hover Targets:** Sidebar rows and multiplexer gateway headers have clearer hover highlights. Close buttons in the sidebar, Pills and Compact Pills also gain consistent hover targets and respect Reduce Motion.
+
+### Memory
+
+- **Lower Memory Use for Inactive Tabs and Previews:** Inactive and restored regular, tssh and tmux tabs now start with their renderers asleep, avoiding full-size Metal surfaces until first shown. Tab Exposé, multiplexer and hover previews release their mirrored surfaces when dismissed, further reducing memory use with many tabs.
+
+### Appearance
+
+- **Current Theme Stays Visible:** The Cmd-Shift-T theme picker pins the active theme in a Current section above Favorites, keeping it visible without searching or scrolling.
+
+### VPN
+
+- **Redesigned VPN Control Widget:** The VPN Control widget has a native, status-tinted design with clearer controls and wrapping profile names. It now shows user@host and SSH/tssh details; the medium widget adds a large live connection timer, while the small widget adapts its status and timer to the available space.
+
+### Standalone macOS
+
+- **Automatic Ghostty Shell Integration:** Local shells now receive Ghostty shell integration automatically. zsh, fish and Bash 4+ report working directories and titles without manually sourcing rootshell scripts; Elvish receives the integration search path. Integration no longer overrides rootshell's cursor style, and updated Bash handling avoids duplicated multiline prompts.
+- **Reliable File and Folder Opening on macOS 15:** Opening a folder or file through Finder, a Dock drop, AppleScript or `open -a`/`open -b` now targets and surfaces the receiving window reliably on macOS 15. A new window replaces its temporary shell with the requested folder tab, while restored tabs finish loading before the request is applied.
+
+### Multiplexers and SSH
+
+- **Faster tmux Restore and Resume:** Returning from the background or restoring rootshell after termination now feels dramatically faster for tmux control-mode sessions. The active tab recovers first and becomes interactive quickly while background histories continue loading; selecting another tab makes it the new priority. This also applies after buffered output is discarded. Control output stays gated until tmux is ready, and fresh-shell fallbacks discard stale projections.
+- **Correct Focus Reporting after tssh Resume:** Resumed tssh sessions restore focus-reporting mode instead of sending an unconditional focus event. Plain shells no longer show stray `^[[I`, tmux control channels avoid extra input, and TUIs receive their requested focus state. tmux 3.8+ panes also regain focus reporting after a cold restore.
+- **Platform-Aware Multiplexer Discovery:** Session discovery and multiplexer attachment no longer probe Linux-only Homebrew and Snap paths on macOS hosts, including standalone local shells and remote connections. This avoids repeated automount and directory-service lookups while still finding tools on Linux and macOS.
+
+### Reliability and Size
+
+- **Correct GitHub Copilot Detection:** GitHub Copilot is no longer mistaken for OpenCode on first launch, keeping agent activity and attention indicators attached to the correct agent.
+- **No CloudKit Diagnostics When Sync Is Off:** With iCloud sync disabled, rootshell no longer performs CloudKit account, zone or subscription diagnostics at startup.
+- **Improved Selectable Command and Key Blocks:** Fingerprints, public keys and push install commands now use consistent selectable blocks. Long values wrap cleanly, and Copy buttons no longer resize when changing to Copied.
+- **Updated curl:** The iPhone, iPad and Apple Vision Pro local shell now includes curl 8.22.0.
+- **Smaller App Bundles:** The uncompressed app bundle is about 22 MiB smaller on iOS and 20 MiB smaller on Mac after removing duplicate localization catalogs from extensions, with all supported languages preserved.
+
 ## 1.0.11-141 - September 2, 2026
 
 ### Settings Sync

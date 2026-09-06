@@ -206,7 +206,7 @@ final class TabExposeView: UIView, TabExposeControllerObserver {
             if isFirstResponder { resignFirstResponder() }
             isHidden = true
             accessibilityViewIsModal = false
-            hero.tab = nil
+            hero.releaseContents()
             syncTerminalConcealment()
             resetPage()
             zoomPinchActive = false
@@ -674,7 +674,7 @@ extension TabExposeView {
         if companion != nil, companionSide == delta { return }
         guard let tabsModel = controller.tabsModel,
               let neighbor = controller.neighborScope(offset: delta) else { return }
-        companion?.removeFromSuperview()
+        companion?.discard()
         let tray = makeTray(interactive: false)
         tray.rebuildCells(
             tabIDs: neighbor.tabIDs,
@@ -734,7 +734,7 @@ extension TabExposeView {
             pageShift += CGFloat(companionSide) * W
             companionSide = -companionSide
         } else {
-            companion?.removeFromSuperview()
+            companion?.discard()
             primary = makeTray(interactive: true)
             companionSide = -direction
             pageShift = CGFloat(direction) * W
@@ -801,7 +801,7 @@ extension TabExposeView {
     }
 
     private func dropCompanion() {
-        companion?.removeFromSuperview()
+        companion?.discard()
         companion = nil
         companionSide = 0
         controller.setScopePreview([])
@@ -1105,7 +1105,7 @@ final class TabExposeCellView: UIView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func showMirror(of tab: TabModel) {
-        muxPreview.tab = nil
+        muxPreview.releaseResources()
         muxPreview.isHidden = true
         mirror.isHidden = false
         mirror.tab = tab
@@ -1114,7 +1114,7 @@ final class TabExposeCellView: UIView {
     }
 
     func showMultiplexerTab(_ tab: MuxTab, feed: MultiplexerExposeFeed?) {
-        mirror.tab = nil
+        mirror.releaseContents()
         mirror.isHidden = true
         muxPreview.isHidden = false
         muxPreview.feed = feed
@@ -1144,6 +1144,16 @@ final class TabExposeCellView: UIView {
             addSubview(host.view)
             captionHost = host
         }
+    }
+
+    /// Release renderer-backed previews and hosted caption state before this
+    /// cell is detached. Both can otherwise outlive the visible exposé tray.
+    func prepareForRemoval() {
+        layer.removeAllAnimations()
+        mirror.releaseContents()
+        muxPreview.releaseResources()
+        setCaption(nil)
+        onActivate = nil
     }
 
     var previewCornerRadius: CGFloat { preview.layer.cornerRadius }

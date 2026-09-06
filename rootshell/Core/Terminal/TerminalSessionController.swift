@@ -31,7 +31,9 @@ final class TerminalSessionController {
     /// The active session. Settable so existing `TerminalView.session`
     /// forwarders and the transfer-receive path can still assign through the
     /// controller while the view is decomposed incrementally.
-    var session: TerminalSession?
+    var session: TerminalSession? {
+        willSet { host?.terminalSessionWillChange() }
+    }
 
     /// The PTY backing the active session (nil for sessionless tmux panes).
     var pty: TerminalPTY?

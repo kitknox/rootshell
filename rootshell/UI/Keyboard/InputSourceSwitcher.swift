@@ -77,10 +77,49 @@ enum InputSourceCatalog {
 
     #if targetEnvironment(macCatalyst)
 
-    private struct CatalystCurrentInputSourceSnapshot {
+    // UIKit can ask for hundreds of document positions per input event. Each
+    // query checks Korean isolation, so cache both positive and negative
+    // language matches with the source snapshot, not just the TIS properties.
+    // A reference keeps those results shared across all document queries;
+    // replacing/invalidating the snapshot discards them together.
+    private final class CatalystCurrentInputSourceSnapshot {
         let languages: [String]
         let sourceID: String?
         let expiresAt: TimeInterval
+        private var languageMatches: [[String]: Bool] = [:]
+
+        init(languages: [String], sourceID: String?, expiresAt: TimeInterval) {
+            self.languages = languages
+            self.sourceID = sourceID
+            self.expiresAt = expiresAt
+        }
+
+        func hasLanguagePrefix(_ prefixes: [String]) -> Bool {
+            if let result = languageMatches[prefixes] { return result }
+            let result = matchesLanguagePrefixes(prefixes)
+            languageMatches[prefixes] = result
+            return result
+        }
+
+        private func matchesLanguagePrefixes(_ prefixes: [String]) -> Bool {
+            let normalizedPrefixes = prefixes.map { $0.lowercased() }
+            if languages.contains(where: { language in
+                normalizedPrefixes.contains { language.hasPrefix($0) }
+            }) {
+                return true
+            }
+
+            guard let sourceID = sourceID else { return false }
+
+            return normalizedPrefixes.contains { prefix in
+                sourceID.contains(".\(prefix)")
+                    || sourceID.contains("\(prefix)-")
+                    || sourceID.contains("_\(prefix)")
+                    || (prefix == "ko" && (sourceID.contains("korean") || sourceID.contains("hangul")))
+                    || (prefix == "ja" && (sourceID.contains("japanese") || sourceID.contains("kana")))
+                    || (prefix == "zh" && (sourceID.contains("chinese") || sourceID.contains("pinyin")))
+            }
+        }
     }
 
     private static var catalystCurrentInputSourceSnapshot: CatalystCurrentInputSourceSnapshot?
@@ -156,23 +195,7 @@ enum InputSourceCatalog {
     static func catalystCurrentInputSourceHasLanguagePrefix(_ prefixes: [String]) -> Bool {
         guard let snapshot = catalystCurrentInputSourceSnapshotValue() else { return false }
 
-        let normalizedPrefixes = prefixes.map { $0.lowercased() }
-        if snapshot.languages.contains(where: { language in
-            normalizedPrefixes.contains { language.hasPrefix($0) }
-        }) {
-            return true
-        }
-
-        guard let sourceID = snapshot.sourceID else { return false }
-
-        return normalizedPrefixes.contains { prefix in
-            sourceID.contains(".\(prefix)")
-                || sourceID.contains("\(prefix)-")
-                || sourceID.contains("_\(prefix)")
-                || (prefix == "ko" && (sourceID.contains("korean") || sourceID.contains("hangul")))
-                || (prefix == "ja" && (sourceID.contains("japanese") || sourceID.contains("kana")))
-                || (prefix == "zh" && (sourceID.contains("chinese") || sourceID.contains("pinyin")))
-        }
+        return snapshot.hasLanguagePrefix(prefixes)
     }
 
     private static func catalystCurrentInputSourceSnapshotValue() -> CatalystCurrentInputSourceSnapshot? {

@@ -320,6 +320,16 @@ struct SettingsSearchEntry: Identifiable, Hashable {
                 isSuggested: false
             ),
             .init(
+                id: "terminal-writing-assistance",
+                title: String(localized: "Writing Assistance"),
+                subtitle: String(localized: "Terminal"),
+                systemImage: TerminalWritingAssistanceMode.toolbarIcon,
+                action: .section(.terminal),
+                keywords: ["keyboard", "typing", "suggestions", "autocorrect", "autocorrection",
+                           "spell checking", "spellcheck", "spelling", "completion", "software keyboard"],
+                isSuggested: false
+            ),
+            .init(
                 id: "option-key-as-alt",
                 title: String(localized: "Option Key as Alt"),
                 subtitle: String(localized: "Terminal"),
@@ -919,6 +929,10 @@ struct SettingsSearchEntry: Identifiable, Hashable {
             )
         )
         #endif
+        #endif
+
+        #if targetEnvironment(macCatalyst)
+        entries.removeAll { $0.id == "terminal-writing-assistance" }
         #endif
 
         #if CHINA_BUILD

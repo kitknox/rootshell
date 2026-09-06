@@ -10,6 +10,8 @@ import SwiftUI
 struct ScreenSharingSettingsView: View {
     @Setting(Settings.ScreenSharing.clipboardSyncDefault) private var clipboardSyncDefault
     @Setting(Settings.ScreenSharing.panningDefault) private var panningDefault
+    @Setting(Settings.ScreenSharing.controlOptionAsCommandDefault) private var controlOptionAsCommandDefault
+    @Setting(Settings.ScreenSharing.routeReservedShortcutsToVNCDefault) private var routeReservedShortcutsToVNCDefault
 
     private var resolvedClipboardSyncDefault: ScreenSharingClipboardSyncDefault {
         clipboardSyncDefault
@@ -17,6 +19,36 @@ struct ScreenSharingSettingsView: View {
 
     var body: some View {
         List {
+            Section {
+                Toggle(isOn: $controlOptionAsCommandDefault) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "keyboard")
+                        Text("Control+Option as Command")
+                    }
+                    .settingRow(Settings.ScreenSharing.controlOptionAsCommandDefault)
+                }
+                .themedRow()
+            } header: {
+                SettingGroupHeader("Hardware Keyboard", group: .screenSharing)
+            } footer: {
+                Text("Maps physical Control+Option to remote Command, including Tab and Shift shortcuts. Replaces existing Control+Option shortcuts, including Dictate. Sets the default for new sessions; change it for the current session from the Screen Sharing menu. Turn it off to send Control+Option combinations.")
+            }
+
+            Section {
+                Toggle(isOn: $routeReservedShortcutsToVNCDefault) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "keyboard.badge.ellipsis")
+                        Text("Route Reserved Shortcuts to VNC")
+                    }
+                    .settingRow(Settings.ScreenSharing.routeReservedShortcutsToVNCDefault)
+                }
+                .themedRow()
+            } header: {
+                SettingGroupHeader("Reserved Shortcuts", group: .screenSharing)
+            } footer: {
+                Text("Sends rootshell’s reserved keyboard shortcuts to the remote computer by default in new Screen Sharing sessions. Change it for the current session from the Screen Sharing menu or with Command+Shift+M. Command+Shift+M always stays local.")
+            }
+
             Section {
                 Picker(selection: $clipboardSyncDefault) {
                     ForEach(ScreenSharingClipboardSyncDefault.allCases, id: \.rawValue) { behavior in
