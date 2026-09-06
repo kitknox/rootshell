@@ -14,7 +14,7 @@ struct ProfileKeyAvailabilityBadge: View {
     let profile: ConnectionProfile
 
     var body: some View {
-        if !ConnectionKeyResolver.isResolvable(config: profile.sshConfig, profileID: profile.id) {
+        if profile.isSSHBased && !ConnectionKeyResolver.isResolvable(config: profile.sshConfig, profileID: profile.id) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .symbolEffect(.wiggle, options: .repeat(2).speed(0.8))
                 .font(.caption2)

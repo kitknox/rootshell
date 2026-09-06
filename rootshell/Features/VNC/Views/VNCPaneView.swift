@@ -197,8 +197,14 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
     /// user chose not to save it. Consumed by the first connect attempt.
     var pendingPassword: String?
 
-    /// Window this pane currently belongs to (bookkeeping only in v1).
-    private(set) var windowId: String
+    /// Window this pane currently belongs to, including its theme context.
+    private(set) var windowId: String {
+        didSet { objectWillChange.send() }
+    }
+
+    override var containingTabID: UUID? {
+        didSet { objectWillChange.send() }
+    }
 
     /// Set by PaneFullScreenController while this pane is checked out for
     /// the in-window full-screen takeover, so close/retarget flows can reach
@@ -1256,7 +1262,7 @@ struct VNCPaneRootView: View {
         // glass tint and scheme, and hostOwnsRecoveryChrome suppresses the
         // package's reconnect/failure cards that would otherwise show
         // through rootshell's clear-glass cards as duplicates.
-        VNCPaneThemedSurface(windowId: pane.windowId) {
+        VNCPaneThemedSurface(pane: pane) {
             ZStack {
                 RemoteDesktopView(
                     session: pane.session,
@@ -1301,23 +1307,22 @@ struct VNCPaneRootView: View {
 
 // MARK: - Pane Theme
 
-/// Window-scoped mirror of MainView's sheet-theme resolution for surfaces
+/// Pane-context mirror of MainView's sheet-theme resolution for surfaces
 /// hosted inside the pane's own UIHostingController, where the sheet theme
-/// environment is never installed. Tab-level theme overrides don't apply
-/// (VNC panes aren't terminal tabs); window overrides and per-theme UI
-/// overrides do.
+/// environment is never installed. Resolve the containing tab so profile,
+/// tab, window, and per-theme UI overrides also reach the pane chrome.
 struct VNCPaneTheme {
     let accent: Color?
     let background: Color?
     let colorScheme: ColorScheme?
 
-    static func resolve(windowId: String, themedUIEnabled: Bool) -> VNCPaneTheme {
+    static func resolve(tabId: UUID?, windowId: String, themedUIEnabled: Bool) -> VNCPaneTheme {
         guard themedUIEnabled else {
             return VNCPaneTheme(accent: nil, background: nil, colorScheme: nil)
         }
         let themeManager = ThemeManager.shared
         let (themeName, _) = ThemeOverrideManager.shared.resolveTheme(
-            tabId: nil,
+            tabId: tabId,
             windowId: windowId
         )
         let colors = themeName == themeManager.currentTheme
@@ -1365,7 +1370,7 @@ extension EnvironmentValues {
 /// belongs on rootshell's dialog cards (VNCOverlayCard applies it), not on
 /// the package's HUD menu, where theme tinting proved a bad fit.
 struct VNCPaneThemedSurface<Content: View>: View {
-    let windowId: String
+    @ObservedObject var pane: VNCPaneView
     @ViewBuilder let content: () -> Content
 
     @Setting(Settings.Theme.themedUI) private var themedUIEnabled
@@ -1373,7 +1378,8 @@ struct VNCPaneThemedSurface<Content: View>: View {
 
     var body: some View {
         let theme = VNCPaneTheme.resolve(
-            windowId: windowId,
+            tabId: pane.containingTabID,
+            windowId: pane.windowId,
             themedUIEnabled: themedUIEnabled
         )
         content()

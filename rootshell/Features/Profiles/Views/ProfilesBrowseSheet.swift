@@ -32,10 +32,14 @@ struct ProfilesBrowseSheet: View {
 
     // Manager
     private var profileManager: ConnectionProfileManager { ConnectionProfileManager.shared }
+    private var availableTags: [ProfileTag] {
+        profileManager.tags(showAllPlatforms: showAllPlatforms)
+    }
 
     // State
     @State private var searchQuery: String = ""
     @State private var selectedTags: Set<String> = []
+    @State private var showAllPlatforms = false
     @State private var showTagFilter: Bool = false
     @Setting(Settings.Connections.profilesSortOrder) private var sortOrder
     @State private var showingNewProfileSheet: Bool = false
@@ -142,6 +146,17 @@ struct ProfilesBrowseSheet: View {
             highlightedIndex = 0
             triggerDNSPrefetch()
         }
+        .onChange(of: Set(availableTags.map(\.name))) { _, names in
+            selectedTags.formIntersection(names)
+            if names.isEmpty { showTagFilter = false }
+        }
+        .onChange(of: profileManager.hasUnavailableProfiles) { _, hasUnavailable in
+            if !hasUnavailable { showAllPlatforms = false }
+        }
+        .onChange(of: showAllPlatforms) { _, _ in
+            highlightedIndex = 0
+            triggerDNSPrefetch()
+        }
         .onChange(of: sortOrder) { _, _ in
             highlightedIndex = 0
         }
@@ -219,6 +234,16 @@ struct ProfilesBrowseSheet: View {
                 Button("Cancel") { dismiss() }
             }
 
+            if profileManager.hasUnavailableProfiles {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Toggle("Show All Platforms", isOn: $showAllPlatforms)
+                    } label: {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                    }
+                    .accessibilityLabel("Platform Filter")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     presentNewProfileSheet(in: folder)
@@ -312,7 +337,7 @@ struct ProfilesBrowseSheet: View {
             onSubmit: { activateHighlightedItem() }
         ) {
             // Tag filter button (only show if tags exist)
-            if !profileManager.allTags.isEmpty {
+            if !availableTags.isEmpty {
                 Button(action: { showTagFilter = true }) {
                     ZStack(alignment: .topTrailing) {
                         Image(systemName: "tag")
@@ -327,7 +352,7 @@ struct ProfilesBrowseSheet: View {
                 }
                 .popover(isPresented: $showTagFilter, arrowEdge: .top) {
                     TagFilterPopover(
-                        tags: profileManager.allTags,
+                        tags: availableTags,
                         selectedTags: $selectedTags
                     )
                     .themedSubSheet(sheetThemeColors)
@@ -505,7 +530,7 @@ struct ProfilesBrowseSheet: View {
     // MARK: - Filtering
 
     private func filteredFolders(in parentPath: String) -> [ProfileFolder] {
-        profileManager.subfolders(of: parentPath)
+        profileManager.subfolders(of: parentPath, showAllPlatforms: showAllPlatforms)
     }
 
     private func filteredProfiles(in folder: String) -> [ConnectionProfile] {
@@ -524,7 +549,8 @@ struct ProfilesBrowseSheet: View {
             profiles = profileManager.profiles(inFolder: folder)
         }
 
-        return profiles.sorted(by: sortOrder.compare)
+        return profiles.filter { showAllPlatforms || $0.isAvailableOnCurrentPlatform }
+            .sorted(by: sortOrder.compare)
     }
 
     // MARK: - Actions
@@ -543,7 +569,10 @@ struct ProfilesBrowseSheet: View {
     }
 
     private func selectProfile(_ profile: ConnectionProfile) {
-        profileManager.recordUsage(id: profile.id)
+        guard profile.isAvailableOnCurrentPlatform else {
+            editingProfile = profile
+            return
+        }
         onProfileSelected?(ProfileSelection(profile: profile, splitOption: splitOption))
         dismiss()
     }
@@ -630,7 +659,7 @@ struct ProfilesBrowseSheet: View {
 
             var hosts: [String] = []
             for item in items[lower...upper] {
-                if case .profile(let profile) = item {
+                if case .profile(let profile) = item, profile.connectionProtocol != .local {
                     let host = profile.sshConfig.host
                     if !host.isEmpty { hosts.append(host) }
                 }
@@ -702,6 +731,16 @@ struct ProfileRow: View {
                 Text(profile.name)
                     .foregroundColor(.primary)
 
+                if profile.connectionProtocol == .local {
+                    Text(profile.localConfig?.platform.displayName ?? String(localized: "Unavailable"))
+                        .font(.caption)
+                        .foregroundStyle(profile.isAvailableOnCurrentPlatform ? Color.secondary : Color.orange)
+                    if !profile.isAvailableOnCurrentPlatform {
+                        Text("Unavailable on this device · Tap to edit")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 Text(profile.displayString)
                     .font(.caption)
                     .foregroundColor(.secondary)

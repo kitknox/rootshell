@@ -18,13 +18,14 @@ final class ConnectionProfileManager {
 
     /// File store for sync-ready per-record storage
     private var store: SyncableFileStore<ConnectionProfile>
+    private var themeStore: SyncableFileStore<ProfileThemeRecord>
 
     /// Sorted profiles (by name), excluding deleted
     private(set) var profiles: [ConnectionProfile] = []
 
     /// All records including tombstones (for CloudKit sync)
     var allRecordsForSync: [ConnectionProfile] {
-        store.allRecords
+        store.allRecords.map(profileWithTheme)
     }
 
     /// Whether the last disk load failed to list the store directory
@@ -34,7 +35,9 @@ final class ConnectionProfileManager {
 
     /// Reload all profiles from disk (recovery path when the initial load failed)
     func reloadFromDisk() {
+        themeStore.reload()
         store.reload()
+        restoreProfileThemesFromDisk()
         updateProfilesFromStore()
     }
 
@@ -47,7 +50,9 @@ final class ConnectionProfileManager {
 
     private init() {
         self.store = SyncableFileStore<ConnectionProfile>(storeName: "connection_profiles")
+        self.themeStore = SyncableFileStore<ProfileThemeRecord>(storeName: "profile_themes")
         sanitizePersistedProfiles()
+        restoreProfileThemesFromDisk()
         updateProfilesFromStore()
     }
 
@@ -88,11 +93,17 @@ final class ConnectionProfileManager {
         return folders.sorted { $0.path.localizedCaseInsensitiveCompare($1.path) == .orderedAscending }
     }
 
-    /// All unique tags with usage counts
+    /// All unique tags with usage counts (including other platforms for editors).
     var allTags: [ProfileTag] {
+        tags(showAllPlatforms: true)
+    }
+
+    /// Browse filters and counts must use the same platform scope as results.
+    func tags(showAllPlatforms: Bool) -> [ProfileTag] {
+        let visibleProfiles = showAllPlatforms ? profiles : availableProfiles
         var tagCounts: [String: Int] = [:]
 
-        for profile in profiles {
+        for profile in visibleProfiles {
             for tag in profile.tags {
                 tagCounts[tag, default: 0] += 1
             }
@@ -469,9 +480,31 @@ final class ConnectionProfileManager {
 
     // MARK: - Query Operations
 
+    var availableProfiles: [ConnectionProfile] {
+        profiles.filter { $0.isAvailableOnCurrentPlatform }
+    }
+
+    var hasUnavailableProfiles: Bool {
+        profiles.contains { !$0.isAvailableOnCurrentPlatform }
+    }
+
+    /// Folder counts must reflect the same platform filter as their rows.
+    func subfolders(of parentPath: String, showAllPlatforms: Bool) -> [ProfileFolder] {
+        let visible = showAllPlatforms ? profiles : availableProfiles
+        return subfolders(of: parentPath).compactMap { folder in
+            let descendants = visible.filter {
+                $0.folderPath == folder.path || $0.folderPath.hasPrefix(folder.path + "/")
+            }
+            guard !descendants.isEmpty else { return nil }
+            return ProfileFolder(path: folder.path,
+                                 profileCount: descendants.filter { $0.folderPath == folder.path }.count,
+                                 totalProfileCount: descendants.count)
+        }
+    }
+
     /// Get a profile by ID
     func profile(for id: UUID) -> ConnectionProfile? {
-        store.record(for: id)
+        store.record(for: id).map(profileWithTheme)
     }
 
     /// Get profiles in a specific folder (direct children only)
@@ -512,6 +545,7 @@ final class ConnectionProfileManager {
         }
 
         return filtered
+            .filter { $0.isAvailableOnCurrentPlatform }
             .sorted { p1, p2 in
                 // Sort by last used (most recent first), then by use count
                 if let d1 = p1.lastUsedAt, let d2 = p2.lastUsedAt {
@@ -526,6 +560,40 @@ final class ConnectionProfileManager {
     }
 
     // MARK: - Sync Support
+
+    var pendingThemesForSync: [ProfileThemeRecord] {
+        themeStore.allRecords.filter { $0.needsUpload }
+    }
+
+    /// A delayed upload must not acknowledge a newer local edit.
+    func markThemeSynced(_ theme: ProfileThemeRecord) throws {
+        guard var current = themeStore.record(for: theme.id),
+              current.modifiedAt == theme.modifiedAt,
+              current.themeName == theme.themeName,
+              current.isDeleted == theme.isDeleted,
+              current.needsUpload else { return }
+        current.syncedRevision = theme.modifiedAt
+        try themeStore.save(current, updateTimestamp: false, notifySync: false)
+    }
+
+    /// A theme may arrive before its profile or after an old client's edit.
+    /// Persist it independently, then join it to whichever profile is present.
+    func applyRemoteTheme(_ theme: ProfileThemeRecord) throws {
+        let newest: ProfileThemeRecord
+        if let existing = themeStore.record(for: theme.id), existing.modifiedAt >= theme.modifiedAt {
+            if !theme.needsUpload {
+                try markThemeSynced(theme)
+            }
+            newest = themeStore.record(for: theme.id) ?? existing
+        } else {
+            try themeStore.save(theme, updateTimestamp: false, notifySync: false)
+            newest = theme
+        }
+        if let profile = store.record(for: theme.id) {
+            try store.save(newest.applying(to: profile), updateTimestamp: false, notifySync: false)
+            updateProfilesFromStore()
+        }
+    }
 
     /// Apply changes from remote sync
     @discardableResult
@@ -543,6 +611,14 @@ final class ConnectionProfileManager {
         var failures: [(id: UUID, error: Error)] = []
 
         for remote in remoteProfiles {
+            if let theme = ProfileThemeRecord(profile: remote) {
+                do {
+                    try applyRemoteTheme(theme)
+                } catch {
+                    failures.append((id: remote.id, error: error))
+                    continue
+                }
+            }
             let needsPersist: Bool
             if let existing = store.record(for: remote.id) {
                 needsPersist = remote.modifiedAt > existing.modifiedAt
@@ -602,7 +678,9 @@ final class ConnectionProfileManager {
 
     /// Reload all records from disk
     func reload() {
+        themeStore.reload()
         store.reload()
+        restoreProfileThemesFromDisk()
         updateProfilesFromStore()
     }
 
@@ -680,9 +758,29 @@ final class ConnectionProfileManager {
 
     // MARK: - Private Helpers
 
+    private func profileWithTheme(_ profile: ConnectionProfile) -> ConnectionProfile {
+        guard let theme = themeStore.record(for: profile.id) else { return profile }
+        return theme.applying(to: profile)
+    }
+
+    /// Seed the companion cache from local JSON/backups made before companion
+    /// records existed. This also repairs a partial write after a disk failure.
+    private func restoreProfileThemesFromDisk() {
+        for profile in store.allRecords {
+            guard let theme = ProfileThemeRecord(profile: profile),
+                  themeStore.record(for: profile.id).map({ $0.modifiedAt < theme.modifiedAt }) ?? true else { continue }
+            do {
+                try themeStore.save(theme, updateTimestamp: false, notifySync: false)
+            } catch {
+                Self.logger.error("Failed to restore profile theme: \(error.localizedDescription)")
+            }
+        }
+    }
+
     /// Update the profiles array from the store
     private func updateProfilesFromStore() {
         profiles = store.activeRecords
+            .map(profileWithTheme)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         syncVPNSharedProfiles()
     }
@@ -692,7 +790,27 @@ final class ConnectionProfileManager {
         updateTimestamp: Bool = true,
         notifySync: Bool = true
     ) throws {
-        let sanitized = sanitizeProfileForPersistence(profile)
+        var sanitized = sanitizeProfileForPersistence(profile)
+        if notifySync {
+            let existing = store.record(for: profile.id).map(profileWithTheme)
+            if sanitized.themeName != existing?.themeName {
+                var payload = sanitized.extensionPayload ?? ProfileExtensionPayload()
+                payload.themeModifiedAt = Date()
+                sanitized.extensionPayload = payload
+            } else if let previousRevision = existing?.extensionPayload?.themeModifiedAt {
+                // Editing connection settings must not advance the theme revision.
+                var payload = sanitized.extensionPayload ?? ProfileExtensionPayload()
+                payload.themeModifiedAt = previousRevision
+                sanitized.extensionPayload = payload
+            }
+        }
+        if let incomingTheme = ProfileThemeRecord(profile: sanitized),
+           themeStore.record(for: sanitized.id).map({ $0.modifiedAt < incomingTheme.modifiedAt }) ?? true {
+            try themeStore.save(incomingTheme, updateTimestamp: false, notifySync: false)
+        }
+        if let theme = themeStore.record(for: sanitized.id) {
+            sanitized = theme.applying(to: sanitized)
+        }
         try store.save(sanitized, updateTimestamp: updateTimestamp, notifySync: notifySync)
     }
 

@@ -64,7 +64,7 @@ extension MainView {
     /// handoff from a profile password prompt (not saved to the Keychain).
     func createVNCTab(with config: VNCConnectionConfig, sourceProfileID: UUID? = nil, password: String? = nil) {
         let pane = makeVNCPane(config: config, sourceProfileID: sourceProfileID, password: password)
-        insertPaneAsTab(pane, title: config.displayName)
+        insertPaneAsTab(pane, title: config.displayName, profileThemeSourceID: sourceProfileID)
     }
 
     /// Open a Screen Sharing session as a split of the focused pane in the
@@ -98,7 +98,8 @@ extension MainView {
             at: targetPane,
             inTab: selectedTabIndex,
             direction: direction,
-            logLabel: "VNC"
+            logLabel: "VNC",
+            profileThemeSourceID: sourceProfileID
         )
     }
 }

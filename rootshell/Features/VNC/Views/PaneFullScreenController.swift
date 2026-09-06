@@ -272,7 +272,7 @@ final class PaneFullScreenController {
             return
         }
 
-        let overlay = VNCPaneThemedSurface(windowId: pane.windowId) {
+        let overlay = VNCPaneThemedSurface(pane: pane) {
             VNCConnectionFailureCard(
                 subtitle: pane.config.displayName,
                 message: message,

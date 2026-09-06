@@ -248,6 +248,16 @@ extension MainView {
     }
 
     func connectToProfile(_ profile: ConnectionProfile, splitOption: SSHConnectionView.SplitOption) {
+        guard !profile.isDeleted, profile.isAvailableOnCurrentPlatform else {
+            alerts.showProfileUnavailableAlert = true
+            alerts.enqueue(.profileUnavailable)
+            return
+        }
+        if profile.connectionProtocol == .local {
+            ConnectionProfileManager.shared.recordUsage(id: profile.id)
+            createLocalProfile(profile, splitOption: splitOption)
+            return
+        }
         // Record usage
         ConnectionProfileManager.shared.recordUsage(id: profile.id)
 
@@ -356,7 +366,9 @@ extension MainView {
             return
         }
 
-        if vncConfig.security == .none || VNCPasswordManager.shared.hasPassword(for: vncConfig) {
+        if let password = VNCPasswordManager.shared.takeEphemeralPassword(for: vncConfig.passwordKey) {
+            handleVNCConnection(config: vncConfig, splitOption: splitOption, sourceProfileID: profile.id, password: password)
+        } else if vncConfig.security == .none || VNCPasswordManager.shared.hasPassword(for: vncConfig) {
             handleVNCConnection(config: vncConfig, splitOption: splitOption, sourceProfileID: profile.id)
         } else {
             passwordPromptProfile = profile
@@ -375,7 +387,11 @@ extension MainView {
         }
 
         if let override = request.launchCommandOverride {
-            profile.sshConfig.launchCommand = override
+            if profile.connectionProtocol == .local {
+                profile.localConfig?.startupCommand = override
+            } else {
+                profile.sshConfig.launchCommand = override
+            }
         }
 
         connectToProfile(profile, splitOption: .newTab)
@@ -413,7 +429,7 @@ extension MainView {
             case .unresolved(let partialConfig, let unresolvedKeys):
                 keyResolutionConfig = partialConfig
                 keyResolutionUnresolvedKeys = unresolvedKeys
-                keyResolutionProfileID = nil
+                keyResolutionProfileID = sourceProfileID
                 keyResolutionConnectionIdentity = nil
                 keyResolutionProtocol = connectionProtocol
                 keyResolutionTransportMode = trzszTransportMode
@@ -428,6 +444,11 @@ extension MainView {
         }
 
         switch connectionProtocol {
+        case .local:
+            if let sourceProfileID,
+               let profile = ConnectionProfileManager.shared.profile(for: sourceProfileID) {
+                connectToProfile(profile, splitOption: splitOption)
+            }
         case .mosh:
             // Create Mosh connection
             let moshConfig = MoshConfig(sshConfig: config)

@@ -9,6 +9,7 @@ import AppIntents
 
 /// Shortcuts-visible mirror of ConnectionProtocol for filtering profiles.
 enum ConnectionProtocolAppEnum: String, AppEnum {
+    case local
     case ssh
     case mosh
     case trzsz
@@ -24,6 +25,7 @@ enum ConnectionProtocolAppEnum: String, AppEnum {
     /// existing `Localizable.xcstrings` translations apply to both call sites.
     nonisolated static var caseDisplayRepresentations: [ConnectionProtocolAppEnum: DisplayRepresentation] {
         [
+            .local: "Local Shell",
             .ssh:   "SSH",
             .mosh:  "Roam - mosh compatible",
             .trzsz: "Roam - tssh",
@@ -33,6 +35,7 @@ enum ConnectionProtocolAppEnum: String, AppEnum {
 
     var connectionProtocol: ConnectionProtocol {
         switch self {
+        case .local: return .local
         case .ssh: return .ssh
         case .mosh: return .mosh
         case .trzsz: return .trzsz

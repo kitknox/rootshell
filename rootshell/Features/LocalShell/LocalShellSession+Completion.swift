@@ -21,7 +21,8 @@ extension LocalShellSession {
         if state.suggestions.isEmpty {
             state.suggestions = QuickConnectSuggestionProvider.shared.getSuggestions(
                 matching: extraction.completableText,
-                mode: state.matchingMode
+                mode: state.matchingMode,
+                context: .sshDestination
             )
             state.suggestionIndex = 0
         }
@@ -48,7 +49,8 @@ extension LocalShellSession {
 
         let suggestions = QuickConnectSuggestionProvider.shared.getSuggestions(
             matching: extraction.completableText,
-            mode: .prefix
+            mode: .prefix,
+            context: .sshDestination
         )
 
         guard let firstSuggestion = suggestions.first else {
@@ -250,7 +252,7 @@ extension LocalShellSession {
                 || bufferPrefix.lowercased().contains(" -p\t")
 
             let rawHostSuggestions = QuickConnectSuggestionProvider.shared
-                .getSuggestions(matching: prefix, mode: scpCompletion.matchingMode)
+                .getSuggestions(matching: prefix, mode: scpCompletion.matchingMode, context: .sshDestination)
 
             // ProfileSuggestion.matches() always uses substring across name/host/username/folder/tags/notes,
             // ignoring `mode`. In .prefix mode that lets a profile whose tag/notes contains "ni" surface its

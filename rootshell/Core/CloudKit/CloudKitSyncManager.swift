@@ -236,7 +236,7 @@ final class CloudKitSyncManager {
             // An existing change token has already consumed past AppSetting
             // records, so fetch the zone from scratch.
             let changes = try await fetchZoneChanges(resetToken: true)
-            await processChangedRecords(changes.records)
+            try await processChangedRecords(changes.records)
             await processDeletedRecords(changes.deletedRecords)
             let cloud = changes.records.compactMap { $0.recordType == AppSettingRecord.recordType ? AppSettingRecord.from($0) : nil }
             let preview = coordinator.mergePreview(cloud: cloud)
@@ -434,7 +434,7 @@ final class CloudKitSyncManager {
                 // Fetch remote changes first
                 syncState = .fetchingChanges
                 let changes = try await fetchZoneChanges()
-                await processChangedRecords(changes.records)
+                try await processChangedRecords(changes.records)
                 await processDeletedRecords(changes.deletedRecords)
 
                 // Push all local records for the new types
@@ -525,7 +525,7 @@ final class CloudKitSyncManager {
             syncState = .fetchingChanges
             let shouldPushAll = try await ensureCustomZoneReady()
             let changes = try await fetchZoneChanges(resetToken: true)
-            await processChangedRecords(changes.records)
+            try await processChangedRecords(changes.records)
             await processDeletedRecords(changes.deletedRecords)
 
             if shouldPushAll {
@@ -843,7 +843,7 @@ final class CloudKitSyncManager {
 
             // Fetch remote changes from the custom zone
             let changes = try await fetchZoneChanges()
-            await processChangedRecords(changes.records)
+            try await processChangedRecords(changes.records)
             await processDeletedRecords(changes.deletedRecords)
 
             // Push local changes
@@ -885,7 +885,7 @@ final class CloudKitSyncManager {
 
         // Fetch all existing records from the custom zone
         let changes = try await fetchZoneChanges(resetToken: true)
-        await processChangedRecords(changes.records)
+        try await processChangedRecords(changes.records)
         await processDeletedRecords(changes.deletedRecords)
 
         // Push all local records to seed the zone
@@ -945,7 +945,7 @@ final class CloudKitSyncManager {
 
         // Apply to local store
         let records = allRecords.compactMap { T.from($0) }
-        await applyRemoteRecords(records, type: type)
+        try await applyRemoteRecords(records, type: type)
         return true
     }
 
@@ -1132,7 +1132,16 @@ final class CloudKitSyncManager {
     }
 
     /// Process changed records from CloudKit
-    private func processChangedRecords(_ records: [CKRecord]) async {
+    private func processChangedRecords(_ records: [CKRecord]) async throws {
+        // Fetch currently advances the zone token before applying records. If
+        // a companion cannot reach disk, refetch rather than losing that change.
+        var appliedAll = false
+        defer {
+            if !appliedAll {
+                zoneChangeToken = nil
+                saveChangeToken()
+            }
+        }
         // Settings are merged as one batch so managers reload and the terminal
         // config rewrites once, not once per key.
         var settingRecords: [AppSettingRecord] = []
@@ -1147,25 +1156,28 @@ final class CloudKitSyncManager {
             case SSHConnectionHistoryEntry.recordType:
                 guard isHistorySyncEnabled else { continue }
                 if let entry = SSHConnectionHistoryEntry.from(record) {
-                    await applyRemoteRecords([entry], type: SSHConnectionHistoryEntry.self)
+                    try await applyRemoteRecords([entry], type: SSHConnectionHistoryEntry.self)
                 }
             case KnownHost.recordType:
                 guard isKnownHostsSyncEnabled else { continue }
                 if let host = KnownHost.from(record) {
-                    await applyRemoteRecords([host], type: KnownHost.self)
+                    try await applyRemoteRecords([host], type: KnownHost.self)
                 }
             case ConnectionProfile.recordType:
                 guard isProfilesSyncEnabled else { continue }
-                if let profile = ConnectionProfile.from(record) {
-                    await applyRemoteRecords([profile], type: ConnectionProfile.self)
+                if let theme = ProfileThemeRecord.from(record) {
+                    try ConnectionProfileManager.shared.applyRemoteTheme(theme)
+                } else if let profile = ConnectionProfile.from(record) {
+                    try await applyRemoteRecords([profile], type: ConnectionProfile.self)
                 }
             default:
                 Self.logger.warning("Unknown record type: \(record.recordType)")
             }
         }
         if !settingRecords.isEmpty {
-            await applyRemoteRecords(settingRecords, type: AppSettingRecord.self)
+            try await applyRemoteRecords(settingRecords, type: AppSettingRecord.self)
         }
+        appliedAll = true
     }
 
     /// Process deleted records from CloudKit
@@ -1219,7 +1231,7 @@ final class CloudKitSyncManager {
     }
 
     /// Apply remote records to local stores
-    private func applyRemoteRecords<T: CloudKitSyncable>(_ records: [T], type: T.Type) async {
+    private func applyRemoteRecords<T: CloudKitSyncable>(_ records: [T], type: T.Type) async throws {
         syncState = .applyingChanges
 
         switch T.recordType {
@@ -1233,7 +1245,10 @@ final class CloudKitSyncManager {
             }
         case ConnectionProfile.recordType:
             if let profiles = records as? [ConnectionProfile] {
-                ConnectionProfileManager.shared.applyRemoteChanges(profiles)
+                let result = ConnectionProfileManager.shared.applyRemoteChangesWithFailures(profiles)
+                if let failure = result.failures.first { throw failure.error }
+            } else if let themes = records as? [ProfileThemeRecord] {
+                for theme in themes { try ConnectionProfileManager.shared.applyRemoteTheme(theme) }
             }
         case AppSettingRecord.recordType:
             if let settings = records as? [AppSettingRecord] {
@@ -1273,13 +1288,19 @@ final class CloudKitSyncManager {
 
     /// Save a record with conflict resolution
     private func saveRecord<T: CloudKitSyncable>(_ record: T) async throws {
+        // Write the companion first. Failure queues the original profile, so
+        // retries and initial pushes always include both records.
+        if let profile = record as? ConnectionProfile,
+           let theme = ProfileThemeRecord(profile: profile) {
+            try await saveRecord(theme)
+        }
         let ckRecord = record.toCKRecord()
 
         do {
             let (saveResults, _) = try await database.modifyRecords(
                 saving: [ckRecord],
                 deleting: [],
-                savePolicy: .allKeys
+                savePolicy: record is ProfileThemeRecord ? .ifServerRecordUnchanged : .allKeys
             )
             for (_, result) in saveResults {
                 if case .failure(let error) = result {
@@ -1288,6 +1309,9 @@ final class CloudKitSyncManager {
             }
         } catch let ckError as CKError where ckError.code == .serverRecordChanged {
             try await resolveServerRecordConflict(ckError, localRecord: record)
+        }
+        if let theme = record as? ProfileThemeRecord {
+            try ConnectionProfileManager.shared.markThemeSynced(theme)
         }
     }
 
@@ -1307,7 +1331,7 @@ final class CloudKitSyncManager {
             let (saveResults, _) = try await database.modifyRecords(
                 saving: [serverRecord],
                 deleting: [],
-                savePolicy: .allKeys
+                savePolicy: localRecord is ProfileThemeRecord ? .ifServerRecordUnchanged : .allKeys
             )
             for (_, result) in saveResults {
                 if case .failure(let error) = result {
@@ -1316,12 +1340,24 @@ final class CloudKitSyncManager {
             }
         } else {
             // Server is newer - accept server record and update local store
-            await applyRemoteRecords([serverModel], type: T.self)
+            try await applyRemoteRecords([serverModel], type: T.self)
         }
     }
 
     /// Push all pending changes from offline queue
     private func pushPendingChanges() async throws {
+        // Includes themes recovered from local profiles or legacy envelopes,
+        // even when there has been no profile edit and the offline queue is empty.
+        if isProfilesSyncEnabled {
+            for theme in ConnectionProfileManager.shared.pendingThemesForSync {
+                do {
+                    try await saveRecord(theme)
+                } catch let error as CKError where error.code == .requestRateLimited {
+                    scheduleRateLimitedRetry(after: error.retryAfterSeconds ?? 30)
+                    return
+                }
+            }
+        }
         let batch = offlineQueue.nextBatch(limit: 100)
         guard !batch.isEmpty else { return }
 

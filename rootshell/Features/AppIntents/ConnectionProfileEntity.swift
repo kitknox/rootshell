@@ -70,7 +70,7 @@ extension ConnectionProfile {
         ConnectionProfileEntity(
             id: id,
             name: name,
-            host: sshConfig.host,
+            host: connectionProtocol == .local ? displayString : sshConfig.host,
             username: sshConfig.username,
             folderPath: folderPath,
             connectionProtocol: connectionProtocol.displayName,
