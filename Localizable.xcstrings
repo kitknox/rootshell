@@ -6107,7 +6107,158 @@
       }
     },
     "%@ (Unavailable)" : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (غير متوفر)"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (no disponible)"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (nedostupné)"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (ikke tilgængelig)"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (nicht verfügbar)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (no disponible)"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (ei käytettävissä)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (indisponible)"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (לא זמין)"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (nem érhető el)"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (non disponibile)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（利用不可）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@(사용 불가)"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (utilgjengelig)"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (niet beschikbaar)"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (niedostępny)"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (indisponível)"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (indisponível)"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (indisponibil)"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (ni na voljo)"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (ej tillgänglig)"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (недоступна)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (không khả dụng)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（不可用）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（無法使用）"
+          }
+        }
+      }
     },
     "%@ / %@" : {
       "localizations" : {
@@ -53969,7 +54120,158 @@
       }
     },
     "All Devices" : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "جميع الأجهزة"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tots els dispositius"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Všechna zařízení"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle enheder"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Geräte"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todos los dispositivos"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kaikki laitteet"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tous les appareils"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "כל המכשירים"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Minden eszköz"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tutti i dispositivi"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてのデバイス"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 기기"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle enheter"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle apparaten"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wszystkie urządzenia"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todos os Dispositivos"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todos os dispositivos"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toate dispozitivele"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vse naprave"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alla enheter"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Усі пристрої"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tất cả thiết bị"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有设备"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有裝置"
+          }
+        }
+      }
     },
     "All Exposed Keys" : {
       "comment" : "Local SSH agent client rule all keys toggle",
@@ -65401,7 +65703,158 @@
       }
     },
     "Applied to the entire tab when this profile opens, including split panes." : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يُطبَّق على علامة التبويب بأكملها عند فتح هذا الملف الشخصي، بما في ذلك الأجزاء المقسمة."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S'aplica a tota la pestanya quan s'obre aquest perfil, inclosos els panells dividits."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Použije se na celou kartu při otevření tohoto profilu, včetně rozdělených panelů."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anvendes på hele fanen, når denne profil åbnes, inklusive opdelte paneler."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird beim Öffnen dieses Profils auf den gesamten Tab angewendet, einschließlich geteilter Bereiche."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se aplica a toda la pestaña al abrir este perfil, incluidos los paneles divididos."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Käytetään koko välilehteen, kun tämä profiili avataan, mukaan lukien jaetut ruudut."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S'applique à tout l'onglet à l'ouverture de ce profil, y compris les volets divisés."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "חל על הלשונית כולה כאשר פרופיל זה נפתח, כולל חלוניות מפוצלות."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A profil megnyitásakor a teljes lapra érvényes, a felosztott panelekre is."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Viene applicato all'intera scheda quando questo profilo si apre, inclusi i riquadri divisi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このプロファイルを開いたとき、分割ペインを含むタブ全体に適用されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 프로필을 열면 분할된 패널을 포함해 탭 전체에 적용됩니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brukes på hele fanen når denne profilen åpnes, inkludert delte ruter."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wordt toegepast op het hele tabblad wanneer dit profiel wordt geopend, inclusief gesplitste deelvensters."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stosowane do całej karty po otwarciu tego profilu, w tym do podzielonych paneli."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aplicado a toda a aba quando este perfil é aberto, incluindo painéis divididos."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aplicado a todo o separador quando este perfil é aberto, incluindo painéis divididos."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se aplică întregii file la deschiderea acestui profil, inclusiv panourilor împărțite."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uporabi se za celoten zavihek, ko se ta profil odpre, vključno z razdeljenimi podokni."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tillämpas på hela fliken när den här profilen öppnas, inklusive delade rutor."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Застосовується до всієї вкладки під час відкриття цього профілю, включно з розділеними панелями."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Áp dụng cho toàn bộ tab khi mở hồ sơ này, bao gồm cả các ngăn chia đôi."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开此配置时应用于整个标签页，包括分屏窗格。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開啟此設定檔時套用至整個分頁，包括分割窗格。"
+          }
+        }
+      }
     },
     "Applies to sessions opened from now on. Existing tabs keep the shell they started with." : {
       "localizations" : {
@@ -384900,7 +385353,158 @@
       }
     },
     "Opens a saved local shell or remote connection profile." : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يفتح ملفًا شخصيًا محفوظًا للصدفة المحلية أو لاتصال بعيد."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Obre un perfil desat de shell local o de connexió remota."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otevře uložený profil lokálního shellu nebo vzdáleného připojení."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Åbner en gemt profil for lokal shell eller fjernforbindelse."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffnet ein gespeichertes Profil für eine lokale Shell oder eine Remote-Verbindung."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre un perfil guardado de shell local o de conexión remota."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avaa tallennetun paikallisen komentotulkin tai etäyhteyden profiilin."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvre un profil enregistré de shell local ou de connexion distante."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "פותח פרופיל שמור של מעטפת מקומית או חיבור מרוחק."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Megnyit egy mentett helyi shell- vagy távoli kapcsolati profilt."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apre un profilo salvato di shell locale o di connessione remota."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済みのローカルシェルまたはリモート接続のプロファイルを開きます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 로컬 셸 또는 원격 연결 프로필을 엽니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Åpner en lagret profil for lokalt skall eller ekstern tilkobling."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opent een bewaard profiel voor een lokale shell of externe verbinding."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otwiera zapisany profil lokalnej powłoki lub połączenia zdalnego."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre um perfil salvo de shell local ou de conexão remota."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre um perfil guardado de shell local ou de ligação remota."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deschide un profil salvat de shell local sau de conexiune la distanță."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Odpre shranjeni profil lokalne lupine ali oddaljene povezave."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öppnar en sparad profil för lokalt skal eller fjärranslutning."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Відкриває збережений профіль локальної оболонки або віддаленого підключення."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mở hồ sơ đã lưu của shell cục bộ hoặc kết nối từ xa."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开已保存的本地 Shell 或远程连接配置。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開啟已儲存的本機 Shell 或遠端連線設定檔。"
+          }
+        }
+      }
     },
     "Opens an SSH connection to a saved profile." : {
       "extractionState" : "stale",
@@ -404675,10 +405279,312 @@
       }
     },
     "Platform" : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "النظام الأساسي"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plataforma"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Platforma"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Platform"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plattform"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plataforma"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alusta"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plateforme"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "פלטפורמה"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Platform"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Piattaforma"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プラットフォーム"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "플랫폼"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plattform"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Platform"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Platforma"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plataforma"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plataforma"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Platformă"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Platforma"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plattform"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Платформа"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nền tảng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平台"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平台"
+          }
+        }
+      }
     },
     "Platform Filter" : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تصفية النظام الأساسي"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtre de plataforma"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtr platformy"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Platformsfilter"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plattformfilter"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtro de plataforma"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alustasuodatin"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtre de plateforme"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "סינון פלטפורמה"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Platformszűrő"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtro piattaforma"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プラットフォームフィルター"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "플랫폼 필터"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plattformfilter"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Platformfilter"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtr platformy"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtro de plataforma"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtro de plataforma"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtru de platformă"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filter platforme"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plattformsfilter"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Фільтр платформи"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bộ lọc nền tảng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平台筛选"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平台篩選"
+          }
+        }
+      }
     },
     "Play Remote Audio" : {
       "localizations" : {
@@ -415335,7 +416241,158 @@
       }
     },
     "Profile Unavailable" : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الملف الشخصي غير متوفر"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perfil no disponible"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil není dostupný"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil ikke tilgængelig"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil nicht verfügbar"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perfil no disponible"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profiili ei ole käytettävissä"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil indisponible"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הפרופיל אינו זמין"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A profil nem érhető el"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profilo non disponibile"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロファイルを利用できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로필 사용 불가"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profilen er utilgjengelig"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profiel niet beschikbaar"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil niedostępny"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perfil Indisponível"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perfil indisponível"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil indisponibil"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil ni na voljo"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil ej tillgänglig"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Профіль недоступний"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hồ sơ không khả dụng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置不可用"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定檔無法使用"
+          }
+        }
+      }
     },
     "Profiles" : {
       "localizations" : {
@@ -467402,10 +468459,312 @@
       }
     },
     "Saving replaces this profile's Local Shell settings (directory, startup command, platform) with Screen Sharing settings." : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الحفظ يستبدل إعدادات الصدفة المحلية لهذا الملف الشخصي (المجلد، أمر البدء، النظام الأساسي) بإعدادات مشاركة الشاشة."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En desar, la configuració de Shell local d'aquest perfil (directori, ordre d'inici, plataforma) es reemplaça per la de Compartir pantalla."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uložením se nastavení lokálního shellu tohoto profilu (adresář, spouštěcí příkaz, platforma) nahradí nastavením sdílení obrazovky."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Når du gemmer, erstattes profilens indstillinger for lokal shell (mappe, startkommando, platform) med indstillinger for skærmdeling."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Speichern werden die Einstellungen der lokalen Shell dieses Profils (Verzeichnis, Startbefehl, Plattform) durch Einstellungen für die Bildschirmfreigabe ersetzt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al guardar, la configuración de Shell local de este perfil (directorio, comando de inicio, plataforma) se reemplaza por la de Compartir pantalla."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tallentaminen korvaa tämän profiilin paikallisen komentotulkin asetukset (hakemisto, käynnistyskomento, alusta) näytön jakamisen asetuksilla."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'enregistrement remplace les réglages de shell local de ce profil (répertoire, commande de démarrage, plateforme) par les réglages de partage d'écran."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "השמירה מחליפה את הגדרות המעטפת המקומית של פרופיל זה (תיקייה, פקודת הפעלה, פלטפורמה) בהגדרות שיתוף מסך."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A mentés lecseréli a profil helyi shell-beállításait (könyvtár, indítóparancs, platform) képernyőmegosztási beállításokra."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il salvataggio sostituisce le impostazioni della shell locale di questo profilo (directory, comando di avvio, piattaforma) con le impostazioni di condivisione schermo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存すると、このプロファイルのローカルシェル設定（ディレクトリ、起動コマンド、プラットフォーム）は画面共有の設定に置き換わります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장하면 이 프로필의 로컬 셸 설정(디렉토리, 시작 명령어, 플랫폼)이 화면 공유 설정으로 대체됩니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Når du lagrer, erstattes profilens innstillinger for lokalt skall (katalog, oppstartskommando, plattform) med innstillinger for skjermdeling."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bij het bewaren worden de instellingen voor de lokale shell van dit profiel (map, opstartopdracht, platform) vervangen door instellingen voor schermdelen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zapisanie zastąpi ustawienia lokalnej powłoki tego profilu (katalog, polecenie startowe, platforma) ustawieniami udostępniania ekranu."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvar substitui as configurações de Shell Local deste perfil (diretório, comando de inicialização, plataforma) pelas de Compartilhamento de Tela."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar substitui as definições de Shell Local deste perfil (diretório, comando de arranque, plataforma) pelas de Partilha de Ecrã."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvarea înlocuiește setările de shell local ale acestui profil (director, comandă de pornire, platformă) cu setări de partajare a ecranului."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shranjevanje zamenja nastavitve lokalne lupine tega profila (imenik, zagonski ukaz, platforma) z nastavitvami skupne rabe zaslona."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "När du sparar ersätts profilens inställningar för lokalt skal (katalog, startkommando, plattform) med inställningar för skärmdelning."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Збереження замінює налаштування локальної оболонки цього профілю (каталог, команда запуску, платформа) налаштуваннями спільного доступу до екрана."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khi lưu, các thiết lập Shell cục bộ của hồ sơ này (thư mục, lệnh khởi động, nền tảng) sẽ được thay bằng thiết lập Chia sẻ màn hình."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存后，此配置的本地 Shell 设置（目录、启动命令、平台）将被屏幕共享设置替换。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "儲存後，此設定檔的本機 Shell 設定（目錄、啟動指令、平台）將由螢幕共享設定取代。"
+          }
+        }
+      }
     },
     "Saving replaces this profile's Local Shell settings (directory, startup command, platform) with SSH settings." : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الحفظ يستبدل إعدادات الصدفة المحلية لهذا الملف الشخصي (المجلد، أمر البدء، النظام الأساسي) بإعدادات SSH."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En desar, la configuració de Shell local d'aquest perfil (directori, ordre d'inici, plataforma) es reemplaça per la configuració SSH."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uložením se nastavení lokálního shellu tohoto profilu (adresář, spouštěcí příkaz, platforma) nahradí nastavením SSH."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Når du gemmer, erstattes profilens indstillinger for lokal shell (mappe, startkommando, platform) med SSH-indstillinger."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Speichern werden die Einstellungen der lokalen Shell dieses Profils (Verzeichnis, Startbefehl, Plattform) durch SSH-Einstellungen ersetzt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al guardar, la configuración de Shell local de este perfil (directorio, comando de inicio, plataforma) se reemplaza por la configuración SSH."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tallentaminen korvaa tämän profiilin paikallisen komentotulkin asetukset (hakemisto, käynnistyskomento, alusta) SSH-asetuksilla."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'enregistrement remplace les réglages de shell local de ce profil (répertoire, commande de démarrage, plateforme) par les réglages SSH."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "השמירה מחליפה את הגדרות המעטפת המקומית של פרופיל זה (תיקייה, פקודת הפעלה, פלטפורמה) בהגדרות SSH."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A mentés lecseréli a profil helyi shell-beállításait (könyvtár, indítóparancs, platform) SSH-beállításokra."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il salvataggio sostituisce le impostazioni della shell locale di questo profilo (directory, comando di avvio, piattaforma) con le impostazioni SSH."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存すると、このプロファイルのローカルシェル設定（ディレクトリ、起動コマンド、プラットフォーム）は SSH の設定に置き換わります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장하면 이 프로필의 로컬 셸 설정(디렉토리, 시작 명령어, 플랫폼)이 SSH 설정으로 대체됩니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Når du lagrer, erstattes profilens innstillinger for lokalt skall (katalog, oppstartskommando, plattform) med SSH-innstillinger."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bij het bewaren worden de instellingen voor de lokale shell van dit profiel (map, opstartopdracht, platform) vervangen door SSH-instellingen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zapisanie zastąpi ustawienia lokalnej powłoki tego profilu (katalog, polecenie startowe, platforma) ustawieniami SSH."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvar substitui as configurações de Shell Local deste perfil (diretório, comando de inicialização, plataforma) pelas configurações SSH."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar substitui as definições de Shell Local deste perfil (diretório, comando de arranque, plataforma) pelas definições SSH."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvarea înlocuiește setările de shell local ale acestui profil (director, comandă de pornire, platformă) cu setări SSH."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shranjevanje zamenja nastavitve lokalne lupine tega profila (imenik, zagonski ukaz, platforma) z nastavitvami SSH."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "När du sparar ersätts profilens inställningar för lokalt skal (katalog, startkommando, plattform) med SSH-inställningar."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Збереження замінює налаштування локальної оболонки цього профілю (каталог, команда запуску, платформа) налаштуваннями SSH."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khi lưu, các thiết lập Shell cục bộ của hồ sơ này (thư mục, lệnh khởi động, nền tảng) sẽ được thay bằng thiết lập SSH."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存后，此配置的本地 Shell 设置（目录、启动命令、平台）将被 SSH 设置替换。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "儲存後，此設定檔的本機 Shell 設定（目錄、啟動指令、平台）將由 SSH 設定取代。"
+          }
+        }
+      }
     },
     "Saving replaces this profile's Screen Sharing settings (quality, display, audio) with SSH settings. The hostname is carried over." : {
       "comment" : "Profile editor footer shown when converting a Screen Sharing profile to SSH",
@@ -467563,10 +468922,312 @@
       }
     },
     "Saving replaces this profile's Screen Sharing settings with Local Shell settings." : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الحفظ يستبدل إعدادات مشاركة الشاشة لهذا الملف الشخصي بإعدادات الصدفة المحلية."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En desar, la configuració de Compartir pantalla d'aquest perfil es reemplaça per la de Shell local."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uložením se nastavení sdílení obrazovky tohoto profilu nahradí nastavením lokálního shellu."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Når du gemmer, erstattes profilens indstillinger for skærmdeling med indstillinger for lokal shell."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Speichern werden die Einstellungen für die Bildschirmfreigabe dieses Profils durch Einstellungen der lokalen Shell ersetzt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al guardar, la configuración de Compartir pantalla de este perfil se reemplaza por la de Shell local."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tallentaminen korvaa tämän profiilin näytön jakamisen asetukset paikallisen komentotulkin asetuksilla."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'enregistrement remplace les réglages de partage d'écran de ce profil par les réglages de shell local."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "השמירה מחליפה את הגדרות שיתוף המסך של פרופיל זה בהגדרות המעטפת המקומית."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A mentés lecseréli a profil képernyőmegosztási beállításait helyi shell-beállításokra."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il salvataggio sostituisce le impostazioni di condivisione schermo di questo profilo con le impostazioni della shell locale."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存すると、このプロファイルの画面共有設定はローカルシェルの設定に置き換わります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장하면 이 프로필의 화면 공유 설정이 로컬 셸 설정으로 대체됩니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Når du lagrer, erstattes profilens innstillinger for skjermdeling med innstillinger for lokalt skall."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bij het bewaren worden de instellingen voor schermdelen van dit profiel vervangen door instellingen voor de lokale shell."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zapisanie zastąpi ustawienia udostępniania ekranu tego profilu ustawieniami lokalnej powłoki."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvar substitui as configurações de Compartilhamento de Tela deste perfil pelas de Shell Local."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar substitui as definições de Partilha de Ecrã deste perfil pelas de Shell Local."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvarea înlocuiește setările de partajare a ecranului ale acestui profil cu setări de shell local."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shranjevanje zamenja nastavitve skupne rabe zaslona tega profila z nastavitvami lokalne lupine."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "När du sparar ersätts profilens inställningar för skärmdelning med inställningar för lokalt skal."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Збереження замінює налаштування спільного доступу до екрана цього профілю налаштуваннями локальної оболонки."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khi lưu, các thiết lập Chia sẻ màn hình của hồ sơ này sẽ được thay bằng thiết lập Shell cục bộ."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存后，此配置的屏幕共享设置将被本地 Shell 设置替换。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "儲存後，此設定檔的螢幕共享設定將由本機 Shell 設定取代。"
+          }
+        }
+      }
     },
     "Saving replaces this profile's SSH settings (keys, port forwards, agent forwarding, terminal options) with Local Shell settings." : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الحفظ يستبدل إعدادات SSH لهذا الملف الشخصي (المفاتيح، توجيهات المنافذ، توجيه الوكيل، خيارات الطرفية) بإعدادات الصدفة المحلية."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En desar, la configuració SSH d'aquest perfil (claus, reenviaments de ports, reenviament d'agent, opcions del terminal) es reemplaça per la de Shell local."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uložením se nastavení SSH tohoto profilu (klíče, přesměrování portů, přesměrování agenta, možnosti terminálu) nahradí nastavením lokálního shellu."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Når du gemmer, erstattes profilens SSH-indstillinger (nøgler, port forwards, agent forwarding, terminalindstillinger) med indstillinger for lokal shell."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Speichern werden die SSH-Einstellungen dieses Profils (Schlüssel, Portweiterleitungen, Agent-Weiterleitung, Terminal-Optionen) durch Einstellungen der lokalen Shell ersetzt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al guardar, la configuración SSH de este perfil (claves, reenvíos de puertos, reenvío de agente, opciones del terminal) se reemplaza por la de Shell local."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tallentaminen korvaa tämän profiilin SSH-asetukset (avaimet, portin välitykset, agentin välitys, terminaaliasetukset) paikallisen komentotulkin asetuksilla."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'enregistrement remplace les réglages SSH de ce profil (clés, redirections de port, transfert d'agent, options du terminal) par les réglages de shell local."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "השמירה מחליפה את הגדרות ה-SSH של פרופיל זה (מפתחות, העברות פורטים, העברת סוכן, אפשרויות מסוף) בהגדרות המעטפת המקומית."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A mentés lecseréli a profil SSH-beállításait (kulcsok, porttovábbítások, ügynöktovábbítás, terminálbeállítások) helyi shell-beállításokra."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il salvataggio sostituisce le impostazioni SSH di questo profilo (chiavi, inoltri porte, inoltro dell'agente, opzioni del terminale) con le impostazioni della shell locale."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存すると、このプロファイルの SSH 設定（鍵、ポート転送、エージェント転送、ターミナルオプション）はローカルシェルの設定に置き換わります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장하면 이 프로필의 SSH 설정(키, 포트 포워딩, 에이전트 포워딩, 터미널 옵션)이 로컬 셸 설정으로 대체됩니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Når du lagrer, erstattes profilens SSH-innstillinger (nøkler, portvideresendinger, agentvideresending, terminalalternativer) med innstillinger for lokalt skall."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bij het bewaren worden de SSH-instellingen van dit profiel (sleutels, port forwards, agent forwarding, terminalopties) vervangen door instellingen voor de lokale shell."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zapisanie zastąpi ustawienia SSH tego profilu (klucze, przekierowania portów, przekazywanie agenta, opcje terminala) ustawieniami lokalnej powłoki."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvar substitui as configurações SSH deste perfil (chaves, encaminhamentos de porta, encaminhamento de agente, opções do terminal) pelas de Shell Local."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar substitui as definições SSH deste perfil (chaves, reencaminhamentos de portas, reencaminhamento de agente, opções do terminal) pelas de Shell Local."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvarea înlocuiește setările SSH ale acestui profil (chei, redirecționări de port, redirecționare agent, opțiuni terminal) cu setări de shell local."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shranjevanje zamenja nastavitve SSH tega profila (ključi, posredovanja vrat, posredovanje agenta, možnosti terminala) z nastavitvami lokalne lupine."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "När du sparar ersätts profilens SSH-inställningar (nycklar, portvidarebefordringar, agentvidarebefordran, terminalalternativ) med inställningar för lokalt skal."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Збереження замінює налаштування SSH цього профілю (ключі, переадресації портів, переспрямування агента, параметри термінала) налаштуваннями локальної оболонки."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khi lưu, các thiết lập SSH của hồ sơ này (khóa, chuyển tiếp cổng, chuyển tiếp agent, tùy chọn terminal) sẽ được thay bằng thiết lập Shell cục bộ."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存后，此配置的 SSH 设置（密钥、端口转发、代理转发、终端选项）将被本地 Shell 设置替换。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "儲存後，此設定檔的 SSH 設定（金鑰、連接埠轉送、代理轉送、終端機選項）將由本機 Shell 設定取代。"
+          }
+        }
+      }
     },
     "Saving replaces this profile's SSH settings (keys, port forwards, agent forwarding, terminal options) with Screen Sharing settings. The hostname is carried over." : {
       "comment" : "Profile editor footer shown when converting an SSH profile to Screen Sharing",
@@ -498002,7 +499663,158 @@
       }
     },
     "Shell on this device" : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "صدفة على هذا الجهاز"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell en aquest dispositiu"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell na tomto zařízení"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell på denne enhed"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell auf diesem Gerät"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell en este dispositivo"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Komentotulkki tällä laitteella"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell sur cet appareil"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "מעטפת במכשיר זה"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell ezen az eszközön"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell su questo dispositivo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このデバイス上のシェル"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기기의 셸"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skall på denne enheten"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell op dit apparaat"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Powłoka na tym urządzeniu"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell neste dispositivo"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell neste dispositivo"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell pe acest dispozitiv"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lupina na tej napravi"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skal på den här enheten"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Оболонка на цьому пристрої"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell trên thiết bị này"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此设备上的 Shell"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此裝置上的 Shell"
+          }
+        }
+      }
     },
     "Shell Utilities:" : {
       "comment" : "Help: shell utilities section header",
@@ -498934,7 +500746,158 @@
       }
     },
     "Show All Platforms" : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "إظهار جميع الأنظمة الأساسية"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar totes les plataformes"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zobrazit všechny platformy"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vis alle platforme"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Plattformen anzeigen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar todas las plataformas"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Näytä kaikki alustat"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afficher toutes les plateformes"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הצג את כל הפלטפורמות"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Minden platform megjelenítése"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostra tutte le piattaforme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてのプラットフォームを表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 플랫폼 표시"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vis alle plattformer"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle platforms tonen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pokaż wszystkie platformy"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar Todas as Plataformas"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar todas as plataformas"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afișează toate platformele"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prikaži vse platforme"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visa alla plattformar"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Показати всі платформи"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hiển thị tất cả nền tảng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示所有平台"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示所有平台"
+          }
+        }
+      }
     },
     "Show All Tabs" : {
       "comment" : "Tab hover preview: exposé hint tooltip",
@@ -529073,10 +531036,312 @@
       }
     },
     "Starting Directory (Optional)" : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "مجلد البدء (اختياري)"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Directori inicial (opcional)"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Počáteční adresář (volitelné)"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startmappe (valgfrit)"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startverzeichnis (optional)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Directorio inicial (opcional)"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aloitushakemisto (valinnainen)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Répertoire de départ (facultatif)"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "תיקיית התחלה (אופציונלי)"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kezdő könyvtár (nem kötelező)"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Directory iniziale (facoltativo)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開始ディレクトリ（任意）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시작 디렉토리(선택 사항)"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startkatalog (valgfritt)"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startmap (optioneel)"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Katalog początkowy (opcjonalnie)"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diretório inicial (opcional)"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diretório inicial (opcional)"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Director de pornire (opțional)"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Začetni imenik (izbirno)"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startkatalog (valfritt)"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Початковий каталог (необов’язково)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thư mục bắt đầu (tùy chọn)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "起始目录（可选）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "起始目錄（選填）"
+          }
+        }
+      }
     },
     "Startup Command (Optional)" : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "أمر البدء (اختياري)"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ordre d'inici (opcional)"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spouštěcí příkaz (volitelné)"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startkommando (valgfrit)"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startbefehl (optional)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comando de inicio (opcional)"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Käynnistyskomento (valinnainen)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commande de démarrage (facultatif)"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "פקודת הפעלה (אופציונלי)"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Indítóparancs (nem kötelező)"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comando di avvio (facoltativo)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "起動コマンド（任意）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시작 명령어(선택 사항)"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oppstartskommando (valgfritt)"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opstartopdracht (optioneel)"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Polecenie startowe (opcjonalnie)"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comando de inicialização (opcional)"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comando de arranque (opcional)"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comandă de pornire (opțional)"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zagonski ukaz (izbirno)"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startkommando (valfritt)"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Команда запуску (необов’язково)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lệnh khởi động (tùy chọn)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动命令（可选）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "啟動指令（選填）"
+          }
+        }
+      }
     },
     "Statistics" : {
       "localizations" : {
@@ -568756,7 +571021,158 @@
       }
     },
     "This action requires an SSH, mosh, or tssh profile." : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يتطلب هذا الإجراء ملفًا شخصيًا من نوع SSH أو mosh أو tssh."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aquesta acció requereix un perfil SSH, mosh o tssh."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tato akce vyžaduje profil SSH, mosh nebo tssh."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Denne handling kræver en SSH-, mosh- eller tssh-profil."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Für diese Aktion ist ein SSH-, mosh- oder tssh-Profil erforderlich."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta acción requiere un perfil SSH, mosh o tssh."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tämä toiminto vaatii SSH-, mosh- tai tssh-profiilin."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette action nécessite un profil SSH, mosh ou tssh."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "פעולה זו דורשת פרופיל SSH, mosh או tssh."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ehhez a művelethez SSH-, mosh- vagy tssh-profil szükséges."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questa azione richiede un profilo SSH, mosh o tssh."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この操作には SSH、mosh、または tssh のプロファイルが必要です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 작업에는 SSH, mosh 또는 tssh 프로필이 필요합니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Denne handlingen krever en SSH-, mosh- eller tssh-profil."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voor deze actie is een SSH-, mosh- of tssh-profiel vereist."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ta akcja wymaga profilu SSH, mosh lub tssh."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta ação requer um perfil SSH, mosh ou tssh."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta ação requer um perfil SSH, mosh ou tssh."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Această acțiune necesită un profil SSH, mosh sau tssh."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To dejanje zahteva profil SSH, mosh ali tssh."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Den här åtgärden kräver en SSH-, mosh- eller tssh-profil."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ця дія потребує профілю SSH, mosh або tssh."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hành động này yêu cầu hồ sơ SSH, mosh hoặc tssh."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此操作需要 SSH、mosh 或 tssh 配置。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此操作需要 SSH、mosh 或 tssh 設定檔。"
+          }
+        }
+      }
     },
     "This certificate belongs to '%@', not '%@'. Open that key's details to attach it there." : {
       "comment" : "Cert import error: belongs to another key",
@@ -573085,7 +575501,158 @@
       }
     },
     "This local profile is unavailable on this device. Enable Show All Platforms in Profiles to edit its platform or repair its settings." : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "هذا الملف الشخصي المحلي غير متوفر على هذا الجهاز. فعّل \"إظهار جميع الأنظمة الأساسية\" في الملفات الشخصية لتعديل نظامه الأساسي أو إصلاح إعداداته."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aquest perfil local no està disponible en aquest dispositiu. Activa \"Mostrar totes les plataformes\" a Perfils per editar-ne la plataforma o reparar-ne la configuració."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tento lokální profil není na tomto zařízení dostupný. Zapněte „Zobrazit všechny platformy“ v Profilech a upravte jeho platformu nebo opravte jeho nastavení."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Denne lokale profil er ikke tilgængelig på denne enhed. Slå \"Vis alle platforme\" til i Profiler for at redigere dens platform eller reparere dens indstillinger."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses lokale Profil ist auf diesem Gerät nicht verfügbar. Aktivieren Sie „Alle Plattformen anzeigen“ in den Profilen, um seine Plattform zu bearbeiten oder seine Einstellungen zu reparieren."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este perfil local no está disponible en este dispositivo. Activa \"Mostrar todas las plataformas\" en Perfiles para editar su plataforma o reparar su configuración."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tämä paikallinen profiili ei ole käytettävissä tällä laitteella. Ota käyttöön \"Näytä kaikki alustat\" Profiileissa, jotta voit muokata sen alustaa tai korjata sen asetukset."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce profil local est indisponible sur cet appareil. Activez « Afficher toutes les plateformes » dans Profils pour modifier sa plateforme ou réparer ses réglages."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "פרופיל מקומי זה אינו זמין במכשיר זה. הפעל את \"הצג את כל הפלטפורמות\" בפרופילים כדי לערוך את הפלטפורמה שלו או לתקן את הגדרותיו."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ez a helyi profil nem érhető el ezen az eszközön. Kapcsolja be a „Minden platform megjelenítése” lehetőséget a Profilok között a platform szerkesztéséhez vagy a beállítások javításához."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questo profilo locale non è disponibile su questo dispositivo. Attiva \"Mostra tutte le piattaforme\" in Profili per modificarne la piattaforma o riparare le impostazioni."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このローカルプロファイルはこのデバイスでは利用できません。プロファイルで「すべてのプラットフォームを表示」をオンにすると、プラットフォームを編集したり設定を修復したりできます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 로컬 프로필은 이 기기에서 사용할 수 없습니다. 프로필에서 \"모든 플랫폼 표시\"를 켜면 플랫폼을 편집하거나 설정을 복구할 수 있습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Denne lokale profilen er ikke tilgjengelig på denne enheten. Slå på \"Vis alle plattformer\" i Profiler for å redigere plattformen eller reparere innstillingene."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dit lokale profiel is niet beschikbaar op dit apparaat. Schakel \"Alle platforms tonen\" in bij Profielen om het platform te bewerken of de instellingen te herstellen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ten lokalny profil jest niedostępny na tym urządzeniu. Włącz „Pokaż wszystkie platformy” w Profilach, aby edytować jego platformę lub naprawić ustawienia."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este perfil local está indisponível neste dispositivo. Ative \"Mostrar Todas as Plataformas\" em Perfis para editar a plataforma ou reparar as configurações."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este perfil local está indisponível neste dispositivo. Ative \"Mostrar todas as plataformas\" em Perfis para editar a plataforma ou reparar as definições."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acest profil local este indisponibil pe acest dispozitiv. Activați „Afișează toate platformele” în Profiluri pentru a-i edita platforma sau a-i repara setările."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ta lokalni profil ni na voljo na tej napravi. V Profilih vklopite »Prikaži vse platforme«, da uredite njegovo platformo ali popravite njegove nastavitve."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Den här lokala profilen är inte tillgänglig på den här enheten. Slå på \"Visa alla plattformar\" i Profiler för att redigera plattformen eller reparera inställningarna."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Цей локальний профіль недоступний на цьому пристрої. Увімкніть «Показати всі платформи» у Профілях, щоб змінити його платформу або виправити налаштування."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hồ sơ cục bộ này không khả dụng trên thiết bị này. Bật \"Hiển thị tất cả nền tảng\" trong Hồ Sơ để chỉnh sửa nền tảng hoặc sửa lại thiết lập của hồ sơ."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此本地配置在此设备上不可用。请在配置中开启“显示所有平台”，以编辑其平台或修复其设置。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此本機設定檔在此裝置上無法使用。請在設定檔中開啟「顯示所有平台」，以編輯其平台或修復其設定。"
+          }
+        }
+      }
     },
     "This looks like a private key. Paste the certificate (-cert.pub), not the key itself." : {
       "comment" : "Cert import error: private key pasted",
@@ -573705,7 +576272,158 @@
       }
     },
     "This profile is unavailable on this device. Edit its platform using Show All Platforms in Profiles." : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "هذا الملف الشخصي غير متوفر على هذا الجهاز. عدّل نظامه الأساسي باستخدام \"إظهار جميع الأنظمة الأساسية\" في الملفات الشخصية."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aquest perfil no està disponible en aquest dispositiu. Edita'n la plataforma amb \"Mostrar totes les plataformes\" a Perfils."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tento profil není na tomto zařízení dostupný. Upravte jeho platformu pomocí „Zobrazit všechny platformy“ v Profilech."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Denne profil er ikke tilgængelig på denne enhed. Rediger dens platform med \"Vis alle platforme\" i Profiler."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Profil ist auf diesem Gerät nicht verfügbar. Bearbeiten Sie seine Plattform über „Alle Plattformen anzeigen“ in den Profilen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este perfil no está disponible en este dispositivo. Edita su plataforma con \"Mostrar todas las plataformas\" en Perfiles."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tämä profiili ei ole käytettävissä tällä laitteella. Muokkaa sen alustaa käyttämällä \"Näytä kaikki alustat\" Profiileissa."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce profil est indisponible sur cet appareil. Modifiez sa plateforme via « Afficher toutes les plateformes » dans Profils."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "פרופיל זה אינו זמין במכשיר זה. ערוך את הפלטפורמה שלו באמצעות \"הצג את כל הפלטפורמות\" בפרופילים."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ez a profil nem érhető el ezen az eszközön. Szerkessze a platformját a „Minden platform megjelenítése” lehetőséggel a Profilok között."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questo profilo non è disponibile su questo dispositivo. Modificane la piattaforma usando \"Mostra tutte le piattaforme\" in Profili."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このプロファイルはこのデバイスでは利用できません。プロファイルの「すべてのプラットフォームを表示」からプラットフォームを編集してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 프로필은 이 기기에서 사용할 수 없습니다. 프로필의 \"모든 플랫폼 표시\"를 사용해 플랫폼을 편집하세요."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Denne profilen er ikke tilgjengelig på denne enheten. Rediger plattformen ved hjelp av \"Vis alle plattformer\" i Profiler."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dit profiel is niet beschikbaar op dit apparaat. Bewerk het platform via \"Alle platforms tonen\" bij Profielen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ten profil jest niedostępny na tym urządzeniu. Edytuj jego platformę za pomocą „Pokaż wszystkie platformy” w Profilach."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este perfil está indisponível neste dispositivo. Edite a plataforma dele usando \"Mostrar Todas as Plataformas\" em Perfis."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este perfil está indisponível neste dispositivo. Edite a plataforma através de \"Mostrar todas as plataformas\" em Perfis."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acest profil este indisponibil pe acest dispozitiv. Editați-i platforma folosind „Afișează toate platformele” în Profiluri."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ta profil ni na voljo na tej napravi. Uredite njegovo platformo z možnostjo »Prikaži vse platforme« v Profilih."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Den här profilen är inte tillgänglig på den här enheten. Redigera plattformen med \"Visa alla plattformar\" i Profiler."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Цей профіль недоступний на цьому пристрої. Змініть його платформу за допомогою «Показати всі платформи» у Профілях."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hồ sơ này không khả dụng trên thiết bị này. Hãy chỉnh sửa nền tảng của hồ sơ bằng \"Hiển thị tất cả nền tảng\" trong Hồ Sơ."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此配置在此设备上不可用。请在配置中通过“显示所有平台”编辑其平台。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此設定檔在此裝置上無法使用。請在設定檔中透過「顯示所有平台」編輯其平台。"
+          }
+        }
+      }
     },
     "This profile normally inherits the remote terminal type from Settings. Override it only for hosts that require a different terminfo name." : {
       "localizations" : {
@@ -601670,7 +604388,158 @@
       }
     },
     "Unavailable on this device · Tap to edit" : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "غير متوفر على هذا الجهاز · اضغط للتعديل"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No disponible en aquest dispositiu · Toca per editar"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nedostupné na tomto zařízení · Klepnutím upravíte"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ikke tilgængelig på denne enhed · Tryk for at redigere"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf diesem Gerät nicht verfügbar · Zum Bearbeiten tippen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No disponible en este dispositivo · Toca para editar"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ei käytettävissä tällä laitteella · Muokkaa napauttamalla"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Indisponible sur cet appareil · Touchez pour modifier"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "לא זמין במכשיר זה · הקש לעריכה"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nem érhető el ezen az eszközön · Koppintson a szerkesztéshez"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Non disponibile su questo dispositivo · Tocca per modificare"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このデバイスでは利用できません · タップして編集"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기기에서 사용 불가 · 탭하여 편집"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utilgjengelig på denne enheten · Trykk for å redigere"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Niet beschikbaar op dit apparaat · Tik om te bewerken"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Niedostępne na tym urządzeniu · Dotknij, aby edytować"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Indisponível neste dispositivo · Toque para editar"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Indisponível neste dispositivo · Toque para editar"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Indisponibil pe acest dispozitiv · Atingeți pentru editare"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ni na voljo na tej napravi · Tapnite za urejanje"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inte tillgänglig på den här enheten · Tryck för att redigera"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Недоступно на цьому пристрої · Торкніться, щоб змінити"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không khả dụng trên thiết bị này · Chạm để chỉnh sửa"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此设备上不可用 · 点按以编辑"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此裝置上無法使用 · 點一下以編輯"
+          }
+        }
+      }
     },
     "Unbalanced quote." : {
       "comment" : "Local shell warning: quote is never closed",
@@ -614199,7 +617068,158 @@
       }
     },
     "Use Default" : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "استخدام الافتراضي"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utilitzar el valor per defecte"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Použít výchozí"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brug standard"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard verwenden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar predeterminado"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Käytä oletusta"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utiliser la valeur par défaut"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "השתמש בברירת המחדל"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alapértelmezett használata"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa predefinito"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトを使用"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본값 사용"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bruk standard"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standaard gebruiken"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Użyj domyślnego"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar Padrão"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar predefinição"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folosește valoarea implicită"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uporabi privzeto"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Använd standard"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Використовувати типове"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dùng mặc định"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用默认"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用預設值"
+          }
+        }
+      }
     },
     "Use Device Location" : {
       "localizations" : {
@@ -621311,7 +624331,158 @@
       }
     },
     "Uses this device's shell. An empty directory inherits the current local shell's directory. The startup command runs once when you open the profile." : {
-
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يستخدم صدفة هذا الجهاز. المجلد الفارغ يرث مجلد الصدفة المحلية الحالية. يُنفَّذ أمر البدء مرة واحدة عند فتح الملف الشخصي."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utilitza el shell d'aquest dispositiu. Un directori buit hereta el directori del shell local actual. L'ordre d'inici s'executa un cop quan s'obre el perfil."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Použije shell tohoto zařízení. Prázdný adresář převezme adresář aktuálního lokálního shellu. Spouštěcí příkaz se provede jednou při otevření profilu."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bruger denne enheds shell. En tom mappe arver den aktuelle lokale shells mappe. Startkommandoen køres én gang, når profilen åbnes."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verwendet die Shell dieses Geräts. Ein leeres Verzeichnis übernimmt das Verzeichnis der aktuellen lokalen Shell. Der Startbefehl wird einmal ausgeführt, wenn das Profil geöffnet wird."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa el shell de este dispositivo. Un directorio vacío hereda el directorio del shell local actual. El comando de inicio se ejecuta una vez al abrir el perfil."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Käyttää tämän laitteen komentotulkkia. Tyhjä hakemisto perii nykyisen paikallisen komentotulkin hakemiston. Käynnistyskomento suoritetaan kerran, kun profiili avataan."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utilise le shell de cet appareil. Un répertoire vide hérite du répertoire du shell local actuel. La commande de démarrage s'exécute une fois à l'ouverture du profil."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "משתמש במעטפת של מכשיר זה. תיקייה ריקה יורשת את התיקייה של המעטפת המקומית הנוכחית. פקודת ההפעלה מורצת פעם אחת בעת פתיחת הפרופיל."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ennek az eszköznek a shelljét használja. Az üres könyvtár az aktuális helyi shell könyvtárát örökli. Az indítóparancs egyszer fut le a profil megnyitásakor."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa la shell di questo dispositivo. Una directory vuota eredita la directory della shell locale corrente. Il comando di avvio viene eseguito una volta all'apertura del profilo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このデバイスのシェルを使用します。ディレクトリが空の場合は、現在のローカルシェルのディレクトリを引き継ぎます。起動コマンドはプロファイルを開いたときに一度だけ実行されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기기의 셸을 사용합니다. 디렉토리를 비워 두면 현재 로컬 셸의 디렉토리를 그대로 사용합니다. 시작 명령어는 프로필을 열 때 한 번 실행됩니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bruker denne enhetens skall. En tom katalog arver katalogen til det gjeldende lokale skallet. Oppstartskommandoen kjøres én gang når profilen åpnes."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gebruikt de shell van dit apparaat. Een lege map neemt de map van de huidige lokale shell over. De opstartopdracht wordt één keer uitgevoerd wanneer het profiel wordt geopend."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Używa powłoki tego urządzenia. Pusty katalog dziedziczy katalog bieżącej lokalnej powłoki. Polecenie startowe jest uruchamiane raz po otwarciu profilu."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa o shell deste dispositivo. Um diretório vazio herda o diretório do shell local atual. O comando de inicialização é executado uma vez ao abrir o perfil."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa a shell deste dispositivo. Um diretório vazio herda o diretório da shell local atual. O comando de arranque é executado uma vez ao abrir o perfil."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folosește shell-ul acestui dispozitiv. Un director gol preia directorul shell-ului local curent. Comanda de pornire rulează o dată la deschiderea profilului."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uporablja lupino te naprave. Prazen imenik prevzame imenik trenutne lokalne lupine. Zagonski ukaz se izvede enkrat ob odprtju profila."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Använder enhetens skal. En tom katalog ärver katalogen från det aktuella lokala skalet. Startkommandot körs en gång när profilen öppnas."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Використовує оболонку цього пристрою. Порожній каталог успадковує каталог поточної локальної оболонки. Команда запуску виконується один раз під час відкриття профілю."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dùng shell của thiết bị này. Thư mục để trống sẽ kế thừa thư mục của shell cục bộ hiện tại. Lệnh khởi động chạy một lần khi bạn mở hồ sơ."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用此设备的 Shell。目录留空时将沿用当前本地 Shell 的目录。启动命令在打开此配置时执行一次。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用此裝置的 Shell。目錄留空時會沿用目前本機 Shell 的目錄。啟動指令會在開啟此設定檔時執行一次。"
+          }
+        }
+      }
     },
     "Uses your ChatGPT Plus/Pro subscription instead of a metered API key." : {
       "localizations" : {
