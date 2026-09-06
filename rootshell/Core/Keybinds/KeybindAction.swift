@@ -84,15 +84,15 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
     case start_search = "start_search"
 
     // Tab Management
-    /// Create new local shell tab
+    /// Global New Tab command (historical serialized identifier)
     case new_local_shell = "new_local_shell"
-    /// Create new tab (browse hosts)
+    /// Open Connections (historical serialized identifier)
     case new_tab = "new_tab"
     /// Create new window
     case new_window = "new_window"
     /// Close current tab/split
     case close_tab = "close_tab"
-    /// Duplicate current SSH connection in new tab
+    /// Duplicate the focused session in a new tab
     case duplicate_ssh_tab = "duplicate_ssh_tab"
     /// Switch to previous tab
     case previous_tab = "previous_tab"
@@ -345,11 +345,11 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
         case .reset_font_size: return String(localized: "Reset Font Size", comment: "Keybind action")
         case .start_search: return String(localized: "Find", comment: "Keybind action: open search")
 
-        case .new_local_shell: return String(localized: "New Local Shell", comment: "Keybind action")
-        case .new_tab: return String(localized: "New Tab", comment: "Keybind action")
+        case .new_local_shell: return String(localized: "New Tab", comment: "Keybind action")
+        case .new_tab: return String(localized: "Open Connections", comment: "Keybind action")
         case .new_window: return String(localized: "New Window", comment: "Keybind action")
         case .close_tab: return String(localized: "Close Tab", comment: "Keybind action")
-        case .duplicate_ssh_tab: return String(localized: "Duplicate SSH Tab", comment: "Keybind action")
+        case .duplicate_ssh_tab: return String(localized: "Duplicate Focused Tab", comment: "Keybind action")
         case .previous_tab: return String(localized: "Previous Tab", comment: "Keybind action")
         case .next_tab: return String(localized: "Next Tab", comment: "Keybind action")
         case .show_tmux_sessions: return String(localized: "tmux Sessions", comment: "Keybind action")

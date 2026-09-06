@@ -9,7 +9,6 @@ struct MultiplexerSettingsView: View {
     @Setting(Settings.Multiplexer.zmxSessionName) private var zmxSessionName
     @Setting(Settings.Multiplexer.zmxCustomCommand) private var zmxCustomCommand
     @Setting(Settings.Multiplexer.tmuxTabCloseAction) private var tabCloseAction
-    @Setting(Settings.Multiplexer.tmuxNewTabAction) private var newTabAction
 
     private var hasCustomCommand: Bool {
         !customCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -116,26 +115,18 @@ struct MultiplexerSettingsView: View {
                 }
                 .themedRow()
                 .settingContextMenu(Settings.Multiplexer.tmuxTabCloseAction)
-
-                NavigationLink {
-                    TmuxNewTabActionPickerView()
-                } label: {
-                    HStack(spacing: 12) {
-                        SettingsIcon(systemName: "plus.rectangle.on.rectangle")
-                        Text("New Tab Action")
-                        SettingPinTag(Settings.Multiplexer.tmuxNewTabAction.erased)
-                        Spacer()
-                        Text(newTabAction.displayName)
-                            .foregroundColor(.secondary)
-                            .font(.subheadline)
-                    }
-                }
-                .themedRow()
-                .settingContextMenu(Settings.Multiplexer.tmuxNewTabAction)
             } header: {
                 SettingGroupHeader("tmux Control Mode", group: .multiplexer)
             } footer: {
                 Text("These settings apply while attached with tmux -CC control mode, where each tmux window is its own tab.")
+            }
+
+            Section {
+                NewTabActionSettingsRow()
+            } header: {
+                Text("New Tabs")
+            } footer: {
+                Text("New Tab Action applies globally, including outside multiplexer sessions. The tab-bar + always opens Connections.")
             }
 
             Section {
@@ -262,16 +253,14 @@ struct TmuxTabCloseActionPickerView: View {
     }
 }
 
-/// Pushed list for choosing what ⌘T does while attached to a tmux -CC session.
-/// Same layout as the close-action picker: per-option icon + description.
-/// (id=tmux-new-tab-action)
-struct TmuxNewTabActionPickerView: View {
-    @Setting(Settings.Multiplexer.tmuxNewTabAction) private var newTabAction
+/// Global New Tab behavior, shared by Terminal and Multiplexer settings.
+struct NewTabActionPickerView: View {
+    @Setting(Settings.Tabs.newTabAction) private var newTabAction
 
     var body: some View {
         List {
             Section {
-                ForEach(TmuxNewTabAction.allCases, id: \.rawValue) { action in
+                ForEach(NewTabAction.allCases, id: \.rawValue) { action in
                     Button {
                         newTabAction = action
                     } label: {
@@ -300,12 +289,35 @@ struct TmuxNewTabActionPickerView: View {
                     .themedRow()
                 }
             } footer: {
-                Text("Controls what ⌘T does while attached to a tmux -CC session. Outside tmux it always opens a local shell.")
+                Text("Controls the New Tab command (⌘T by default, or your custom shortcut) in every session. The tab-bar + always opens Connections.")
             }
         }
         .themedList()
         .navigationTitle("New Tab Action")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { SettingsScreenPinMenu(groups: [.multiplexer]) }
+        .toolbar { SettingsScreenPinMenu(groups: [.tabs]) }
+    }
+}
+
+/// Both settings locations edit the same registered preference.
+struct NewTabActionSettingsRow: View {
+    @Setting(Settings.Tabs.newTabAction) private var action
+
+    var body: some View {
+        NavigationLink {
+            NewTabActionPickerView()
+        } label: {
+            HStack(spacing: 12) {
+                SettingsIcon(systemName: "plus.rectangle.on.rectangle")
+                Text("New Tab Action")
+                SettingPinTag(Settings.Tabs.newTabAction.erased)
+                Spacer()
+                Text(action.displayName)
+                    .foregroundColor(.secondary)
+                    .font(.subheadline)
+            }
+        }
+        .themedRow()
+        .settingContextMenu(Settings.Tabs.newTabAction)
     }
 }

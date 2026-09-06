@@ -95,6 +95,10 @@ extension MainView {
 
     func createSplit(direction: SplitTree<SplitPaneView>.NewDirection) {
         guard terminals.indices.contains(selectedTabIndex) else { return }
+        if let vnc = terminals[selectedTabIndex].focusedPane as? VNCPaneView {
+            createVNCSplit(with: vnc.config, direction: direction, sourceProfileID: vnc.sourceProfileID)
+            return
+        }
         guard let focusedTerminal = terminals[selectedTabIndex].focusedTerminal else { return }
 
         // tmux control mode: the tmux server owns this window's topology. Ask it
@@ -121,6 +125,13 @@ extension MainView {
             connectionConfig: connectionConfig,
             windowId: windowId
         )
+        // An independent split belongs to the same originating profile.
+        // A not-yet-consumed transfer falls back to local and has no provenance.
+        if case .trzszTransfer = focusedTerminal.connectionConfig {
+            newTerminalView.sourceProfileID = nil
+        } else {
+            newTerminalView.sourceProfileID = focusedTerminal.sourceProfileID
+        }
         newTerminalView.setWindowActive(isWindowFocused)
         newTerminalView.onAgentApprovalRequired = { @MainActor @Sendable request in
             handleAgentApprovalRequest(request)
@@ -131,8 +142,8 @@ extension MainView {
         if connectionConfig.requiresSSHCallbacks {
             let sshSplitTerminal = newTerminalView
             newTerminalView.onAuthenticationRequired = { @MainActor @Sendable [weak sshSplitTerminal] config in
-                if let index = terminals.firstIndex(where: { $0.splitTree.contains { $0 === sshSplitTerminal } }) {
-                    handleAuthenticationRequired(for: index, config: config)
+                if let sshSplitTerminal {
+                    handleAuthenticationRequired(for: sshSplitTerminal, config: config)
                 }
             }
             newTerminalView.onHostKeyValidationRequired = { @MainActor @Sendable request, validatedTerminal in

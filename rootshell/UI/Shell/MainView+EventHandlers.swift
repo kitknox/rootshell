@@ -551,6 +551,10 @@ extension MainView {
         // Ghostty focus was already set when the tab was created
         if oldValue == true && newValue == false {
             pendingBrowseSelection = nil  // Clear browse selection on dismissal
+            if authenticationRetryRequest != nil {
+                authenticationRetryRequest = nil
+                reconnectConfig = nil
+            }
 
             // Safety net: if no terminals exist and the tab bar is hidden,
             // re-show the sheet immediately. Without this, the user lands on an

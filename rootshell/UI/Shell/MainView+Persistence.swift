@@ -512,8 +512,8 @@ extension MainView {
             if connectionConfig.requiresSSHCallbacks {
                 let restoredTerminal = terminalView
                 terminalView.onAuthenticationRequired = { @MainActor @Sendable [weak restoredTerminal] config in
-                    if let index = self.terminals.firstIndex(where: { $0.splitTree.contains { $0 === restoredTerminal } }) {
-                        self.handleAuthenticationRequired(for: index, config: config)
+                    if let restoredTerminal {
+                        self.handleAuthenticationRequired(for: restoredTerminal, config: config)
                     }
                 }
                 terminalView.onHostKeyValidationRequired = { @MainActor @Sendable request, validatedTerminal in
