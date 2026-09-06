@@ -606,6 +606,29 @@ struct KeyTrigger: Codable, Hashable, CustomStringConvertible, Sendable {
         self.modifiers = modifiers
     }
 
+    /// Symbol spelling of a shifted physical trigger. The keybind system uses
+    /// US physical key identities; menu bindings can instead spell Shift+[ as
+    /// "{". Do not use the IME-produced characters to resolve these shortcuts.
+    var shiftedSymbolEquivalent: KeyTrigger? {
+        guard modifiers.contains(.shift) else { return nil }
+        let symbol: KeyCode
+        switch key {
+        case .equal: symbol = .plus
+        case .minus: symbol = .underscore
+        case .leftBracket: symbol = .leftBrace
+        case .rightBracket: symbol = .rightBrace
+        case .backslash: symbol = .pipe
+        case .semicolon: symbol = .colon
+        case .quote: symbol = .doubleQuote
+        case .comma: symbol = .lessThan
+        case .period: symbol = .greaterThan
+        case .slash: symbol = .questionMark
+        case .grave: symbol = .tilde
+        default: return nil
+        }
+        return KeyTrigger(key: symbol, modifiers: modifiers.subtracting(.shift))
+    }
+
     /// Parse from ghostty config format: "cmd+shift+d" or "ctrl+a"
     init?(ghosttyFormat: String) {
         let parts = ghosttyFormat.lowercased().components(separatedBy: "+")

@@ -195,6 +195,16 @@ class KeyboardTracker {
     @MainActor
     private var pressedHardwareModifierKeys: Set<GCKeyCode> = []
 
+    // Only actual key-down callbacks populate this set, never a GC snapshot.
+    // It survives terminal focus handoffs, but not scene/app deactivation.
+    @MainActor
+    private var shortcutRecoveryModifierKeys: Set<GCKeyCode> = []
+
+    @MainActor
+    var shortcutRecoveryModifierFlags: UIKeyModifierFlags {
+        Self.modifierFlags(for: shortcutRecoveryModifierKeys)
+    }
+
     @MainActor
     private var softwareKeyboardVisibilityContinuations: [UUID: AsyncStream<Bool>.Continuation] = [:]
 
@@ -428,6 +438,7 @@ class KeyboardTracker {
 
     @MainActor
     @objc private func sceneWillDeactivateForKeyboard(_ notification: Notification) {
+        shortcutRecoveryModifierKeys.removeAll()
         beginAppTransitionKeyboardPreservationIfNeeded(autoClearIfAppStaysActive: true)
     }
 
@@ -1034,6 +1045,11 @@ class KeyboardTracker {
     @MainActor
     private func updateHardwareModifierState(keyCode: GCKeyCode, pressed: Bool) {
         guard Self.isModifierKey(keyCode) else { return }
+        if pressed, UIApplication.shared.applicationState == .active {
+            shortcutRecoveryModifierKeys.insert(keyCode)
+        } else {
+            shortcutRecoveryModifierKeys.remove(keyCode)
+        }
         if pressed {
             pressedHardwareModifierKeys.insert(keyCode)
         } else {
@@ -1061,6 +1077,7 @@ class KeyboardTracker {
 
     @MainActor
     private func resetHardwareModifierState() {
+        shortcutRecoveryModifierKeys.removeAll()
         pressedHardwareModifierKeys.removeAll()
         setHardwareModifierFlags([])
     }
