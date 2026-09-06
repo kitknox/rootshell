@@ -19,9 +19,8 @@ extension MainView {
     func wireWindowScopedCallbacks(on terminalView: Ghostty.TerminalView) {
         let trackedTerminal = terminalView
         terminalView.onAuthenticationRequired = { @MainActor @Sendable [weak trackedTerminal] config in
-            if let trackedTerminal,
-               let index = self.terminals.firstIndex(where: { $0.splitTree.contains { $0 === trackedTerminal } }) {
-                self.handleAuthenticationRequired(for: index, config: config)
+            if let trackedTerminal {
+                self.handleAuthenticationRequired(for: trackedTerminal, config: config)
             }
         }
         terminalView.onHostKeyValidationRequired = { @MainActor @Sendable request, validatedTerminal in

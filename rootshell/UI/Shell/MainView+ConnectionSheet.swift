@@ -110,9 +110,9 @@ extension MainView {
     private func handleSSHOrLocalConnection(config: SSHConfig?, splitOption: SSHConnectionView.SplitOption) {
         if let config = config {
             // SSH connection
-            if let tabIndex = reconnectingTabIndex {
-                // Reconnecting existing tab
-                reconnectTab(at: tabIndex, with: config)
+            if let request = authenticationRetryRequest {
+                // Resolve the failing pane, never the current selection/index.
+                reconnectTerminal(for: request, with: config)
             } else {
                 // Creating new connection - check split option
                 switch splitOption {
@@ -136,7 +136,7 @@ extension MainView {
             }
         }
         // Clear reconnection state
-        reconnectingTabIndex = nil
+        authenticationRetryRequest = nil
         reconnectConfig = nil
     }
 

@@ -215,6 +215,8 @@ final class ConfigOverlayManager {
         var values: [String: CodableValue?] = [:]
         var bound: [String: BoundEntry] = [:]
         for configKey in order {
+            // The global spelling wins regardless of file order, including reset.
+            if configKey == "tmux-new-tab-action", grouped["new-tab-action"] != nil { continue }
             guard let item = grouped[configKey] else { continue }
             guard let def = registry.definition(forConfigKey: configKey) else {
                 diags.append(ConfigOverlayDiagnostic(severity: .info, file: item.entry.sourceFile, line: item.entry.lineNumber, key: configKey,

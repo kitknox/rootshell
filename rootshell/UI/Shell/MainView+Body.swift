@@ -158,7 +158,7 @@ extension MainView {
             TabStyleContextMenuRegion(
                 selectedStyleRawValue: topTabStyleRawValueBinding,
                 primaryAction: addNewTab,
-                accessibilityLabel: String(localized: "New Tab")
+                accessibilityLabel: String(localized: "Open Connections")
             )
         }
         .overlay(alignment: .leading) {

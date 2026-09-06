@@ -55,6 +55,28 @@ enum WindowSessionCensus {
         }.count
     }
 
+    /// Independent profile-associated connections, not tmux display panes.
+    static func profileCounts(in tabs: [TabModel]) -> [UUID: Int] {
+        var profileCounts: [UUID: Int] = [:]
+
+        // Count independent pane owners, including VNC. Hidden gateways remain
+        // in tabs; their tmux display panes share the connection and add nothing.
+        var countedPaneIDs: Set<UUID> = []
+        for pane in tabs.flatMap({ Array($0.splitTree) }) where countedPaneIDs.insert(pane.uuid).inserted {
+            let profileID: UUID?
+            if let terminal = pane.asTerminal {
+                profileID = terminal.isTmuxPane ? nil : terminal.sourceProfileID
+            } else {
+                profileID = (pane as? VNCPaneView)?.sourceProfileID
+            }
+            if let profileID {
+                profileCounts[profileID, default: 0] += 1
+            }
+        }
+
+        return profileCounts
+    }
+
     /// Gather per-type counts and host names for all session types
     static func details(in tabs: [TabModel]) -> Details {
         var sshCount = 0
@@ -64,13 +86,9 @@ enum WindowSessionCensus {
         var localTaskCount = 0
         var roamCount = 0
         var roamHostNames: [String] = []
-        var profileCounts: [UUID: Int] = [:]
+        let profileCounts = Self.profileCounts(in: tabs)
 
         for terminal in tabs.flatMap({ $0.splitTree.terminalLeaves }) {
-            if let profileID = terminal.sourceProfileID {
-                profileCounts[profileID, default: 0] += 1
-            }
-
             switch terminal.connectionConfig {
             case .ssh(let config):
                 sshCount += 1

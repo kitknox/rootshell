@@ -65,12 +65,12 @@ final class EmptyStateView: UIView {
 
     override var keyCommands: [UIKeyCommand]? {
         // Built from the user's live bindings so remaps are honored (defaults:
-        // Cmd+T new local shell, Cmd+S new tab, Cmd+N new window).
+        // Cmd+T New Tab, Cmd+S Open Connections, Cmd+N New Window).
         let manager = KeybindManager.shared
         return [
             manager.keyCommand(for: .new_local_shell, selector: #selector(handleNewLocalShell),
-                               title: "New Local Shell", wantsPriority: true),
-            manager.keyCommand(for: .new_tab, selector: #selector(handleNewTab), title: "New Tab"),
+                               title: "New Tab", wantsPriority: true),
+            manager.keyCommand(for: .new_tab, selector: #selector(handleNewTab), title: "Open Connections"),
             manager.keyCommand(for: .new_window, selector: #selector(handleNewWindow), title: "New Window"),
         ].compactMap { $0 }
     }

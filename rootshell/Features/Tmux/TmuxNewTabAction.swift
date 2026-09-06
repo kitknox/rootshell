@@ -1,60 +1,51 @@
-//
-//  TmuxNewTabAction.swift
-//  rootshell
-//
-//  What ⌘T (the "new local shell" command) does WHILE attached to a tmux
-//  control-mode (-CC) session. Outside tmux, ⌘T always opens a local shell;
-//  this setting only changes behavior when the selected tab is a live tmux
-//  context. Global preference, surfaced in Settings → Connections →
-//  Multiplexers. Default preserves the historical behavior (local shell).
-//  (id=tmux-new-tab-action)
-//
-
+// Global New Tab preference. The file retains its historical location to
+// preserve project source membership.
 import Foundation
 
-enum TmuxNewTabAction: String, CaseIterable, Codable, Sendable {
-    /// Always open a local shell tab, even inside a tmux session. Default —
-    /// the only behavior before this setting existed.
+nonisolated enum NewTabAction: String, CaseIterable, Codable, Sendable {
     case localShell
-
-    /// While attached to a tmux session, open a new window in that session
-    /// (the equivalent of "New tmux Tab") instead of a local shell.
-    case tmuxTab
-
-    /// While attached to a tmux session, prompt: local shell vs new tmux window.
+    // The synced key is shared with older apps, which only understand tmuxTab.
+    case duplicateFocused = "tmuxTab"
     case ask
 
-    static let storageKey = "tmuxNewTabAction"
+    // Also accept the transitional spelling written by early global-setting
+    // versions; rawValue/Codable/SettingValue always encode the legacy spelling.
+    init?(rawValue: String) {
+        switch rawValue {
+        case "localShell": self = .localShell
+        case "duplicateFocused", "tmuxTab": self = .duplicateFocused
+        case "ask": self = .ask
+        default: return nil
+        }
+    }
 
-    /// The user's current preference, defaulting to `.localShell`.
-    static var current: TmuxNewTabAction {
-        SettingsStore.shared.value(Settings.Multiplexer.tmuxNewTabAction)
+    static var current: NewTabAction {
+        SettingsStore.shared.value(Settings.Tabs.newTabAction)
     }
 
     var displayName: String {
         switch self {
-        case .localShell: return "Local Shell"
-        case .tmuxTab: return "New tmux Tab"
-        case .ask: return "Ask Each Time"
+        case .localShell: return String(localized: "Local Shell")
+        case .duplicateFocused: return String(localized: "Duplicate Focused")
+        case .ask: return String(localized: "Ask Each Time")
         }
     }
 
-    /// Longer explanation shown beneath the title in the picker list.
     var detail: String {
         switch self {
         case .localShell:
-            return "Open a local shell tab, even while attached to a tmux session."
-        case .tmuxTab:
-            return "While attached to a tmux session, open a new window in that session instead of a local shell."
+            return String(localized: "Open a new local shell tab.")
+        case .duplicateFocused:
+            return String(localized: "Open another session matching the focused pane, or a new window in its tmux control-mode session.")
         case .ask:
-            return "While attached to a tmux session, ask whether to open a local shell or a new tmux window."
+            return String(localized: "Choose a local shell, duplicate the focused session, or open Connections each time.")
         }
     }
 
     var iconName: String {
         switch self {
         case .localShell: return "terminal"
-        case .tmuxTab: return "plus.rectangle.on.rectangle"
+        case .duplicateFocused: return "plus.rectangle.on.rectangle"
         case .ask: return "questionmark.circle"
         }
     }

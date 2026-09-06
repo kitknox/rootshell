@@ -377,45 +377,111 @@ extension MainView {
 #endif
     }
 
-    /// ⌘T / "New Local Shell" entry point. Outside tmux this always opens a
-    /// local shell (the default). When the selected tab is a live tmux -CC
-    /// context, the user-configured New Tab Action decides: local shell, a new
-    /// tmux window, or a prompt. (id=tmux-new-tab-action)
+    /// Global New Tab command; the legacy shortcut identifier remains stable.
     @MainActor
     func handleNewTabCommand() {
-        guard terminals.indices.contains(selectedTabIndex),
-              let controller = tmuxControllerForTab(terminals[selectedTabIndex]),
-              controller.isActive else {
-            createLocalShellTab()
-            return
-        }
-        switch TmuxNewTabAction.current {
+        guard pendingNewTabRequest == nil, unavailableNewTabRequest == nil else { return }
+        let request = captureNewTabRequest()
+        switch NewTabAction.current {
         case .localShell:
-            createLocalShellTab()
-        case .tmuxTab:
-            requestTmuxNewWindow(for: terminals[selectedTabIndex])
+            createLocalShellTab(for: request)
+        case .duplicateFocused:
+            runNewTabDuplicate(request)
         case .ask:
-            pendingTmuxNewTabTabID = terminals[selectedTabIndex].id
+            pendingNewTabRequest = request
         }
     }
 
-    /// Resolve the tab captured by the "Ask Each Time" new-tab sheet and act.
-    /// Re-resolves by id (the tab array may have shifted); falls back to a local
-    /// shell if the tmux context is gone. (id=tmux-new-tab-action)
-    @MainActor
-    func runPendingTmuxNewTab(local: Bool) {
-        defer { pendingTmuxNewTabTabID = nil }
-        if local {
-            createLocalShellTab()
-            return
+    func captureNewTabRequest() -> NewTabRequest {
+        guard terminals.indices.contains(selectedTabIndex),
+              let pane = terminals[selectedTabIndex].focusedPane else {
+            return NewTabRequest(target: .local, localDirectory: nil)
         }
-        guard let id = pendingTmuxNewTabTabID,
-              let tab = terminals.first(where: { $0.id == id }),
-              let controller = tmuxControllerForTab(tab), controller.isActive else {
-            createLocalShellTab()
-            return
+        if let vnc = pane as? VNCPaneView {
+            return NewTabRequest(target: .connection(.vnc(vnc.config), vnc.sourceProfileID), localDirectory: nil)
         }
-        requestTmuxNewWindow(for: tab)
+        guard let terminal = pane.asTerminal else {
+            return NewTabRequest(target: .connections, localDirectory: nil)
+        }
+        if let controller = newTabTmuxController(for: terminal), controller.isActive {
+            return NewTabRequest(target: .tmux(terminal.uuid, controller), localDirectory: nil)
+        }
+        switch terminal.connectionConfig {
+        case .local:
+            // A stale tmux surface is not a real local shell.
+            return NewTabRequest(target: terminal.isTmuxPane ? .connections : .local,
+                                 localDirectory: terminal.isTmuxPane ? nil : terminal.pwd)
+        case .trzszTransfer:
+            return NewTabRequest(target: .connections, localDirectory: nil)
+        default:
+            return NewTabRequest(target: .connection(terminal.connectionConfig, terminal.sourceProfileID), localDirectory: nil)
+        }
+    }
+
+    private func newTabTmuxController(for terminal: Ghostty.TerminalView) -> TmuxController? {
+        if let binding = terminal.tmuxPaneBinding {
+            return TmuxController.controller(forOwnerSurface: binding.parentSurface)
+        }
+        return terminal.tmuxController
+    }
+
+    private func requestNewTmuxWindow(on terminal: Ghostty.TerminalView, ownedBy controller: TmuxController) -> Bool {
+        guard controller.isActive, newTabTmuxController(for: terminal) === controller else { return false }
+        if terminal.isTmuxPane {
+            terminal.requestTmuxNewWindow()
+            return true
+        }
+        return terminal.requestTmuxNewWindowFromGateway()
+    }
+
+    func createLocalShellTab(for request: NewTabRequest) {
+        performLocalShellAction(description: "open a local shell tab") {
+            self.openTerminalTab(config: .local(workingDirectory: request.localDirectory),
+                                 title: String(localized: "Local Shell"), suppressesTabBarAnimation: true)
+        }
+    }
+
+    func runNewTabDuplicate(_ request: NewTabRequest) {
+        switch request.target {
+        case .local:
+            createLocalShellTab(for: request)
+        case .connections:
+            addNewTab()
+        case .tmux(let terminalID, let controller):
+            guard controller.isActive else {
+                unavailableNewTabRequest = request
+                return
+            }
+            let panes = terminals.flatMap { $0.splitTree.terminalLeaves }
+            // Prefer the captured pane to preserve insertion position. If tmux
+            // removed it, the captured session can still create a new window.
+            if let original = panes.first(where: { $0.uuid == terminalID }),
+               requestNewTmuxWindow(on: original, ownedBy: controller) { return }
+            if let gateway = TmuxWindowRegistry.gatewayView(ownerTerminalUUID: controller.ownerTerminalUUIDForNotifications),
+               requestNewTmuxWindow(on: gateway, ownedBy: controller) { return }
+            for pane in panes where pane.uuid != terminalID {
+                if requestNewTmuxWindow(on: pane, ownedBy: controller) { return }
+            }
+            unavailableNewTabRequest = request
+        case .connection(let original, let profileID):
+            // Never reuse roam/cloud session IDs. Keep the effective config and
+            // profile provenance rather than re-reading an edited saved profile.
+            let config = original.forNewSplit()
+            switch config {
+            case .vnc(let vnc):
+                createVNCTab(with: vnc, sourceProfileID: profileID)
+            case .mosh(let mosh), .shellLaunchedMosh(let mosh, _):
+                createMoshTab(with: mosh, sourceProfileID: profileID)
+            case .trzsz(let trzsz), .shellLaunchedTrzsz(let trzsz, _):
+                createTrzszTab(with: trzsz, sourceProfileID: profileID)
+            case .ssh(let ssh), .shellLaunchedSSH(let ssh, _):
+                createSSHTab(with: ssh, sourceProfileID: profileID)
+            case .trzszTransfer:
+                addNewTab()
+            default:
+                openTerminalTab(config: config, title: config.displayName, sourceProfileID: profileID)
+            }
+        }
     }
 
     func createLocalShellTab() {
@@ -587,43 +653,7 @@ extension MainView {
 extension MainView {
 
     func duplicateCurrentTabWithSSH() {
-        guard terminals.indices.contains(selectedTabIndex) else { return }
-        guard let focusedTerminal = terminals[selectedTabIndex].focusedTerminal else {
-            showConnectionSidebar = true
-            return
-        }
-
-        // tmux control mode: open a new tmux window on the same gateway, matching the
-        // "New tmux Tab" menu. A window-tab pane carries a pane binding; the gateway
-        // tab (running tmux -CC) does not, so route it through its own controller.
-        if focusedTerminal.isTmuxPane {
-            focusedTerminal.requestTmuxNewWindow()
-            return
-        }
-        if focusedTerminal.requestTmuxNewWindowFromGateway() {
-            return
-        }
-
-        // Check for Mosh connection first (Mosh contains SSH config internally)
-        if let moshConfig = focusedTerminal.connectionConfig.moshConfig {
-            createMoshTab(with: moshConfig)
-            return
-        }
-
-        // Check for trzsz connection (trzsz contains SSH config internally)
-        if let trzszConfig = focusedTerminal.connectionConfig.trzszConfig {
-            createTrzszTab(with: trzszConfig)
-            return
-        }
-
-        // Then check for SSH connection
-        if let sshConfig = focusedTerminal.connectionConfig.sshConfig {
-            createSSHTab(with: sshConfig)
-            return
-        }
-
-        // Current focused terminal doesn't have SSH/Mosh config, show connection sheet
-        showConnectionSidebar = true
+        runNewTabDuplicate(captureNewTabRequest())
     }
 }
 
@@ -993,30 +1023,89 @@ extension MainView {
 
 extension MainView {
 
-    func handleAuthenticationRequired(for index: Int, config: SSHConfig) {
-        // Set reconnection state and show connection sheet
-        reconnectingTabIndex = index
+    func handleAuthenticationRequired(for terminal: Ghostty.TerminalView, config: SSHConfig) {
+        guard terminals.contains(where: { $0.splitTree.contains { $0 === terminal } }),
+              authenticationRetryRequest == nil else { return }
+        // Snapshot the failing pane before focus, topology, or profile changes.
+        // A second callback must not retarget the picker already on screen.
+        authenticationRetryRequest = SSHAuthenticationRetryRequest(
+            terminalID: terminal.uuid, sourceProfileID: terminal.sourceProfileID, config: config)
         reconnectConfig = config
         showConnectionSidebar = true
     }
 
-    func reconnectTab(at index: Int, with config: SSHConfig) {
-        guard index < terminals.count, let app = ghosttyApp.app else { return }
+    func reconnectTerminal(for request: SSHAuthenticationRetryRequest, with config: SSHConfig) {
+        guard let index = terminals.firstIndex(where: { tab in
+            tab.splitTree.terminalLeaves.contains { $0.uuid == request.terminalID }
+        }), let previous = terminals[index].splitTree.terminalLeaves.first(where: { $0.uuid == request.terminalID }),
+              let app = ghosttyApp.app else {
+            Ghostty.logger.info("Authentication retry source is no longer in this window")
+            return
+        }
 
-        let terminalView = makeConnectedTerminalView(app: app, config: .ssh(config))
-
-        // Create a new tab with updated config and window ID
-        let updatedTab = TerminalTab(terminalView: terminalView, title: config.displayName, windowId: windowId)
-        terminalView.containingTabID = updatedTab.id
-
-        // Replace the old tab
-        terminals[index] = updatedTab
-
-        // Set up title observation to sync terminal title changes to tab title
-        setupTitleObservation(at: index)
-
-        // Make sure this tab is selected
+        // Preserve captured provenance for credential edits, but not when the
+        // user chooses a different endpoint in the connection picker.
+        let sourceProfileID = request.config.host == config.host &&
+            request.config.port == config.port && request.config.username == config.username
+            ? request.sourceProfileID : nil
+        let terminalView = makeConnectedTerminalView(app: app, config: .ssh(config), sourceProfileID: sourceProfileID)
+        let tab = terminals[index]
+        terminalView.containingTabID = tab.id
+        do {
+            tab.splitTree = try tab.splitTree.replace(node: .leaf(view: previous), with: .leaf(view: terminalView))
+        } catch {
+            terminalView.prepareForClose()
+            Ghostty.logger.error("Cannot replace authentication retry pane: \(error)")
+            return
+        }
+        if previous.isFirstResponder { previous.resignFirstResponder() }
+        previous.isLogicallyFocused = false
+        withdrawKeyboardInteractive(for: previous)
+        previous.prepareForClose()
         selectedTabIndex = index
         setFocusedTerminal(terminalView, inTab: index)
+        setupTitleObservation(at: index)
+        notifySessionCountChanged()
+    }
+}
+
+/// Stable authentication retry context; tab indexes and focus are transient.
+struct SSHAuthenticationRetryRequest {
+    let terminalID: UUID
+    let sourceProfileID: UUID?
+    let config: SSHConfig
+}
+
+/// Snapshot taken before showing the chooser so a later focus change cannot
+/// silently select a different host or tmux session.
+struct NewTabRequest {
+    enum Target {
+        case local
+        case connection(ConnectionConfig, UUID?)
+        case tmux(UUID, TmuxController)
+        case connections
+    }
+
+    let target: Target
+    let localDirectory: String?
+
+    var duplicateTitle: String? {
+        switch target {
+        case .local, .connections: return nil
+        case .tmux: return String(localized: "New tmux Window")
+        case .connection(let config, _):
+            // Roaming transports decorate displayName with "roam". Use the
+            // connection's own name here without removing user-authored text.
+            let name: String
+            switch config {
+            case .mosh(let mosh), .shellLaunchedMosh(let mosh, _):
+                name = mosh.sshConfig.displayName
+            case .trzsz(let trzsz), .shellLaunchedTrzsz(let trzsz, _):
+                name = trzsz.sshConfig.displayName
+            default:
+                name = config.displayName
+            }
+            return String(localized: "Duplicate “\(name)”")
+        }
     }
 }

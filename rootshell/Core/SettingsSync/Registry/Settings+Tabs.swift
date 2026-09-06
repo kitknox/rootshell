@@ -25,6 +25,7 @@ enum TabHoverPreviewActivation: String, CaseIterable, Sendable {
     }
 }
 
+extension NewTabAction: SettingValue {}
 extension TabHoverPreviewActivation: SettingValue {}
 extension TopTabStyle: SettingValue {}
 extension SplitFocusBorderStyle: SettingValue {}
@@ -34,6 +35,11 @@ extension PowerManager.BatteryRefreshRate: SettingValue {}
 
 nonisolated extension Settings {
     enum Tabs {
+        // Keep the persisted identity so sync records, per-key pins, and old
+        // preferences survive the move out of Multiplexers without migration.
+        static let newTabAction = SettingKey(
+            "tmuxNewTabAction", default: NewTabAction.localShell, group: .tabs, configKey: "new-tab-action",
+            title: String(localized: "New Tab Action", comment: "Setting title"))
         static let barHidden = SettingKey(
             "tabBarHidden", default: false, group: .tabs, configKey: "tab-bar-hidden",
             title: String(localized: "Show Top Tab Bar", comment: "Setting title"))
@@ -75,7 +81,7 @@ nonisolated extension Settings {
             title: String(localized: "Tab Hover Preview Size", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
-            barHidden.erased, barAnimationsDisabled.erased, topTabStyle.erased, compactPillSpacing.erased,
+            newTabAction.erased, barHidden.erased, barAnimationsDisabled.erased, topTabStyle.erased, compactPillSpacing.erased,
             showScopeMenu.erased, showShortcutIndicators.erased, exposeShowsCaptions.erased, exposeZoom.erased,
             hoverPreviews.erased, hoverPreviewActivation.erased, hoverPreviewZoom.erased,
         ]

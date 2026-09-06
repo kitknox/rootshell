@@ -11,7 +11,6 @@ extension ProfileSortOrder: SettingValue {}
 extension KeyAuthRequirement: SettingValue {}
 extension KeyStorageLevel: SettingValue {}
 extension TmuxAutoMode: SettingValue {}
-extension TmuxNewTabAction: SettingValue {}
 extension TmuxTabCloseAction: SettingValue {}
 extension SessionDiscoverySortOrder: SettingValue {}
 extension MoshConfig.PredictionMode: SettingValue {}
@@ -131,9 +130,6 @@ nonisolated extension Settings {
         static let tmuxDiscoveryAttachMode = SettingKey(
             "tmuxDiscoveryAttachMode", default: TmuxAutoMode.regular, group: .multiplexer, configKey: "tmux-discovery-attach-mode",
             title: String(localized: "tmux Attach Mode", comment: "Setting title"))
-        static let tmuxNewTabAction = SettingKey(
-            "tmuxNewTabAction", default: TmuxNewTabAction.localShell, group: .multiplexer, configKey: "tmux-new-tab-action",
-            title: String(localized: "tmux New Tab Action", comment: "Setting title"))
         static let tmuxTabCloseAction = SettingKey(
             "tmuxTabCloseAction", default: TmuxTabCloseAction.closeWindow, group: .multiplexer, configKey: "tmux-tab-close-action",
             title: String(localized: "tmux Close Tab Action", comment: "Setting title"))
@@ -177,7 +173,7 @@ nonisolated extension Settings {
 
         static let all: [AnySettingDefinition] = [
             tmuxSessionName.erased, tmuxCustomCommand.erased, tmuxSessionDiscovery.erased,
-            tmuxAutoHideGatewayOnAttach.erased, tmuxDiscoveryAttachMode.erased, tmuxNewTabAction.erased,
+            tmuxAutoHideGatewayOnAttach.erased, tmuxDiscoveryAttachMode.erased,
             tmuxTabCloseAction.erased, zellijSessionDiscovery.erased, herdrSessionName.erased,
             herdrCustomCommand.erased, herdrSessionDiscovery.erased,
             zmxSessionName.erased, zmxCustomCommand.erased, zmxSessionDiscovery.erased, localSessionDiscovery.erased,

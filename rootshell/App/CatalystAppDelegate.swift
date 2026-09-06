@@ -1061,14 +1061,14 @@ class CatalystAppDelegate: AppDelegate {
 
     private func buildFileMenu(_ builder: UIMenuBuilder) {
         let newLocalShell = UIKeyCommand(
-            title: String(localized: "New Local Shell"),
+            title: String(localized: "New Tab"),
             action: #selector(UIApplication.ghostty_newLocalShell(_:)),
             input: "t",
             modifierFlags: [.command]
         )
 
         let newTab = UIKeyCommand(
-            title: String(localized: "New Tab"),
+            title: String(localized: "Open Connections"),
             action: #selector(UIApplication.ghostty_newTab(_:)),
             input: "s",
             modifierFlags: [.command]
@@ -1082,7 +1082,7 @@ class CatalystAppDelegate: AppDelegate {
         )
 
         let duplicateSshTab = UIKeyCommand(
-            title: String(localized: "Duplicate SSH Tab"),
+            title: String(localized: "Duplicate Focused Tab"),
             action: #selector(UIApplication.ghostty_duplicateSshTab(_:)),
             input: "R",
             modifierFlags: [.command, .shift]

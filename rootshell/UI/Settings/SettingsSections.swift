@@ -441,6 +441,8 @@ struct SettingsTerminalSection: View {
                 #endif
                 #endif
 
+                NewTabActionSettingsRow()
+
                 NavigationLink {
                     KeyboardShortcutsSettingsView()
                 } label: {

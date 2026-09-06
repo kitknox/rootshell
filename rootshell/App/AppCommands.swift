@@ -123,7 +123,7 @@ struct FileCommands: Commands {
 
         // Replace system "New" items with our custom file commands
         CommandGroup(replacing: .newItem) {
-            Button("New Local Shell") {
+            Button("New Tab") {
                 UIApplication.shared.sendAction(
                     #selector(Ghostty.TerminalView.menuCreateLocalShell(_:)),
                     to: nil, from: nil, for: nil
@@ -131,7 +131,7 @@ struct FileCommands: Commands {
             }
             .modifier(DynamicShortcut(action: .new_local_shell, shortcuts: shortcutState.shortcuts))
 
-            Button("New Tab") {
+            Button("Open Connections") {
                 UIApplication.shared.sendAction(
                     #selector(Ghostty.TerminalView.menuNewTab(_:)),
                     to: nil, from: nil, for: nil
@@ -147,7 +147,7 @@ struct FileCommands: Commands {
             }
             .modifier(DynamicShortcut(action: .new_window, shortcuts: shortcutState.shortcuts))
 
-            Button("Duplicate SSH Tab") {
+            Button("Duplicate Focused Tab") {
                 UIApplication.shared.sendAction(
                     #selector(Ghostty.TerminalView.menuDuplicateTabWithSSH(_:)),
                     to: nil, from: nil, for: nil

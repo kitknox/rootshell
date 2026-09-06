@@ -136,10 +136,9 @@ struct MainView: View {
     /// "Ask Each Time" tmux tab-close: the tab whose ⌘W/✕ is awaiting the
     /// user's choice in the close action sheet. (id=tmux-tab-close-action)
     @State var pendingTmuxCloseTabID: UUID?
-    /// "Ask Each Time" tmux new-tab (⌘T): the tmux tab whose new-tab choice is
-    /// awaiting the user (local shell vs new tmux window). (id=tmux-new-tab-action)
-    @State var pendingTmuxNewTabTabID: UUID?
-    @State var reconnectingTabIndex: Int?
+    @State var pendingNewTabRequest: NewTabRequest?
+    @State var unavailableNewTabRequest: NewTabRequest?
+    @State var authenticationRetryRequest: SSHAuthenticationRetryRequest?
     @State var reconnectConfig: SSHConfig?
     /// Source-compat shim around `tabsModel.draggingTabID`.
     var draggingTab: TerminalTab? {
@@ -510,7 +509,7 @@ struct MainView: View {
                         // Empty state - shown when all tabs are closed
                         EmptyStateResponder(
                             onNewTab: addNewTab,
-                            onNewLocalShell: createLocalShellTab
+                            onNewLocalShell: handleNewTabCommand
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else if ghosttyApp.readiness == .ready, terminals.isEmpty {

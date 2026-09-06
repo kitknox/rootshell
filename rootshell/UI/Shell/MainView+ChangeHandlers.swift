@@ -86,6 +86,11 @@ extension MainView {
                 }
                 handleTerminalCountChange(oldCount: oldCount, newCount: newCount)
             }
+            // Splitting or closing a pane need not change the number of tabs.
+            // Keep profile badges current for those topology changes as well.
+            .onChange(of: WindowSessionCensus.profileCounts(in: terminals)) { _, _ in
+                notifySessionCountChanged()
+            }
             .onChange(of: selectedTabIndex) { oldValue, newValue in
                 handleSelectedTabChange(oldValue: oldValue, newValue: newValue)
             }

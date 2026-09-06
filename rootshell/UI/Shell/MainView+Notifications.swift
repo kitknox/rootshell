@@ -378,8 +378,7 @@ extension MainView {
         observerBag.observeOnMainActor(.createLocalShell) { [self] notification in
             // Handle both UIKeyCommand (with terminal) and SwiftUI Commands (nil object)
             guard self.shouldHandleNotification(notification) else { return }
-            // Default: new local-shell tab. In a tmux -CC context the configured
-            // New Tab Action may open a tmux window or prompt. (id=tmux-new-tab-action)
+            // The legacy notification now dispatches the global New Tab action.
             self.handleNewTabCommand()
         }
 
