@@ -22,6 +22,7 @@ struct SSHConnectionView: View {
     
     // Split option for how to open the connection
     // (internal: shared with the Screen Sharing form extension)
+    @State var quickConnectProfile: ConnectionProfile?
     @State var splitOption: SplitOption = .newTab
     
     // Kubernetes-specific state
@@ -688,7 +689,7 @@ struct SSHConnectionView: View {
                 // Screen Sharing has its own connection tab; the terminal
                 // protocols are the only valid choices here.
                 Picker("Protocol", selection: $connectionProtocol) {
-                    ForEach(ConnectionProtocol.allCases.filter { $0 != .vnc }, id: \.self) { proto in
+                    ForEach(ConnectionProtocol.allCases.filter { $0 != .vnc && $0 != .local }, id: \.self) { proto in
                         Label(proto.displayName, systemImage: proto.iconName).tag(proto)
                     }
                 }
@@ -2149,6 +2150,18 @@ struct SSHConnectionView: View {
             )
         }
         
+        // Preserve the profile's theme and provenance when its populated form opens.
+        if var profile = quickConnectProfile,
+           profile.sshConfig.host == config.host,
+           profile.sshConfig.username == config.username,
+           profile.connectionProtocol == connectionProtocol,
+           let onProfileConnect {
+            profile.sshConfig = config
+            onProfileConnect(profile, splitOption)
+            close()
+            return
+        }
+
         // Call the appropriate connection callback based on connection type
         if connectionProtocol == .mosh, let moshCallback = onMoshConnect {
             // Create MoshConfig from SSHConfig
@@ -2597,6 +2610,7 @@ struct SSHConnectionView: View {
     }
     
     private func handleProfileAccepted(_ profile: ConnectionProfile) {
+        quickConnectProfile = profile
         let config = profile.sshConfig
         
         // Set protocol from profile
@@ -2727,12 +2741,11 @@ struct SSHConnectionView: View {
                                 username: config.username,
                                 port: config.port)
 
-        // Record usage
-        ConnectionProfileManager.shared.recordUsage(id: profile.id)
     }
     
     /// Handle unified suggestion acceptance (history or cloud instance)
     private func handleUnifiedSuggestionAccepted(_ suggestion: AnyQuickConnectSuggestion) {
+        quickConnectProfile = nil
         // Defer setting suggestion detail and cloud label until after SwiftUI's update cycle
         // processes the text change. This prevents updateFieldsFromQuickConnect (triggered by
         // .onChange) from immediately clearing these values after we set them.
@@ -2820,7 +2833,11 @@ struct SSHConnectionView: View {
                 // Find the profile and apply its config (VNC profiles switch
                 // to the Screen Sharing form instead of the SSH fields)
                 if let profile = ConnectionProfileManager.shared.profiles.first(where: { $0.id == suggestion.id }) {
-                    if profile.connectionProtocol == .vnc {
+                    if profile.connectionProtocol == .local {
+                        guard profile.isAvailableOnCurrentPlatform else { return }
+                        onProfileConnect?(profile, splitOption)
+                        close()
+                    } else if profile.connectionProtocol == .vnc {
                         applyVNCProfile(profile)
                     } else {
                         handleProfileAccepted(profile)
@@ -2832,6 +2849,7 @@ struct SSHConnectionView: View {
     
     /// Apply selection from the host browse sheet
     private func applyBrowseSelection(_ selection: BrowseHostSelection) {
+        quickConnectProfile = nil
         // Discovered Screen Sharing hosts go straight to the VNC form; the
         // SSH auth/username restoration below doesn't apply to them.
         if selection.serviceKind == .vnc {
@@ -3710,6 +3728,9 @@ extension SSHConnectionView {
         
         // Manager
         private var profileManager: ConnectionProfileManager { ConnectionProfileManager.shared }
+        private var availableTags: [ProfileTag] {
+            profileManager.tags(showAllPlatforms: showAllPlatforms)
+        }
         
         // Split option binding from parent
         @Binding var splitOption: SSHConnectionView.SplitOption
@@ -3717,6 +3738,7 @@ extension SSHConnectionView {
         // State
         @State private var searchQuery: String = ""
         @State private var selectedTags: Set<String> = []
+        @State private var showAllPlatforms = false
         @State private var showTagFilter: Bool = false
         @State private var showingNewProfileSheet: Bool = false
         @State private var editingProfile: ConnectionProfile?
@@ -3805,6 +3827,16 @@ extension SSHConnectionView {
                 .onChange(of: selectedTags) { _, _ in
                     highlightedIndex = 0
                 }
+                .onChange(of: Set(availableTags.map(\.name))) { _, names in
+                    selectedTags.formIntersection(names)
+                    if names.isEmpty { showTagFilter = false }
+                }
+                .onChange(of: profileManager.hasUnavailableProfiles) { _, hasUnavailable in
+                    if !hasUnavailable { showAllPlatforms = false }
+                }
+                .onChange(of: showAllPlatforms) { _, _ in
+                    highlightedIndex = 0
+                }
                 .onChange(of: sortOrder) { _, _ in
                     highlightedIndex = 0
                 }
@@ -3815,6 +3847,16 @@ extension SSHConnectionView {
                     ProfileEditorSheet(profile: profile, embedded: true)
                 }
                 .toolbar {
+                    if profileManager.hasUnavailableProfiles {
+                        ToolbarItem(placement: .primaryAction) {
+                            Menu {
+                                Toggle("Show All Platforms", isOn: $showAllPlatforms)
+                            } label: {
+                                Image(systemName: "line.3.horizontal.decrease.circle")
+                            }
+                            .accessibilityLabel("Platform Filter")
+                        }
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Button {
                             presentNewProfileSheet(in: currentFolder)
@@ -3958,7 +4000,7 @@ extension SSHConnectionView {
                 onSubmit: { activateHighlightedItem() }
             ) {
                 // Tag filter button (only show if tags exist)
-                if !profileManager.allTags.isEmpty {
+                if !availableTags.isEmpty {
                     Button(action: { showTagFilter = true }) {
                         ZStack(alignment: .topTrailing) {
                             Image(systemName: "tag")
@@ -3973,7 +4015,7 @@ extension SSHConnectionView {
                     }
                     .popover(isPresented: $showTagFilter, arrowEdge: .top) {
                         TagFilterPopover(
-                            tags: profileManager.allTags,
+                            tags: availableTags,
                             selectedTags: $selectedTags
                         )
                         .themedSubSheet(sheetThemeColors)
@@ -4174,7 +4216,7 @@ extension SSHConnectionView {
         // MARK: - Filtering
         
         private func filteredFolders(in parentPath: String) -> [ProfileFolder] {
-            profileManager.subfolders(of: parentPath)
+            profileManager.subfolders(of: parentPath, showAllPlatforms: showAllPlatforms)
         }
         
         private func filteredProfiles(in folder: String) -> [ConnectionProfile] {
@@ -4193,7 +4235,8 @@ extension SSHConnectionView {
                 profiles = profileManager.profiles(inFolder: folder)
             }
             
-            return profiles.sorted(by: sortOrder.compare)
+            return profiles.filter { showAllPlatforms || $0.isAvailableOnCurrentPlatform }
+                .sorted(by: sortOrder.compare)
         }
         
         // MARK: - Actions
@@ -4212,7 +4255,10 @@ extension SSHConnectionView {
         }
         
         private func selectProfile(_ profile: ConnectionProfile) {
-            profileManager.recordUsage(id: profile.id)
+            guard profile.isAvailableOnCurrentPlatform else {
+                editingProfile = profile
+                return
+            }
             onProfileSelected(profile, splitOption)
         }
         

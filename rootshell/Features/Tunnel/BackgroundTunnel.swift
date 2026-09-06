@@ -191,9 +191,9 @@ final class BackgroundTunnel {
                 try await connect(using: resolvedConfig)
                 await startPortForwards()
                 startHealthMonitoring()
-            case .vnc:
+            case .vnc, .local:
                 // VNC profiles are never VPN-capable (isVPNCapable excludes them)
-                throw TunnelError.connectionFailed("Screen Sharing profiles cannot run tunnels")
+                throw TunnelError.connectionFailed("This profile type cannot run tunnels")
             }
             transition(to: .connected)
             reconnectionManager?.handleConnected()
@@ -689,9 +689,9 @@ final class BackgroundTunnel {
                 try await self.connect(using: resolvedConfig)
                 await self.startPortForwards()
                 self.startHealthMonitoring()
-            case .vnc:
+            case .vnc, .local:
                 // VNC profiles are never VPN-capable (isVPNCapable excludes them)
-                throw TunnelError.connectionFailed("Screen Sharing profiles cannot run tunnels")
+                throw TunnelError.connectionFailed("This profile type cannot run tunnels")
             }
 
             // stop() may have run while the connect was awaiting (cooperative

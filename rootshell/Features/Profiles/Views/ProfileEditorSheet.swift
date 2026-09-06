@@ -27,6 +27,8 @@ struct ProfileEditorSheet: View {
     @FocusState private var isTagFieldFocused: Bool
 
     // Connection protocol state
+    @State private var localConfig = LocalProfileConfig()
+    @State private var profileThemeName: String = ""
     @State private var connectionProtocol: ConnectionProtocol = .ssh
 
     // Keeps the host/username/jump fields when the picker flips between the
@@ -228,7 +230,11 @@ struct ProfileEditorSheet: View {
             // Organization Section
             organizationSection
 
-            if connectionProtocol == .vnc {
+            appearanceSection
+
+            if connectionProtocol == .local {
+                localConnectionSection
+            } else if connectionProtocol == .vnc {
                 // Screen Sharing: protocol picker plus the shared VNC form
                 // sections; the SSH-specific sections don't apply.
                 vncConnectionSection
@@ -303,6 +309,7 @@ struct ProfileEditorSheet: View {
         .onAppear {
             loadExistingProfile()
         }
+        .task { await ThemeManager.shared.ensureThemesLoaded() }
         .onChange(of: connectionProtocol) { oldValue, newValue in
             carryEndpointAcrossProtocolChange(from: oldValue, to: newValue)
         }
@@ -512,6 +519,60 @@ struct ProfileEditorSheet: View {
 
     // MARK: - Connection Section
 
+    private var appearanceSection: some View {
+        Section("Appearance") {
+            Picker("Theme", selection: $profileThemeName) {
+                Text("Use Default").tag("")
+                if !profileThemeName.isEmpty,
+                   !ThemeManager.shared.availableThemes.contains(where: { $0.name == profileThemeName }) {
+                    Text("\(profileThemeName) (Unavailable)").tag(profileThemeName)
+                }
+                ForEach(ThemeManager.shared.availableThemes, id: \.name) { theme in
+                    Text(theme.name).tag(theme.name)
+                }
+            }
+            .themedRow()
+            Text("Applied to the entire tab when this profile opens, including split panes.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .themedRow()
+        }
+    }
+
+    private var localConnectionSection: some View {
+        Section {
+            protocolPickerRow
+            Picker("Platform", selection: $localConfig.platform) {
+                ForEach(LocalProfileConfig.Platform.allCases, id: \.self) { platform in
+                    Text(platform.displayName).tag(platform)
+                }
+            }
+            .themedRow()
+            TextField("Starting Directory (Optional)", text: Binding(
+                get: { localConfig.workingDirectory ?? "" },
+                set: { localConfig.workingDirectory = $0.isEmpty ? nil : $0 }
+            ))
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .themedRow()
+            TextField("Startup Command (Optional)", text: Binding(
+                get: { localConfig.startupCommand ?? "" },
+                set: { localConfig.startupCommand = $0.isEmpty ? nil : $0 }
+            ), axis: .vertical)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .themedRow()
+            Text("Uses this device's shell. An empty directory inherits the current local shell's directory. The startup command runs once when you open the profile.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .themedRow()
+        } header: {
+            Text("Local Shell")
+        } footer: {
+            if let protocolConversionNotice { Text(protocolConversionNotice) }
+        }
+    }
+
     /// Protocol picker row shared by the SSH connection section and the
     /// Screen Sharing section (which replaces the SSH fields entirely).
     private var protocolPickerRow: some View {
@@ -538,13 +599,24 @@ struct ProfileEditorSheet: View {
         }
     }
 
-    /// Saving after a switch across the Screen Sharing boundary replaces the
-    /// stored configuration wholesale, so say so before the user commits.
+    /// Crossing the SSH, Screen Sharing, or Local Shell boundary replaces
+    /// the stored configuration, so describe the loss before saving.
     private var protocolConversionNotice: String? {
         guard let existing = existingProfile,
-              (existing.connectionProtocol == .vnc) != (connectionProtocol == .vnc) else {
-            return nil
+              existing.connectionProtocol != connectionProtocol else { return nil }
+        if connectionProtocol == .local {
+            if existing.connectionProtocol == .vnc {
+                return String(localized: "Saving replaces this profile's Screen Sharing settings with Local Shell settings.")
+            }
+            return String(localized: "Saving replaces this profile's SSH settings (keys, port forwards, agent forwarding, terminal options) with Local Shell settings.")
         }
+        if existing.connectionProtocol == .local {
+            if connectionProtocol == .vnc {
+                return String(localized: "Saving replaces this profile's Local Shell settings (directory, startup command, platform) with Screen Sharing settings.")
+            }
+            return String(localized: "Saving replaces this profile's Local Shell settings (directory, startup command, platform) with SSH settings.")
+        }
+        guard (existing.connectionProtocol == .vnc) != (connectionProtocol == .vnc) else { return nil }
         if connectionProtocol == .vnc {
             return String(
                 localized: "Saving replaces this profile's SSH settings (keys, port forwards, agent forwarding, terminal options) with Screen Sharing settings. The hostname is carried over.",
@@ -1551,6 +1623,7 @@ struct ProfileEditorSheet: View {
     // MARK: - Validation
 
     private var isFormValid: Bool {
+        if connectionProtocol == .local { return nameValidationMessage == nil }
         if connectionProtocol == .vnc {
             return nameValidationMessage == nil && vncForm.isValid
         }
@@ -1666,7 +1739,8 @@ struct ProfileEditorSheet: View {
         to newValue: ConnectionProtocol
     ) {
         // SSH / Roam / tssh all share one field set, so nothing to carry.
-        guard (oldValue == .vnc) != (newValue == .vnc) else { return }
+        guard oldValue != .local, newValue != .local,
+              (oldValue == .vnc) != (newValue == .vnc) else { return }
 
         if newValue == .vnc {
             var destination = vncForm.endpoint
@@ -1754,6 +1828,9 @@ struct ProfileEditorSheet: View {
 
             // Load connection protocol and transport mode
             connectionProtocol = profile.connectionProtocol
+            profileThemeName = profile.themeName ?? ""
+            localConfig = profile.localConfig ?? LocalProfileConfig()
+            if profile.connectionProtocol == .local { return }
             trzszTransportMode = profile.trzszTransportMode
 
             // Screen Sharing profiles: populate the VNC form and skip the
@@ -2004,6 +2081,10 @@ struct ProfileEditorSheet: View {
 
     private func saveProfile() {
         errorMessage = nil
+        if connectionProtocol == .local {
+            saveLocalProfile()
+            return
+        }
 
         if connectionProtocol == .vnc {
             saveVNCProfile()
@@ -2213,6 +2294,8 @@ struct ProfileEditorSheet: View {
                 // Switching a Screen Sharing profile to an SSH-family
                 // protocol drops the stale VNC config from the envelope.
                 updated.vncConfig = nil
+                updated.localConfig = nil
+                updated.themeName = profileThemeName.isEmpty ? nil : profileThemeName
                 try profileManager.updateProfile(updated)
             } else {
                 // Create new profile
@@ -2236,7 +2319,47 @@ struct ProfileEditorSheet: View {
                     vpnEnabled: vpnEnabled,
                     vpnDNSServers: vpnDNSServers,
                     vpnExcludedRoutes: vpnExcludedRoutes,
-                    vpnBlockQUIC: vpnBlockQUIC
+                    vpnBlockQUIC: vpnBlockQUIC,
+                    extensionPayload: ProfileExtensionPayload(themeName: profileThemeName.isEmpty ? nil : profileThemeName)
+                )
+            }
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveLocalProfile() {
+        guard isFormValid else { return }
+        var config = localConfig
+        let directory = config.workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines)
+        config.workingDirectory = directory?.isEmpty == false ? directory : nil
+        let command = config.startupCommand?.trimmingCharacters(in: .whitespacesAndNewlines)
+        config.startupCommand = command?.isEmpty == false ? command : nil
+        let payload = ProfileExtensionPayload(
+            localConfig: config,
+            themeName: profileThemeName.isEmpty ? nil : profileThemeName
+        )
+        do {
+            if let existing = existingProfile {
+                // Construct a clean local profile, retaining identity and usage metadata.
+                let updated = ConnectionProfile(
+                    id: existing.id, name: trimmedName,
+                    sshConfig: ConnectionProfile.localPlaceholderSSHConfig(),
+                    connectionProtocol: .local,
+                    notes: notes.isEmpty ? nil : notes, iconName: iconName,
+                    colorTag: colorTag, folderPath: folderPath, tags: tags,
+                    createdAt: existing.createdAt, lastUsedAt: existing.lastUsedAt,
+                    useCount: existing.useCount, extensionPayload: payload
+                )
+                try profileManager.updateProfile(updated)
+            } else {
+                try profileManager.createProfile(
+                    name: trimmedName, sshConfig: ConnectionProfile.localPlaceholderSSHConfig(),
+                    connectionProtocol: .local,
+                    notes: notes.isEmpty ? nil : notes, iconName: iconName,
+                    colorTag: colorTag, folderPath: folderPath, tags: tags,
+                    extensionPayload: payload
                 )
             }
             dismiss()
@@ -2283,6 +2406,8 @@ struct ProfileEditorSheet: View {
                 updated.tags = tags
                 updated.connectionProtocol = .vnc
                 updated.vncConfig = config
+                updated.localConfig = nil
+                updated.themeName = profileThemeName.isEmpty ? nil : profileThemeName
                 updated.sshConfig = ConnectionProfile.vncPlaceholderSSHConfig(for: config)
                 try profileManager.updateProfile(updated)
             } else {
@@ -2295,7 +2420,7 @@ struct ProfileEditorSheet: View {
                     colorTag: colorTag,
                     folderPath: folderPath,
                     tags: tags,
-                    extensionPayload: ProfileExtensionPayload(vncConfig: config)
+                    extensionPayload: ProfileExtensionPayload(vncConfig: config, themeName: profileThemeName.isEmpty ? nil : profileThemeName)
                 )
             }
             dismiss()

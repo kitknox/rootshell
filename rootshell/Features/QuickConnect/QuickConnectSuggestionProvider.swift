@@ -65,16 +65,22 @@ class QuickConnectSuggestionProvider: ObservableObject {
 
     // MARK: - Public API
 
+    enum Context {
+        case connectionLauncher
+        case sshDestination
+    }
+
     /// Get unified suggestions matching search text
     func getSuggestions(
         matching searchText: String,
-        mode: MatchingMode = .prefix
+        mode: MatchingMode = .prefix,
+        context: Context = .connectionLauncher
     ) -> [AnyQuickConnectSuggestion] {
         var all: [AnyQuickConnectSuggestion] = []
 
         // Profile suggestions (highest priority)
-        let profiles = profileManager.profiles
-            .filter { !$0.isDeleted }
+        let profiles = profileManager.availableProfiles
+            .filter { !$0.isDeleted && (context == .connectionLauncher || $0.isSSHBased) }
             .map { ProfileSuggestion(profile: $0) }
             .filter { searchText.isEmpty || $0.matches(searchText, mode: mode) }
             .map { AnyQuickConnectSuggestion($0) }
@@ -82,6 +88,7 @@ class QuickConnectSuggestionProvider: ObservableObject {
 
         // History suggestions
         let history = historyManager.entries
+            .filter { context == .connectionLauncher || ($0.connectionProtocol != .vnc && $0.connectionProtocol != .local) }
             .map { HistorySuggestion(entry: $0) }
             .filter { searchText.isEmpty || $0.matches(searchText, mode: mode) }
             .map { AnyQuickConnectSuggestion($0) }
@@ -89,6 +96,7 @@ class QuickConnectSuggestionProvider: ObservableObject {
 
         // Local network (mDNS) suggestions
         let localNetwork = makeLocalNetworkSuggestions()
+            .filter { context == .connectionLauncher || $0.host.kind == .ssh }
             .filter { searchText.isEmpty || $0.matches(searchText, mode: mode) }
             .map { AnyQuickConnectSuggestion($0) }
         all.append(contentsOf: localNetwork)

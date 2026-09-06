@@ -412,20 +412,25 @@ extension ConnectionProfile: CloudKitSyncable {
         record["schemaVersion"] = Int64(Self.schemaVersion)
         record["deviceID"] = CloudKitSyncSettings.deviceID
 
-        // SSH config as JSON data. VNC records deliberately OMIT the blob:
+        // SSH config as JSON data. VNC and local records deliberately OMIT the blob:
         // old builds decode unknown protocols as `?? .ssh`, and a placeholder
         // sshConfig would materialize there as a corrupt SSH profile. The
         // missing blob instead trips their existing guard and the record is
         // skipped - skip, not break.
-        if connectionProtocol == .vnc {
+        if !isSSHBased {
             record["sshConfig"] = nil as Data?
         } else if let sshData = try? JSONEncoder().encode(sshConfig) {
             record["sshConfig"] = sshData
         }
 
-        // Extension envelope for VNC configuration and future profile fields.
-        if let extensionPayload, !extensionPayload.isEmpty,
-           let envelopeData = try? JSONEncoder().encode(extensionPayload) {
+        // Keep appearance out of the legacy envelope: old clients reconstruct
+        // that envelope and erase unknown fields. Theme revisions ride a
+        // separate ProfileThemeRecord using the same existing CloudKit schema.
+        var connectionPayload = extensionPayload
+        connectionPayload?.themeName = nil
+        connectionPayload?.themeModifiedAt = nil
+        if let connectionPayload, !connectionPayload.isEmpty,
+           let envelopeData = try? JSONEncoder().encode(connectionPayload) {
             record["extensionData"] = envelopeData
         } else {
             record["extensionData"] = nil as Data?
@@ -485,13 +490,15 @@ extension ConnectionProfile: CloudKitSyncable {
                     logger.debug("Raw sshConfig JSON: \(jsonString)")
                 }
             }
-        } else if connectionProtocol != .vnc {
+        } else if connectionProtocol != .vnc && connectionProtocol != .local {
             logger.warning("ConnectionProfile '\(name)' missing sshConfig data")
         }
 
         let validSSHConfig: SSHConfig
         if let sshConfig {
             validSSHConfig = sshConfig
+        } else if connectionProtocol == .local {
+            validSSHConfig = ConnectionProfile.localPlaceholderSSHConfig()
         } else if connectionProtocol == .vnc {
             // VNC records omit sshConfig; synthesize the placeholder from the
             // envelope (or empty when the envelope is missing/undecodable -
@@ -561,5 +568,41 @@ extension ConnectionProfile: CloudKitSyncable {
             useCount: useCount,
             extensionPayload: extensionPayload
         )
+    }
+}
+
+// MARK: - ProfileThemeRecord + CloudKitSyncable
+
+extension ProfileThemeRecord: CloudKitSyncable {
+    // Reuse the deployed record type and fields; no CloudKit schema additions.
+    static var recordType: String { ConnectionProfile.recordType }
+    static var schemaVersion: Int { 1 }
+
+    static func recordName(for record: ProfileThemeRecord) -> String {
+        CloudKitRecordName.make(recordType: "ConnectionProfileTheme", identity: record.id.uuidString)
+    }
+
+    func apply(to record: CKRecord) {
+        // Missing profileID is intentional: every older profile decoder rejects
+        // this record before reading the envelope. Its ID is in the opaque data.
+        record["profileID"] = nil as String?
+        record["name"] = nil as String?
+        var wireRecord = self
+        wireRecord.syncedRevision = nil
+        record["extensionData"] = try? JSONEncoder().encode(wireRecord)
+        record["modifiedAt"] = modifiedAt
+        record["schemaVersion"] = Int64(Self.schemaVersion)
+        record["isDeleted"] = isDeleted ? 1 : 0
+    }
+
+    static func from(_ record: CKRecord) -> ProfileThemeRecord? {
+        guard record.recordType == recordType,
+              let data = record["extensionData"] as? Data,
+              var theme = try? JSONDecoder().decode(Self.self, from: data),
+              record.recordID.recordName == recordName(for: theme) else { return nil }
+        theme.syncedRevision = theme.modifiedAt
+        // Use the theme revision, not server modificationDate: an unrelated
+        // profile edit or an offline retry must never become a new theme edit.
+        return theme
     }
 }

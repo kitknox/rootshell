@@ -36,6 +36,8 @@ extension MainView {
             return alerts.validationData?.alertTitle ?? "⚠️ WARNING: Host Key Changed"
         case .helperMissing:
             return String(localized: "Rootshell Helper Required", comment: "Standalone helper alert title")
+        case .profileUnavailable:
+            return String(localized: "Profile Unavailable")
         case .vncProfileInvalid:
             return String(localized: "Screen Sharing Unavailable", comment: "Alert title for a VNC profile without a usable configuration")
         case .vncHighPerformanceTransport:
@@ -151,7 +153,7 @@ extension MainView {
                     Button("OK", role: .cancel) {
                         alerts.dismissActive()
                     }
-                case .vncProfileInvalid:
+                case .profileUnavailable, .vncProfileInvalid:
                     Button("OK", role: .cancel) {
                         alerts.dismissActive()
                     }
@@ -243,6 +245,8 @@ extension MainView {
                     }
                 case .helperMissing:
                     Text("Local shells on Mac require the separate Rootshell Helper app. Launch the helper and try again.")
+                case .profileUnavailable:
+                    Text("This local profile is unavailable on this device. Enable Show All Platforms in Profiles to edit its platform or repair its settings.")
                 case .vncProfileInvalid:
                     Text("This profile has no usable Screen Sharing configuration. It may have been created by a newer version of the app - edit the profile or update the app.")
                 case .vncHighPerformanceTransport:

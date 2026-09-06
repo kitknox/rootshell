@@ -21,6 +21,8 @@ enum ProfileColorTag: String, Codable, CaseIterable, Sendable {
 
 /// Connection protocol options for profiles
 enum ConnectionProtocol: String, Codable, CaseIterable, Sendable {
+    /// Shell on the current device
+    case local
     /// Standard SSH connection
     case ssh
     /// Mosh (mobile shell) connection - survives network changes and high latency
@@ -32,6 +34,7 @@ enum ConnectionProtocol: String, Codable, CaseIterable, Sendable {
 
     var displayName: String {
         switch self {
+        case .local: return String(localized: "Local Shell")
         case .ssh: return String(localized: "SSH", comment: "Connection protocol: SSH")
         case .mosh: return String(localized: "Roam - mosh compatible", comment: "Connection protocol: mosh")
         case .trzsz: return String(localized: "Roam - tssh", comment: "Connection protocol: trzsz")
@@ -41,6 +44,7 @@ enum ConnectionProtocol: String, Codable, CaseIterable, Sendable {
 
     var description: String {
         switch self {
+        case .local: return String(localized: "Shell on this device")
         case .ssh: return String(localized: "Standard secure shell connection", comment: "Connection protocol description: SSH")
         case .mosh: return String(localized: "Mobile shell - better for unreliable networks", comment: "Connection protocol description: mosh")
         case .trzsz: return String(localized: "QUIC-based mobile shell - modern roaming protocol", comment: "Connection protocol description: trzsz")
@@ -50,6 +54,7 @@ enum ConnectionProtocol: String, Codable, CaseIterable, Sendable {
 
     var iconName: String {
         switch self {
+        case .local: return "terminal"
         case .ssh: return "terminal"
         case .mosh: return "antenna.radiowaves.left.and.right"
         case .trzsz: return "antenna.radiowaves.left.and.right"
@@ -123,7 +128,7 @@ struct ConnectionProfile: Codable, Identifiable, Hashable, SyncableRecord {
 
     // MARK: - Connection Configuration
 
-    /// Connection protocol (SSH or Mosh)
+    /// Local shell or remote connection protocol
     var connectionProtocol: ConnectionProtocol
 
     /// Transport mode for TSSH connections (default inherits from Settings > Roam)
@@ -144,7 +149,8 @@ struct ConnectionProfile: Codable, Identifiable, Hashable, SyncableRecord {
 
     /// SSH connection configuration.
     ///
-    /// Non-optional for backward compatibility, so VNC profiles carry a
+    /// Non-optional for backward compatibility. Local profiles carry an empty
+    /// placeholder with auth `.none`; VNC profiles carry a
     /// PLACEHOLDER SSHConfig (host/port/username mirrored from `vncConfig`,
     /// auth `.none`). It must never be used to open an SSH connection; the
     /// real VNC settings live in `extensionPayload.vncConfig`. Note the
@@ -153,9 +159,8 @@ struct ConnectionProfile: Codable, Identifiable, Hashable, SyncableRecord {
     /// profile.
     var sshConfig: SSHConfig
 
-    /// Versioned envelope for extension fields (VNC config now, future
-    /// additions later). nil / empty envelopes are omitted from JSON so SSH
-    /// profile files are byte-identical to before this field existed.
+    /// Versioned envelope for VNC/local settings and the profile theme.
+    /// Empty envelopes are omitted so existing SSH profile JSON stays unchanged.
     var extensionPayload: ProfileExtensionPayload?
 
     // MARK: - VPN Configuration
@@ -390,6 +395,40 @@ struct ConnectionProfile: Codable, Identifiable, Hashable, SyncableRecord {
 
     // MARK: - Computed Properties
 
+    var isSSHBased: Bool {
+        connectionProtocol == .ssh || connectionProtocol == .mosh || connectionProtocol == .trzsz
+    }
+
+    var isAvailableOnCurrentPlatform: Bool {
+        connectionProtocol != .local || localConfig?.platform.isAvailable == true
+    }
+
+    var localConfig: LocalProfileConfig? {
+        get { extensionPayload?.localConfig }
+        set {
+            var payload = extensionPayload ?? ProfileExtensionPayload()
+            payload.localConfig = newValue
+            extensionPayload = payload.isEmpty ? nil : payload
+        }
+    }
+
+    var themeName: String? {
+        get { extensionPayload?.themeName }
+        set {
+            guard themeName != newValue else { return }
+            var payload = extensionPayload ?? ProfileExtensionPayload()
+            payload.themeName = newValue
+            payload.themeModifiedAt = Date()
+            extensionPayload = payload
+        }
+    }
+
+    static func localPlaceholderSSHConfig() -> SSHConfig {
+        var config = SSHConfig(host: "", port: 22, username: "", password: "")
+        config.authMethod = .none
+        return config
+    }
+
     /// Convenience accessor for the VNC config in the extension envelope.
     /// Setting a value creates the envelope; clearing the last field drops it
     /// so SSH profiles never carry an empty envelope.
@@ -444,6 +483,9 @@ struct ConnectionProfile: Codable, Identifiable, Hashable, SyncableRecord {
 
     /// Display string for autocomplete/suggestions (shows host info)
     var displayString: String {
+        if connectionProtocol == .local {
+            return String(localized: "Local Shell")
+        }
         if connectionProtocol == .vnc, let vncConfig {
             return vncConfig.displayName
         }
@@ -459,6 +501,8 @@ struct ConnectionProfile: Codable, Identifiable, Hashable, SyncableRecord {
     /// Display string with protocol prefix (e.g., "mosh user@host")
     var displayStringWithProtocol: String {
         switch connectionProtocol {
+        case .local:
+            return displayString
         case .ssh:
             return displayString
         case .mosh:

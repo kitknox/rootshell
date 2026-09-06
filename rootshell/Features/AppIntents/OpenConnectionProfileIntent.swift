@@ -10,7 +10,7 @@ import AppIntents
 /// Shortcuts action: open a saved connection profile, optionally with a directory and command.
 struct OpenConnectionProfileIntent: AppIntent {
     static var title: LocalizedStringResource = "Open Connection Profile"
-    static var description: IntentDescription = "Opens an SSH connection to a saved profile."
+    static var description: IntentDescription = "Opens a saved local shell or remote connection profile."
     static var openAppWhenRun = true
 
     @Parameter(title: "Profile")
@@ -27,8 +27,13 @@ struct OpenConnectionProfileIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        guard ConnectionProfileManager.shared.profile(for: profile.id) != nil else {
+        guard let saved = ConnectionProfileManager.shared.profile(for: profile.id),
+              !saved.isDeleted else {
             throw IntentError.profileNotFound
+        }
+
+        guard saved.isAvailableOnCurrentPlatform else {
+            throw IntentError.profileUnavailable
         }
 
         let launchCommand = Self.composeLaunchCommand(
@@ -76,9 +81,12 @@ struct OpenConnectionProfileIntent: AppIntent {
 
     enum IntentError: Swift.Error, CustomLocalizedStringResourceConvertible {
         case profileNotFound
+        case profileUnavailable
 
         var localizedStringResource: LocalizedStringResource {
             switch self {
+            case .profileUnavailable:
+                return "This profile is unavailable on this device. Edit its platform using Show All Platforms in Profiles."
             case .profileNotFound:
                 return "Connection profile not found."
             }

@@ -6106,6 +6106,9 @@
         }
       }
     },
+    "%@ (Unavailable)" : {
+
+    },
     "%@ / %@" : {
       "localizations" : {
         "ar" : {
@@ -53965,6 +53968,9 @@
         }
       }
     },
+    "All Devices" : {
+
+    },
     "All Exposed Keys" : {
       "comment" : "Local SSH agent client rule all keys toggle",
       "localizations" : {
@@ -57982,7 +57988,7 @@
       }
     },
     "Always" : {
-      "comment" : "Always On Display duration: never auto-lock\nCert validity: no start bound\nHole-punch mode: always perform\nLocation Diary authorization status\nPrediction mode: always show predictions\nShader animation: always\nTab hover preview activation",
+      "comment" : "Cert validity: no start bound\nHole-punch mode: always perform\nLocation Diary authorization status\nPrediction mode: always show predictions\nShader animation: always\nTab hover preview activation",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -65393,6 +65399,9 @@
           }
         }
       }
+    },
+    "Applied to the entire tab when this profile opens, including split panes." : {
+
     },
     "Applies to sessions opened from now on. Existing tabs keep the shell they started with." : {
       "localizations" : {
@@ -141106,7 +141115,7 @@
       }
     },
     "Copied" : {
-      "comment" : "Clipboard entry source: explicit copy\nCopy button state: copied",
+      "comment" : "Clipboard entry source: explicit copy\nCopy button state: copied\nLocal SSH agent export copied button",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -172313,7 +172322,7 @@
       }
     },
     "Denied" : {
-      "comment" : "Location Diary authorization status",
+      "comment" : "Local SSH agent audit outcome\nLocation Diary authorization status",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -265506,7 +265515,7 @@
       }
     },
     "Identity" : {
-      "comment" : "OpenPubkey field: signed-in account",
+      "comment" : "Local SSH agent client rule identity key label\nOpenPubkey field: signed-in account",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -319735,7 +319744,7 @@
       }
     },
     "Local SSH Agent" : {
-      "comment" : "Setting title",
+      "comment" : "Local SSH agent settings title\nSetting title\nSettings row: local SSH agent",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -367893,7 +367902,7 @@
       }
     },
     "None" : {
-      "comment" : "Auth method: no authentication\nBackground effect: no effect active\nBell sound: completely silent\nBookmarked locations: none saved\nCursor effect: no effect\nKey auth requirement: none\nKubernetes auth method: no authentication\nNotification sound: silent\nProfile folder: no folder selected\nQuick setup pair: disable both swipes\nSplit border style: no border\nVNC jump selection\nVNC security preference\nVPN excluded routes: none configured",
+      "comment" : "Auth method: no authentication\nBackground effect: no effect active\nBell sound: completely silent\nCursor effect: no effect\nKey auth requirement: none\nKubernetes auth method: no authentication\nNotification sound: silent\nProfile folder: no folder selected\nQuick setup pair: disable both swipes\nSettings status: none configured\nSplit border style: no border\nVNC jump selection\nVNC security preference\nVPN excluded routes: none configured",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -376709,7 +376718,7 @@
       }
     },
     "Off" : {
-      "comment" : "Agent notification policy: never notify\nAlways On Display duration: disabled\nMod-tap: no active rules\nScreen Sharing clipboard sync default\nSetting value display\nTask notification policy: never notify\nToggle state: disabled\nTwo-finger long press: gesture disabled\nVNC keyboard toolbar preference",
+      "comment" : "Agent notification policy: never notify\nMod-tap: no active rules\nScreen Sharing clipboard sync default\nSetting value display\nSettings status: disabled\nTask notification policy: never notify\nToggle state: disabled\nTwo-finger long press: gesture disabled\nVNC keyboard toolbar preference",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -377173,7 +377182,7 @@
       }
     },
     "On" : {
-      "comment" : "Setting value display\nToggle state: enabled\nVNC keyboard toolbar preference",
+      "comment" : "Setting value display\nSettings status: enabled\nToggle state: enabled\nVNC keyboard toolbar preference",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -384890,7 +384899,11 @@
         }
       }
     },
+    "Opens a saved local shell or remote connection profile." : {
+
+    },
     "Opens an SSH connection to a saved profile." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -404661,6 +404674,12 @@
         }
       }
     },
+    "Platform" : {
+
+    },
+    "Platform Filter" : {
+
+    },
     "Play Remote Audio" : {
       "localizations" : {
         "ar" : {
@@ -415314,6 +415333,9 @@
           }
         }
       }
+    },
+    "Profile Unavailable" : {
+
     },
     "Profiles" : {
       "localizations" : {
@@ -467379,6 +467401,12 @@
         }
       }
     },
+    "Saving replaces this profile's Local Shell settings (directory, startup command, platform) with Screen Sharing settings." : {
+
+    },
+    "Saving replaces this profile's Local Shell settings (directory, startup command, platform) with SSH settings." : {
+
+    },
     "Saving replaces this profile's Screen Sharing settings (quality, display, audio) with SSH settings. The hostname is carried over." : {
       "comment" : "Profile editor footer shown when converting a Screen Sharing profile to SSH",
       "localizations" : {
@@ -467533,6 +467561,12 @@
           }
         }
       }
+    },
+    "Saving replaces this profile's Screen Sharing settings with Local Shell settings." : {
+
+    },
+    "Saving replaces this profile's SSH settings (keys, port forwards, agent forwarding, terminal options) with Local Shell settings." : {
+
     },
     "Saving replaces this profile's SSH settings (keys, port forwards, agent forwarding, terminal options) with Screen Sharing settings. The hostname is carried over." : {
       "comment" : "Profile editor footer shown when converting an SSH profile to Screen Sharing",
@@ -469695,6 +469729,7 @@
       }
     },
     "Screen Sharing profiles can't run commands." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -497966,6 +498001,9 @@
         }
       }
     },
+    "Shell on this device" : {
+
+    },
     "Shell Utilities:" : {
       "comment" : "Help: shell utilities section header",
       "localizations" : {
@@ -498894,6 +498932,9 @@
           }
         }
       }
+    },
+    "Show All Platforms" : {
+
     },
     "Show All Tabs" : {
       "comment" : "Tab hover preview: exposé hint tooltip",
@@ -520383,7 +520424,7 @@
       }
     },
     "SSH Agent" : {
-      "comment" : "Setting group title",
+      "comment" : "Agent key section header\nSetting group title",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -529030,6 +529071,12 @@
           }
         }
       }
+    },
+    "Starting Directory (Optional)" : {
+
+    },
+    "Startup Command (Optional)" : {
+
     },
     "Statistics" : {
       "localizations" : {
@@ -568708,6 +568755,9 @@
         }
       }
     },
+    "This action requires an SSH, mosh, or tssh profile." : {
+
+    },
     "This certificate belongs to '%@', not '%@'. Open that key's details to attach it there." : {
       "comment" : "Cert import error: belongs to another key",
       "localizations" : {
@@ -573034,6 +573084,9 @@
         }
       }
     },
+    "This local profile is unavailable on this device. Enable Show All Platforms in Profiles to edit its platform or repair its settings." : {
+
+    },
     "This looks like a private key. Paste the certificate (-cert.pub), not the key itself." : {
       "comment" : "Cert import error: private key pasted",
       "localizations" : {
@@ -573650,6 +573703,9 @@
           }
         }
       }
+    },
+    "This profile is unavailable on this device. Edit its platform using Show All Platforms in Profiles." : {
+
     },
     "This profile normally inherits the remote terminal type from Settings. Override it only for hosts that require a different terminfo name." : {
       "localizations" : {
@@ -601613,6 +601669,9 @@
         }
       }
     },
+    "Unavailable on this device · Tap to edit" : {
+
+    },
     "Unbalanced quote." : {
       "comment" : "Local shell warning: quote is never closed",
       "extractionState" : "stale",
@@ -614139,6 +614198,9 @@
         }
       }
     },
+    "Use Default" : {
+
+    },
     "Use Device Location" : {
       "localizations" : {
         "ar" : {
@@ -621247,6 +621309,9 @@
           }
         }
       }
+    },
+    "Uses this device's shell. An empty directory inherits the current local shell's directory. The startup command runs once when you open the profile." : {
+
     },
     "Uses your ChatGPT Plus/Pro subscription instead of a metered API key." : {
       "localizations" : {
@@ -639021,7 +639086,7 @@
       }
     },
     "Weekly" : {
-      "comment" : "Agent usage window title: weekly quota",
+      "comment" : "Agent usage window title: weekly quota\nUpdate interval: weekly",
       "localizations" : {
         "ar" : {
           "stringUnit" : {

@@ -1042,6 +1042,13 @@ final class TerminalSessionController {
                 } else {
                     try await session.start()
                 }
+                if case .local = connectionConfig {
+                    let command = host.terminalPendingStartupCommand
+                    host.terminalPendingStartupCommand = nil
+                    if let command, !command.isEmpty {
+                        session.sendInput(Data((command + "\n").utf8))
+                    }
+                }
                 Ghostty.logger.info("Session started successfully")
 
                 if case .mosh = connectionConfig {

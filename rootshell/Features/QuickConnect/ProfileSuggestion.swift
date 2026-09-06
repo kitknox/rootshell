@@ -19,6 +19,7 @@ struct ProfileSuggestion: QuickConnectSuggestion {
 
     /// Complete with the connection string (vnc:// URL for Screen Sharing)
     var completionString: String {
+        if profile.connectionProtocol == .local { return profile.name }
         if profile.connectionProtocol == .vnc {
             let config = profile.vncConfig
             let host = config?.host ?? profile.sshConfig.host
@@ -35,6 +36,10 @@ struct ProfileSuggestion: QuickConnectSuggestion {
 
     var detailText: String? {
         var parts: [String] = []
+
+        if profile.connectionProtocol == .local {
+            parts.append(profile.displayString)
+        }
 
         // Show protocol if Mosh or Screen Sharing
         if profile.connectionProtocol == .mosh {

@@ -34,6 +34,7 @@ import UserNotifications
         case newHost
         case keyChanged
         case helperMissing
+        case profileUnavailable
         case vncProfileInvalid
         case vncHighPerformanceTransport
         case vncCertificate
@@ -59,6 +60,7 @@ import UserNotifications
     var validationData: MainView.ValidationData?
 
     var showHelperMissingAlert = false
+    var showProfileUnavailableAlert = false
 
     /// A shared file failed to import (see FileOpenCoordinator).
     var fileOpenErrorMessage: String?
@@ -186,6 +188,8 @@ import UserNotifications
             return showKeyChangedAlert
         case .helperMissing:
             return showHelperMissingAlert
+        case .profileUnavailable:
+            return showProfileUnavailableAlert
         case .vncProfileInvalid:
             return showVNCProfileInvalidAlert
         case .vncHighPerformanceTransport:
@@ -269,6 +273,8 @@ import UserNotifications
             showKeyChangedAlert = false
         case .helperMissing:
             showHelperMissingAlert = false
+        case .profileUnavailable:
+            showProfileUnavailableAlert = false
         case .vncProfileInvalid:
             showVNCProfileInvalidAlert = false
         case .vncHighPerformanceTransport:

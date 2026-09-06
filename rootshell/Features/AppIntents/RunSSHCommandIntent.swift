@@ -23,7 +23,7 @@ struct RunSSHCommandIntent: AppIntent, ForegroundContinuableIntent {
     /// bloating the Shortcuts run.
     private static let maxOutputCharacters = 100_000
 
-    @Parameter(title: "Profile")
+    @Parameter(title: "Profile", query: SSHConnectionProfileEntityQuery())
     var profile: ConnectionProfileEntity
 
     @Parameter(title: "Command")
@@ -34,10 +34,11 @@ struct RunSSHCommandIntent: AppIntent, ForegroundContinuableIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
-        guard let savedProfile = ConnectionProfileManager.shared.profile(for: profile.id) else {
+        guard let savedProfile = ConnectionProfileManager.shared.profile(for: profile.id),
+              !savedProfile.isDeleted else {
             throw IntentError.profileNotFound
         }
-        guard savedProfile.connectionProtocol != .vnc else {
+        guard savedProfile.isSSHBased else {
             throw IntentError.notATerminalProfile
         }
         let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -162,7 +163,7 @@ struct RunSSHCommandIntent: AppIntent, ForegroundContinuableIntent {
             case .profileNotFound:
                 return "Connection profile not found."
             case .notATerminalProfile:
-                return "Screen Sharing profiles can't run commands."
+                return "This action requires an SSH, mosh, or tssh profile."
             case .emptyCommand:
                 return "A command is required."
             case .keyUnavailable(let profileName):

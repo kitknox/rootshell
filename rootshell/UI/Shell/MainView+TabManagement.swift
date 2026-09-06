@@ -162,7 +162,8 @@ extension MainView {
         insertPaneAsTab(
             terminalView,
             title: title,
-            suppressesTabBarAnimation: suppressesTabBarAnimation
+            suppressesTabBarAnimation: suppressesTabBarAnimation,
+            profileThemeSourceID: sourceProfileID
         )
     }
 
@@ -175,10 +176,12 @@ extension MainView {
     func insertPaneAsTab(
         _ pane: SplitPaneView,
         title: String,
-        suppressesTabBarAnimation: Bool = false
+        suppressesTabBarAnimation: Bool = false,
+        profileThemeSourceID: UUID? = nil
     ) {
         let newTab = TerminalTab(paneView: pane, title: title, windowId: windowId)
         pane.containingTabID = newTab.id
+        applyProfileTheme(profileID: profileThemeSourceID, tabID: newTab.id)
 
         // Insert tab after current tab (not at end)
         let insertionIndex = min(selectedTabIndex + 1, terminals.count)
@@ -233,8 +236,9 @@ extension MainView {
         direction: SplitTree<SplitPaneView>.NewDirection,
         logLabel: String,
         sourceProfileID: UUID? = nil,
-        configFor: (SplitPaneView) -> ConnectionConfig,
-        fallbackToTab: () -> Void
+        startupCommand: String? = nil,
+        configFor: @MainActor (SplitPaneView) -> ConnectionConfig,
+        fallbackToTab: @MainActor () -> Void
     ) {
         guard terminals.indices.contains(selectedTabIndex) else {
             // No tab exists, create a new tab instead
@@ -265,12 +269,15 @@ extension MainView {
             sourceProfileID: sourceProfileID
         )
 
+        newTerminalView.pendingStartupCommand = startupCommand
+
         insertPaneAsSplit(
             newTerminalView,
             at: targetPane,
             inTab: selectedTabIndex,
             direction: direction,
-            logLabel: logLabel
+            logLabel: logLabel,
+            profileThemeSourceID: sourceProfileID
         )
     }
 
@@ -283,7 +290,8 @@ extension MainView {
         at targetPane: SplitPaneView,
         inTab tabIndex: Int,
         direction: SplitTree<SplitPaneView>.NewDirection,
-        logLabel: String
+        logLabel: String,
+        profileThemeSourceID: UUID? = nil
     ) {
         pane.containingTabID = terminals[tabIndex].id
 
@@ -295,11 +303,22 @@ extension MainView {
                 direction: direction
             )
 
+            applyProfileTheme(profileID: profileThemeSourceID, tabID: terminals[tabIndex].id)
+
             // Set focus immediately - Ghostty focus is independent of UIKit focus
             setFocusedPane(pane, inTab: tabIndex)
         } catch {
             Ghostty.logger.error("Failed to create \(logLabel) split: \(error)")
         }
+    }
+
+    /// Only explicit launches pass a profile ID here. Restore and pane moves
+    /// retain their saved/user-selected tab override instead of reapplying it.
+    private func applyProfileTheme(profileID: UUID?, tabID: UUID) {
+        guard let profileID,
+              let name = ConnectionProfileManager.shared.profile(for: profileID)?.themeName,
+              ThemeManager.shared.themeInfo(for: name) != nil else { return }
+        themeOverrideManager.setTabTheme(tabId: tabID, themeName: name)
     }
 
     // MARK: - Per-Protocol Creators
@@ -338,7 +357,7 @@ extension MainView {
 
     /// Ensures ghostty-helper is available before running a local shell action on Catalyst
     /// Will auto-launch helper if running in non-sandboxed mode
-    func performLocalShellAction(description: String, action: @escaping () -> Void) {
+    func performLocalShellAction(description: String, action: @escaping @MainActor () -> Void) {
 #if targetEnvironment(macCatalyst)
         // Fast path: when the helper has already been confirmed running, run
         // the action synchronously instead of awaiting ensureHelperRunning()
@@ -409,8 +428,16 @@ extension MainView {
         switch terminal.connectionConfig {
         case .local:
             // A stale tmux surface is not a real local shell.
-            return NewTabRequest(target: terminal.isTmuxPane ? .connections : .local,
-                                 localDirectory: terminal.isTmuxPane ? nil : terminal.pwd)
+            guard !terminal.isTmuxPane else {
+                return NewTabRequest(target: .connections, localDirectory: nil)
+            }
+            if let profileID = terminal.sourceProfileID {
+                return NewTabRequest(
+                    target: .connection(.local(workingDirectory: terminal.pwd), profileID),
+                    localDirectory: terminal.pwd
+                )
+            }
+            return NewTabRequest(target: .local, localDirectory: terminal.pwd)
         case .trzszTransfer:
             return NewTabRequest(target: .connections, localDirectory: nil)
         default:
@@ -468,6 +495,11 @@ extension MainView {
             // profile provenance rather than re-reading an edited saved profile.
             let config = original.forNewSplit()
             switch config {
+            case .local:
+                performLocalShellAction(description: "duplicate a local shell") {
+                    self.openTerminalTab(config: config, title: config.displayName,
+                                         sourceProfileID: profileID, suppressesTabBarAnimation: true)
+                }
             case .vnc(let vnc):
                 createVNCTab(with: vnc, sourceProfileID: profileID)
             case .mosh(let mosh), .shellLaunchedMosh(let mosh, _):
@@ -480,6 +512,53 @@ extension MainView {
                 addNewTab()
             default:
                 openTerminalTab(config: config, title: config.displayName, sourceProfileID: profileID)
+            }
+        }
+    }
+
+    func createLocalProfile(_ profile: ConnectionProfile, splitOption: SSHConnectionView.SplitOption) {
+        guard profile.isAvailableOnCurrentPlatform, let local = profile.localConfig else { return }
+        performLocalShellAction(description: "open a local shell profile") {
+            let configuredDirectory = local.workingDirectory.flatMap { raw -> String? in
+                guard let path = Self.resolveIntentDirectory(raw) else { return nil }
+                #if targetEnvironment(macCatalyst)
+                // The helper exits if chdir fails; use HOME for a missing
+                // directory (common when a profile syncs to another Mac).
+                var isDirectory: ObjCBool = false
+                if !FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+                    || !isDirectory.boolValue {
+                    return Self.resolveIntentDirectory("~")
+                }
+                #endif
+                return path
+            }
+            @MainActor func inheritedDirectory(from pane: SplitPaneView?) -> String? {
+                guard let terminal = pane?.asTerminal,
+                      case .local = terminal.connectionConfig else { return nil }
+                return terminal.pwd
+            }
+            let openTab: @MainActor () -> Void = {
+                let focused = self.terminals.indices.contains(self.selectedTabIndex)
+                    ? self.terminals[self.selectedTabIndex].focusedPane : nil
+                self.openTerminalTab(
+                    config: .local(workingDirectory: configuredDirectory ?? inheritedDirectory(from: focused)),
+                    title: profile.name, sourceProfileID: profile.id,
+                    suppressesTabBarAnimation: true, startupCommand: local.startupCommand
+                )
+            }
+            switch splitOption {
+            case .newTab:
+                openTab()
+            case .splitRight, .splitDown:
+                self.openTerminalSplit(
+                    direction: splitOption == .splitRight ? .right : .down,
+                    logLabel: "local profile", sourceProfileID: profile.id,
+                    startupCommand: local.startupCommand,
+                    configFor: { pane in
+                        .local(workingDirectory: configuredDirectory ?? inheritedDirectory(from: pane))
+                    },
+                    fallbackToTab: openTab
+                )
             }
         }
     }

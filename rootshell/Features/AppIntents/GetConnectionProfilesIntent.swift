@@ -30,7 +30,7 @@ struct GetConnectionProfilesIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<[ConnectionProfileEntity]> {
-        var results = ConnectionProfileManager.shared.profiles
+        var results = ConnectionProfileManager.shared.availableProfiles
 
         if let folder, !folder.isEmpty {
             results = results.filter { $0.folderPath == folder }
@@ -55,7 +55,9 @@ struct GetConnectionProfilesIntent: AppIntent {
     struct FolderOptionsProvider: DynamicOptionsProvider {
         func results() async throws -> [String] {
             await MainActor.run {
-                ConnectionProfileManager.shared.allFolders.map { $0.path }
+                Set(ConnectionProfileManager.shared.availableProfiles.map { $0.folderPath })
+                    .filter { !$0.isEmpty }
+                    .sorted()
             }
         }
     }
@@ -63,7 +65,8 @@ struct GetConnectionProfilesIntent: AppIntent {
     struct TagOptionsProvider: DynamicOptionsProvider {
         func results() async throws -> [String] {
             await MainActor.run {
-                ConnectionProfileManager.shared.allTags.map { $0.name }
+                Set(ConnectionProfileManager.shared.availableProfiles.flatMap { $0.tags })
+                    .sorted()
             }
         }
     }

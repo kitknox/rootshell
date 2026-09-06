@@ -60,6 +60,7 @@ extension SSHConnectionView {
     func applyVNCProfile(_ profile: ConnectionProfile) {
         guard let config = profile.vncConfig else { return }
 
+        quickConnectProfile = profile
         connectionType = .vnc
         vncForm = VNCFormState(config: config)
 
@@ -68,11 +69,11 @@ extension SSHConnectionView {
             vncForm.password = saved
         }
 
-        ConnectionProfileManager.shared.recordUsage(id: profile.id)
     }
 
     /// Populate the VNC form from a discovered host or vnc:// quick connect.
     func applyVNCTarget(hostname: String, port: Int?) {
+        quickConnectProfile = nil
         connectionType = .vnc
         var form = VNCFormState()
         form.hostname = hostname
@@ -146,7 +147,15 @@ extension SSHConnectionView {
             }
         }
 
-        onVNCConnect?(config, splitOption)
+        if var profile = quickConnectProfile,
+           profile.connectionProtocol == .vnc,
+           profile.vncConfig?.host == config.host,
+           let onProfileConnect {
+            profile.vncConfig = config
+            onProfileConnect(profile, splitOption)
+        } else {
+            onVNCConnect?(config, splitOption)
+        }
         close()
     }
 }
