@@ -252,6 +252,14 @@ nonisolated extension Settings {
     }
 
     enum ScreenSharing {
+        static let routeReservedShortcutsToVNCDefault = SettingKey(
+            "screenSharingRouteReservedShortcutsToVNCDefault", default: true, group: .screenSharing,
+            configKey: "screen-sharing-route-reserved-shortcuts-to-vnc-default",
+            title: String(localized: "Route Reserved Shortcuts to VNC", comment: "Setting title"))
+        static let controlOptionAsCommandDefault = SettingKey(
+            "screenSharingControlOptionAsCommandDefault", default: true, group: .screenSharing,
+            configKey: "screen-sharing-control-option-as-command-default",
+            title: String(localized: "Control+Option as Command", comment: "Setting title"))
         static let clipboardSyncDefault = SettingKey(
             "screenSharingClipboardSyncDefault", default: ScreenSharingClipboardSyncDefault.automatic, group: .screenSharing,
             configKey: "screen-sharing-clipboard-sync-default",
@@ -261,7 +269,10 @@ nonisolated extension Settings {
             configKey: "screen-sharing-panning-default",
             title: String(localized: "Default Panning Mode", comment: "Setting title"))
 
-        static let all: [AnySettingDefinition] = [clipboardSyncDefault.erased, panningDefault.erased]
+        static let all: [AnySettingDefinition] = [
+            clipboardSyncDefault.erased, panningDefault.erased,
+            controlOptionAsCommandDefault.erased, routeReservedShortcutsToVNCDefault.erased,
+        ]
     }
 
     enum Transfer {
