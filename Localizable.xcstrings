@@ -70024,6 +70024,160 @@
         }
       }
     },
+    "Ask Each Time" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "السؤال في كل مرة"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pregunta cada vegada"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ptát se pokaždé"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spørg hver gang"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jedes Mal fragen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preguntar cada vez"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kysy joka kerta"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Demander à chaque fois"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "שאל בכל פעם"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kérdés minden alkalommal"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chiedi ogni volta"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毎回確認"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "매번 묻기"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spør hver gang"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elke keer vragen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pytaj za każdym razem"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perguntar sempre"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perguntar sempre"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Întreabă de fiecare dată"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vprašaj vsakič"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fråga varje gång"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Запитувати щоразу"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hỏi mỗi lần"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次询问"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次詢問"
+          }
+        }
+      }
+    },
     "Ask Every Time" : {
       "comment" : "Local SSH agent client rule policy",
       "localizations" : {
@@ -106955,6 +107109,160 @@
         }
       }
     },
+    "Choose a local shell, duplicate the focused session, or open Connections each time." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "اختر في كل مرة صدفة محلية، أو تكرار الجلسة المركّز عليها، أو فتح الاتصالات."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tria cada vegada un shell local, duplica la sessió enfocada o obre Connexions."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pokaždé zvolit lokální shell, duplikovat zaměřenou relaci nebo otevřít Připojení."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vælg hver gang en lokal shell, dupliker den fokuserede session, eller åbn Forbindelser."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jedes Mal eine lokale Shell wählen, die fokussierte Sitzung duplizieren oder Verbindungen öffnen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elegir cada vez entre un shell local, duplicar la sesión enfocada o abrir Conexiones."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valitse joka kerta paikallinen komentotulkki, kohdistetun istunnon kopiointi tai Yhteydet."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisir à chaque fois un shell local, dupliquer la session active ou ouvrir Connexions."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "בחר בכל פעם מעטפת מקומית, שכפול ההפעלה הממוקדת או פתיחת החיבורים."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Minden alkalommal választhat helyi parancsértelmezőt, duplikálhatja a fókuszált munkamenetet, vagy megnyithatja a Kapcsolatokat."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scegli ogni volta se aprire una shell locale, duplicare la sessione attiva o aprire Connessioni."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毎回、ローカルシェルを開く、フォーカス中のセッションを複製する、「接続」を開くのいずれかを選択します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "매번 로컬 셸 열기, 포커스된 세션 복제 또는 연결 열기 중에서 선택합니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Velg hver gang et lokalt skall, dupliser den fokuserte økten, eller åpne Tilkoblinger."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kies elke keer een lokale shell, dupliceer de actieve sessie of open Verbindingen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Za każdym razem wybieraj lokalną powłokę, duplikowanie aktywnej sesji lub otwarcie Połączeń."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escolha um shell local, duplique a sessão em foco ou abra Conexões a cada vez."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escolha um shell local, duplique a sessão em foco ou abra Ligações de cada vez."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alege de fiecare dată un shell local, duplicarea sesiunii focalizate sau deschiderea listei Conexiuni."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vsakič izberite lokalno lupino, podvojite osredotočeno sejo ali odprite Povezave."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Välj varje gång ett lokalt skal, duplicera den fokuserade sessionen eller öppna Anslutningar."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Щоразу вибирати локальну оболонку, дублювати активний сеанс або відкривати З'єднання."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mỗi lần chọn mở shell cục bộ, nhân đôi phiên đang chọn hoặc mở Kết nối."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次选取打开本地 Shell、复制聚焦的会话或打开“连接”。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次選擇開啟本機 Shell、複製聚焦的工作階段，或開啟「連線」。"
+          }
+        }
+      }
+    },
     "Choose External File…" : {
       "localizations" : {
         "ar" : {
@@ -108497,6 +108805,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "選擇要對這個 tmux 控制模式分頁執行的操作。"
+          }
+        }
+      }
+    },
+    "Choose what to open in a new tab." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "اختر ما تريد فتحه في علامة تبويب جديدة."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tria què vols obrir en una pestanya nova."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vyberte, co se má otevřít v nové kartě."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vælg, hvad der skal åbnes i en ny fane."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle, was in einem neuen Tab geöffnet werden soll."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elige qué abrir en una nueva pestaña."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valitse, mitä uuteen välilehteen avataan."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisissez ce qui doit s'ouvrir dans un nouvel onglet."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "בחר מה לפתוח בלשונית חדשה."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Válassza ki, mi nyíljon meg az új lapon."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scegli cosa aprire in una nuova scheda."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新規タブで開く項目を選択してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 탭에서 열 항목을 선택하십시오."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Velg hva som skal åpnes i en ny fane."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kies wat er in een nieuw tabblad moet worden geopend."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wybierz, co otworzyć w nowej karcie."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escolha o que abrir em uma nova aba."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escolha o que abrir num novo separador."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alege ce să deschizi într-o filă nouă."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Izberite, kaj naj se odpre v novem zavihku."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Välj vad som ska öppnas i en ny flik."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Виберіть, що відкрити в новій вкладці."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chọn nội dung cần mở trong tab mới."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选取要在新标签页中打开的内容。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請選擇要在新分頁中開啟的項目。"
           }
         }
       }
@@ -138639,6 +139101,161 @@
         }
       }
     },
+    "Control+Option as Command" : {
+      "comment" : "Setting title",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "استخدام Control+Option كمفتاح Command"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option com a Ordre"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option jako Command"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option som Command"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steuerung+Option als Befehl"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Opción como Comando"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option Command-näppäimenä"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contrôle+Option comme Commande"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option כמקש Command"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option mint Command"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option come Comando"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option を Command として使用"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option을 Command로 사용"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option som Command"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option als Command"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option jako Command"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option como Comando"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option como Comando"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option ca Comandă"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option kot Command"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option som Kommando"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control+Option як Command"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dùng Control+Option làm Command"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将 Control+Option 用作 Command"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "將 Control+Option 用作 Command"
+          }
+        }
+      }
+    },
     "Controls cursor transparency. %@ is fully opaque." : {
       "localizations" : {
         "ar" : {
@@ -139101,6 +139718,160 @@
         }
       }
     },
+    "Controls the New Tab command (⌘T by default, or your custom shortcut) in every session. The tab-bar + always opens Connections." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يتحكم في أمر علامة التبويب الجديدة (⌘T افتراضيًا، أو الاختصار المخصص لديك) في كل جلسة. ويفتح الزر + في شريط علامات التبويب الاتصالات دائمًا."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Controla l'ordre Nova pestanya (⌘T per omissió, o la teva drecera personalitzada) a totes les sessions. El + de la barra de pestanyes sempre obre Connexions."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Určuje, co dělá příkaz Nová karta (ve výchozím nastavení ⌘T nebo vaše vlastní zkratka) ve všech relacích. Tlačítko + na liště karet vždy otevře Připojení."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Styrer kommandoen Ny fane (⌘T som standard eller din egen genvej) i alle sessioner. Knappen + på fanelinjen åbner altid Forbindelser."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Legt fest, was „Neuer Tab“ (standardmäßig ⌘T oder dein eigener Kurzbefehl) in jeder Sitzung bewirkt. Das + in der Tableiste öffnet immer Verbindungen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Controla qué hace el comando Nueva pestaña (⌘T por omisión, o tu atajo personalizado) en todas las sesiones. El + de la barra de pestañas siempre abre Conexiones."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Määrittää Uusi välilehti -komennon (oletuksena ⌘T tai oma pikanäppäimesi) toiminnan kaikissa istunnoissa. Välilehtipalkin + avaa aina Yhteydet."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Détermine ce que fait la commande Nouvel onglet (⌘T par défaut, ou votre raccourci personnalisé) dans chaque session. Le + de la barre d'onglets ouvre toujours Connexions."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "קובע מה עושה פקודת לשונית חדשה (⌘T כברירת מחדל, או קיצור הדרך המותאם אישית שלך) בכל הפעלה. הכפתור + בסרגל הלשוניות תמיד פותח את החיבורים."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meghatározza az Új lap parancs működését (alapértelmezés szerint ⌘T, vagy az egyéni billentyűparancs) minden munkamenetben. A lapsáv + gombja mindig a Kapcsolatokat nyitja meg."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Controlla cosa fa il comando Nuova scheda (⌘T per impostazione predefinita, o la scorciatoia personalizzata) in ogni sessione. Il + nella barra delle schede apre sempre Connessioni."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてのセッションで「新規タブ」コマンド（デフォルトは ⌘T、またはカスタムショートカット）の動作を制御します。タブバーの + は常に「接続」を開きます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 세션에서 새 탭 명령(기본값은 ⌘T 또는 사용자가 지정한 단축키)의 동작을 제어합니다. 탭 막대의 +는 항상 연결을 엽니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Styrer Ny fane-kommandoen (⌘T som standard, eller din egen snarvei) i alle økter. + på fanelinjen åpner alltid Tilkoblinger."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bepaalt wat de opdracht Nieuw tabblad (standaard ⌘T of je eigen sneltoets) in elke sessie doet. De + in de tabbladbalk opent altijd Verbindingen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Określa działanie polecenia Nowa karta (domyślnie ⌘T lub Twojego własnego skrótu) w każdej sesji. Przycisk + na pasku kart zawsze otwiera Połączenia."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Controla o comando Nova Aba (⌘T por padrão, ou seu atalho personalizado) em todas as sessões. O + da barra de abas sempre abre Conexões."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Controla o comando Novo Separador (⌘T por predefinição, ou o seu atalho personalizado) em todas as sessões. O + da barra de separadores abre sempre Ligações."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Controlează comanda Filă nouă (⌘T implicit sau scurtătura ta personalizată) în toate sesiunile. Butonul + din bara de file deschide întotdeauna Conexiuni."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Določa, kaj stori ukaz Nov zavihek (privzeto ⌘T ali vaša bližnjica po meri) v vsaki seji. Gumb + v vrstici zavihkov vedno odpre Povezave."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Styr kommandot Ny flik (⌘T som standard, eller din egen genväg) i alla sessioner. Knappen + i flikfältet öppnar alltid Anslutningar."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Визначає дію команди «Нова вкладка» (типово ⌘T або ваше власне скорочення) у кожному сеансі. Кнопка + на панелі вкладок завжди відкриває З'єднання."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kiểm soát lệnh Tab mới (mặc định là ⌘T, hoặc phím tắt tùy chỉnh của bạn) trong mọi phiên. Nút + trên thanh tab luôn mở Kết nối."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控制每个会话中的“新建标签页”命令（默认为 ⌘T，或您自定的快捷键）。标签栏中的 + 始终打开“连接”。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控制每個工作階段中的「新增分頁」指令（預設為 ⌘T，或你自訂的快速鍵）。分頁列中的 + 一律開啟「連線」。"
+          }
+        }
+      }
+    },
     "Controls the text size in AI Agent chat messages, code blocks, and tool outputs." : {
       "localizations" : {
         "ar" : {
@@ -139410,6 +140181,7 @@
       }
     },
     "Controls what ⌘T does while attached to a tmux -CC session. Outside tmux it always opens a local shell." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -190742,6 +191514,160 @@
         }
       }
     },
+    "Duplicate “%@”" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تكرار “%@”"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplica “%@”"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplikovat „%@“"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dupliker “%@”"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ duplizieren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicar “%@”"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopioi ”%@”"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dupliquer « %@ »"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "שכפל את “%@”"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@” duplikálása"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplica “%@”"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」を複製"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” 복제"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dupliser «%@»"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” dupliceren"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplikuj „%@”"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicar “%@”"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicar “%@”"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplică „%@”"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Podvoji „%@“"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicera ”%@”"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Дублювати «%@»"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nhân đôi “%@”"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制“%@”"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "複製「%@」"
+          }
+        }
+      }
+    },
     "Duplicate as Custom Theme" : {
       "localizations" : {
         "ar" : {
@@ -191050,8 +191976,318 @@
         }
       }
     },
+    "Duplicate Focused" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تكرار الجلسة المركّز عليها"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplica la sessió enfocada"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplikovat zaměřenou relaci"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dupliker fokuseret session"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fokussierte Sitzung duplizieren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicar la sesión enfocada"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopioi kohdistettu istunto"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dupliquer la session active"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "שכפל את ההפעלה הממוקדת"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fókuszált munkamenet duplikálása"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplica sessione attiva"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フォーカス中のセッションを複製"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "포커스된 세션 복제"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dupliser fokusert økt"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actieve sessie dupliceren"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplikuj aktywną sesję"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicar Sessão em Foco"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicar sessão em foco"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplică sesiunea focalizată"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Podvoji osredotočeno sejo"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicera fokuserad session"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Дублювати активний сеанс"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nhân đôi phiên đang chọn"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制聚焦的会话"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "複製聚焦的工作階段"
+          }
+        }
+      }
+    },
+    "Duplicate Focused Tab" : {
+      "comment" : "Keybind action",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تكرار علامة التبويب المركّز عليها"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplica la pestanya enfocada"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplikovat zaměřenou kartu"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dupliker fokuseret fane"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fokussierten Tab duplizieren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicar pestaña enfocada"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopioi kohdistettu välilehti"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dupliquer l'onglet actif"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "שכפל את הלשונית הממוקדת"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fókuszált lap duplikálása"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplica scheda attiva"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フォーカス中のタブを複製"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "포커스된 탭 복제"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dupliser fokusert fane"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actief tabblad dupliceren"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplikuj aktywną kartę"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicar Aba em Foco"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicar separador em foco"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplică fila focalizată"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Podvoji osredotočeni zavihek"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicera fokuserad flik"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Дублювати активну вкладку"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nhân đôi tab đang chọn"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制聚焦的标签页"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "複製聚焦的分頁"
+          }
+        }
+      }
+    },
     "Duplicate SSH Tab" : {
       "comment" : "Keybind action",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -249912,6 +251148,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "硬體"
+          }
+        }
+      }
+    },
+    "Hardware Keyboard" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لوحة المفاتيح الخارجية"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teclat físic"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hardwarová klávesnice"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fysisk tastatur"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hardware-Tastatur"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teclado físico"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fyysinen näppäimistö"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clavier physique"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "מקלדת חומרה"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hardveres billentyűzet"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastiera fisica"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ハードウェアキーボード"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "하드웨어 키보드"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maskinvaretastatur"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hardwaretoetsenbord"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klawiatura sprzętowa"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teclado Físico"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teclado Físico"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastatură fizică"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Strojna tipkovnica"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fysiskt tangentbord"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Апаратна клавіатура"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bàn phím vật lý"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "硬件键盘"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "硬體鍵盤"
           }
         }
       }
@@ -326215,6 +327605,160 @@
         }
       }
     },
+    "Maps physical Control+Option to remote Command, including Tab and Shift shortcuts. Replaces existing Control+Option shortcuts, including Dictate. Sets the default for new sessions; change it for the current session from the Screen Sharing menu. Turn it off to send Control+Option combinations." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يحوّل Control+Option الفعليين إلى Command على الجهاز البعيد، بما في ذلك اختصارات Tab وShift. ويحل محل اختصارات Control+Option الحالية، بما فيها الإملاء. يضبط الإعداد الافتراضي للجلسات الجديدة؛ ولتغييره في الجلسة الحالية استخدم قائمة مشاركة الشاشة. أوقف تشغيله لإرسال تركيبات Control+Option."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Assigna el Control+Option físic a l'Ordre remota, incloses les dreceres amb Tab i Shift. Substitueix les dreceres Control+Option existents, inclosa la de Dictat. Estableix el valor per omissió per a les sessions noves; canvia'l per a la sessió actual des del menú Compartir pantalla. Desactiva-ho per enviar combinacions amb Control+Option."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mapuje fyzickou kombinaci Control+Option na vzdálený Command, včetně zkratek s klávesami Tab a Shift. Nahradí stávající zkratky s Control+Option, včetně Diktování. Nastavuje výchozí chování pro nové relace; pro aktuální relaci ho změníte v nabídce Sdílení obrazovky. Vypnutím budete odesílat kombinace Control+Option."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tilknytter fysisk Control+Option til Command på fjerncomputeren, inklusive genveje med Tab og Shift. Erstatter eksisterende Control+Option-genveje, inklusive Diktering. Angiver standarden for nye sessioner; du kan ændre den for den aktuelle session i menuen Skærmdeling. Slå den fra for at sende Control+Option-kombinationer."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildet physisches Steuerung+Option auf Befehl auf dem entfernten Computer ab, einschließlich Tab- und Shift-Kurzbefehlen. Ersetzt vorhandene Steuerung+Option-Kurzbefehle, einschließlich Diktieren. Legt die Vorgabe für neue Sitzungen fest; für die aktuelle Sitzung im Menü „Bildschirmfreigabe“ änderbar. Deaktiviere die Option, um Steuerung+Option-Kombinationen zu senden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Asigna Control+Opción del teclado físico a Comando en el ordenador remoto, incluidos los atajos con Tab y Shift. Sustituye los atajos de Control+Opción existentes, incluido Dictado. Establece el valor por omisión de las nuevas sesiones; puedes cambiarlo para la sesión actual desde el menú Compartir pantalla. Desactívalo para enviar combinaciones de Control+Opción."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yhdistää fyysisen Control+Option-yhdistelmän etäkoneen Command-näppäimeen, mukaan lukien Tab- ja Shift-pikanäppäimet. Korvaa nykyiset Control+Option-pikanäppäimet, myös Sanelun. Asettaa oletuksen uusille istunnoille; voit muuttaa sen nykyiselle istunnolle Näytön jakaminen -valikosta. Poista se käytöstä, jos haluat lähettää Control+Option-yhdistelmiä."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Convertit Contrôle+Option du clavier physique en Commande sur l'ordinateur distant, y compris les raccourcis Tab et Shift. Remplace les raccourcis Contrôle+Option existants, y compris Dictée. Définit le réglage par défaut des nouvelles sessions ; modifiez-le pour la session en cours depuis le menu Partage d'écran. Désactivez cette option pour envoyer les combinaisons Contrôle+Option."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ממפה את Control+Option הפיזיים אל Command המרוחק, כולל קיצורי Tab ו-Shift. מחליף קיצורי Control+Option קיימים, כולל הכתבה. קובע את ברירת המחדל להפעלות חדשות; לשינוי בהפעלה הנוכחית, השתמש בתפריט שיתוף מסך. כבה זאת כדי לשלוח צירופי Control+Option."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A fizikai Control+Option billentyűket a távoli gép Command billentyűjére képezi le, beleértve a Tab és Shift billentyűparancsokat is. Felülírja a meglévő Control+Option billentyűparancsokat, köztük a Diktálást. Az új munkamenetek alapértelmezését állítja be; az aktuális munkamenetnél a Képernyőmegosztás menüben módosíthatja. Kapcsolja ki a Control+Option kombinációk küldéséhez."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Associa Control+Option della tastiera fisica a Comando sul computer remoto, incluse le scorciatoie con Tab e Shift. Sostituisce le scorciatoie Control+Option esistenti, inclusa Dettatura. Imposta il valore predefinito per le nuove sessioni; puoi modificarlo per la sessione corrente dal menu Condivisione schermo. Disattivalo per inviare le combinazioni Control+Option."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "物理キーボードの Control+Option をリモートの Command にマッピングします。Tab や Shift を使ったショートカットも含まれます。「音声入力」など、既存の Control+Option ショートカットは置き換えられます。この設定は新規セッションのデフォルトになります。現在のセッションで変更するには「画面共有」メニューを使用します。Control+Option の組み合わせを送信するにはオフにしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "물리적 Control+Option을 원격 Command로 매핑하며, Tab 및 Shift 단축키도 포함됩니다. 받아쓰기를 포함한 기존 Control+Option 단축키를 대체합니다. 새로운 세션의 기본값을 설정하며, 현재 세션은 화면 공유 메뉴에서 변경할 수 있습니다. Control+Option 조합을 전송하려면 끄십시오."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tilordner fysisk Control+Option til Command på den eksterne maskinen, inkludert snarveier med Tab og Shift. Erstatter eksisterende Control+Option-snarveier, inkludert Diktering. Angir standarden for nye økter; endre den for den gjeldende økten fra Skjermdeling-menyen. Slå den av for å sende Control+Option-kombinasjoner."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wijst het fysieke Control+Option toe aan Command op de externe computer, inclusief sneltoetsen met Tab en Shift. Vervangt bestaande Control+Option-sneltoetsen, waaronder Dicteren. Stelt de standaardwaarde in voor nieuwe sessies; wijzig deze voor de huidige sessie via het menu Schermdelen. Schakel dit uit om Control+Option-combinaties te versturen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mapuje fizyczne Control+Option na zdalny Command, w tym skróty z klawiszami Tab i Shift. Zastępuje istniejące skróty Control+Option, w tym Dyktowanie. Ustawia wartość domyślną dla nowych sesji; dla bieżącej sesji zmienisz ją w menu Udostępnianie ekranu. Wyłącz, aby wysyłać kombinacje Control+Option."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mapeia o Control+Option físico para o Comando remoto, incluindo atalhos com Tab e Shift. Substitui os atalhos Control+Option existentes, incluindo Ditado. Define o padrão para novas sessões; altere-o para a sessão atual no menu Compartilhamento de Tela. Desative para enviar combinações com Control+Option."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mapeia o Control+Option físico para o Comando remoto, incluindo atalhos com Tab e Shift. Substitui os atalhos Control+Option existentes, incluindo Ditado. Define a predefinição para novas sessões; altere-a para a sessão atual no menu Partilha de Ecrã. Desative para enviar combinações com Control+Option."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mapează Control+Option fizic la Comandă pe computerul la distanță, inclusiv scurtăturile cu Tab și Shift. Înlocuiește scurtăturile Control+Option existente, inclusiv Dictare. Stabilește valoarea implicită pentru sesiunile noi; modifică-o pentru sesiunea curentă din meniul Partajare ecran. Dezactiveaz-o pentru a trimite combinații cu Control+Option."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preslika fizični Control+Option v oddaljeni Command, vključno z bližnjicama Tab in Shift. Nadomesti obstoječe bližnjice Control+Option, tudi Narekovanje. Nastavi privzeto vrednost za nove seje; za trenutno sejo jo spremenite v meniju Skupna raba zaslona. Izklopite jo, če želite pošiljati kombinacije Control+Option."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mappar fysiskt Control+Option till Kommando på fjärrdatorn, inklusive genvägar med Tab och Shift. Ersätter befintliga Control+Option-genvägar, inklusive Diktering. Anger standard för nya sessioner; ändra den för den aktuella sessionen i menyn Skärmdelning. Stäng av för att skicka Control+Option-kombinationer."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Зіставляє фізичні Control+Option із віддаленою Command, включно зі скороченнями Tab і Shift. Замінює наявні скорочення Control+Option, зокрема Диктування. Задає типове значення для нових сеансів; для поточного сеансу змініть його в меню «Спільний доступ до екрана». Вимкніть, щоб надсилати комбінації Control+Option."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ánh xạ Control+Option vật lý thành Command trên máy từ xa, bao gồm cả các phím tắt Tab và Shift. Thay thế các phím tắt Control+Option hiện có, kể cả Đọc chính tả. Thiết lập giá trị mặc định cho các phiên mới; thay đổi cho phiên hiện tại từ menu Chia sẻ màn hình. Tắt tùy chọn này để gửi các tổ hợp Control+Option."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将物理键盘的 Control+Option 映射为远程的 Command，包括 Tab 和 Shift 快捷键。这会替换现有的 Control+Option 快捷键，包括“听写”。此设置为新会话设定默认值；若要更改当前会话，请使用“屏幕共享”菜单。将其关闭即可发送 Control+Option 组合键。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "將實體鍵盤的 Control+Option 對應為遠端的 Command，包括 Tab 與 Shift 快速鍵。這會取代現有的 Control+Option 快速鍵，包括「聽寫」。此設定會為新的工作階段設定預設值；若要更改目前的工作階段，請使用「螢幕共享」選單。將其關閉即可傳送 Control+Option 組合鍵。"
+          }
+        }
+      }
+    },
     "Markdown image" : {
       "localizations" : {
         "ar" : {
@@ -347683,6 +349227,7 @@
     },
     "New Local Shell" : {
       "comment" : "Keybind action",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -349533,6 +351078,7 @@
       }
     },
     "New Tab Action" : {
+      "comment" : "Setting title",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -349682,6 +351228,314 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新增分頁動作"
+          }
+        }
+      }
+    },
+    "New Tab Action applies globally, including outside multiplexer sessions. The tab-bar + always opens Connections." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ينطبق إجراء علامة التبويب الجديدة في كل مكان، بما في ذلك خارج جلسات المُضاعِف. ويفتح الزر + في شريط علامات التبويب الاتصالات دائمًا."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'Acció de pestanya nova s'aplica globalment, també fora de les sessions de multiplexor. El + de la barra de pestanyes sempre obre Connexions."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Akce nové karty platí globálně, i mimo relace multiplexeru. Tlačítko + na liště karet vždy otevře Připojení."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Handling ved ny fane gælder overalt, også uden for multiplexer-sessioner. Knappen + på fanelinjen åbner altid Forbindelser."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Aktion bei neuem Tab“ gilt global, auch außerhalb von Multiplexer-Sitzungen. Das + in der Tableiste öffnet immer Verbindungen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La acción de pestaña nueva se aplica de forma global, incluso fuera de las sesiones del multiplexor. El + de la barra de pestañas siempre abre Conexiones."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uuden välilehden toiminto on käytössä kaikkialla, myös multiplekseri-istuntojen ulkopuolella. Välilehtipalkin + avaa aina Yhteydet."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'action de nouvel onglet s'applique partout, y compris en dehors des sessions de multiplexeur. Le + de la barre d'onglets ouvre toujours Connexions."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "פעולת לשונית חדשה חלה בכל מקום, גם מחוץ להפעלות מרבב. הכפתור + בסרגל הלשוניות תמיד פותח את החיבורים."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Az Új lap művelet globálisan érvényes, a multiplexer-munkameneteken kívül is. A lapsáv + gombja mindig a Kapcsolatokat nyitja meg."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'azione nuova scheda si applica ovunque, anche al di fuori delle sessioni del multiplexer. Il + nella barra delle schede apre sempre Connessioni."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「新規タブ動作」は、マルチプレクサセッション以外も含め、全体に適用されます。タブバーの + は常に「接続」を開きます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 탭 동작은 멀티플렉서 세션 외부를 포함하여 전체에 적용됩니다. 탭 막대의 +는 항상 연결을 엽니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Handling ved ny fane gjelder overalt, også utenfor multiplekser-økter. + på fanelinjen åpner alltid Tilkoblinger."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "'Actie bij nieuw tabblad' geldt overal, ook buiten multiplexersessies. De + in de tabbladbalk opent altijd Verbindingen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Akcja nowej karty obowiązuje globalnie, także poza sesjami multipleksera. Przycisk + na pasku kart zawsze otwiera Połączenia."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Ação de Nova Aba se aplica globalmente, inclusive fora de sessões de multiplexador. O + da barra de abas sempre abre Conexões."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Ação de novo separador aplica-se globalmente, inclusive fora de sessões de multiplexador. O + da barra de separadores abre sempre Ligações."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acțiunea la filă nouă se aplică global, inclusiv în afara sesiunilor de multiplexor. Butonul + din bara de file deschide întotdeauna Conexiuni."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dejanje za nov zavihek velja povsod, tudi zunaj sej multiplekserja. Gumb + v vrstici zavihkov vedno odpre Povezave."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Åtgärd vid ny flik gäller globalt, även utanför multiplexersessioner. Knappen + i flikfältet öppnar alltid Anslutningar."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Дія для нової вкладки застосовується глобально, зокрема поза сеансами мультиплексора. Кнопка + на панелі вкладок завжди відкриває З'єднання."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hành động mở tab mới áp dụng trên toàn ứng dụng, kể cả bên ngoài các phiên multiplexer. Nút + trên thanh tab luôn mở Kết nối."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“新建标签页操作”全局生效，包括在多路复用器会话之外。标签栏中的 + 始终打开“连接”。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「新增分頁動作」會全域套用，包括在多工器工作階段之外。分頁列中的 + 一律開啟「連線」。"
+          }
+        }
+      }
+    },
+    "New Tabs" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "علامات التبويب الجديدة"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pestanyes noves"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nové karty"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nye faner"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neue Tabs"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pestañas nuevas"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uudet välilehdet"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nouveaux onglets"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "לשוניות חדשות"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Új lapok"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nuove schede"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新規タブ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 탭"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nye faner"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nieuwe tabbladen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nowe karty"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Novas Abas"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Novos Separadores"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "File noi"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Novi zavihki"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nya flikar"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нові вкладки"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tab mới"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建标签页"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新增分頁"
           }
         }
       }
@@ -350102,6 +351956,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nova janela tmux"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fereastră tmux nouă"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Novo okno tmux"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nytt tmux-fönster"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нове вікно tmux"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cửa sổ tmux mới"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建 tmux 窗口"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新增 tmux 視窗"
+          }
+        }
+      }
+    },
+    "New tmux Window" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "نافذة tmux جديدة"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finestra nova de tmux"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nové okno tmux"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nyt tmux-vindue"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neues tmux-Fenster"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nueva ventana de tmux"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uusi tmux-ikkuna"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nouvelle fenêtre tmux"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "חלון tmux חדש"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Új tmux ablak"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nuova finestra tmux"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新規tmuxウインドウ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 tmux 창"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nytt tmux-vindu"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nieuw tmux-venster"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nowe okno tmux"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nova Janela do tmux"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nova Janela tmux"
           }
         },
         "ro" : {
@@ -377788,6 +379796,7 @@
       }
     },
     "Open a new local shell tab, or a new tmux window in the current session." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -377937,6 +379946,314 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "開啟一個新的本機 Shell 標籤頁，或在目前工作階段中開啟一個新的 tmux 視窗。"
+          }
+        }
+      }
+    },
+    "Open a new local shell tab." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يفتح علامة تبويب جديدة بصدفة محلية."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Obre una pestanya nova de shell local."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otevřít novou kartu lokálního shellu."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Åbn en ny fane med en lokal shell."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einen neuen Tab mit einer lokalen Shell öffnen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre una nueva pestaña de shell local."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avaa uusi paikallisen komentotulkin välilehti."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir un nouvel onglet de shell local."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "פותח לשונית חדשה של מעטפת מקומית."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Új lapot nyit meg helyi parancsértelmezővel."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apri una nuova scheda di shell locale."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいローカルシェルのタブを開きます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 로컬 셸 탭을 엽니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Åpne en ny fane med lokalt skall."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open een nieuw tabblad met een lokale shell."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otwórz nową kartę lokalnej powłoki."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre uma nova aba de shell local."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre um novo separador de shell local."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deschide o filă nouă cu shell local."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Odpre nov zavihek z lokalno lupino."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öppnar en ny flik med ett lokalt skal."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Відкриває нову вкладку з локальною оболонкою."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mở một tab shell cục bộ mới."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开一个新的本地 Shell 标签页。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開啟新的本機 Shell 分頁。"
+          }
+        }
+      }
+    },
+    "Open another session matching the focused pane, or a new window in its tmux control-mode session." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يفتح جلسة أخرى مطابقة للوحة المركّز عليها، أو نافذة جديدة في جلسة tmux بوضع control الخاصة بها."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Obre una altra sessió que coincideix amb el panell enfocat, o una finestra nova a la seva sessió de tmux en control mode."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otevřít další relaci odpovídající zaměřenému panelu nebo nové okno v její relaci tmux v režimu control mode."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Åbn endnu en session, der svarer til det fokuserede panel, eller et nyt vindue i dens tmux-session i control mode."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine weitere Sitzung passend zum fokussierten Bereich öffnen oder ein neues Fenster in dessen tmux-Control-Mode-Sitzung."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre otra sesión igual a la del panel enfocado, o una nueva ventana en su sesión de tmux en control mode."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avaa uusi istunto, joka vastaa kohdistettua ruutua, tai uusi ikkuna sen tmux control mode -istunnossa."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir une autre session correspondant au volet actif, ou une nouvelle fenêtre dans sa session tmux en control mode."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "פותח הפעלה נוספת התואמת לחלונית הממוקדת, או חלון חדש בהפעלת tmux במצב control שלה."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Megnyit egy újabb munkamenetet a fókuszált panelnek megfelelően, vagy egy új ablakot annak tmux control mode munkamenetében."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apri un'altra sessione corrispondente al pannello attivo, o una nuova finestra nella sua sessione tmux in control mode."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フォーカス中のペインと同じ接続で別のセッションを開きます。tmux control mode のセッションでは新しいウインドウを開きます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "포커스된 패널과 일치하는 다른 세션을 열거나, 해당 tmux control mode 세션에서 새 창을 엽니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Åpne en ny økt som samsvarer med det fokuserte panelet, eller et nytt vindu i dens tmux-økt i control mode."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open nog een sessie die overeenkomt met het actieve paneel, of een nieuw venster in de bijbehorende tmux-control-mode-sessie."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otwórz kolejną sesję zgodną z aktywnym panelem lub nowe okno w jego sesji tmux w trybie control mode."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre outra sessão correspondente ao painel em foco ou uma nova janela na respectiva sessão do tmux em control mode."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre outra sessão correspondente ao painel em foco ou uma nova janela na respetiva sessão tmux em control mode."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deschide o altă sesiune care corespunde panoului focalizat sau o fereastră nouă în sesiunea tmux control mode a acestuia."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Odpre novo sejo, ki se ujema z osredotočenim podoknom, ali novo okno v njegovi seji tmux v načinu control."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öppnar en till session som matchar den fokuserade rutan, eller ett nytt fönster i dess tmux-session i control mode."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Відкриває ще один сеанс, що відповідає активній панелі, або нове вікно в його сеансі tmux у режимі control."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mở một phiên khác khớp với ngăn đang chọn, hoặc một cửa sổ mới trong phiên tmux control mode của nó."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开与聚焦窗格相匹配的另一个会话，或在其 tmux control mode 会话中打开一个新窗口。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開啟與聚焦面板相符的另一個工作階段，或在其 tmux control mode 工作階段中開啟新視窗。"
           }
         }
       }
@@ -378553,6 +380870,161 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "開啟連線設定檔"
+          }
+        }
+      }
+    },
+    "Open Connections" : {
+      "comment" : "Keybind action",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "فتح الاتصالات"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Obre Connexions"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otevřít Připojení"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Åbn Forbindelser"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindungen öffnen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir Conexiones"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avaa Yhteydet"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir Connexions"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "פתח חיבורים"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kapcsolatok megnyitása"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apri Connessioni"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「接続」を開く"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결 열기"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Åpne Tilkoblinger"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindingen openen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otwórz Połączenia"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir Conexões"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir Ligações"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deschide Conexiuni"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Odpri Povezave"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öppna Anslutningar"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Відкрити З'єднання"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mở Kết nối"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开“连接”"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開啟「連線」"
           }
         }
       }
@@ -444954,6 +447426,160 @@
         }
       }
     },
+    "Reserved Shortcuts" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الاختصارات المحجوزة"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dreceres reservades"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vyhrazené zkratky"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reserverede genveje"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reservierte Kurzbefehle"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atajos reservados"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Varatut pikanäppäimet"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Raccourcis réservés"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "קיצורים שמורים"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fenntartott billentyűparancsok"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scorciatoie riservate"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "予約済みショートカット"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예약된 단축키"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reserverte snarveier"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gereserveerde sneltoetsen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zarezerwowane skróty"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atalhos Reservados"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atalhos Reservados"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scurtături rezervate"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezervirane bližnjice"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reserverade genvägar"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Зарезервовані скорочення"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phím tắt dành riêng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留的快捷键"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留的快速鍵"
+          }
+        }
+      }
+    },
     "Reset" : {
       "comment" : "Tab exposé zoom HUD: restore the auto-fit preview size",
       "localizations" : {
@@ -458575,6 +461201,161 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "路由排除"
+          }
+        }
+      }
+    },
+    "Route Reserved Shortcuts to VNC" : {
+      "comment" : "Setting title",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "توجيه الاختصارات المحجوزة إلى VNC"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encaminar les dreceres reservades al VNC"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Směrovat vyhrazené zkratky do VNC"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send reserverede genveje til VNC"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reservierte Kurzbefehle an VNC weiterleiten"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Redirigir los atajos reservados a VNC"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ohjaa varatut pikanäppäimet VNC:hen"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rediriger les raccourcis réservés vers VNC"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "נתב קיצורים שמורים אל VNC"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fenntartott billentyűparancsok továbbítása a VNC-nek"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inoltra le scorciatoie riservate a VNC"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "予約済みショートカットを VNC に送信"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예약된 단축키를 VNC로 전달"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send reserverte snarveier til VNC"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gereserveerde sneltoetsen naar VNC sturen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kieruj zarezerwowane skróty do VNC"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encaminhar Atalhos Reservados para o VNC"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encaminhar Atalhos Reservados para o VNC"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Direcționează scurtăturile rezervate către VNC"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preusmeri rezervirane bližnjice v VNC"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skicka reserverade genvägar till VNC"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Надсилати зарезервовані скорочення до VNC"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chuyển phím tắt dành riêng tới VNC"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将保留的快捷键发送到 VNC"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "將保留的快速鍵傳送至 VNC"
           }
         }
       }
@@ -482808,6 +485589,160 @@
         }
       }
     },
+    "Sends rootshell’s reserved keyboard shortcuts to the remote computer by default in new Screen Sharing sessions. Change it for the current session from the Screen Sharing menu or with Command+Shift+M. Command+Shift+M always stays local." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يرسل اختصارات لوحة المفاتيح المحجوزة في rootshell إلى الكمبيوتر البعيد افتراضيًا في جلسات مشاركة الشاشة الجديدة. ولتغيير ذلك في الجلسة الحالية، استخدم قائمة مشاركة الشاشة أو Command+Shift+M. ويظل Command+Shift+M محليًا دائمًا."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envia les dreceres de teclat reservades del rootshell a l'ordinador remot per omissió a les sessions noves de Compartir pantalla. Canvia-ho per a la sessió actual des del menú Compartir pantalla o amb Command+Shift+M. Command+Shift+M sempre es manté local."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "V nových relacích sdílení obrazovky ve výchozím nastavení odesílá vyhrazené klávesové zkratky aplikace rootshell do vzdáleného počítače. Pro aktuální relaci to změníte v nabídce Sdílení obrazovky nebo pomocí Command+Shift+M. Command+Shift+M zůstává vždy lokální."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sender som standard rootshells reserverede tastaturgenveje til fjerncomputeren i nye skærmdelingssessioner. Du kan ændre det for den aktuelle session i menuen Skærmdeling eller med Command+Shift+M. Command+Shift+M forbliver altid lokal."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sendet die reservierten Tastaturkurzbefehle von rootshell in neuen Bildschirmfreigabe-Sitzungen standardmäßig an den entfernten Computer. Für die aktuelle Sitzung im Menü „Bildschirmfreigabe“ oder mit Command+Shift+M änderbar. Command+Shift+M bleibt immer lokal."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envía por omisión los atajos de teclado reservados de rootshell al ordenador remoto en las nuevas sesiones de Compartir pantalla. Puedes cambiarlo para la sesión actual desde el menú Compartir pantalla o con Command+Shift+M. Command+Shift+M siempre permanece local."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lähettää rootshellin varatut pikanäppäimet etäkoneelle oletuksena uusissa näytön jakamisen istunnoissa. Voit muuttaa sen nykyiselle istunnolle Näytön jakaminen -valikosta tai näppäinyhdistelmällä Command+Shift+M. Command+Shift+M pysyy aina paikallisena."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envoie par défaut les raccourcis clavier réservés de rootshell à l'ordinateur distant dans les nouvelles sessions de partage d'écran. Modifiez ce réglage pour la session en cours depuis le menu Partage d'écran ou avec Command+Shift+M. Command+Shift+M reste toujours local."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "שולח את קיצורי המקלדת השמורים של rootshell למחשב המרוחק כברירת מחדל בהפעלות שיתוף מסך חדשות. לשינוי בהפעלה הנוכחית, השתמש בתפריט שיתוף מסך או ב-Command+Shift+M. הצירוף Command+Shift+M תמיד נשאר מקומי."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Az új Képernyőmegosztás-munkamenetekben alapértelmezés szerint elküldi a rootshell fenntartott billentyűparancsait a távoli számítógépnek. Az aktuális munkamenetnél a Képernyőmegosztás menüben vagy a Command+Shift+M billentyűkkel módosíthatja. A Command+Shift+M mindig helyben marad."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invia per impostazione predefinita le scorciatoie da tastiera riservate di rootshell al computer remoto nelle nuove sessioni di Condivisione schermo. Puoi modificarlo per la sessione corrente dal menu Condivisione schermo o con Command+Shift+M. Command+Shift+M rimane sempre locale."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新規の画面共有セッションで、rootshell の予約済みキーボードショートカットをデフォルトでリモートコンピュータに送信します。現在のセッションで変更するには、「画面共有」メニューまたは Command+Shift+M を使用します。Command+Shift+M は常にローカルで処理されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 화면 공유 세션에서 rootshell의 예약된 키보드 단축키를 기본적으로 원격 컴퓨터에 전송합니다. 현재 세션은 화면 공유 메뉴 또는 Command+Shift+M으로 변경할 수 있습니다. Command+Shift+M은 항상 로컬에 유지됩니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sender rootshells reserverte tastatursnarveier til den eksterne maskinen som standard i nye skjermdelingsøkter. Endre det for den gjeldende økten fra Skjermdeling-menyen eller med Command+Shift+M. Command+Shift+M forblir alltid lokal."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stuurt de gereserveerde sneltoetsen van rootshell standaard naar de externe computer in nieuwe sessies van Schermdelen. Wijzig dit voor de huidige sessie via het menu Schermdelen of met Command+Shift+M. Command+Shift+M blijft altijd lokaal."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Domyślnie wysyła zarezerwowane skróty klawiszowe rootshella do zdalnego komputera w nowych sesjach udostępniania ekranu. Dla bieżącej sesji zmienisz to w menu Udostępnianie ekranu lub skrótem Command+Shift+M. Command+Shift+M zawsze pozostaje lokalny."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envia os atalhos de teclado reservados do rootshell para o computador remoto por padrão em novas sessões de Compartilhamento de Tela. Altere isso para a sessão atual no menu Compartilhamento de Tela ou com Command+Shift+M. O Command+Shift+M permanece sempre local."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envia os atalhos de teclado reservados do rootshell para o computador remoto por predefinição em novas sessões de Partilha de Ecrã. Altere isto para a sessão atual no menu Partilha de Ecrã ou com Command+Shift+M. O Command+Shift+M permanece sempre local."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trimite implicit scurtăturile de tastatură rezervate ale rootshell către computerul la distanță în sesiunile noi de Partajare ecran. Modifică acest lucru pentru sesiunea curentă din meniul Partajare ecran sau cu Command+Shift+M. Command+Shift+M rămâne întotdeauna local."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "V novih sejah Skupne rabe zaslona privzeto pošlje rezervirane bližnjice na tipkovnici aplikacije rootshell oddaljenemu računalniku. Za trenutno sejo to spremenite v meniju Skupna raba zaslona ali s tipkami Command+Shift+M. Command+Shift+M vedno ostane lokalna."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skickar rootshells reserverade tangentbordsgenvägar till fjärrdatorn som standard i nya skärmdelningssessioner. Ändra det för den aktuella sessionen i menyn Skärmdelning eller med Command+Shift+M. Command+Shift+M förblir alltid lokalt."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Типово надсилає зарезервовані клавіатурні скорочення rootshell на віддалений комп'ютер у нових сеансах спільного доступу до екрана. Для поточного сеансу змініть це в меню «Спільний доступ до екрана» або клавішами Command+Shift+M. Command+Shift+M завжди залишається локальним."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gửi các phím tắt bàn phím dành riêng của rootshell tới máy tính từ xa theo mặc định trong các phiên Chia sẻ màn hình mới. Thay đổi cho phiên hiện tại từ menu Chia sẻ màn hình hoặc bằng Command+Shift+M. Command+Shift+M luôn được giữ ở máy cục bộ."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在新的屏幕共享会话中，默认将 rootshell 的保留键盘快捷键发送到远程电脑。若要更改当前会话，请使用“屏幕共享”菜单或按 Command+Shift+M。Command+Shift+M 始终保留在本地。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在新的螢幕共享工作階段中，預設會將 rootshell 的保留鍵盤快速鍵傳送至遠端電腦。若要更改目前的工作階段，請使用「螢幕共享」選單或按 Command+Shift+M。Command+Shift+M 一律保留在本機。"
+          }
+        }
+      }
+    },
     "Sent as TERM to remote servers via SSH, Mosh, and tssh. Most servers don't have an xterm-ghostty terminfo entry unless you install one, which is why this stays on xterm-256color. Individual connections can override it in the profile editor." : {
       "comment" : "Terminal type footer: remote sessions",
       "localizations" : {
@@ -487902,6 +490837,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "工作階段排序方式"
+          }
+        }
+      }
+    },
+    "Session Unavailable" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الجلسة غير متوفرة"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessió no disponible"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Relace není dostupná"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session ikke tilgængelig"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sitzung nicht verfügbar"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sesión no disponible"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Istunto ei ole käytettävissä"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session indisponible"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ההפעלה אינה זמינה"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A munkamenet nem érhető el"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessione non disponibile"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "セッションを利用できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션 사용 불가"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Økten er utilgjengelig"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessie niet beschikbaar"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sesja niedostępna"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessão Indisponível"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessão indisponível"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sesiune indisponibilă"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seja ni na voljo"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session ej tillgänglig"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сеанс недоступний"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phiên không khả dụng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话不可用"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作階段無法使用"
           }
         }
       }
@@ -557751,6 +560840,160 @@
         }
       }
     },
+    "The original tmux session is no longer available. Open a local shell or choose another connection." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لم تعد جلسة tmux الأصلية متوفرة. افتح صدفة محلية أو اختر اتصالاً آخر."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sessió de tmux original ja no està disponible. Obre un shell local o tria una altra connexió."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Původní relace tmux již není dostupná. Otevřete lokální shell nebo zvolte jiné připojení."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Den oprindelige tmux-session er ikke længere tilgængelig. Åbn en lokal shell, eller vælg en anden forbindelse."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die ursprüngliche tmux-Sitzung ist nicht mehr verfügbar. Öffne eine lokale Shell oder wähle eine andere Verbindung."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sesión de tmux original ya no está disponible. Abre un shell local o elige otra conexión."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alkuperäinen tmux-istunto ei ole enää käytettävissä. Avaa paikallinen komentotulkki tai valitse toinen yhteys."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La session tmux d'origine n'est plus disponible. Ouvrez un shell local ou choisissez une autre connexion."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הפעלת tmux המקורית אינה זמינה עוד. פתח מעטפת מקומית או בחר חיבור אחר."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Az eredeti tmux munkamenet már nem érhető el. Nyisson meg egy helyi parancsértelmezőt, vagy válasszon másik kapcsolatot."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sessione tmux originale non è più disponibile. Apri una shell locale o scegli un'altra connessione."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元の tmux セッションは利用できなくなりました。ローカルシェルを開くか、別の接続を選択してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원래 tmux 세션을 더 이상 사용할 수 없습니다. 로컬 셸을 열거나 다른 연결을 선택하십시오."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Den opprinnelige tmux-økten er ikke lenger tilgjengelig. Åpne et lokalt skall eller velg en annen tilkobling."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De oorspronkelijke tmux-sessie is niet meer beschikbaar. Open een lokale shell of kies een andere verbinding."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pierwotna sesja tmux nie jest już dostępna. Otwórz lokalną powłokę lub wybierz inne połączenie."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A sessão original do tmux não está mais disponível. Abra um shell local ou escolha outra conexão."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A sessão tmux original já não está disponível. Abra um shell local ou escolha outra ligação."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sesiunea tmux originală nu mai este disponibilă. Deschide un shell local sau alege altă conexiune."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Izvirna seja tmux ni več na voljo. Odprite lokalno lupino ali izberite drugo povezavo."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Den ursprungliga tmux-sessionen är inte längre tillgänglig. Öppna ett lokalt skal eller välj en annan anslutning."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Початковий сеанс tmux більше недоступний. Відкрийте локальну оболонку або виберіть інше з'єднання."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phiên tmux ban đầu không còn khả dụng. Hãy mở một shell cục bộ hoặc chọn kết nối khác."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原 tmux 会话已不再可用。请打开本地 Shell 或选取其他连接。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原本的 tmux 工作階段已無法使用。請開啟本機 Shell 或選擇其他連線。"
+          }
+        }
+      }
+    },
     "The pairing code contains this device's public key and a credential for that computer only; it can be revoked from the previous screen." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -579056,6 +582299,7 @@
     },
     "tmux New Tab Action" : {
       "comment" : "Setting title",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
