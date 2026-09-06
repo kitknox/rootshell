@@ -14,7 +14,7 @@ extension Ghostty {
 
     /// A minimal UIView hosting a Ghostty surface that animates cursor movement
     /// to demonstrate cursor shader trail effects in the settings preview.
-    class CursorEffectPreviewView: UIView {
+    class CursorEffectPreviewView: UIView, PreviewRenderingParticipant {
 
         private nonisolated static let logger = Logger(
             subsystem: "com.rootshell",
@@ -25,11 +25,19 @@ extension Ghostty {
         private var surface: ghostty_surface_t?
         private var slaveFd: Int32 = -1
         private var hasSized = false
+        private var renderingSuspended = false
+        private var needsRendererResume = false
+        private var cleanedUp = false
+
+        private var canRender: Bool {
+            !cleanedUp && !renderingSuspended && !Ghostty.isSecureDrawProhibitedAtomic && window != nil
+        }
 
         // Animation
         private var moveTimer: Timer?
         private var currentWaypointIndex: Int = 0
         private var shaderObserver: NSObjectProtocol?
+        private var animationGeneration: UInt64 = 0
 
         // Waypoints for cursor movement — mix of horizontal, vertical, diagonal jumps
         // Kept within ~25 cols to avoid issues in narrow sidebars
@@ -52,6 +60,7 @@ extension Ghostty {
             isUserInteractionEnabled = false
             backgroundColor = .clear
             isOpaque = false
+            PreviewRenderingLifecycle.register(self)
         }
 
         @available(*, unavailable)
@@ -60,15 +69,21 @@ extension Ghostty {
         override func didMoveToWindow() {
             super.didMoveToWindow()
             if window != nil {
+                // A lifecycle-paused surface waits for the deferred activation
+                // pass, even if UIKit reattaches it earlier in the transaction.
+                guard canRender else { return }
                 if surface == nil {
                     createSurface()
                 } else if let surface {
                     ghostty_surface_set_occlusion(surface, true)
-                    if hasSized { startAnimation() }
+                    needsRendererResume = false
+                    if hasSized { scheduleContentAndAnimation(after: 0.15) }
                 }
             } else {
+                if Ghostty.isSecureDrawProhibitedAtomic { suspendPreviewRendering() }
                 if let surface {
                     ghostty_surface_set_occlusion(surface, false)
+                    needsRendererResume = true
                 }
                 stopAnimation()
             }
@@ -76,6 +91,7 @@ extension Ghostty {
 
         override func layoutSubviews() {
             super.layoutSubviews()
+            guard canRender else { return }
 
             if let sublayers = layer.sublayers {
                 for sublayer in sublayers {
@@ -96,16 +112,14 @@ extension Ghostty {
             if !hasSized {
                 hasSized = true
                 // Populate content and start animation after first layout
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-                    self?.populateContent()
-                    self?.startAnimation()
-                }
+                scheduleContentAndAnimation(after: 0.15)
             }
         }
 
         // MARK: - Surface Creation
 
         private func createSurface() {
+            guard canRender else { return }
             guard let app = ghosttyApp?.app else {
                 Self.logger.error("Cannot create preview surface: app pointer is nil")
                 return
@@ -143,11 +157,46 @@ extension Ghostty {
             Self.logger.debug("Cursor effect preview surface created, slaveFd=\(fd)")
         }
 
+        // MARK: - Secure-draw Lifecycle
+
+        func suspendPreviewRendering() {
+            stopAnimation()
+            guard !cleanedUp, !renderingSuspended else { return }
+            renderingSuspended = true
+            guard let surface else { return }
+            needsRendererResume = true
+            ghostty_surface_set_occlusion(surface, false)
+            let drained = ghostty_surface_drain_renderer_to_idle(surface, 100_000_000)
+            LifecycleDebugLogger.shared.checkpoint("SECURE.cursorPreview.pause", ms: nil, [
+                ("surface", UInt(bitPattern: surface)), ("drained", drained),
+            ])
+            if !drained {
+                LifecycleDebugLogger.shared.criticalCheckpoint("SECURE.cursorPreview.drain.timeout", [
+                    ("surface", UInt(bitPattern: surface)),
+                ])
+            }
+        }
+
+        func resumePreviewRendering() {
+            guard !cleanedUp, !Ghostty.isSecureDrawProhibitedAtomic else { return }
+            renderingSuspended = false
+            guard window != nil else { return }
+            if surface == nil { createSurface() }
+            setNeedsLayout()
+            layoutIfNeeded()
+            if needsRendererResume, let surface {
+                needsRendererResume = false
+                ghostty_surface_set_occlusion(surface, true)
+            }
+            // Also recovers a first-layout population interrupted by lock.
+            scheduleContentAndAnimation(after: 0.15)
+        }
+
         // MARK: - Content
 
         /// Write fake terminal content so the cursor trail is visible against text.
         private func populateContent() {
-            guard slaveFd >= 0 else { return }
+            guard canRender, hasSized, slaveFd >= 0 else { return }
 
             // Short lines (<25 chars) to avoid wrapping in narrow sidebars
             let content = [
@@ -166,8 +215,10 @@ extension Ghostty {
 
             // Tick + draw to render the initial content
             ghosttyApp?.appTick()
+            let generation = animationGeneration
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-                guard let self, let surface = self.surface,
+                guard let self, self.animationGeneration == generation, self.canRender,
+                      let surface = self.surface,
                       self.ghosttyApp?.isInBackground != true,
                       !Ghostty.isSecureDrawProhibitedAtomic else { return }
                 self.ghosttyApp?.appTick()
@@ -176,7 +227,7 @@ extension Ghostty {
         }
 
         private func writeToSlaveFd(_ text: String) {
-            guard slaveFd >= 0, let data = text.data(using: .utf8) else { return }
+            guard canRender, hasSized, slaveFd >= 0, let data = text.data(using: .utf8) else { return }
             data.withUnsafeBytes { buffer in
                 guard let ptr = buffer.baseAddress else { return }
                 var written = 0
@@ -192,7 +243,7 @@ extension Ghostty {
         // MARK: - Animation
 
         func startAnimation() {
-            guard moveTimer == nil, surface != nil else { return }
+            guard canRender, hasSized, moveTimer == nil, surface != nil else { return }
 
             // Ghostty owns frame cadence and parks its display link after the
             // finite cursor effect. This timer only supplies demo movement.
@@ -205,6 +256,7 @@ extension Ghostty {
         }
 
         func stopAnimation() {
+            animationGeneration &+= 1
             moveTimer?.invalidate()
             moveTimer = nil
         }
@@ -213,13 +265,22 @@ extension Ghostty {
             stopAnimation()
             currentWaypointIndex = 0
             // Short delay to let config propagate
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                guard let self, self.surface != nil, self.window != nil else { return }
+            scheduleContentAndAnimation(after: 0.25)
+        }
+
+        private func scheduleContentAndAnimation(after delay: TimeInterval) {
+            stopAnimation()
+            guard canRender, hasSized, surface != nil else { return }
+            let generation = animationGeneration
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, self.animationGeneration == generation, self.canRender else { return }
+                self.populateContent()
                 self.startAnimation()
             }
         }
 
         private func moveCursorToNextWaypoint() {
+            guard canRender, hasSized else { return }
             let wp = waypoints[currentWaypointIndex]
             currentWaypointIndex = (currentWaypointIndex + 1) % waypoints.count
             // ANSI CSI cursor position: ESC [ row ; col H
@@ -229,6 +290,8 @@ extension Ghostty {
         // MARK: - Cleanup
 
         func cleanup() {
+            if Ghostty.isSecureDrawProhibitedAtomic { suspendPreviewRendering() }
+            cleanedUp = true
             stopAnimation()
 
             if let observer = shaderObserver {

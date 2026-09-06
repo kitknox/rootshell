@@ -101,6 +101,44 @@ final class TabHoverPreviewView: UIView {
 
     // MARK: - Presentation
 
+    private var animationsSuspended = false
+    private var dismissalPending = false
+
+    func suspendAnimations() {
+        guard !animationsSuspended else { return }
+        animationsSuspended = true
+        zoomReadoutTask?.cancel()
+        zoomText = nil
+        let pausedTime = layer.convertTime(CACurrentMediaTime(), from: nil)
+        layer.speed = 0
+        layer.timeOffset = pausedTime
+    }
+
+    func resumeAnimations() {
+        guard animationsSuspended, !Ghostty.isSecureDrawProhibitedAtomic else { return }
+        animationsSuspended = false
+        let pausedTime = layer.timeOffset
+        layer.speed = 1
+        layer.timeOffset = 0
+        layer.beginTime = 0
+        layer.beginTime = layer.convertTime(CACurrentMediaTime(), from: nil) - pausedTime
+        lastStepTime = 0
+        updateCaption()
+    }
+
+    func finishPendingDismissal() {
+        guard dismissalPending, !Ghostty.isSecureDrawProhibitedAtomic else { return }
+        dismissalPending = false
+        generation += 1 // Invalidate an animation completion from before lock.
+        layer.removeAllAnimations()
+        removeFromSuperview()
+        mirror.releaseContents()
+        caption = nil
+        updateCaption()
+        transform = .identity
+        isHandingOff = false
+    }
+
     /// Show for `tab` (first appearance), or slide/resize to it when already up.
     func present(
         tab: TabModel,
@@ -113,6 +151,8 @@ final class TabHoverPreviewView: UIView {
         canEnterExpose: Bool = true,
         animated: Bool
     ) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
+        dismissalPending = false
         generation += 1
         zoomReadoutTask?.cancel()
         zoomText = nil
@@ -177,21 +217,16 @@ final class TabHoverPreviewView: UIView {
     func dismiss(animated: Bool) {
         guard isVisible else { return }
         isVisible = false
+        dismissalPending = true
         generation += 1
         let gen = generation
         zoomReadoutTask?.cancel()
         hintVisible = false
         frameAnimation = nil
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         let finish = {
             guard self.generation == gen else { return }
-            self.removeFromSuperview()
-            self.mirror.releaseContents()
-            // The caption retains the tab (and the title line's tab list);
-            // the card outlives the preview, so drop it now.
-            self.caption = nil
-            self.updateCaption()
-            self.transform = .identity
-            self.isHandingOff = false
+            self.finishPendingDismissal()
         }
         guard animated else {
             finish()
@@ -410,6 +445,7 @@ final class TabHoverPreviewView: UIView {
     // MARK: - Caption
 
     private func updateCaption() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         let row = AnyView(TabHoverPreviewCaptionRow(
             caption: caption, hintVisible: hintVisible && canEnterExpose, zoomText: zoomText
         ))

@@ -31,7 +31,7 @@ struct TabHoverPreviewExposeHandoff {
 
 @MainActor
 @Observable
-final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
+final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate, PreviewRenderingParticipant {
     /// First show waits; switching between tabs while up is instant.
     static let showDelay: UInt64 = 380_000_000
     /// Grace to cross the gap from the tab into the card (and back).
@@ -89,6 +89,43 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
 
     var isShowing: Bool { previewedTabID != nil }
 
+    override init() {
+        super.init()
+        PreviewRenderingLifecycle.register(self)
+    }
+
+    func suspendPreviewRendering() {
+        showTask?.cancel()
+        showTask = nil
+        hideTask?.cancel()
+        hideTask = nil
+        pinchActive = false
+        stopDisplayLink()
+        card?.suspendAnimations()
+    }
+
+    func dismissPreviewForBackground() {
+        hoveredTabID = nil
+        hoverBeganAt = nil
+        hide(animated: false)
+    }
+
+    func preparePreviewForActivation() {
+        card?.finishPendingDismissal()
+    }
+
+    func resumePreviewRendering() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
+        card?.resumeAnimations()
+        // Suspension cancels both timers. Reconcile their intent even if no
+        // new pointer/modifier event arrives after temporary inactivity.
+        // scheduleShow preserves the original hover start time; scheduleHide
+        // gives the pointer the normal grace period to return to the card.
+        reevaluateActivation()
+        if hoveredTabID == nil, !pointerInsideCard { scheduleHide() }
+        if isShowing { startDisplayLink() }
+    }
+
     deinit {
         showTask?.cancel()
         hideTask?.cancel()
@@ -145,6 +182,7 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
 
     /// A tab button / sidebar row's pointer hover changed.
     func handleHover(tabID: UUID, source: TabHoverPreviewSource, isHovered: Bool) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard !isHandingOff else { return }
         if isHovered {
             hideTask?.cancel()
@@ -194,6 +232,7 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
     }
 
     private func reevaluateActivation() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard !isHandingOff else { return }
         guard isEnabled(), activationIsSatisfied else {
             showTask?.cancel()
@@ -209,7 +248,8 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
     private func scheduleShow(tabID: UUID, source: TabHoverPreviewSource) {
         showTask?.cancel()
         showTask = nil
-        guard isEnabled(), canPresent(source), activationIsSatisfied else { return }
+        guard !Ghostty.isSecureDrawProhibitedAtomic,
+              isEnabled(), canPresent(source), activationIsSatisfied else { return }
         let elapsed = hoverBeganAt.map { max(0, CACurrentMediaTime() - $0) } ?? 0
         let delay = max(0, Double(Self.showDelay) / 1_000_000_000 - elapsed)
         if delay == 0 {
@@ -228,6 +268,7 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
 
     /// The pointer entered / left the card itself.
     fileprivate func cardHoverChanged(inside: Bool) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         pointerInsideCard = inside
         if inside {
             hideTask?.cancel()
@@ -238,6 +279,7 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
     }
 
     private func scheduleHide() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard previewedTabID != nil, !pinchActive, !isHandingOff else { return }
         hideTask?.cancel()
         hideTask = Task { @MainActor [weak self] in
@@ -252,6 +294,7 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
     // MARK: - Presentation
 
     private func present(_ tabID: UUID, source: TabHoverPreviewSource) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard isEnabled(), activationIsSatisfied, canPresent(source),
               let tabsModel, let tab = tabsModel.tab(withID: tabID),
               tabsModel.selectedTabID != tabID,
@@ -296,7 +339,7 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
         isHandingOff = false
         pinchActive = false
         stopDisplayLink()
-        pinch?.isEnabled = false
+        if !Ghostty.isSecureDrawProhibitedAtomic { pinch?.isEnabled = false }
         card?.dismiss(animated: animated && !reduceMotion())
         onReconcile?()
     }
@@ -313,6 +356,7 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
 
     /// Click on the card: open the exposé and fly the picture into its cell.
     func enterExpose() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard let id = previewedTabID, let card, !isHandingOff, card.canEnterExpose else { return }
         showTask?.cancel()
         showTask = nil
@@ -348,6 +392,7 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
     // MARK: - Display link
 
     private func startDisplayLink() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard displayLink == nil else { return }
         let proxy = DisplayLinkProxy(owner: self)
         let link = CADisplayLink(target: proxy, selector: #selector(DisplayLinkProxy.tick(_:)))
@@ -361,6 +406,10 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
     }
 
     fileprivate func tick(now: CFTimeInterval) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else {
+            suspendPreviewRendering()
+            return
+        }
         guard let id = previewedTabID, let card else {
             stopDisplayLink()
             return
@@ -414,6 +463,7 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate {
     }
 
     @objc private func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard let card, previewedTabID != nil, !isHandingOff else { return }
         switch recognizer.state {
         case .began:

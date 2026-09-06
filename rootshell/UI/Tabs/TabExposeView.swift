@@ -18,7 +18,7 @@ import UIKit
 import SwiftUI
 
 @MainActor
-final class TabExposeView: UIView, TabExposeControllerObserver {
+final class TabExposeView: UIView, TabExposeControllerObserver, PreviewRenderingParticipant {
     struct Configuration {
         /// User setting: two-finger / trackpad pull-down reveal.
         var gestureEnabled: () -> Bool = { true }
@@ -89,6 +89,7 @@ final class TabExposeView: UIView, TabExposeControllerObserver {
     /// Highlight the tray was last scrolled to; see `tabExposeDidChangeCells`.
     private var lastScrolledHighlightID: UUID?
     private var displayLink: CADisplayLink?
+    private var renderingSuspended = false
     private var lastAppliedProgress: CGFloat = -1
     private var lastAppliedShift: CGFloat = 0
     private lazy var edgePan: InteractiveEdgePanRecognizer = makeEdgePan()
@@ -140,6 +141,7 @@ final class TabExposeView: UIView, TabExposeControllerObserver {
         #endif
 
         controller.previewFrameProvider = { [weak self] id in self?.restingPreview(for: id) }
+        PreviewRenderingLifecycle.register(self)
     }
 
     @available(*, unavailable)
@@ -185,7 +187,53 @@ final class TabExposeView: UIView, TabExposeControllerObserver {
 
     // MARK: - Controller observer
 
+    func suspendPreviewRendering() {
+        stopDisplayLink()
+        guard !renderingSuspended else { return }
+        renderingSuspended = true
+        zoomHUDHideTask?.cancel()
+        let pausedTime = layer.convertTime(CACurrentMediaTime(), from: nil)
+        layer.speed = 0
+        layer.timeOffset = pausedTime
+    }
+
+    func dismissPreviewForBackground() {
+        controller.forceHide(reason: "background")
+    }
+
+    func preparePreviewForActivation() {
+        // Background changes the model immediately, but view removal and
+        // first-responder transitions must wait until the latch has cleared.
+        if !controller.isActive { tabExposeDidChangeActivity(controller) }
+        controller.finishDeferredDismissal()
+    }
+
+    func resumePreviewRendering() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
+        if renderingSuspended {
+            renderingSuspended = false
+            let pausedTime = layer.timeOffset
+            layer.speed = 1
+            layer.timeOffset = 0
+            layer.beginTime = 0
+            layer.beginTime = layer.convertTime(CACurrentMediaTime(), from: nil) - pausedTime
+        }
+        controller.resumeAfterInactivity()
+        if controller.isActive {
+            // Rebuild from current scope/frame data, including changes received
+            // while presentation was frozen. Reset interrupted page/pinch input.
+            scopeSwipeActive = false
+            zoomPinchActive = false
+            hideZoomHUD(animated: false)
+            tabExposeDidChangeActivity(controller)
+        }
+    }
+
     func tabExposeDidChangeActivity(_ controller: TabExposeController) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else {
+            stopDisplayLink()
+            return
+        }
         if controller.isActive {
             isHidden = false
             accessibilityViewIsModal = true
@@ -218,7 +266,17 @@ final class TabExposeView: UIView, TabExposeControllerObserver {
     // MARK: - First-responder fallback (no terminal to hook keys on)
 
     override var canBecomeFirstResponder: Bool {
-        controller.isActive && controller.wantsFirstResponderFallback
+        !Ghostty.isSecureDrawProhibitedAtomic && controller.isActive && controller.wantsFirstResponderFallback
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return false }
+        return super.becomeFirstResponder()
+    }
+
+    override func resignFirstResponder() -> Bool {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return false }
+        return super.resignFirstResponder()
     }
 
     override var keyCommands: [UIKeyCommand]? {
@@ -243,6 +301,7 @@ final class TabExposeView: UIView, TabExposeControllerObserver {
     }
 
     func tabExposeDidChangeCells(_ controller: TabExposeController) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard controller.isActive else { return }
         if let direction = controller.takeScopeTransition() {
             if controller.reduceMotion() {
@@ -302,6 +361,7 @@ final class TabExposeView: UIView, TabExposeControllerObserver {
     }
 
     private func applyAppearance() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         backdrop.backgroundColor = appearance.backgroundColor.withAlphaComponent(appearance.backgroundOpacity)
         // Mirrored pixels already carry the terminal's translucent background.
         hero.backgroundColor = isTranslucent ? .clear : appearance.backgroundColor
@@ -347,6 +407,7 @@ final class TabExposeView: UIView, TabExposeControllerObserver {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard controller.isActive else { return }
         heroRect = currentHeroRect()
         let H = max(heroRect.height, 1)
@@ -412,6 +473,7 @@ final class TabExposeView: UIView, TabExposeControllerObserver {
     /// Everything visual derives from `controller.progress` (0 hidden … 1
     /// presented) and `pageShift` (horizontal paging between scopes).
     private func applyProgress() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         let p = controller.progress
         guard p != lastAppliedProgress || pageShift != lastAppliedShift else { return }
         lastAppliedProgress = p
@@ -463,6 +525,7 @@ final class TabExposeView: UIView, TabExposeControllerObserver {
     // MARK: - Display link
 
     private func startDisplayLink() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard displayLink == nil else { return }
         let proxy = DisplayLinkProxy(owner: self)
         let link = CADisplayLink(target: proxy, selector: #selector(DisplayLinkProxy.tick(_:)))
@@ -476,6 +539,10 @@ final class TabExposeView: UIView, TabExposeControllerObserver {
     }
 
     fileprivate func tick(_ link: CADisplayLink) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else {
+            suspendPreviewRendering()
+            return
+        }
         controller.tick(now: link.timestamp)
         guard controller.isActive else {
             stopDisplayLink()
@@ -649,6 +716,7 @@ extension TabExposeView {
     }
 
     private func beginScopeSwipe() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard controller.phase == .presented, controller.canNavigateScope else { return }
         // Take over a settling page where it is so flicks chain.
         scopeSwipeBase = pageShift
@@ -660,6 +728,7 @@ extension TabExposeView {
 
     /// `progress` is the gesture's signed distance / page width (right-positive).
     private func updateScopeSwipe(progress: CGFloat) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard scopeSwipeActive else { return }
         let W = pageWidth
         pageShift = Self.rubberBanded(scopeSwipeBase + progress * W, limit: W)
@@ -696,6 +765,7 @@ extension TabExposeView {
     }
 
     private func endScopeSwipe(progress: CGFloat, velocity: CGFloat) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard scopeSwipeActive else { return }
         scopeSwipeActive = false
         let W = pageWidth
@@ -838,6 +908,7 @@ extension TabExposeView: UIGestureRecognizerDelegate {
     }
 
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return false }
         guard gestureRecognizer is UIPinchGestureRecognizer else {
             return super.gestureRecognizerShouldBegin(gestureRecognizer)
         }
@@ -845,6 +916,7 @@ extension TabExposeView: UIGestureRecognizerDelegate {
     }
 
     @objc private func handleZoomPinch(_ pinch: UIPinchGestureRecognizer) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         switch pinch.state {
         case .began:
             zoomPinchActive = true
@@ -933,6 +1005,7 @@ extension TabExposeView: UIGestureRecognizerDelegate {
     }
 
     private func updateZoomHUD() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard let host = zoomHUDHost else { return }
         let percent = Int((zoom * 100).rounded())
         host.rootView = TabExposeZoomHUD(text: "\(percent)%", onReset: { [weak self] in self?.resetZoom() })
@@ -951,17 +1024,21 @@ extension TabExposeView: UIGestureRecognizerDelegate {
     }
 
     private func hideZoomHUD(animated: Bool) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         zoomHUDHideTask?.cancel()
         zoomHUDHideTask = nil
         guard let host = zoomHUDHost else { return }
-        zoomHUDHost = nil
         guard animated else {
+            zoomHUDHost = nil
             host.view.removeFromSuperview()
             return
         }
         UIView.animate(withDuration: 0.3, delay: 0, options: .curveEaseIn, animations: {
             host.view.alpha = 0
-        }, completion: { _ in
+        }, completion: { [weak self] finished in
+            guard finished, let self, self.zoomHUDHost === host,
+                  !Ghostty.isSecureDrawProhibitedAtomic else { return }
+            self.zoomHUDHost = nil
             host.view.removeFromSuperview()
         })
     }

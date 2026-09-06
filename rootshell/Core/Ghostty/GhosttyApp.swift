@@ -12,6 +12,83 @@ import os
 import UniformTypeIdentifiers
 import GhosttyKit
 
+/// Preview renderers live outside the tab split trees swept by MainView.
+/// Keep their lifecycle synchronous with the secure-draw latch, including
+/// protected-data/background launches that have no active → inactive edge.
+@MainActor
+protocol PreviewRenderingParticipant: AnyObject {
+    func suspendPreviewRendering()
+    func dismissPreviewForBackground()
+    func preparePreviewForActivation()
+    func resumePreviewRendering()
+}
+
+extension PreviewRenderingParticipant {
+    func dismissPreviewForBackground() {}
+    func preparePreviewForActivation() {}
+}
+
+@MainActor
+enum PreviewRenderingLifecycle {
+    private struct Entry {
+        weak var participant: (any PreviewRenderingParticipant)?
+    }
+    private static var entries: [Entry] = []
+    private static var resumeGeneration: UInt64 = 0
+
+    static func register(_ participant: any PreviewRenderingParticipant) {
+        entries.removeAll { $0.participant == nil }
+        entries.append(Entry(participant: participant))
+    }
+
+    private static var participants: [any PreviewRenderingParticipant] {
+        entries.compactMap(\.participant)
+    }
+
+    static func suspend() {
+        #if !targetEnvironment(macCatalyst)
+        resumeGeneration &+= 1
+        Ghostty.isSecureDrawProhibitedAtomic = true
+        for participant in participants { participant.suspendPreviewRendering() }
+        #endif
+    }
+
+    static func didEnterBackground() {
+        #if !targetEnvironment(macCatalyst)
+        suspend()
+        for participant in participants { participant.dismissPreviewForBackground() }
+        #endif
+    }
+
+    static func scheduleResumeAfterActivation() {
+        #if !targetEnvironment(macCatalyst)
+        resumeGeneration &+= 1
+        let generation = resumeGeneration
+        // Like MainView's renderer resume, let the FrontBoard activation
+        // transaction commit before changing responders, layout, or Metal state.
+        DispatchQueue.main.async {
+            // An inactive/background/active rebound supersedes this request,
+            // even if the latch is clear again by the time this closure runs.
+            guard canResume(generation: generation) else { return }
+            // Remove dismissed previews before any retained GPU surface resumes.
+            for participant in participants {
+                guard canResume(generation: generation) else { return }
+                participant.preparePreviewForActivation()
+            }
+            for participant in participants {
+                guard canResume(generation: generation) else { return }
+                participant.resumePreviewRendering()
+            }
+        }
+        #endif
+    }
+
+    private static func canResume(generation: UInt64) -> Bool {
+        generation == resumeGeneration && !Ghostty.isSecureDrawProhibitedAtomic
+            && UIApplication.shared.applicationState == .active
+    }
+}
+
 protocol GhosttyAppDelegate: AnyObject {
     /// Called when a surface should be closed
     func closeSurface(uuid: UUID, processAlive: Bool)

@@ -164,12 +164,14 @@ final class TabExposeController {
     /// Inside `attachMultiplexer`: the feed's synchronous start notification
     /// must not re-enter `refreshScope` from underneath one.
     @ObservationIgnored private var isAttachingMultiplexer = false
+    @ObservationIgnored private var dismissalCallbackPending = false
 
     // MARK: - Interactive reveal / dismiss
 
     /// A pull started. From hidden this is a reveal; from presented (or a
     /// settle) the finger takes over wherever the tray currently is.
     func beginInteractive() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         switch phase {
         case .hidden:
             guard activate() else { return }
@@ -189,6 +191,7 @@ final class TabExposeController {
     /// `signed` is the gesture's distance/length, down-positive: a reveal
     /// pulls down from 0, a dismiss pushes up from 1.
     func updateInteractive(signed: CGFloat) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard phase == .interactive else { return }
         let p: CGFloat
         switch interactiveMode {
@@ -200,6 +203,7 @@ final class TabExposeController {
 
     /// Release. `velocity` is along the gesture axis, down-positive, pt/s.
     func endInteractive(velocity v: CGFloat) {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard phase == .interactive else { return }
         let commit: Bool
         switch interactiveMode {
@@ -439,6 +443,7 @@ final class TabExposeController {
     /// Keys routed from the focused terminal while presented. Returns false
     /// for anything the exposé doesn't own (the host dismisses and lets it through).
     func handleKey(_ key: OverlayKeyEvent) -> Bool {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return false }
         guard isActive else { return false }
         switch key.keyCode {
         case .keyboardEscape:
@@ -487,6 +492,7 @@ final class TabExposeController {
     /// Advance the settle spring. Returns true while the overlay needs frames.
     @discardableResult
     func tick(now: CFTimeInterval) -> Bool {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return false }
         defer { lastTick = now }
         guard isActive else { return false }
 
@@ -526,10 +532,24 @@ final class TabExposeController {
 
     // MARK: - Internals
 
+    func resumeAfterInactivity() {
+        lastTick = 0
+        // UIKit may cancel a gesture during lock without delivering an end
+        // while drawing is allowed. Settle it instead of leaving it stranded.
+        if phase == .interactive { endInteractive(velocity: 0) }
+    }
+
+    func finishDeferredDismissal() {
+        guard dismissalCallbackPending, !Ghostty.isSecureDrawProhibitedAtomic else { return }
+        dismissalCallbackPending = false
+        onDidDismiss?()
+    }
+
     /// Snapshot the scope and tell the host we're about to show. False if there is nothing to show.
     /// `preferAppPage` keeps an attached multiplexer page reachable by paging
     /// but opens on the app tabs.
     private func activate(preferAppPage: Bool = false) -> Bool {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return false }
         guard let tabsModel else { return false }
         attachMultiplexer()
         prefersAppPage = preferAppPage
@@ -593,7 +613,10 @@ final class TabExposeController {
         multiplexerHostTabID = nil
         prefersAppPage = false
         observer?.tabExposeDidChangeActivity(self)
-        onDidDismiss?()
+        // The host callback can hand keyboard focus back to a VNC pane.
+        // Defer that along with the view's responder/hierarchy teardown.
+        dismissalCallbackPending = true
+        finishDeferredDismissal()
     }
 
     /// The multiplexer page always belongs to the SELECTED tab: after any

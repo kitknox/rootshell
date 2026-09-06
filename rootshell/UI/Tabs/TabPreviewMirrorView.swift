@@ -45,6 +45,7 @@ final class TabPreviewMirrorView: UIView {
     /// Refresh geometry and contents. Cheap when nothing changed: called every
     /// display-link tick while the exposé is visible.
     func sync() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard let tab, let host = tab.splitTree.first?.enclosingSplitHost else {
             removeAllMirrors()
             return
@@ -174,6 +175,7 @@ final class TabPreviewMirrorView: UIView {
     }
 
     private func removeAllMirrors() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }

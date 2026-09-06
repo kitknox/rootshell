@@ -14,7 +14,7 @@ extension Ghostty {
 
     /// A minimal UIView hosting a read-only Ghostty surface for previewing tmux pane content.
     /// No keyboard input, gestures, sessions, or scrollback — just renders ANSI text.
-    class TmuxPreviewView: UIView {
+    class TmuxPreviewView: UIView, PreviewRenderingParticipant {
 
         private nonisolated static let logger = Logger(
             subsystem: "com.rootshell",
@@ -25,6 +25,13 @@ extension Ghostty {
         private var surface: ghostty_surface_t?
         private var slaveFd: Int32 = -1
         private var hasSized = false
+        private var renderingSuspended = false
+        private var needsRendererResume = false
+        private var cleanedUp = false
+
+        private var canRender: Bool {
+            !cleanedUp && !renderingSuspended && !Ghostty.isSecureDrawProhibitedAtomic
+        }
 
         override class var layerClass: AnyClass { CAMetalLayer.self }
 
@@ -34,6 +41,7 @@ extension Ghostty {
             isUserInteractionEnabled = false
             backgroundColor = .clear
             isOpaque = false
+            PreviewRenderingLifecycle.register(self)
         }
 
         @available(*, unavailable)
@@ -43,11 +51,14 @@ extension Ghostty {
             super.didMoveToWindow()
             if window != nil && surface == nil {
                 createSurface()
+            } else if window != nil && needsRendererResume {
+                resumePreviewRendering()
             }
         }
 
         override func layoutSubviews() {
             super.layoutSubviews()
+            guard canRender else { return }
 
             // Sync Ghostty's IOSurfaceLayer sublayer frames to match our bounds
             if let sublayers = layer.sublayers {
@@ -73,9 +84,11 @@ extension Ghostty {
             ghostty_surface_set_content_scale(surface, scale, scale)
             ghostty_surface_set_size(surface, fbWidth, fbHeight)
             hasSized = true
+            flushPendingWrites()
         }
 
         private func createSurface() {
+            guard canRender else { return }
             guard let app = ghosttyApp?.app else {
                 Self.logger.error("Cannot create preview surface: app pointer is nil")
                 return
@@ -98,6 +111,38 @@ extension Ghostty {
             self.surface = newSurface
             self.slaveFd = ghostty_surface_get_slave_fd(newSurface)
             ghosttyApp?.registerSurface(newSurface)
+        }
+
+        func suspendPreviewRendering() {
+            guard !cleanedUp, !renderingSuspended else { return }
+            renderingSuspended = true
+            guard let surface else { return }
+            needsRendererResume = true
+            ghostty_surface_set_occlusion(surface, false)
+            let drained = ghostty_surface_drain_renderer_to_idle(surface, 100_000_000)
+            LifecycleDebugLogger.shared.checkpoint("SECURE.preview.pause", ms: nil, [
+                ("surface", UInt(bitPattern: surface)), ("drained", drained),
+            ])
+            if !drained {
+                LifecycleDebugLogger.shared.criticalCheckpoint("SECURE.preview.drain.timeout", [
+                    ("surface", UInt(bitPattern: surface)),
+                ])
+            }
+        }
+
+        func resumePreviewRendering() {
+            guard !cleanedUp, !Ghostty.isSecureDrawProhibitedAtomic else { return }
+            renderingSuspended = false
+            guard window != nil else { return }
+            if surface == nil { createSurface() }
+            setNeedsLayout()
+            layoutIfNeeded()
+            if needsRendererResume, let surface {
+                needsRendererResume = false
+                ghostty_surface_set_occlusion(surface, true)
+            }
+            flushPendingWrites()
+            scheduleDraw()
         }
 
         /// Cell size in points once the surface has been sized; nil before.
@@ -155,7 +200,7 @@ extension Ghostty {
         private var flushScheduled = false
 
         private func writeToSurface(_ normalized: String) {
-            guard slaveFd >= 0, surface != nil else { return }
+            guard !cleanedUp else { return }
             var text = ""
             if pendingIsPartial {
                 // CAN abandons any half-written control sequence, then leave
@@ -167,7 +212,9 @@ extension Ghostty {
             // A newer frame supersedes whatever is still queued: the preview
             // wants the latest screen, not every screen.
             pending = data
-            pendingIsPartial = false
+            // Keep the emulator's partial-sequence state until bytes actually
+            // reach it. Several frames can replace each other during lock;
+            // each replacement still needs CAN if the old frame was truncated.
             flushPendingWrites()
         }
 
@@ -176,11 +223,9 @@ extension Ghostty {
         /// write completes over the next few. Returns true when nothing is left.
         @discardableResult
         func flushPendingWrites() -> Bool {
-            guard slaveFd >= 0, surface != nil else {
-                pending.removeAll()
-                pendingIsPartial = false
-                return true
-            }
+            // Retain the latest frame (including an unfinished ANSI sequence)
+            // without feeding the emulator or re-arming timers during lock.
+            guard canRender, hasSized, slaveFd >= 0, surface != nil else { return pending.isEmpty }
             guard !pending.isEmpty else { return true }
             var written = 0
             pending.withUnsafeBytes { buffer in
@@ -221,7 +266,7 @@ extension Ghostty {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
                 guard let self else { return }
                 self.drawScheduled = false
-                guard let surface = self.surface,
+                guard self.canRender, let surface = self.surface,
                       self.ghosttyApp?.isInBackground != true,
                       !Ghostty.isSecureDrawProhibitedAtomic else { return }
                 self.ghosttyApp?.appTick()
@@ -230,6 +275,10 @@ extension Ghostty {
         }
 
         func cleanup() {
+            // A SwiftUI dismantle can precede the lifecycle participant sweep.
+            // Stop presentation before queued destruction relinquishes ownership.
+            if Ghostty.isSecureDrawProhibitedAtomic { suspendPreviewRendering() }
+            cleanedUp = true
             pending.removeAll()
             pendingIsPartial = false
             guard let surface = self.surface else { return }

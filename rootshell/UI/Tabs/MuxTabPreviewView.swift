@@ -77,6 +77,7 @@ final class MuxTabPreviewView: UIView {
 
     /// Refresh geometry and frames; cheap when nothing changed (per display tick).
     func sync() {
+        guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard let tab, tab.cols > 0, tab.rows > 0, bounds.width > 0, bounds.height > 0, window != nil else { return }
         let cw = bounds.width / CGFloat(tab.cols)
         let ch = bounds.height / CGFloat(tab.rows)
