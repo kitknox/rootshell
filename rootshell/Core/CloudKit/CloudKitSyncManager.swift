@@ -98,7 +98,7 @@ final class CloudKitSyncManager {
     // MARK: - Initialization
 
     private init() {
-        self.container = CKContainer(identifier: "iCloud.rootshell")
+        self.container = CKContainer(identifier: AppIdentifiers.iCloudContainerID)
         self.database = container.privateCloudDatabase
 
         // Load settings

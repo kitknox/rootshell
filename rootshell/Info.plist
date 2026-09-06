@@ -87,8 +87,12 @@
 	<string>$(ROOTSHELL_IPINFO_TOKEN_XOR)</string>
 	<key>RootshellAppGroup</key>
 	<string>$(ROOTSHELL_APP_GROUP)</string>
+	<key>RootshellDefaultAppGroup</key>
+	<string>$(ROOTSHELL_DEFAULT_APP_GROUP)</string>
 	<key>RootshellKeychainAccessGroup</key>
 	<string>$(ROOTSHELL_KEYCHAIN_ACCESS_GROUP)</string>
+	<key>RootshellICloudContainer</key>
+	<string>$(ROOTSHELL_ICLOUD_CONTAINER)</string>
 	<key>RootshellPushServer</key>
 	<string>$(ROOTSHELL_PUSH_SERVER)</string>
 	<key>RootshellLinodeOAuthClientID</key>

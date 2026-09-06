@@ -24,7 +24,7 @@ class VNCPasswordManager {
     static let shared = VNCPasswordManager()
 
     private nonisolated static let service = "com.ghostty.vnc.password"
-    private nonisolated static let accessGroup = "D97ZME3ET2.com.kk2.ghostty-ios"
+    private nonisolated static let accessGroup = AppIdentifiers.keychainAccessGroup
 
     private init() {}
 

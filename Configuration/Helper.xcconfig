@@ -1,14 +1,14 @@
 // Native macOS background helper embedded only by the Standalone Catalyst app.
+#include "Identity.xcconfig"
 CODE_SIGN_ENTITLEMENTS = rootshell-helper/rootshell-helper.entitlements
 CODE_SIGN_IDENTITY = Apple Development
 CODE_SIGN_IDENTITY[sdk=macosx*] = Apple Development
 CODE_SIGN_STYLE = Automatic
-DEVELOPMENT_TEAM = D97ZME3ET2
 ENABLE_APP_SANDBOX = NO
 ENABLE_HARDENED_RUNTIME = YES
 INFOPLIST_FILE = rootshell-helper/Sources/Info.plist
 MACOSX_DEPLOYMENT_TARGET = 15.0
-PRODUCT_BUNDLE_IDENTIFIER = com.kk2.rootshell-helper
+PRODUCT_BUNDLE_IDENTIFIER = $(ROOTSHELL_ORG_IDENTIFIER).rootshell-helper
 PRODUCT_NAME = $(TARGET_NAME)
 PROVISIONING_PROFILE_SPECIFIER =
 REGISTER_APP_GROUPS = YES

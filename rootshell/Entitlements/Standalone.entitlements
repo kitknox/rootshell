@@ -12,15 +12,15 @@
 	<true/>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)com.kk2.ghostty-ios</string>
+		<string>$(AppIdentifierPrefix)$(ROOTSHELL_KEYCHAIN_GROUP_SUFFIX)</string>
 	</array>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.kk2.ghostty</string>
+		<string>$(ROOTSHELL_APP_GROUP)</string>
 	</array>
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
-		<string>iCloud.rootshell</string>
+		<string>$(ROOTSHELL_ICLOUD_CONTAINER)</string>
 	</array>
 	<key>com.apple.developer.icloud-services</key>
 	<array>

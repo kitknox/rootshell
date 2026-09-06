@@ -245,7 +245,7 @@ struct VPNDebugView: View {
 
     private func readTimeSeriesLog() -> String? {
         guard let containerURL = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: "group.com.kk2.ghostty"
+            forSecurityApplicationGroupIdentifier: AppIdentifiers.defaultAppGroupID
         ) else { return nil }
         let fileURL = containerURL.appendingPathComponent("vpn_ssh_timeseries.log")
         return try? String(contentsOf: fileURL, encoding: .utf8)

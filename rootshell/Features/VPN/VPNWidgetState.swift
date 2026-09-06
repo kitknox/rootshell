@@ -23,9 +23,11 @@ nonisolated struct VPNWidgetState: Codable, Sendable {
 
     static let fileName = "vpn_widget_state.json"
 
+    private static let appGroupID = AppIdentifiers.defaultAppGroupID
+
     private static var containerURL: URL? {
         FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: "group.com.kk2.ghostty"
+            forSecurityApplicationGroupIdentifier: appGroupID
         )
     }
 

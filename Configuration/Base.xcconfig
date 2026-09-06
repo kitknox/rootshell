@@ -11,8 +11,9 @@ ROOTSHELL_IPINFO_TOKEN_XOR =
 ROOTSHELL_IPINFO_TOKEN_KEY =
 #include? "Secrets.xcconfig"
 
-// Development Team
-DEVELOPMENT_TEAM = D97ZME3ET2
+// Apple Developer team and identifier namespace, plus the optional
+// contributor override that redirects all of it.
+#include "Identity.xcconfig"
 
 // Swift Settings
 SWIFT_VERSION = 5.0
@@ -34,12 +35,16 @@ TARGETED_DEVICE_FAMILY = 1,2,7
 FRAMEWORK_SEARCH_PATHS = $(inherited) $(PROJECT_DIR)/Frameworks
 
 // App Identity
-PRODUCT_BUNDLE_IDENTIFIER = com.kk2.rootshell
+PRODUCT_BUNDLE_IDENTIFIER = $(ROOTSHELL_ORG_IDENTIFIER).rootshell
 INFOPLIST_FILE = rootshell/Info.plist
 
-// Shared with the notification service extension (push decryption).
-ROOTSHELL_APP_GROUP = group.com.kk2.ghostty
-ROOTSHELL_KEYCHAIN_ACCESS_GROUP = D97ZME3ET2.com.kk2.ghostty-ios
+// The app's own app group, also shared with the notification service
+// extension (push decryption). Region-specific: China.xcconfig overrides it.
+// Defined here rather than in Identity.xcconfig so that override, which
+// arrives later in the project-level chain, isn't shadowed by the
+// target-level #include in Helper.xcconfig.
+ROOTSHELL_APP_GROUP = $(ROOTSHELL_DEFAULT_APP_GROUP)
+
 ROOTSHELL_PUSH_SERVER = https:/$()/push.rootshell.com
 
 // Swift Bridging Header

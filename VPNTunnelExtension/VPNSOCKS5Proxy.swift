@@ -44,7 +44,7 @@ nonisolated final class VPNSOCKS5DebugMetrics: @unchecked Sendable {
     private let maxRecentEvents = 120
 
     // File-based time-series log for full session analysis
-    private static let appGroupID = "group.com.kk2.ghostty"
+    private static let appGroupID = AppIdentifiers.defaultAppGroupID
     static let timeSeriesFilename = "vpn_ssh_timeseries.log"
     private var logFileHandle: FileHandle?
     private var sessionStartTime: UInt64 = 0 // mach_continuous_time reference

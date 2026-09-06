@@ -18,7 +18,7 @@ struct DebugSettingsView: View {
     @AppStorage(AgentDetectionCapture.enabledKey) private var agentCaptureEnabled: Bool = false
     @AppStorage(
         "vpnConnectionDebugLoggingEnabled",
-        store: UserDefaults(suiteName: "group.com.kk2.ghostty")
+        store: UserDefaults(suiteName: AppIdentifiers.defaultAppGroupID)
     ) private var vpnConnectionDebugLogging: Bool = false
 
     /// Log file sizes for display
@@ -30,7 +30,7 @@ struct DebugSettingsView: View {
     @State private var vpnLogFileSize: String = "—"
     @State private var agentCaptureFileSize: String = "—"
 
-    private static let vpnAppGroupID = "group.com.kk2.ghostty"
+    private static let vpnAppGroupID = AppIdentifiers.defaultAppGroupID
     private static let vpnLogFilename = "vpn_connection_debug.log"
     private static let vpnRotatedLogFilename = "vpn_connection_debug.1.log"
 

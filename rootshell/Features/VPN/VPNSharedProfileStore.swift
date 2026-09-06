@@ -91,7 +91,8 @@ nonisolated enum VPNSharedProfileStore {
 
     static let currentVersion = 1
     static let fileName = "vpn_profiles.json"
-    static let appGroupID = "group.com.kk2.ghostty"
+
+    static let appGroupID = AppIdentifiers.defaultAppGroupID
 
     private static var containerURL: URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)

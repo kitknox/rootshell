@@ -71,7 +71,7 @@ final class AppIconManager: ObservableObject {
     private nonisolated static let logger = Logger(subsystem: "com.rootshell", category: "AppIconManager")
 
     private static let storageKey = "selectedAppIconVariant"
-    private static let appGroupIdentifier = "group.com.kk2.ghostty"
+    private static let appGroupIdentifier = AppIdentifiers.defaultAppGroupID
 
     /// Selectable app-icon variants. Raw values match the alternate-icon names
     /// declared in the Xcode build setting `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`.

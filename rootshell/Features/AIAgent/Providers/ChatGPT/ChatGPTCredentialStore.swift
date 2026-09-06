@@ -24,7 +24,7 @@ actor ChatGPTCredentialStore {
 
     /// Same Keychain service and access group as the AI API keys, its own account.
     private static let keychainService = "com.ghostty.ai.apikey"
-    private static let keychainAccessGroup = "D97ZME3ET2.com.kk2.ghostty-ios"
+    private static let keychainAccessGroup = AppIdentifiers.keychainAccessGroup
     static let keychainAccount = "chatgpt-codex"
 
     private let logger = Logger(subsystem: "com.rootshell", category: "ChatGPTCredentials")

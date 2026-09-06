@@ -25,9 +25,11 @@ nonisolated struct LiveActivityFaviconStore: Sendable {
         case wifiFavicon = "wifi_favicon.png"
     }
 
+    private static let appGroupID = AppIdentifiers.defaultAppGroupID
+
     private static var containerURL: URL? {
         FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: "group.com.kk2.ghostty"
+            forSecurityApplicationGroupIdentifier: appGroupID
         )
     }
 

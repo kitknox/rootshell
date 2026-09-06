@@ -3,6 +3,9 @@ xcuserdata/
 .local-packages/
 Frameworks/
 Configuration/Secrets.xcconfig
+Configuration/DeveloperSettings.xcconfig
+# Derived from AppStore.entitlements by scripts/setup-dev-signing.sh
+rootshell/Entitlements/AppStore-dev.entitlements
 releases
 /build/
 /tools/

@@ -135,10 +135,12 @@ class SSHVPNTunnelProvider: NEPacketTunnelProvider {
 
     // MARK: - Error Forwarding
 
+    private static let appGroupID = AppIdentifiers.defaultAppGroupID
+
     /// Write an error to the app group so the main app can display it.
     private static func writeErrorToAppGroup(_ error: any Error) {
         guard let containerURL = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: "group.com.kk2.ghostty"
+            forSecurityApplicationGroupIdentifier: appGroupID
         ) else { return }
 
         let fileURL = containerURL.appendingPathComponent("vpn_last_error.txt")
@@ -149,7 +151,7 @@ class SSHVPNTunnelProvider: NEPacketTunnelProvider {
     /// Read the last error written by the extension.
     static func readErrorFromAppGroup() -> String? {
         guard let containerURL = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: "group.com.kk2.ghostty"
+            forSecurityApplicationGroupIdentifier: appGroupID
         ) else { return nil }
 
         let fileURL = containerURL.appendingPathComponent("vpn_last_error.txt")

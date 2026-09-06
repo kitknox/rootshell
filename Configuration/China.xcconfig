@@ -21,8 +21,8 @@ CODE_SIGN_ENTITLEMENTS = rootshell/Entitlements/China.entitlements
 // Distinct bundle identifier so the China build can ship under its own App
 // Store listing. Product name stays "rootshell" (via $(TARGET_NAME) at target
 // level) so the user-facing app name matches other regions.
-PRODUCT_BUNDLE_IDENTIFIER = com.kk2.rootshell.cn
-ROOTSHELL_APP_GROUP = group.com.kk2.ghostty.cn
+PRODUCT_BUNDLE_IDENTIFIER = $(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn
+ROOTSHELL_APP_GROUP = $(ROOTSHELL_DEFAULT_APP_GROUP).cn
 
 // Source exclusions
 //

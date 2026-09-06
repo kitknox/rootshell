@@ -7,12 +7,16 @@
 	<key>NetworkExtension</key>
 	<dict>
 		<key>NEMachServiceName</key>
-		<string>group.com.kk2.ghostty.tunnel</string>
+		<string>$(ROOTSHELL_DEFAULT_APP_GROUP).tunnel</string>
 		<key>NEProviderClasses</key>
 		<dict>
 			<key>com.apple.networkextension.packet-tunnel</key>
 			<string>$(PRODUCT_MODULE_NAME).SSHVPNTunnelProvider</string>
 		</dict>
 	</dict>
+	<key>RootshellDefaultAppGroup</key>
+	<string>$(ROOTSHELL_DEFAULT_APP_GROUP)</string>
+	<key>RootshellKeychainAccessGroup</key>
+	<string>$(ROOTSHELL_KEYCHAIN_ACCESS_GROUP)</string>
 </dict>
 </plist>

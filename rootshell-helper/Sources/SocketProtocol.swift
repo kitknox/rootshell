@@ -220,7 +220,14 @@ enum SocketProtocolError: Error, LocalizedError {
 // MARK: - App Group Helper
 
 nonisolated struct AppGroupHelper {
-    static let groupIdentifier = "group.com.kk2.ghostty"
+    /// Read from our own Info.plist so it tracks the org identifier this copy
+    /// was built with. `AppIdentifiers` can't be shared here -- the helper has
+    /// its own source tree and doesn't compile the app's `rootshell` folder.
+    static let groupIdentifier: String = {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "RootshellDefaultAppGroup") as? String,
+              !value.isEmpty else { return "group.com.kk2.ghostty" }
+        return value
+    }()
 
     /// Set from --app-group argv so the spawning app stays authoritative.
     static var overrideGroupIdentifier: String?

@@ -27,5 +27,9 @@
 		<key>NSExtensionPrincipalClass</key>
 		<string>$(PRODUCT_MODULE_NAME).SSHVPNTunnelProvider</string>
 	</dict>
+	<key>RootshellDefaultAppGroup</key>
+	<string>$(ROOTSHELL_DEFAULT_APP_GROUP)</string>
+	<key>RootshellKeychainAccessGroup</key>
+	<string>$(ROOTSHELL_KEYCHAIN_ACCESS_GROUP)</string>
 </dict>
 </plist>

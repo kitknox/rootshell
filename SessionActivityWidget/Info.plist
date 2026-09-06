@@ -7,5 +7,7 @@
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.widgetkit-extension</string>
 	</dict>
+	<key>RootshellDefaultAppGroup</key>
+	<string>$(ROOTSHELL_DEFAULT_APP_GROUP)</string>
 </dict>
 </plist>

@@ -11,8 +11,8 @@ class KeychainManager {
 
     // Keychain access group shared between iOS and Mac Catalyst
     // Uses Team ID prefix to ensure consistent access across platforms
-    // Must match the keychain-access-groups in entitlements: $(AppIdentifierPrefix)com.kk2.ghostty-ios
-    nonisolated private let accessGroup = "D97ZME3ET2.com.kk2.ghostty-ios"
+    // Must match the keychain-access-groups in entitlements: $(AppIdentifierPrefix)$(ROOTSHELL_KEYCHAIN_GROUP_SUFFIX)
+    nonisolated private let accessGroup = AppIdentifiers.keychainAccessGroup
 
     nonisolated private init() {
         Self.logger.info("KeychainManager initialized")

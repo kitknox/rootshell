@@ -20,7 +20,7 @@ nonisolated enum VPNSSHConnector {
     private nonisolated static let logger = Logger(subsystem: "com.rootshell.vpntunnel", category: "SSHConnector")
 
     // Keychain service names must match the main app's KeychainManager
-    private static let accessGroup = "D97ZME3ET2.com.kk2.ghostty-ios"
+    private static let accessGroup = AppIdentifiers.keychainAccessGroup
     private static let privateKeyService = "com.ghostty.ssh.privatekey"
     private static let passphraseService = "com.ghostty.ssh.passphrase"
     private static let passwordService = "com.ghostty.ssh.password"
