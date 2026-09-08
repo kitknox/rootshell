@@ -66,14 +66,55 @@ nonisolated struct CodingAgentCounts: Equatable, Sendable {
 
     var total: Int { working + attention + idle }
 
-    mutating func add(_ status: AgentAttentionStatus) {
-        switch status {
+    mutating func add(_ bucket: CodingAgentBucket) {
+        switch bucket {
         case .working: working += 1
-        case .blocked, .failed, .done: attention += 1
-        case .idle, .paused: idle += 1
-        case .unknown: break
+        case .attention: attention += 1
+        case .idle: idle += 1
         }
     }
+
+    mutating func add(_ status: AgentAttentionStatus) {
+        if let bucket = CodingAgentBucket(status) { add(bucket) }
+    }
+}
+
+/// The three Live Activity buckets. `unknown` maps to none and is not counted.
+nonisolated enum CodingAgentBucket: String, Equatable, Sendable {
+    case working
+    case attention
+    case idle
+
+    init?(_ status: AgentAttentionStatus) {
+        switch status {
+        case .working: self = .working
+        case .blocked, .failed, .done: self = .attention
+        case .idle, .paused: self = .idle
+        case .unknown: return nil
+        }
+    }
+}
+
+/// One counted agent with the push-route keys that identify its pane, so the
+/// notification service extension can apply a hook push to it while the app
+/// is backgrounded. Keys mirror `PushNotificationRouter.resolve`.
+nonisolated struct CodingAgentEntry: Equatable, Sendable {
+    /// The pane's own `TerminalView.uuid`.
+    let paneID: UUID
+    let bucket: CodingAgentBucket
+    /// Ordinary pane: what the hook sends as `pane` (the same UUID).
+    var routePane: UUID? = nil
+    /// tmux control-mode pane: the gateway terminal's UUID.
+    var gatewayPane: UUID? = nil
+    /// tmux control-mode pane: canonical server identity, nil until resolved.
+    var tmuxServer: String? = nil
+    /// tmux control-mode pane: server-global numeric pane id.
+    var tmuxPaneID: Int? = nil
+}
+
+nonisolated struct CodingAgentCensus: Equatable, Sendable {
+    var counts = CodingAgentCounts()
+    var entries: [CodingAgentEntry] = []
 }
 
 // MARK: - Notification event identity

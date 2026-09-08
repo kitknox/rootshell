@@ -39,6 +39,11 @@ enum AgentCountsText {
     static var updatesPaused: String {
         String(localized: "Updates paused")
     }
+
+    /// Time of the last agent hook push applied while detection was paused.
+    static func updatedAt(_ date: Date) -> String {
+        String(localized: "Updated \(date.formatted(date: .omitted, time: .shortened))")
+    }
 }
 
 /// "1 needs attention · 2 working · 1 idle", most urgent first, zero buckets
@@ -62,14 +67,16 @@ struct AgentSummaryLine: View {
         if state.agentIdleCount > 0 {
             parts.append(AgentCountsText.idle(state.agentIdleCount))
         }
-        if state.agentCountsFrozen {
+        if let pushedAt = state.agentPushUpdatedAt, state.agentCountsFrozen {
+            parts.append(AgentCountsText.updatedAt(pushedAt))
+        } else if state.agentCountsFrozen {
             parts.append(AgentCountsText.updatesPaused)
         }
         return parts
     }
 
     private var dotStyle: AnyShapeStyle {
-        if state.agentCountsFrozen { return mutedStyle }
+        if state.agentCountsMuted { return mutedStyle }
         if state.agentAttentionCount > 0 { return AnyShapeStyle(.orange) }
         if state.agentWorkingCount > 0 { return AnyShapeStyle(.green) }
         return mutedStyle
@@ -82,7 +89,7 @@ struct AgentSummaryLine: View {
                 .frame(width: 6, height: 6)
             Text(segments.joined(separator: " \u{00B7} "))
                 .font(font)
-                .foregroundStyle(state.agentCountsFrozen ? mutedStyle : AnyShapeStyle(.primary))
+                .foregroundStyle(state.agentCountsMuted ? mutedStyle : AnyShapeStyle(.primary))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .truncationMode(.tail)

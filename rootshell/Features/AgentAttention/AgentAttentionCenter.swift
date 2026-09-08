@@ -1346,19 +1346,53 @@ final class AgentAttentionCenter {
     /// progress overlay counts the way the sidebar shows it. One entry per
     /// pane; Claude fleet sub-agents ride along with their session.
     func codingAgentCounts() -> CodingAgentCounts {
-        var counts = CodingAgentCounts()
+        codingAgentCensus().counts
+    }
+
+    /// The census with one entry per counted pane, carrying the push-route
+    /// keys the notification service extension matches hook pushes against
+    /// while the app is backgrounded (see `AgentActivityLedger`).
+    func codingAgentCensus() -> CodingAgentCensus {
+        var census = CodingAgentCensus()
         for model in TmuxWindowRegistry.allTabsModels() {
             for tab in model.tabs {
                 for pane in tab.splitTree {
                     guard let detected = pane.presentation.detectedAgentRow,
                           detected.category == .agent,
-                          let row = pane.presentation.agentRow
+                          let row = pane.presentation.agentRow,
+                          let bucket = CodingAgentBucket(row.status)
                     else { continue }
-                    counts.add(row.status)
+                    census.counts.add(bucket)
+                    census.entries.append(Self.codingAgentEntry(for: pane, bucket: bucket))
                 }
             }
         }
-        return counts
+        return census
+    }
+
+    /// Route keys mirror `PushNotificationRouter.resolve`: an ordinary pane is
+    /// its own UUID; a tmux control-mode pane is the canonical server identity
+    /// plus the server-global pane id, with the gateway UUID kept for
+    /// pre-canonical senders. The server identity is taken only from the
+    /// controller that really owns the gateway (see the ABA note on
+    /// `TmuxPaneBinding.parentUUID`).
+    private static func codingAgentEntry(for pane: SplitPaneView, bucket: CodingAgentBucket) -> CodingAgentEntry {
+        guard let view = pane as? Ghostty.TerminalView else {
+            return CodingAgentEntry(paneID: pane.uuid, bucket: bucket)
+        }
+        if let binding = view.tmuxPaneBinding {
+            let controller = TmuxController.controller(forOwnerSurface: binding.parentSurface)
+            let server = controller?.ownerTerminalUUIDForNotifications == binding.parentUUID
+                ? controller?.pushRouteServerIdentity
+                : nil
+            return CodingAgentEntry(
+                paneID: view.uuid, bucket: bucket, gatewayPane: binding.parentUUID,
+                tmuxServer: server, tmuxPaneID: binding.paneId)
+        }
+        // A control-mode gateway is never addressed by its UUID (the resolver
+        // skips it too); its agents live in the bound display panes above.
+        let routePane = view.tmuxController?.isActive == true ? nil : view.uuid
+        return CodingAgentEntry(paneID: view.uuid, bucket: bucket, routePane: routePane)
     }
 
     /// Live agent providers and the terminal that OWNS each one's connection

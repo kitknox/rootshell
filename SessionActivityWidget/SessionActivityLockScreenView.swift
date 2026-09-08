@@ -139,7 +139,7 @@ struct SessionActivityLockScreenView: View {
             if hasAgents {
                 Label(AgentCountsText.agents(state.agentTotalCount), systemImage: "sparkles")
                     .font(.caption2)
-                    .foregroundStyle(state.agentCountsFrozen ? mutedAgentStyle : agentAccentStyle)
+                    .foregroundStyle(state.agentCountsMuted ? mutedAgentStyle : agentAccentStyle)
             }
 
             Spacer()
