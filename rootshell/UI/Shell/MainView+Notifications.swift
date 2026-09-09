@@ -163,7 +163,8 @@ extension MainView {
             // events close the dying tab, not whichever tab the user has since
             // switched to. nil object → fall back to the focused split.
             let target = notification.object as? SplitPaneView
-            self.closeSplit(targeting: target)
+            let leaveMux = notification.userInfo?[MuxSessionDetach.leaveMuxSessionUserInfoKey] as? Bool ?? false
+            self.closeSplit(targeting: target, leaveMuxSession: leaveMux)
         }
 
         observerBag.observeOnMainActor(.vncToggleFullScreen) { [self] notification in
@@ -297,9 +298,52 @@ extension MainView {
             self.showTmuxSessionsForSelectedTab()
         }
 
+        observerBag.observeOnMainActor(.detachSession) { [self] notification in
+            guard self.shouldHandleNotification(notification) else { return }
+            self.detachSessionForSelectedTab()
+        }
+
+        observerBag.observeOnMainActor(.detachAllSessions) { [self] notification in
+            guard self.shouldHandleNotification(notification) else { return }
+            self.requestDetachAllSessions()
+        }
+
         observerBag.observeOnMainActor(.detachOtherClients) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
             self.detachOtherClientsForSelectedTab()
+        }
+
+        observerBag.observeOnMainActor(.muxSessionDidDetach) { [self] notification in
+            guard self.shouldHandleNotification(notification) else { return }
+            let offer = notification.userInfo?["offer"] as? MuxSessionResume.ReconnectOffer
+            let name = offer?.displayName
+                ?? (notification.userInfo?["displayName"] as? String)
+                ?? String(localized: "session", comment: "Generic mux session label in detach banner")
+            self.muxDetachBanner = MuxDetachBannerState(
+                message: String(
+                    localized: "Detached from \(name). Session keeps running.",
+                    comment: "Post-detach banner message"
+                ),
+                offer: offer
+            )
+            self.scheduleMuxDetachBannerDismiss()
+        }
+
+        observerBag.observeOnMainActor(.muxAutoStartDidFallback) { [self] notification in
+            if let targetWindow = notification.userInfo?["windowId"] as? String {
+                guard targetWindow == self.windowId else { return }
+            } else {
+                guard self.shouldHandleNotification(notification) else { return }
+            }
+            let wanted = (notification.userInfo?["wanted"] as? String) ?? "multiplexer"
+            self.muxDetachBanner = MuxDetachBannerState(
+                message: String(
+                    localized: "\(wanted) not found on remote — started a normal shell.",
+                    comment: "Banner when mux auto-start falls back because the binary is missing"
+                ),
+                offer: nil
+            )
+            self.scheduleMuxDetachBannerDismiss()
         }
 
         observerBag.observeOnMainActor(.increaseFontSize) { [self] notification in
@@ -431,31 +475,8 @@ extension MainView {
         }
         #endif
 
-        observerBag.observeOnMainActor(.toggleQuickSettings) { [self] notification in
-            guard self.shouldHandleNotification(notification) else { return }
-            if self.showQuickSettingsOverlay {
-                self.showQuickSettingsOverlay = false
-            } else {
-                // Avoid presenting through a modal workflow. Floating tools yield
-                // their keyboard ownership before Quick Settings takes focus.
-                self.showThemePickerOverlay = false
-                self.showClipboardManager = false
-                guard !self.isSheetPresentedBesidesFloatingTabSidebar else { return }
-                if !self.tabSidebarIsDocked { self.showingTabSwitcher = false }
-                if self.terminals.indices.contains(self.selectedTabIndex) {
-                    for terminal in self.terminals[self.selectedTabIndex].splitTree.terminalLeaves {
-                        terminal.closeSearch()
-                        terminal.showComposeOverlay = false
-                    }
-                }
-                self.showQuickSettingsOverlay = true
-                self.setOverlayOwnsKeyboardForAllTerminals(true)
-            }
-        }
-
         observerBag.observeOnMainActor(.toggleThemePicker) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
-            self.showQuickSettingsOverlay = false
             self.showThemePickerOverlay.toggle()
         }
 
@@ -673,11 +694,6 @@ extension MainView {
     /// Check if notification should be handled by this window
     /// Notifications may include a terminal object or a window scene identifier
     func shouldHandleNotification(_ notification: Notification) -> Bool {
-        #if os(iOS) && !targetEnvironment(macCatalyst)
-        if let handled = iPadVisorController.routeWindowAction(notification, to: windowId) {
-            return handled
-        }
-        #endif
         guard let pane = notification.object as? SplitPaneView else {
             // No terminal view in notification - check for scene ID targeting
             if let targetSceneID = notification.userInfo?[GhosttyCommandRouting.windowSceneSessionIDKey] as? String,

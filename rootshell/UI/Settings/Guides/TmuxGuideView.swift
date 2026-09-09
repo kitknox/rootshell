@@ -42,6 +42,14 @@ struct TmuxGuideView: View {
                     Divider()
 
                     guideRow(
+                        icon: "eject",
+                        title: "Detach Session",
+                        description: "Detach Session on any tmux tab (including when the gateway is auto-hidden), or Tabs → Detach Session, leaves control mode cleanly. Window tabs close; sessions keep running. A banner offers Reconnect. Opening the same auto-start profile again focuses the live attachment instead of spawning a second client. Detach All Sessions leaves every multiplexer attachment in the window. ESC on the gateway still detaches too. ⌘⇧X detaches other tmux clients only (not yourself). Assign your own Detach shortcuts under Settings → Keybinds if you want them (defaults omit a chord so we don’t steal macOS Dock ⌘⌥D or anyone’s existing ⌘⌥E)."
+                    )
+
+                    Divider()
+
+                    guideRow(
                         icon: "command",
                         title: "Tab Shortcuts",
                         description: "Close Tab Action sets what ⌘W or the tab's ✕ does on a tmux -CC tab. New Tab Action sets what ⌘T does while attached. Outside tmux, ⌘T always opens a local shell."
@@ -59,7 +67,7 @@ struct TmuxGuideView: View {
                     guideRow(
                         icon: "arrow.right.square",
                         title: "Detaching",
-                        description: "Press ctrl+\\ to detach from a zmx session and return to the shell. Set ZMX_NO_DETACH_KEY=1 on the host to disable that key if it conflicts with something you use."
+                        description: "Detach Session on the tab (or Tabs → Detach Session) closes the local client and leaves the zmx session running for later reattach — zmx’s recommended leave path. Closing the tab instead runs `zmx kill` so the session is destroyed. A banner offers Reconnect after detach; reopening the same auto-start profile focuses a live attachment instead of opening a second client to the same session. Auto-start must use the same session name (default \"main\" under Settings → Multiplexers, or the name on the profile). After detach, `zmx list` on the host should still show that name. You can also press ctrl+\\ yourself to leave zmx and stay in the shell. Set ZMX_NO_DETACH_KEY=1 on the host to disable that key if it conflicts with something you use. If zmx is missing on the host, auto-start prints a clear message and opens a normal shell (it no longer silently pretends to be zmx)."
                     )
 
                     Divider()
@@ -82,6 +90,21 @@ struct TmuxGuideView: View {
                 .themedRow()
             } header: {
                 Text("zmx")
+            }
+
+            // MARK: - Other Multiplexers
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    guideRow(
+                        icon: "rectangle.split.3x1",
+                        title: "zellij & herdr",
+                        description: "Detach Session also works for raw zellij (Ctrl-o then d) and herdr (Ctrl-b then q) attachments, then closes the local tab. Sessions keep running for later reattach via session discovery. Missing remote binaries print a clear fallback message instead of silently looking like a mux session."
+                    )
+                }
+                .padding(.vertical, 4)
+                .themedRow()
+            } header: {
+                Text("Other Multiplexers")
             }
 
             // MARK: - Recommended Configuration

@@ -580,6 +580,9 @@ struct TabBar: View {
             controller: tmuxController(tab),
             dialogs: tmuxDialogs
         )
+        MultiplexerDetachMenuItem(tab: tab) { tab in
+            _ = MuxSessionDetach.detach(tab: tab, tmuxController: tmuxController)
+        }
         Button(role: .destructive) {
             onCloseTab(index)
         } label: {

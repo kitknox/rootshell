@@ -324,10 +324,12 @@ extension MainView {
     // MARK: - Per-Protocol Creators
 
     func createSSHTab(with config: SSHConfig, sourceProfileID: UUID? = nil) {
+        if focusLiveMuxAttachmentIfPresent(for: config) { return }
         openTerminalTab(config: .ssh(config), title: config.displayName, sourceProfileID: sourceProfileID)
     }
 
     func createMoshTab(with config: MoshConfig, sourceProfileID: UUID? = nil) {
+        if focusLiveMuxAttachmentIfPresent(for: config.sshConfig) { return }
         openTerminalTab(config: .mosh(config), title: config.sshConfig.displayName, sourceProfileID: sourceProfileID)
     }
 
@@ -342,6 +344,7 @@ extension MainView {
     }
 
     func createTrzszTab(with config: TrzszConfig, sourceProfileID: UUID? = nil) {
+        if focusLiveMuxAttachmentIfPresent(for: config.sshConfig) { return }
         openTerminalTab(config: .trzsz(config), title: config.sshConfig.displayName, sourceProfileID: sourceProfileID)
     }
 
@@ -806,42 +809,49 @@ extension MainView {
 
 extension MainView {
 
-    /// Dispatch the user-configured close action for a tmux -CC window tab
-    /// (the tab's ✕ button, or ⌘W on a single-pane tmux window). Returns true
-    /// when it handled the close — the caller must NOT tear the tab down
-    /// locally: the server reconcile (or the chosen action) drives teardown.
-    /// Returns false when the tab isn't a live tmux window tab so the caller
-    /// falls back to a normal local close. (id=tmux-tab-close-action)
+    /// Route a tmux -CC window-tab close to the server (or the configured
+    /// close action). Must NOT require a live pane in the tab's split tree —
+    /// after detach → reattach, background windows often have empty or stale
+    /// trees; a local close then self-heals the tab back into existence.
+    /// Always resolve the gateway via `controller(forWindowTab:)` and kill by
+    /// `tmuxWindowId` on that controller. (id=tmux-tab-close-action)
     @MainActor
     func handleTmuxWindowTabClose(_ tab: TerminalTab) -> Bool {
-        guard tab.isTmuxWindow, let windowId = tab.tmuxWindowId,
-              let pane = tab.splitTree.terminalLeaves.first(where: { $0.isTmuxPane }),
-              let binding = pane.tmuxPaneBinding,
-              let controller = TmuxController.controller(forOwnerSurface: binding.parentSurface),
-              controller.isActive else { return false }
+        guard tab.isTmuxWindow, let windowId = tab.tmuxWindowId else { return false }
+
+        guard let controller = TmuxController.controller(forWindowTab: tab),
+              !controller.didEnd, !controller.isDetaching else {
+            TmuxDebugLogger.shared.event(
+                "CLOSE",
+                "window-tab close: no live controller win=\(windowId) owner=\(tab.owningGatewayTerminalUUID?.uuidString.prefix(8) ?? "nil")"
+            )
+            return false
+        }
 
         let action = TmuxTabCloseAction.current
         if action == .ask {
             pendingTmuxCloseTabID = tab.id
             return true
         }
-        return performTmuxClose(action, tab: tab, pane: pane,
-                                controller: controller, windowId: windowId)
+        return performTmuxClose(action, controller: controller, windowId: windowId)
     }
 
     /// Perform a concrete tmux tab-close action (never resolves `.ask`).
-    /// Factored out so the "Ask Each Time" action sheet can invoke each branch
-    /// directly. (id=tmux-tab-close-action)
+    /// Kill/hide/detach always run via the gateway controller so empty or
+    /// stale background window trees still close after detach → reattach.
+    /// (id=tmux-tab-close-action)
     @MainActor
     @discardableResult
     func performTmuxClose(_ action: TmuxTabCloseAction,
-                          tab: TerminalTab,
-                          pane: Ghostty.TerminalView,
                           controller: TmuxController,
                           windowId: Int) -> Bool {
         switch action {
         case .closeWindow:
-            return pane.requestTmuxKillWindow()
+            // Always kill through the live gateway controller. Pane-view
+            // `requestTmuxKillWindow` can return true while silently dropping
+            // on a stale parent surface after detach→reattach, leaving the
+            // tab stuck; or return false without this fallback.
+            return controller.requestKillWindow(windowId: windowId)
         case .detachSession:
             controller.requestGracefulDetach(source: "tab-close")
             return true
@@ -859,10 +869,12 @@ extension MainView {
             if controller.hideWindow(windowId: windowId) {
                 return true
             }
-            return pane.requestTmuxKillWindow()
+            return controller.requestKillWindow(windowId: windowId)
         case .ask:
             // Safety net: a re-prompt instead of silently dropping the close.
-            pendingTmuxCloseTabID = tab.id
+            if let tab = controller.windowTab(forWindowId: windowId) {
+                pendingTmuxCloseTabID = tab.id
+            }
             return true
         }
     }
@@ -875,12 +887,10 @@ extension MainView {
         defer { pendingTmuxCloseTabID = nil }
         guard let id = pendingTmuxCloseTabID,
               let tab = terminals.first(where: { $0.id == id }),
-              tab.isTmuxWindow, let windowId = tab.tmuxWindowId,
-              let pane = tab.splitTree.terminalLeaves.first(where: { $0.isTmuxPane }),
-              let binding = pane.tmuxPaneBinding,
-              let controller = TmuxController.controller(forOwnerSurface: binding.parentSurface),
-              controller.isActive else { return }
-        performTmuxClose(action, tab: tab, pane: pane, controller: controller, windowId: windowId)
+              tab.isTmuxWindow, let windowId = tab.tmuxWindowId else { return }
+        guard let controller = TmuxController.controller(forWindowTab: tab),
+              !controller.didEnd, !controller.isDetaching else { return }
+        performTmuxClose(action, controller: controller, windowId: windowId)
     }
 
     func closeTab(at index: Int) {

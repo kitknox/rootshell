@@ -314,10 +314,8 @@ extension MainView {
             // tmux -CC window placeholder restored from disk, awaiting reconcile
             tmuxReconnectingOverlay
 
-            if showQuickSettingsOverlay {
-                QuickSettingsHUD(isPresented: $showQuickSettingsOverlay)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+            // Post-detach / already-attached mux banner
+            muxDetachBannerOverlay
 
             // Theme picker overlay
             themePickerOverlayView(isPresented: $showThemePickerOverlay)
@@ -394,6 +392,53 @@ extension MainView {
             .padding(.vertical, 8)
             .frame(maxWidth: 400)
             .bannerBackground()
+    }
+
+    @ViewBuilder
+    private var muxDetachBannerOverlay: some View {
+        if let banner = muxDetachBanner {
+            VStack {
+                HStack(spacing: 10) {
+                    Image(systemName: banner.offer == nil ? "exclamationmark.triangle.fill" : "eject.circle.fill")
+                        .foregroundStyle(.secondary)
+                    Text(banner.message)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                    Spacer(minLength: 8)
+                    if banner.offer != nil {
+                        Button("Reconnect") {
+                            reconnectFromMuxDetachBanner()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    }
+                    Button {
+                        dismissMuxDetachBanner()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(6)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Dismiss")
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: 480)
+                .bannerBackground()
+                // Only the card receives clicks — not the empty space below —
+                // so the dismiss control stays hittable and the terminal works.
+                .padding(.top, 12)
+                Spacer()
+                    .allowsHitTesting(false)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .animation(.easeInOut(duration: 0.2), value: muxDetachBanner)
+        }
     }
 
     private var tmuxReconnectStatusRow: some View {

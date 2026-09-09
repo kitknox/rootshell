@@ -137,6 +137,11 @@ struct MainView: View {
     /// user's choice in the close action sheet. (id=tmux-tab-close-action)
     @State var pendingTmuxCloseTabID: UUID?
     @State var pendingNewTabRequest: NewTabRequest?
+    /// Confirm before menu “Detach All Sessions”.
+    @State var confirmDetachAllSessions = false
+    /// Transient post-detach / already-attached banner.
+    @State var muxDetachBanner: MuxDetachBannerState?
+    @State var muxDetachBannerDismissTask: Task<Void, Never>?
     @State var unavailableNewTabRequest: NewTabRequest?
     @State var authenticationRetryRequest: SSHAuthenticationRetryRequest?
     @State var reconnectConfig: SSHConfig?
@@ -279,7 +284,6 @@ struct MainView: View {
     
     // Theme picker overlay state
     @State var showThemePickerOverlay = false
-    @State var showQuickSettingsOverlay = false
 
     // Clipboard manager overlay state
     @State var showClipboardManager = false
@@ -677,7 +681,6 @@ struct MainView: View {
         let overlayContent = applyOverlayChangeHandlers(sheetContent)
         let alertContent = applyAlertModifiers(overlayContent)
         return applyLifecycleHandlers(alertContent)
-            .iPadVisor(ghosttyApp: ghosttyApp, windowID: windowId, modalPresented: isAnySheetPresented)
     }
 
 }
