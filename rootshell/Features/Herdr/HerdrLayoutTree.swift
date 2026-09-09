@@ -14,6 +14,15 @@ import Foundation
 
 nonisolated enum HerdrLayoutTree {
 
+    /// Points per cell and the native chrome around each pane.
+    struct Metrics {
+        let cellW: CGFloat
+        let cellH: CGFloat
+        let padX: CGFloat
+        let padY: CGFloat
+        let divider: CGFloat
+    }
+
     indirect enum Node: Equatable {
         case pane(paneId: String, rect: HerdrControl.Rect)
         /// `horizontal` means the children sit side by side.

@@ -50,6 +50,8 @@ nonisolated enum HerdrControl {
         let rows: Int
         let cell_width_px: Int
         let cell_height_px: Int
+        /// rootshell draws its own dividers; herdr tiles the panes exactly.
+        var chrome = "none"
     }
 
     struct Subscription: Encodable {
@@ -243,6 +245,12 @@ nonisolated enum HerdrControl {
         let y: Int
         let visible: Bool
         let shape: Int
+        /// The next printable wraps to the next row (cursor sits on the
+        /// last column after a print). Older servers omit it.
+        let pending_wrap: Bool?
+        /// The cell under the cursor as styled VT, for re-establishing
+        /// `pending_wrap`.
+        let pending_wrap_cell: String?
     }
 
     struct TerminalState: Decodable, Sendable {
@@ -262,6 +270,9 @@ nonisolated enum HerdrControl {
         let primary: String?
         let alternate: String?
         let state_ansi: String
+        /// The active pen alone (SGR, hyperlink, protection); older servers
+        /// omit it.
+        let pen_ansi: String?
         let cursor: TerminalCursor
         let state: TerminalState
         let truncated: Bool

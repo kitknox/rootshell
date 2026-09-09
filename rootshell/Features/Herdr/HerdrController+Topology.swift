@@ -103,7 +103,13 @@ extension HerdrController {
         tabs[info.tab_id] = tab
         tabsModel.tabs.append(tab)
         refreshTitle(of: tab)
-        if tabsModel.selectedTabID == nil {
+        // A tab the user just asked for lands in front, like a native new
+        // tab; tabs other clients create stay where they are.
+        if let until = pendingNewTabSelectionUntil, until > Date() {
+            pendingNewTabSelectionUntil = nil
+            tabsModel.selectedTabID = tab.id
+            tabsModel.pendingScrollToTabID = tab.id
+        } else if tabsModel.selectedTabID == nil {
             tabsModel.selectedTabID = tab.id
         }
     }
@@ -227,6 +233,9 @@ extension HerdrController {
         }
         ensurePane(moved.pane)
         paneSessions[moved.pane.terminal_id]?.updatePaneId(moved.pane.pane_id)
+        if let attachId = attachIds[moved.pane.terminal_id] {
+            router.setPane(moved.pane.pane_id, attachId: attachId)
+        }
         if let previousTab = moved.previous_tab_id, let tab = tabs[previousTab],
            let view = paneViews[moved.pane.terminal_id],
            let root = tab.splitTree.root, let leaf = root.node(view: view) {
@@ -312,6 +321,7 @@ extension HerdrController {
     private func retirePane(view: Ghostty.TerminalView, terminalId: String) {
         view.isLogicallyFocused = false
         view.shouldBecomeFirstResponderWhenReady = false
+        view.herdrTargetGrid = nil
         if let attachId = attachIds.removeValue(forKey: terminalId) {
             terminalByAttach.removeValue(forKey: attachId)
             router.unregister(attachId: attachId)
@@ -340,7 +350,7 @@ extension HerdrController {
 
     // MARK: - Layout
 
-    func applyLayout(_ layout: HerdrControl.LayoutSnapshot) {
+    func applyLayout(_ layout: HerdrControl.LayoutSnapshot, barrier: UInt64? = nil) {
         guard let tab = tabs[layout.tab_id] else { return }
         lastLayouts[layout.tab_id] = layout
         guard let node = HerdrLayoutTree.build(layout) else { return }
@@ -349,12 +359,23 @@ extension HerdrController {
             // record for this tab retries.
             return
         }
+        // Each pane keeps exactly the grid herdr gave it, whatever slot the
+        // ratio math hands it (id=herdr-chromeless).
+        // Degraded mode sizes each pane from its own grid (`terminal.resize`),
+        // so a clamp there would pin the pane to the last snapshot forever.
+        for pane in layout.panes {
+            guard let terminalId = paneInfos[pane.pane_id]?.terminal_id, let view = paneViews[terminalId] else { continue }
+            view.herdrTargetGrid = mode == .raw ? (cols: pane.rect.width, rows: pane.rect.height) : nil
+        }
         var zoomed: SplitTree<SplitPaneView>.Node?
         if layout.zoomed, let terminalId = paneInfos[layout.focused_pane_id]?.terminal_id,
            let view = paneViews[terminalId] {
             zoomed = .leaf(view: view)
         }
         tab.splitTree = SplitTree(root: root, zoomed: zoomed)
+        if let barrier {
+            armLayoutRelease(for: layout, barrier: barrier)
+        }
         if tab.focusedPane == nil, let firstId = node.firstPaneId,
            let terminalId = paneInfos[firstId]?.terminal_id, let first = paneViews[terminalId] {
             focusPane(first, in: tab)
@@ -375,7 +396,46 @@ extension HerdrController {
         }
     }
 
+    /// Points a subtree needs along one axis: its cells plus each pane's
+    /// padding inset plus the native dividers between them. Ratios come
+    /// from these, not raw cells, so the frame math hands every pane
+    /// exactly its grid (the tmux path's chrome-ratio rule).
+    private func neededPoints(_ node: HerdrLayoutTree.Node, horizontal: Bool, metrics: HerdrLayoutTree.Metrics) -> CGFloat {
+        let cell = horizontal ? metrics.cellW : metrics.cellH
+        let pad = horizontal ? metrics.padX : metrics.padY
+        switch node {
+        case .pane(_, let rect):
+            return CGFloat(horizontal ? rect.width : rect.height) * cell + pad * 2
+        case .split(let splitHorizontal, let first, let second):
+            let a = neededPoints(first, horizontal: horizontal, metrics: metrics)
+            let b = neededPoints(second, horizontal: horizontal, metrics: metrics)
+            return splitHorizontal == horizontal ? a + b + metrics.divider : max(a, b)
+        }
+    }
+
+    private func layoutMetrics(for node: HerdrLayoutTree.Node) -> HerdrLayoutTree.Metrics? {
+        guard let paneId = node.firstPaneId, let terminalId = paneInfos[paneId]?.terminal_id,
+              let view = paneViews[terminalId], let size = view.surfaceSize,
+              size.cell_width_px > 0, size.cell_height_px > 0 else { return nil }
+        let scale = view.contentScaleFactor > 0 ? view.contentScaleFactor : view.traitCollection.displayScale
+        guard scale > 0 else { return nil }
+        return HerdrLayoutTree.Metrics(
+            cellW: CGFloat(size.cell_width_px) / scale,
+            cellH: CGFloat(size.cell_height_px) / scale,
+            padX: CGFloat(PaddingManager.shared.effectivePaddingX),
+            padY: CGFloat(PaddingManager.shared.effectivePaddingY),
+            divider: SplitTreeHostingView.dividerVisibleThickness
+        )
+    }
+
     private func buildSplitNode(_ node: HerdrLayoutTree.Node) -> SplitTree<SplitPaneView>.Node? {
+        buildSplitNode(node, metrics: layoutMetrics(for: node))
+    }
+
+    private func buildSplitNode(
+        _ node: HerdrLayoutTree.Node,
+        metrics: HerdrLayoutTree.Metrics?
+    ) -> SplitTree<SplitPaneView>.Node? {
         switch node {
         case .pane(let paneId, _):
             guard let terminalId = paneInfos[paneId]?.terminal_id, let view = paneViews[terminalId] else {
@@ -383,11 +443,20 @@ extension HerdrController {
             }
             return .leaf(view: view)
         case .split(let horizontal, let first, let second):
-            guard let left = buildSplitNode(first) else { return buildSplitNode(second) }
-            guard let right = buildSplitNode(second) else { return left }
-            let firstExtent = Double(first.extent(horizontal: horizontal))
-            let total = firstExtent + Double(second.extent(horizontal: horizontal))
-            let ratio = total > 0 ? firstExtent / total : 0.5
+            guard let left = buildSplitNode(first, metrics: metrics) else {
+                return buildSplitNode(second, metrics: metrics)
+            }
+            guard let right = buildSplitNode(second, metrics: metrics) else { return left }
+            let ratio: Double
+            if let metrics {
+                let a = neededPoints(first, horizontal: horizontal, metrics: metrics)
+                let b = neededPoints(second, horizontal: horizontal, metrics: metrics)
+                ratio = a + b > 0 ? Double(a / (a + b)) : 0.5
+            } else {
+                let a = Double(first.extent(horizontal: horizontal))
+                let total = a + Double(second.extent(horizontal: horizontal))
+                ratio = total > 0 ? a / total : 0.5
+            }
             return .split(.init(
                 direction: horizontal ? .horizontal : .vertical,
                 ratio: min(max(ratio, 0.05), 0.95),

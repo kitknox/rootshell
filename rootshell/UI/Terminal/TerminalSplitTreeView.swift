@@ -113,6 +113,10 @@ final class SplitTreeHostingView: UIView {
 
     private var dividerViews: [SplitDividerHandleView] = []
     private var dividerReuseIndex: Int = 0
+    /// Split ratio when a divider drag began, per divider. The tree is
+    /// rewritten on every move, so the node at release only knows the last
+    /// step; herdr needs the whole delta.
+    private var dragStartRatios: [ObjectIdentifier: Double] = [:]
 
     private var borderEligibility: [ObjectIdentifier: Bool] = [:]
 
@@ -158,6 +162,7 @@ final class SplitTreeHostingView: UIView {
                 guard let self else { break }
                 if !animating {
                     self.pushTmuxClientSizeIfNeeded()
+                    self.pushHerdrTabSizeIfNeeded()
                 }
             }
         }
@@ -170,6 +175,7 @@ final class SplitTreeHostingView: UIView {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self?.pushTmuxClientSizeIfNeeded()
+                    self?.pushHerdrTabSizeIfNeeded()
                 }
             }
         }
@@ -284,7 +290,9 @@ final class SplitTreeHostingView: UIView {
             if case .split = rootNode { return tree.zoomed == nil }
             return false
         }()
-        let layoutRect = (renderingSplit ? contentRect : nil) ?? bounds
+        // A herdr split snaps to whole cells the same way, minus the frosted
+        // margin: what is left over is under a cell on each axis.
+        let layoutRect = (renderingSplit ? (contentRect ?? herdrSnapRect()) : nil) ?? bounds
 
         var usedTerminals = Set<ObjectIdentifier>()
         layout(node: rootNode, in: layoutRect, isRoot: rootNode == tree.root, usedTerminals: &usedTerminals)
@@ -293,6 +301,7 @@ final class SplitTreeHostingView: UIView {
         // Push from full `bounds` (inside this call), unaffected by `layoutRect`,
         // so tmux reclaims our full size when the foreign client detaches.
         pushTmuxClientSizeIfNeeded()
+        pushHerdrTabSizeIfNeeded()
         // Frost the dead margin (single- AND multi-pane) over `bounds − contentRect`.
         updateDeadMarginOverlay(contentRect: contentRect)
         // Overlay chrome follows actual pane frames, including tmux's dead margin.
@@ -380,10 +389,28 @@ final class SplitTreeHostingView: UIView {
     /// divider's stored geometry or the panes' grids, which lag a window resize)
     /// is what makes it reliable. Returns nil when there is no tmux pane or the
     /// geometry isn't ready.
+    /// The cell budget of a multiplexer-driven tab (tmux window or herdr
+    /// tab) from this container's bounds; the controller sends it as the
+    /// tab's geometry so the server's layout fits the native split exactly.
+    func multiplexerWindowCells() -> (cols: UInt16, rows: UInt16)? {
+        tmuxWindowCells()
+    }
+
+    /// herdr tabs size from this container, not from their panes: the panes
+    /// are clamped to the server's last layout, so only the container can
+    /// see the window grow. The controller dedupes repeated sizes.
+    private func pushHerdrTabSizeIfNeeded() {
+        guard !KeyboardTracker.shared.isKeyboardAnimating else { return }
+        guard !KeyboardTracker.shared.isPreservingKeyboardForOverlay(in: window) else { return }
+        guard isActiveTab, let tree,
+              let pane = tree.terminalLeaves.first(where: { $0.isHerdrPane }) else { return }
+        pane.noteHerdrHostLayout()
+    }
+
     private func tmuxWindowCells() -> (cols: UInt16, rows: UInt16)? {
         guard let tree,
               let rootNode = tree.zoomed ?? tree.root,
-              let pane = tree.terminalLeaves.first(where: { $0.isTmuxPane }),
+              let pane = tree.terminalLeaves.first(where: { $0.isMultiplexerPane }),
               let size = pane.surfaceSize,
               size.cell_width_px > 0, size.cell_height_px > 0,
               bounds.width > 0, bounds.height > 0
@@ -403,10 +430,37 @@ final class SplitTreeHostingView: UIView {
         // a split's panes collectively needed more space than the container has
         // and the pane above a divider clipped the bottom of its last row.
         // ROOTSHELL-TMUX (id=tmux-split-chrome-budget)
-        let chrome = tmuxChrome(node: rootNode, cellW: cellW, cellH: cellH)
+        // herdr lays a claimed tab out chromeless, so a native divider
+        // replaces nothing there and earns no cell credit.
+        let chrome = tmuxChrome(node: rootNode, cellW: cellW, cellH: cellH, separatorCredit: pane.isTmuxPane)
         let cols = max(1, Int(((bounds.width - chrome.h) / cellW).rounded(.down)))
         let rows = max(1, Int(((bounds.height - chrome.v) / cellH).rounded(.down)))
         return (cols: UInt16(min(cols, Int(UInt16.max))), rows: UInt16(min(rows, Int(UInt16.max))))
+    }
+
+    /// herdr tabs: the split's content rect snapped to whole cells, so the
+    /// frame math never hands a pane the fractional leftover that would
+    /// grow its grid past what the server laid out. nil when nothing is
+    /// left over or this is not a herdr split.
+    private func herdrSnapRect() -> CGRect? {
+        guard let tree,
+              let rootNode = tree.zoomed ?? tree.root,
+              let pane = tree.terminalLeaves.first(where: { $0.isHerdrPane }),
+              let cells = tmuxWindowCells(),
+              let size = pane.surfaceSize,
+              size.cell_width_px > 0, size.cell_height_px > 0
+        else { return nil }
+        let scale = pane.contentScaleFactor > 0 ? pane.contentScaleFactor : pane.traitCollection.displayScale
+        guard scale > 0 else { return nil }
+        let cellW = CGFloat(size.cell_width_px) / scale
+        let cellH = CGFloat(size.cell_height_px) / scale
+        let chrome = tmuxChrome(node: rootNode, cellW: cellW, cellH: cellH, separatorCredit: false)
+        let contentW = min(bounds.width, CGFloat(cells.cols) * cellW + chrome.h)
+        let contentH = min(bounds.height, CGFloat(cells.rows) * cellH + chrome.v)
+        guard contentW > 1, contentH > 1,
+              bounds.width - contentW > 0.5 || bounds.height - contentH > 0.5
+        else { return nil }
+        return CGRect(x: bounds.minX, y: bounds.minY, width: contentW, height: contentH)
     }
 
     /// The non-grid space (points) a rendered tmux split tree needs beyond
@@ -420,10 +474,13 @@ final class SplitTreeHostingView: UIView {
     private func tmuxChrome(
         node: SplitTree<SplitPaneView>.Node,
         cellW: CGFloat,
-        cellH: CGFloat
+        cellH: CGFloat,
+        separatorCredit: Bool = true
     ) -> (h: CGFloat, v: CGFloat) {
         let padX = CGFloat(PaddingManager.shared.effectivePaddingX)
         let padY = CGFloat(PaddingManager.shared.effectivePaddingY)
+        let creditW = separatorCredit ? cellW : 0
+        let creditH = separatorCredit ? cellH : 0
         func walk(_ node: SplitTree<SplitPaneView>.Node) -> (h: CGFloat, v: CGFloat) {
             switch node {
             case .leaf:
@@ -433,11 +490,11 @@ final class SplitTreeHostingView: UIView {
                 let right = walk(split.right)
                 switch split.direction {
                 case .horizontal:
-                    return (h: left.h + right.h + Self.dividerVisibleThickness - cellW,
+                    return (h: left.h + right.h + Self.dividerVisibleThickness - creditW,
                             v: max(left.v, right.v))
                 case .vertical:
                     return (h: max(left.h, right.h),
-                            v: left.v + right.v + Self.dividerVisibleThickness - cellH)
+                            v: left.v + right.v + Self.dividerVisibleThickness - creditH)
                 }
             }
         }
@@ -576,12 +633,39 @@ final class SplitTreeHostingView: UIView {
     /// single-axis `resize-pane`; tmux moves the divider and the reconcile +
     /// wake reflow the panes. For a 2-pane (root) split the window IS the split
     /// region, so this is exact.
-    fileprivate func commitDividerToTmux(node: SplitTree<SplitPaneView>.Node, ratio: Double) {
+    fileprivate func commitDividerToTmux(
+        node: SplitTree<SplitPaneView>.Node,
+        ratio: Double,
+        startRatio: Double? = nil,
+        parentBounds: CGRect? = nil
+    ) {
         guard case .split(let split) = node else { return }
-        // herdr control mode: the server owns the layout; send the ratio
-        // change and let its `tab.layout` record reflow the panes.
-        if let leftView = split.left.leftmostLeaf().asTerminal, leftView.isHerdrPane {
-            leftView.requestHerdrResize(horizontal: split.direction == .horizontal, delta: ratio - split.ratio)
+        // herdr control mode: the server owns the layout; send the whole
+        // drag as cells moved and let its `tab.layout` record reflow the
+        // panes. herdr addresses a divider through a pane bordering it, so
+        // pick the pane on the side that grows: its far edge IS this divider.
+        // The native ratio is relative to this split's own region, which
+        // need not be the server split's, so it is converted to cells here
+        // and to the server split's fraction by the controller.
+        if let probe = split.left.leftmostLeaf().asTerminal, probe.isHerdrPane {
+            let delta = ratio - (startRatio ?? split.ratio)
+            guard abs(delta) > 0.001, let size = probe.surfaceSize,
+                  size.cell_width_px > 0, size.cell_height_px > 0 else { return }
+            let horizontal = split.direction == .horizontal
+            let scale = probe.contentScaleFactor > 0 ? probe.contentScaleFactor : probe.traitCollection.displayScale
+            guard scale > 0 else { return }
+            let region = parentBounds ?? bounds
+            let extent = (horizontal ? region.width : region.height) - Self.dividerVisibleThickness
+            let cell = CGFloat(horizontal ? size.cell_width_px : size.cell_height_px) / scale
+            let cells = Int((CGFloat(abs(delta)) * extent / cell).rounded())
+            guard cells > 0 else { return }
+            if delta > 0 {
+                split.left.rightmostLeaf().asTerminal?
+                    .requestHerdrResizeEdge(direction: horizontal ? "right" : "down", cells: cells)
+            } else {
+                split.right.leftmostLeaf().asTerminal?
+                    .requestHerdrResizeEdge(direction: horizontal ? "left" : "up", cells: cells)
+            }
             return
         }
         guard let leftView = split.left.leftmostLeaf().asTerminal,
@@ -610,7 +694,7 @@ final class SplitTreeHostingView: UIView {
             // touch its frame or attachment.
             guard !pane.isDetachedForFullScreen else { return }
 
-            attach(pane, frame: bounds.integral)
+            attach(pane, frame: herdrClampedFrame(bounds.integral, for: pane))
             applyFocusAppearance(to: pane, showBorder: !isRoot)
 
         case .split(let split):
@@ -627,6 +711,34 @@ final class SplitTreeHostingView: UIView {
         }
     }
 
+    /// A herdr pane never renders more cells than the server laid out for
+    /// it: its slot is trimmed (top-left anchored) to the advertised grid
+    /// plus padding. Ratios only distribute the slots; in an uneven tree a
+    /// slot can be wider than its pane's grid, and the surface would
+    /// otherwise grow into that slack and wrap differently from the PTY.
+    private func herdrClampedFrame(_ frame: CGRect, for pane: SplitPaneView) -> CGRect {
+        guard let terminal = pane.asTerminal, let grid = terminal.herdrTargetGrid,
+              let size = terminal.surfaceSize, size.cell_width_px > 0, size.cell_height_px > 0
+        else { return frame }
+        let scale = terminal.contentScaleFactor > 0 ? terminal.contentScaleFactor : terminal.traitCollection.displayScale
+        guard scale > 0 else { return frame }
+        let padX = CGFloat(PaddingManager.shared.effectivePaddingX)
+        let padY = CGFloat(PaddingManager.shared.effectivePaddingY)
+        // Round up so a fractional cell width never floors the grid short.
+        let maxW = ceil(CGFloat(grid.cols) * CGFloat(size.cell_width_px) / scale + padX * 2)
+        let maxH = ceil(CGFloat(grid.rows) * CGFloat(size.cell_height_px) / scale + padY * 2)
+        // The slot math rounds to whole points and can come up a fraction
+        // short of the grid; take the sub-point overlap into the divider
+        // rather than a missing column. A larger shortfall is real.
+        func fit(_ slot: CGFloat, to needed: CGFloat) -> CGFloat {
+            needed <= slot + 1 ? needed : slot
+        }
+        var clamped = frame
+        clamped.size.width = fit(frame.width, to: maxW)
+        clamped.size.height = fit(frame.height, to: maxH)
+        return clamped
+    }
+
     /// Read-only frame the given pane occupies (or would occupy) in the
     /// current layout, in this view's coordinates. Used by the full-screen
     /// exit animation to target the pane's slot without forcing a re-attach
@@ -639,7 +751,9 @@ final class SplitTreeHostingView: UIView {
             if case .split = rootNode { return tree.zoomed == nil }
             return false
         }()
-        let layoutRect = (renderingSplit ? contentRect : nil) ?? bounds
+        // A herdr split snaps to whole cells the same way, minus the frosted
+        // margin: what is left over is under a cell on each axis.
+        let layoutRect = (renderingSplit ? (contentRect ?? herdrSnapRect()) : nil) ?? bounds
         return slotFrame(for: pane, node: rootNode, in: layoutRect)
     }
 
@@ -822,11 +936,23 @@ final class SplitTreeHostingView: UIView {
             color: dividerColor
         )
 
-        dividerView.onResize = { [weak self] node, ratio in
-            self?.onResize?(node, ratio)
+        dividerView.onResize = { [weak self, weak dividerView] node, ratio in
+            guard let self else { return }
+            if let dividerView, case .split(let split) = node,
+               self.dragStartRatios[ObjectIdentifier(dividerView)] == nil {
+                self.dragStartRatios[ObjectIdentifier(dividerView)] = split.ratio
+            }
+            self.onResize?(node, ratio)
         }
-        dividerView.onResizeEnd = { [weak self] node, ratio in
-            self?.commitDividerToTmux(node: node, ratio: ratio)
+        dividerView.onResizeEnd = { [weak self, weak dividerView] node, ratio in
+            guard let self else { return }
+            let startRatio = dividerView.flatMap { self.dragStartRatios.removeValue(forKey: ObjectIdentifier($0)) }
+            self.commitDividerToTmux(
+                node: node,
+                ratio: ratio,
+                startRatio: startRatio,
+                parentBounds: dividerView?.parentBounds
+            )
         }
         dividerView.onTouchTap = { [weak self] in
             self?.paneRearrangement.revealTouchHandles()
@@ -976,7 +1102,8 @@ private final class SplitDividerHandleView: UIView {
 
     private var node: SplitTree<SplitPaneView>.Node?
     private var direction: SplitTree<SplitPaneView>.Direction = .horizontal
-    private var parentBounds: CGRect = .zero
+    /// The split's region; the drag ratio is relative to it less the divider.
+    private(set) var parentBounds: CGRect = .zero
     private var minSplitSize: CGFloat = 100
     private var visibleThickness: CGFloat = 2
 

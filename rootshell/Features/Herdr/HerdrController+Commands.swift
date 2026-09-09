@@ -60,6 +60,7 @@ extension HerdrController {
             ?? workspaces.values.first(where: \.focused)?.workspace_id
             ?? workspaces.keys.sorted().first
         guard let workspaceId else { return }
+        pendingNewTabSelectionUntil = Date().addingTimeInterval(5)
         if mode == .legacy {
             legacyCommand("tab create --workspace \(workspaceId)")
             return
@@ -94,14 +95,52 @@ extension HerdrController {
         send("pane.zoom", HerdrControl.PaneZoomParams(pane_id: binding.paneId, mode: "toggle"))
     }
 
-    /// Divider drag: grow or shrink the pane by a fraction of its split.
-    func requestResize(_ view: Ghostty.TerminalView, direction: String, amount: Double) {
-        guard let binding = view.herdrPaneBinding, amount > 0.001 else { return }
+    /// Divider drag: move the divider on the pane's `direction` edge by
+    /// `cells`. herdr adds the amount to the ratio of the server split
+    /// that owns the divider, so the cells are scaled by that split's
+    /// extent from the last layout, not the native split's.
+    func requestResize(_ view: Ghostty.TerminalView, direction: String, cells: Int) {
+        guard let binding = view.herdrPaneBinding, cells > 0 else { return }
+        let amount = serverSplitFraction(paneId: binding.paneId, tabId: binding.tabId, direction: direction, cells: cells)
+        guard amount > 0.001 else { return }
         if mode == .legacy {
             legacyCommand("pane resize --pane \(binding.paneId) --direction \(direction) --amount \(String(format: "%.3f", amount))")
             return
         }
         send("pane.resize", HerdrControl.PaneResizeParams(pane_id: binding.paneId, direction: direction, amount: amount))
+    }
+
+    /// `cells` as a fraction of the server split whose divider lies on the
+    /// pane's `direction` edge; falls back to the tab area when the split
+    /// cannot be found.
+    private func serverSplitFraction(paneId: String, tabId: String, direction: String, cells: Int) -> Double {
+        guard let layout = lastLayouts[tabId] else { return 0 }
+        let horizontal = direction == "left" || direction == "right"
+        let areaExtent = Double(horizontal ? layout.area.width : layout.area.height)
+        guard let pane = layout.panes.first(where: { $0.pane_id == paneId }) else {
+            return areaExtent > 0 ? Double(cells) / areaExtent : 0
+        }
+        let edge: Int
+        switch direction {
+        case "right": edge = pane.rect.x + pane.rect.width
+        case "left": edge = pane.rect.x
+        case "down": edge = pane.rect.y + pane.rect.height
+        default: edge = pane.rect.y
+        }
+        let split = layout.splits.first { split in
+            guard (split.direction == "right") == horizontal else { return false }
+            let extent = Double(horizontal ? split.rect.width : split.rect.height)
+            let origin = horizontal ? split.rect.x : split.rect.y
+            let divider = origin + Int((extent * split.ratio).rounded())
+            guard abs(divider - edge) <= 1 else { return false }
+            // The split must span the pane on the other axis.
+            if horizontal {
+                return pane.rect.y >= split.rect.y && pane.rect.y < split.rect.y + split.rect.height
+            }
+            return pane.rect.x >= split.rect.x && pane.rect.x < split.rect.x + split.rect.width
+        }
+        let extent = split.map { Double(horizontal ? $0.rect.width : $0.rect.height) } ?? areaExtent
+        return extent > 0 ? Double(cells) / extent : 0
     }
 
     func requestFocusTab(_ tab: TabModel) {

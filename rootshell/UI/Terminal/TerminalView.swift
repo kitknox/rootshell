@@ -428,6 +428,16 @@ extension Ghostty {
         }
         var isHerdrPane: Bool { herdrPaneBinding != nil }
 
+        /// The grid herdr laid this pane out with. The split host trims the
+        /// pane's slot to it so the surface never exceeds the server PTY.
+        var herdrTargetGrid: (cols: Int, rows: Int)? {
+            didSet {
+                if herdrTargetGrid?.cols != oldValue?.cols || herdrTargetGrid?.rows != oldValue?.rows {
+                    enclosingSplitHost?.setNeedsLayout()
+                }
+            }
+        }
+
         /// A pane a multiplexer controller owns (tmux -CC or herdr control
         /// mode): local split edits must round-trip through the server.
         var isMultiplexerPane: Bool { isTmuxPane || isHerdrPane }
@@ -1665,6 +1675,13 @@ extension Ghostty {
                 tmuxGatewayOwnerKey = 0
                 sessionController.resetGatewayReportFilter()
                 tmuxController = nil
+            }
+            // A herdr gateway going away ends control mode with it, so the
+            // registry never keeps a controller (and a local bridge process)
+            // alive for a surface that no longer exists.
+            if let controller = herdrController {
+                controller.stop()
+                herdrController = nil
             }
             // Loss stashed for a controller that never got created belongs to
             // the surface generation being torn down; don't let it fire a

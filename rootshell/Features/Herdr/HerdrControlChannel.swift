@@ -126,6 +126,16 @@ actor HerdrControlChannel {
         failPending(HerdrChannelError.closed)
     }
 
+    /// Close without the courtesy write: used when the stream is presumed
+    /// dead, where a blocked writer would stall recovery.
+    func abort() async {
+        guard !closed else { return }
+        closed = true
+        readerTask?.cancel()
+        await pipe.close()
+        failPending(HerdrChannelError.closed)
+    }
+
     private func failPending(_ error: Error) {
         let waiting = pending
         pending.removeAll()
@@ -150,10 +160,18 @@ actor HerdrControlChannel {
         var line = encoded
         line.append(0x0A)
 
-        try await pipe.write(line)
-
+        // The continuation is registered before the write suspends: a fast
+        // reply could otherwise land in `dispatch` with nothing to match.
         let response: Data = try await withCheckedThrowingContinuation { continuation in
             pending[id] = continuation
+            Task { [weak self] in
+                guard let self else { return }
+                do {
+                    try await self.pipe.write(line)
+                } catch {
+                    await self.fail(id: id, error: error)
+                }
+            }
             Task { [weak self] in
                 try? await Task.sleep(for: timeout)
                 await self?.timeOut(id: id, method: method)
@@ -202,6 +220,11 @@ actor HerdrControlChannel {
     private func timeOut(id: String, method: String) {
         guard let continuation = pending.removeValue(forKey: id) else { return }
         continuation.resume(throwing: HerdrChannelError.timedOut(method: method))
+    }
+
+    private func fail(id: String, error: Error) {
+        guard let continuation = pending.removeValue(forKey: id) else { return }
+        continuation.resume(throwing: error)
     }
 
     // MARK: - Reader

@@ -1363,6 +1363,14 @@ struct VerticalTabSidebar: View {
                         isHighlighted: isHighlighted
                     )
                 } menu: {
+                    // A herdr workspace group stands in for the gateway
+                    // header a tmux family gets: same admin and detach items.
+                    if groupID.kind == .herdrWorkspace,
+                       let member = tabsModel.tabs.first(where: { tabsModel.effectiveGroupID(for: $0) == groupID }) {
+                        HerdrTabMenuItems(tab: member, dialogs: herdrDialogs)
+                        Divider()
+                        HerdrGatewayDetachMenuItem(tab: member, dialogs: herdrDialogs)
+                    }
                     moveGroupToWindowItems(for: groupID, isGateway: false)
                 }
                 .equatable()

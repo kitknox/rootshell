@@ -497,11 +497,15 @@ actor TSSHCallGate {
         nonisolated(unsafe) let t = transport
         let clamped = Int32(min(maxBytes, Int(Int32.max)))
         return try await runOnWorker {
-            let data = try t.streamLocalRead(channelRef, maxBytes: clamped)
-            // The Go side signals clean EOF as nil-data + nil-error;
-            // gomobile maps that to an empty Data. Surface as nil so
-            // the AsyncBytePipe contract reads cleanly.
-            return data.isEmpty ? nil : data
+            do {
+                let data = try t.streamLocalRead(channelRef, maxBytes: clamped)
+                // The Go side signals clean EOF as nil-data + nil-error;
+                // surface it as nil so the AsyncBytePipe contract reads cleanly.
+                return data.isEmpty ? nil : data
+            } catch let error where Self.isBridgedNilReturn(error) {
+                // Same EOF seen through the ObjC bridge as a nil return.
+                return nil
+            }
         }
     }
 
@@ -589,9 +593,24 @@ actor TSSHCallGate {
         nonisolated(unsafe) let t = transport
         let clamped = min(maxBytes, Int(Int32.max))
         return try await runOnWorker {
-            let data = try t.execRead(channelRef, maxBytes: clamped)
-            return data.isEmpty ? nil : data
+            do {
+                let data = try t.execRead(channelRef, maxBytes: clamped)
+                return data.isEmpty ? nil : data
+            } catch let error where Self.isBridgedNilReturn(error) {
+                // Clean EOF: Go hands back nil bytes with no error, and the
+                // ObjC bridge turns a nil object without an NSError into
+                // this generic failure. A real Go error carries its own
+                // domain and message and still throws.
+                return nil
+            }
         }
+    }
+
+    /// Swift's `_GenericObjCError.nilError`: a throwing ObjC method that
+    /// returned nil without setting an error.
+    private nonisolated static func isBridgedNilReturn(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == "Foundation._GenericObjCError" && nsError.code == 0
     }
 
     /// Write to the command's stdin; returns the bytes accepted.

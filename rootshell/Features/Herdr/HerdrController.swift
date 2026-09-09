@@ -92,7 +92,24 @@ final class HerdrController {
     var legacyGrids: [String: (rows: Int, cols: Int)] = [:]
     var legacyPollTask: Task<Void, Never>?
     var legacySnapshotFingerprint: Int?
+    /// Degraded-mode failures already written to the gateway; each distinct
+    /// message shows once so a repeating poll does not flood the shell.
+    var legacyNoticesShown: Set<String> = []
     var didAutoHideGateway = false
+    /// A tab the user just asked for should be selected when herdr reports it.
+    var pendingNewTabSelectionUntil: Date?
+
+    /// Output held for a tab's panes until their surfaces take the layout.
+    struct LayoutRelease {
+        let tabId: String
+        /// terminal id → grid the layout gives it, dropped as panes match.
+        var expected: [String: (cols: Int, rows: Int)]
+        var deadline: Task<Void, Never>?
+        /// Attaches whose redraw for a superseded layout was discarded.
+        var snapshotOnComplete: Set<String> = []
+    }
+    /// Keyed by the router barrier each `tab.layout` record took.
+    var layoutReleases: [UInt64: LayoutRelease] = [:]
     /// Periodic ping while the stream is open; a missed answer closes it so
     /// the reconnect path re-snapshots instead of waiting on a dead link.
     private var healthTask: Task<Void, Never>?
@@ -118,6 +135,8 @@ final class HerdrController {
     var attachQueue: [String] = []
     var attachesInFlight = 0
     var snapshotRequestsInFlight: Set<String> = []
+    /// Attaches that asked for another snapshot while one was in flight.
+    var snapshotRetryWanted: Set<String> = []
     var lastLayouts: [String: HerdrControl.LayoutSnapshot] = [:]
     var pushedGeometry: [String: (cols: Int, rows: Int)] = [:]
     var geometryTasks: [String: Task<Void, Never>] = [:]
@@ -226,6 +245,13 @@ final class HerdrController {
             let pipe = try await HerdrChannelFactory.open(command: controlCommand, on: gateway)
             let router = self.router
             let gatewayUUID = self.gatewayUUID
+            // Dropped output leaves a screen nothing downstream can repair;
+            // only a fresh snapshot does.
+            router.onOverflow = { attachId in
+                Task { @MainActor in
+                    HerdrController.controller(forGateway: gatewayUUID)?.requestSnapshot(attachId: attachId)
+                }
+            }
             let channel = HerdrControlChannel(
                 pipe: pipe,
                 onInbound: { inbound in
@@ -235,6 +261,16 @@ final class HerdrController {
                         return
                     case .snapshot(let record):
                         router.applySnapshot(record)
+                    case .tabLayout(let layout):
+                        // Queue these panes' output on this thread, before
+                        // any redraw at the new size can reach a surface
+                        // still on the old grid; released once resized.
+                        let barrier = router.holdOutput(forPanes: layout.panes.map(\.pane_id))
+                        Task { @MainActor in
+                            HerdrController.controller(forGateway: gatewayUUID)?
+                                .handleTabLayout(layout, barrier: barrier)
+                        }
+                        return
                     default:
                         break
                     }
@@ -332,10 +368,27 @@ final class HerdrController {
                     try await channel.request("ping", HerdrControl.EmptyParams(), timeout: .seconds(10))
                 } catch {
                     Self.logger.warning("herdr health ping failed: \(error.localizedDescription)")
-                    await channel.close()
+                    await self.streamDidFail(channel, error: error)
                     return
                 }
             }
+        }
+    }
+
+    /// Closes a stream we decided is dead. `close()` suppresses the reader's
+    /// own closed callback, so the recovery path is driven from here.
+    private func streamDidFail(_ channel: HerdrControlChannel, error: Error) async {
+        // No graceful close here: the writer may be the thing that is stuck.
+        await channel.abort()
+        guard self.channel === channel else { return }
+        channelDidClose(error)
+    }
+
+    /// Ends control mode for every gateway hosted in a window being torn
+    /// down, while its tabs model is still alive.
+    static func stopAll(inWindow windowId: String) {
+        for controller in all where controller.hostWindowId == windowId {
+            controller.stop()
         }
     }
 
@@ -401,7 +454,7 @@ final class HerdrController {
             do {
                 try await channel.request("ping", HerdrControl.EmptyParams(), timeout: .seconds(5))
             } catch {
-                await channel.close()
+                await self.streamDidFail(channel, error: error)
             }
         }
     }
@@ -490,13 +543,30 @@ final class HerdrController {
 
     /// Drops attach bookkeeping after the stream died; surfaces stay so the
     /// reconnect can re-snapshot them in place.
+    /// A `tab.layout` record whose panes' output the router holds behind
+    /// `barrier`. Whatever applying it does, the barrier ends: tracked by
+    /// the release the layout armed, or released right here.
+    func handleTabLayout(_ layout: HerdrControl.LayoutSnapshot, barrier: UInt64) {
+        guard !didEnd else {
+            router.release(barrier: barrier)
+            return
+        }
+        applyLayout(layout, barrier: barrier)
+        if layoutReleases[barrier] == nil {
+            router.release(barrier: barrier)
+        }
+    }
+
     private func detachAllLocally() {
+        for release in layoutReleases.values { release.deadline?.cancel() }
+        layoutReleases.removeAll()
         router.removeAll()
         attachIds.removeAll()
         terminalByAttach.removeAll()
         attachQueue.removeAll()
         attachesInFlight = 0
         snapshotRequestsInFlight.removeAll()
+        snapshotRetryWanted.removeAll()
         pushedGeometry.removeAll()
         for session in paneSessions.values {
             session.attachId = nil
@@ -519,6 +589,7 @@ final class HerdrController {
         case .detached(let detached):
             attachDidDetach(detached)
         case .tabLayout(let layout):
+            // Delivered through handleTabLayout with its barrier.
             applyLayout(layout)
         case .layoutUpdated(let layout):
             // The generic event carries outer rectangles; a `tab.layout`

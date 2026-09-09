@@ -135,6 +135,9 @@ extension HerdrController {
             attachIds[terminalId] = attached.attach_id
             terminalByAttach[attached.attach_id] = terminalId
             session.attachId = attached.attach_id
+            if let paneId = paneInfos.values.first(where: { $0.terminal_id == terminalId })?.pane_id {
+                router.setPane(paneId, attachId: attached.attach_id)
+            }
             router.register(attachId: attached.attach_id, sink: session.outputSink)
         } catch {
             Self.logger.error("herdr attach \(terminalId) failed: \(error.localizedDescription)")
@@ -144,7 +147,7 @@ extension HerdrController {
     // MARK: - Records
 
     func snapshotDidArrive(_ record: HerdrControl.SnapshotRecord) {
-        snapshotRequestsInFlight.remove(record.attach_id)
+        snapshotRequestDidFinish(attachId: record.attach_id)
         guard let terminalId = terminalByAttach[record.attach_id], let view = paneViews[terminalId] else { return }
         let state = record.snapshot.state
         if view.userOverrideTitle == nil, let title = state.title, !title.isEmpty, view.title != title {
@@ -157,7 +160,14 @@ extension HerdrController {
 
     /// Asks for a fresh snapshot after the server reported dropped output.
     func requestSnapshot(attachId: String) {
-        guard let channel, !snapshotRequestsInFlight.contains(attachId) else { return }
+        guard let channel else { return }
+        // A request while one is in flight is not lost: it re-runs when the
+        // current snapshot lands (or fails), so a snapshot that arrived
+        // already stale still gets its replacement.
+        guard !snapshotRequestsInFlight.contains(attachId) else {
+            snapshotRetryWanted.insert(attachId)
+            return
+        }
         snapshotRequestsInFlight.insert(attachId)
         if let terminalId = terminalByAttach[attachId], let view = paneViews[terminalId] {
             TerminalBellSuppressor.suppressRebuild(view.uuid)
@@ -166,8 +176,15 @@ extension HerdrController {
             do {
                 try await channel.request("terminal.snapshot", HerdrControl.AttachTarget(attach_id: attachId))
             } catch {
-                self?.snapshotRequestsInFlight.remove(attachId)
+                self?.snapshotRequestDidFinish(attachId: attachId)
             }
+        }
+    }
+
+    private func snapshotRequestDidFinish(attachId: String) {
+        snapshotRequestsInFlight.remove(attachId)
+        if snapshotRetryWanted.remove(attachId) != nil, terminalByAttach[attachId] != nil {
+            requestSnapshot(attachId: attachId)
         }
     }
 
@@ -196,60 +213,134 @@ extension HerdrController {
             legacyGridDidChange(session, rows: rows, cols: cols)
             return
         }
-        guard let view = paneViews[session.terminalId], let tabID = view.containingTabID,
-              let tab = tabs.values.first(where: { $0.id == tabID }), let tabId = tab.herdrTabId else { return }
-        scheduleGeometryPush(tabId: tabId, tab: tab, from: view, rows: rows, cols: cols)
+        noteGridForLayoutRelease(terminalId: session.terminalId, cols: cols, rows: rows)
+        guard let view = paneViews[session.terminalId] else { return }
+        scheduleGeometryPush(from: view)
+    }
+
+    /// The split host laid out (window resize, sidebar, font change): the
+    /// tab's cell budget may have changed even though every pane is still
+    /// clamped to the last server grid.
+    func hostLayoutDidChange(for view: Ghostty.TerminalView) {
+        guard mode == .raw else { return }
+        scheduleGeometryPush(from: view)
     }
 
     func pushGeometryForVisibleTabs() {
         for tab in tabs.values where tabsModel.selectedTabID == tab.id {
-            guard let tabId = tab.herdrTabId, let view = tab.splitTree.terminalLeaves.first,
-                  let size = view.surfaceSize else { continue }
-            scheduleGeometryPush(tabId: tabId, tab: tab, from: view, rows: Int(size.rows), cols: Int(size.columns))
+            guard let view = tab.splitTree.terminalLeaves.first else { continue }
+            scheduleGeometryPush(from: view)
         }
     }
 
-    private func scheduleGeometryPush(tabId: String, tab: TabModel, from view: Ghostty.TerminalView, rows: Int, cols: Int) {
-        guard tabsModel.selectedTabID == tab.id, !Ghostty.isAppBackgroundedAtomic else { return }
+    private func scheduleGeometryPush(from view: Ghostty.TerminalView) {
+        guard let tabID = view.containingTabID,
+              let tab = tabs.values.first(where: { $0.id == tabID }), let tabId = tab.herdrTabId,
+              tabsModel.selectedTabID == tab.id, !Ghostty.isAppBackgroundedAtomic else { return }
         geometryTasks[tabId]?.cancel()
-        geometryTasks[tabId] = Task { @MainActor [weak self, weak tab, weak view] in
+        geometryTasks[tabId] = Task { @MainActor [weak self, weak view] in
             try? await Task.sleep(for: .milliseconds(60))
-            guard let self, let tab, let view, !Task.isCancelled else { return }
+            guard let self, let view, !Task.isCancelled else { return }
             self.geometryTasks.removeValue(forKey: tabId)
-            guard let size = self.tabCells(for: tab, from: view, rows: rows, cols: cols) else { return }
+            guard let size = self.tabCells(from: view) else { return }
             self.pushTabGeometry(tabId: tabId, cols: size.cols, rows: size.rows, cell: size.cell)
         }
     }
 
-    /// Cells the whole tab covers: the pane's own grid when it is alone,
-    /// otherwise the split host's bounds divided by the pane's cell size.
-    private func tabCells(
-        for tab: TabModel,
-        from view: Ghostty.TerminalView,
-        rows: Int,
-        cols: Int
-    ) -> (cols: Int, rows: Int, cell: (width: Int, height: Int))? {
+    /// Cells the whole tab covers, from the split host's bounds less the
+    /// padding and dividers the native layout spends (the same math the host
+    /// uses to snap the split). Never from a pane's grid: panes are clamped
+    /// to the last server layout, so their grids cannot report growth.
+    private func tabCells(from view: Ghostty.TerminalView) -> (cols: Int, rows: Int, cell: (width: Int, height: Int))? {
         guard let surface = view.surfaceSize, surface.cell_width_px > 0, surface.cell_height_px > 0 else {
             return nil
         }
         let cell = (width: Int(surface.cell_width_px), height: Int(surface.cell_height_px))
-        if tab.splitTree.terminalLeaves.count <= 1 {
-            guard cols >= 4, rows >= 2 else { return nil }
-            return (cols, rows, cell)
+        let cols: Int
+        let rows: Int
+        if let cells = view.enclosingSplitHost?.multiplexerWindowCells() {
+            cols = Int(cells.cols)
+            rows = Int(cells.rows)
+        } else {
+            // Not hosted yet: the surface's own grid is the only measure.
+            cols = Int(surface.columns)
+            rows = Int(surface.rows)
         }
-        guard let host = view.enclosingSplitHost else { return nil }
-        let scale = view.contentScaleFactor > 0 ? view.contentScaleFactor : 1
-        let cellW = CGFloat(surface.cell_width_px) / scale
-        let cellH = CGFloat(surface.cell_height_px) / scale
-        guard cellW > 0, cellH > 0 else { return nil }
-        let padX = CGFloat(PaddingManager.shared.effectivePaddingX) * 2
-        let padY = CGFloat(PaddingManager.shared.effectivePaddingY) * 2
-        let width = max(0, host.bounds.width - padX)
-        let height = max(0, host.bounds.height - padY)
-        let tabCols = Int(width / cellW)
-        let tabRows = Int(height / cellH)
-        guard tabCols >= 4, tabRows >= 2 else { return nil }
-        return (tabCols, tabRows, cell)
+        guard cols >= 4, rows >= 2 else { return nil }
+        return (cols, rows, cell)
+    }
+
+    // MARK: - Layout release
+
+    /// Holds these panes' output until their surfaces report the layout's
+    /// grid, or a short deadline passes (a hidden tab never resizes). Called
+    /// after the split tree took the layout.
+    func armLayoutRelease(for layout: HerdrControl.LayoutSnapshot, barrier: UInt64) {
+        // An earlier layout for this tab still waiting was drawn for a grid
+        // the panes never reach: discard its bytes and re-snapshot those
+        // panes once this layout has landed.
+        var snapshotOnComplete: Set<String> = []
+        for (id, previous) in layoutReleases where previous.tabId == layout.tab_id {
+            previous.deadline?.cancel()
+            layoutReleases.removeValue(forKey: id)
+            snapshotOnComplete.formUnion(previous.snapshotOnComplete)
+            snapshotOnComplete.formUnion(router.discardSegment(barrier: id))
+        }
+        guard mode == .raw, let tab = tabs[layout.tab_id], tabsModel.selectedTabID == tab.id else {
+            router.release(barrier: barrier)
+            for attachId in snapshotOnComplete { requestSnapshot(attachId: attachId) }
+            return
+        }
+        var expected: [String: (cols: Int, rows: Int)] = [:]
+        for pane in layout.panes {
+            guard let terminalId = paneInfos[pane.pane_id]?.terminal_id else { continue }
+            let wanted = (cols: pane.rect.width, rows: pane.rect.height)
+            if let size = paneViews[terminalId]?.surfaceSize,
+               Int(size.columns) == wanted.cols, Int(size.rows) == wanted.rows {
+                continue
+            }
+            expected[terminalId] = wanted
+        }
+        guard !expected.isEmpty else {
+            router.release(barrier: barrier)
+            for attachId in snapshotOnComplete { requestSnapshot(attachId: attachId) }
+            return
+        }
+        let deadline = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(750))
+            guard !Task.isCancelled else { return }
+            self?.completeLayoutRelease(barrier: barrier)
+        }
+        layoutReleases[barrier] = LayoutRelease(
+            tabId: layout.tab_id,
+            expected: expected,
+            deadline: deadline,
+            snapshotOnComplete: snapshotOnComplete
+        )
+    }
+
+    private func completeLayoutRelease(barrier: UInt64) {
+        guard let release = layoutReleases.removeValue(forKey: barrier) else { return }
+        release.deadline?.cancel()
+        router.release(barrier: barrier)
+        // Panes whose earlier redraw was discarded rebuild at this grid; the
+        // snapshot arrives behind the barrier just released.
+        for attachId in release.snapshotOnComplete {
+            requestSnapshot(attachId: attachId)
+        }
+    }
+
+    private func noteGridForLayoutRelease(terminalId: String, cols: Int, rows: Int) {
+        for (barrier, var release) in layoutReleases {
+            guard let wanted = release.expected[terminalId] else { continue }
+            guard wanted.cols == cols, wanted.rows == rows else { continue }
+            release.expected.removeValue(forKey: terminalId)
+            if release.expected.isEmpty {
+                completeLayoutRelease(barrier: barrier)
+            } else {
+                layoutReleases[barrier] = release
+            }
+        }
     }
 
     private func pushTabGeometry(tabId: String, cols: Int, rows: Int, cell: (width: Int, height: Int)) {

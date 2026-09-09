@@ -334,6 +334,9 @@ extension MainView {
         observerBag.removeAll()
 
         // Unregister from WindowStateManager
+        // herdr control mode first, while this window's tabs model can still
+        // take the projected tabs down with its controller.
+        HerdrController.stopAll(inWindow: windowId)
         WindowStateManager.shared.unregisterWindow(windowId: windowId)
         TerminalWindowRegistry.unregister(windowId: windowId)
         TmuxWindowRegistry.unregister(windowId: windowId)

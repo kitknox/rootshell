@@ -180,6 +180,9 @@ extension HerdrController {
             guard mode == .legacy, !didEnd else { return }
             // The reply is one JSON line; tolerate chatter around it.
             guard let line = output.split(separator: 0x0A).last(where: { $0.first == UInt8(ascii: "{") }) else {
+                let text = String(decoding: output.prefix(200), as: UTF8.self)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                legacyNotice("herdr api snapshot returned no JSON" + (text.isEmpty ? " (empty output)" : ": \(text)"))
                 return
             }
             let fingerprint = line.hashValue
@@ -192,7 +195,16 @@ extension HerdrController {
             applySnapshot(snapshot)
         } catch {
             Self.logger.warning("herdr degraded poll failed: \(error.localizedDescription)")
+            legacyNotice("snapshot poll failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Degraded mode has no stream to report through, so a failure the user
+    /// would otherwise see only as missing tabs goes to the gateway shell,
+    /// once per distinct message.
+    func legacyNotice(_ message: String) {
+        guard !didEnd, legacyNoticesShown.insert(message).inserted else { return }
+        gateway?.writeToGhostty(string: "\r\n\u{1b}[33mherdr control mode: \(message)\u{1b}[0m\r\n")
     }
 
     /// Only the selected tab's panes hold a channel; the rest release
@@ -245,6 +257,7 @@ extension HerdrController {
                 stream.start()
             } catch {
                 HerdrController.logger.warning("herdr degraded attach \(terminalId) failed: \(error.localizedDescription)")
+                self?.legacyNotice("pane attach failed: \(error.localizedDescription)")
             }
         }
     }
@@ -281,6 +294,7 @@ extension HerdrController {
                 _ = try await self?.legacyRun(args: args)
             } catch {
                 HerdrController.logger.warning("herdr degraded command failed: \(error.localizedDescription)")
+                self?.legacyNotice("command failed: \(error.localizedDescription)")
             }
             await self?.legacyPollOnce()
         }
