@@ -84,10 +84,6 @@ extension UIApplication {
         }?.session.persistentIdentifier
     }
 
-    @objc func menuToggleQuickSettings(_ sender: Any?) {
-        ghostty_postNotification(.toggleQuickSettings)
-    }
-
     // MARK: - Menu Actions (SwiftUI Commands)
 
     @objc func menuCreateLocalShell(_ sender: Any?) {
@@ -244,6 +240,14 @@ extension UIApplication {
 
     @objc func menuShowTmuxSessions(_ sender: Any?) {
         ghostty_postNotification(.showTmuxSessions)
+    }
+
+    @objc func menuDetachSession(_ sender: Any?) {
+        ghostty_postNotification(.detachSession)
+    }
+
+    @objc func menuDetachAllSessions(_ sender: Any?) {
+        ghostty_postNotification(.detachAllSessions)
     }
 
     @objc func menuDetachOtherClients(_ sender: Any?) {

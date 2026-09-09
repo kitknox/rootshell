@@ -2366,6 +2366,14 @@ extension Ghostty.TerminalView {
         NotificationCenter.default.post(name: .showTmuxSessions, object: self)
     }
 
+    @objc func menuDetachSession(_ sender: Any?) {
+        NotificationCenter.default.post(name: .detachSession, object: self)
+    }
+
+    @objc func menuDetachAllSessions(_ sender: Any?) {
+        NotificationCenter.default.post(name: .detachAllSessions, object: self)
+    }
+
     @objc func menuDetachOtherClients(_ sender: Any?) {
         NotificationCenter.default.post(name: .detachOtherClients, object: self)
     }

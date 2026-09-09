@@ -449,6 +449,17 @@ extension Ghostty {
         /// A transparent multiplexer identity that does not suppress agent
         /// attention or depend on alternate-screen ownership.
         var passthroughMultiplexer: RawMultiplexerBinding?
+
+        /// Set when auto-start printed `multiplexerMissingFallbackMarker` before
+        /// (or after) we optimistically bound a mux. Blocks later binding and
+        /// drives an in-app banner — MOTD `clear` often wipes the terminal line.
+        var multiplexerAutoStartFellBack: Bool = false
+
+        /// Short carry buffer so a missing-mux marker split across two SSH
+        /// packets still matches. Only retained while auto-start has not yet
+        /// fallen back. (id=mux-missing-fallback)
+        var multiplexerFallbackScanTail: Data = Data()
+
         nonisolated(unsafe) var tmuxDetachInProgressAtomic: Bool = false
 
         var isTmuxDetachInProgress: Bool {
@@ -1479,13 +1490,20 @@ extension Ghostty {
 
         /// Why the terminal is being torn down. Drives the resumable-session
         /// branch in `cleanup` — the wrong choice here either kills a server
-        /// session the user wants preserved (.userClose during a scene
-        /// teardown) or strands a server session the user wanted closed
-        /// (.sceneTeardown for an explicit tab close).
+        /// session the user wants preserved (`.userClose` / `.muxDetach` during
+        /// a scene teardown) or strands a server session the user wanted
+        /// closed (`.sceneTeardown` for an explicit tab close). Detach must
+        /// use `.muxDetach` so zmx is left running; Close Tab uses `.userClose`
+        /// so zmx is killed.
         enum CleanupReason {
             /// User tapped Close Tab / closed the split. Send "close" to
-            /// tsshd/mosh-server and delete local credentials.
+            /// tsshd/mosh-server and delete local credentials. For zmx this
+            /// also schedules `zmx kill` so the remote session is destroyed.
             case userClose
+            /// Detaching from a multiplexer: tear down the local client like
+            /// `.userClose`, but leave a zmx session running (closing the
+            /// client is zmx’s supported detach path).
+            case muxDetach
             /// Scene/window is being torn down (rotation, app exit). Keep
             /// server-side session alive so resume can pick it back up.
             case sceneTeardown
@@ -1536,10 +1554,17 @@ extension Ghostty {
                 TrzszTransferInbox.shared.cancel(ticketID)
             }
 
-            // 1-2. Stop the session and close the PTY. The per-session-type
+            // 1. Explicit tab/split close of a zmx attachment destroys the
+            // remote session (`zmx kill`). Detach uses `.muxDetach` and skips
+            // this so closing the client leaves the session for reattach.
+            if reason == .userClose {
+                MuxSessionDetach.scheduleZmxSessionDestroyIfNeeded(on: self)
+            }
+
+            // 2. Stop the session and close the PTY. The per-session-type
             // teardown semantics (resumable Trzsz/Mosh keep the server session
-            // alive for .sceneTeardown; .userClose terminates) live on the
-            // owning controller now. See TerminalSessionController.teardown.
+            // alive for .sceneTeardown; .userClose / .muxDetach terminate)
+            // live on the owning controller now. See TerminalSessionController.teardown.
             sessionController.teardown(reason: reason)
 
             // 3. Cancel async tasks and timers
@@ -3506,9 +3531,6 @@ extension Ghostty {
 
         @discardableResult
         override func becomeFirstResponder() -> Bool {
-            #if os(iOS) && !targetEnvironment(macCatalyst)
-            guard iPadVisorController.permitsFocus(self) else { return false }
-            #endif
             if !isFirstResponder { invalidateWritingAssistance(resetDocument: true) }
             refreshWritingAssistanceTraits()
             // Gate: while a keyboard-owning overlay (tab sidebar, connection
@@ -4431,9 +4453,6 @@ extension Ghostty {
         /// `skipResign` is safe when unfocusing the old terminal.
         @discardableResult
         override func focusDidChange(_ focused: Bool, skipResign: Bool = false) -> Bool {
-            #if os(iOS) && !targetEnvironment(macCatalyst)
-            if focused && !iPadVisorController.permitsFocus(self) { return false }
-            #endif
             invalidateWritingAssistance(resetDocument: true)
             // Update mouse capture state when focus changes to ensure scroll handling
             // has accurate state for this terminal (fixes split view mouse capture scrolling)

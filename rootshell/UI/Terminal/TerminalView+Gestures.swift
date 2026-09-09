@@ -1631,7 +1631,63 @@ extension Ghostty.TerminalView {
     }
 
     func writeSessionOutputToGhostty(data: Data) {
+        noteSessionOutputForMuxFallback(data)
         outputPipeline.writeSessionOutput(data)
+    }
+
+    /// Scans session bytes (plus a short carry) for the missing-mux auto-start
+    /// marker. Used by the legacy `handleSessionOutput` path; the live SSH sink
+    /// scans off-main in `makeSessionOutputSink` and calls
+    /// ``applyMuxAutoStartFallback(from:)`` directly.
+    func noteSessionOutputForMuxFallback(_ data: Data) {
+        guard !multiplexerAutoStartFellBack else { return }
+        let textMarker = Data(SSHConfig.multiplexerMissingFallbackMarker.utf8)
+        let oscMarker = Data(SSHConfig.multiplexerMissingFallbackOSCPrefix.utf8)
+        let keep = max(max(textMarker.count, oscMarker.count) + 32, 64)
+        var window = multiplexerFallbackScanTail
+        window.append(data)
+        let maxWindow = keep + max(textMarker.count, oscMarker.count) * 3
+        if window.count > maxWindow {
+            window = Data(window.suffix(maxWindow))
+        }
+        multiplexerFallbackScanTail = Data(window.suffix(keep))
+        let hit = window.range(of: textMarker) != nil || window.range(of: oscMarker) != nil
+        guard hit else { return }
+        applyMuxAutoStartFallback(from: String(decoding: window, as: UTF8.self))
+    }
+
+    /// Drop optimistic mux bindings and show the in-app banner when auto-start
+    /// fell back to `$SHELL` because the remote binary is missing.
+    func applyMuxAutoStartFallback(from text: String) {
+        let hasTextMarker = text.contains(SSHConfig.multiplexerMissingFallbackMarker)
+        let hasOSCMarker = text.contains(SSHConfig.multiplexerMissingFallbackOSCPrefix)
+        guard hasTextMarker || hasOSCMarker else { return }
+        guard !multiplexerAutoStartFellBack else { return }
+        multiplexerAutoStartFellBack = true
+        multiplexerFallbackScanTail = Data()
+        rawMultiplexer = nil
+        passthroughMultiplexer = nil
+        AgentAttentionCenter.shared.topologyDidChange()
+
+        let wanted: String
+        if text.contains("mux-fallback;herdr") || text.contains("(wanted herdr)") {
+            wanted = "herdr"
+        } else if text.contains("mux-fallback;zmx") || text.contains("(wanted zmx)") {
+            wanted = "zmx"
+        } else if text.contains("mux-fallback;tmux") || text.contains("(wanted tmux)") {
+            wanted = "tmux"
+        } else {
+            wanted = "multiplexer"
+        }
+        Ghostty.logger.info("Mux auto-start fell back; remote missing \(wanted)")
+        NotificationCenter.default.post(
+            name: .muxAutoStartDidFallback,
+            object: self,
+            userInfo: [
+                "wanted": wanted,
+                "windowId": windowId
+            ]
+        )
     }
 
     func triggerHapticFeedback() {
