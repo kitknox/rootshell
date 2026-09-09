@@ -1,0 +1,518 @@
+//
+//  HerdrController.swift
+//  rootshell
+//
+//  Drives one herdr session in control mode: it opens a control stream on
+//  the gateway pane's connection, mirrors herdr's workspaces, tabs, and panes
+//  onto native tabs and splits, feeds each pane surface raw terminal output,
+//  and keeps herdr authoritative for layout and agent state. The analogue of
+//  TmuxController, written entirely in Swift on top of the socket API.
+//
+//  Copyright (c) 2026 Kit Knox / Rootshell LLC
+//
+
+import Foundation
+import GhosttyKit
+import os
+import UIKit
+
+extension Notification.Name {
+    /// Posted (object: gateway terminal UUID) when a herdr control stream ends.
+    static let herdrControlModeDidEnd = Notification.Name("herdrControlModeDidEnd")
+    static let herdrControlStateDidChange = Notification.Name("herdrControlStateDidChange")
+}
+
+@MainActor
+final class HerdrController {
+
+    nonisolated static let logger = Logger(subsystem: "com.kk2.rootshell", category: "HerdrController")
+
+    // MARK: - Registry
+
+    private static var controllers: [UUID: HerdrController] = [:]
+
+    static func controller(forGateway uuid: UUID) -> HerdrController? {
+        controllers[uuid]
+    }
+
+    static func controller(for view: Ghostty.TerminalView) -> HerdrController? {
+        if let binding = view.herdrPaneBinding {
+            return controllers[binding.gatewayUUID]
+        }
+        return view.herdrController
+    }
+
+    static func controller(forTab tab: TabModel) -> HerdrController? {
+        guard tab.isHerdrWindow, let owner = tab.owningGatewayTerminalUUID else { return nil }
+        return controllers[owner]
+    }
+
+    static var all: [HerdrController] { Array(controllers.values) }
+
+    // MARK: - Identity
+
+    let gatewayUUID: UUID
+    private(set) weak var gateway: Ghostty.TerminalView?
+    private weak var weakTabsModel: TabsModel?
+    var tabsModel: TabsModel {
+        guard let model = weakTabsModel else {
+            preconditionFailure("HerdrController.tabsModel accessed after its TabsModel was released")
+        }
+        return model
+    }
+    let app: ghostty_app_t
+    private(set) weak var ghosttyApp: Ghostty.App?
+    /// herdr session name; nil attaches to herdr's default session.
+    let sessionName: String?
+    private(set) var hostWindowId: String
+
+    // MARK: - Channel state
+
+    private(set) var channel: HerdrControlChannel?
+    let router = HerdrOutputRouter()
+    private(set) var bootId: String?
+    private(set) var serverVersion: String?
+    private(set) var serverPid: Int?
+    /// True while a control stream is open and the topology has been applied.
+    var isActive = false
+    private(set) var didEnd = false
+    private var connectTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
+    var reconnectAttempt = 0
+
+    enum Mode {
+        /// Control stream: raw pane bytes, herdr drives layout.
+        case raw
+        /// Stock herdr: polled topology, server-rendered visible panes.
+        case legacy
+    }
+    var mode: Mode = .raw
+    var legacyStreams: [String: HerdrLegacyPaneStream] = [:]
+    var legacyOpening: Set<String> = []
+    var legacyGrids: [String: (rows: Int, cols: Int)] = [:]
+    var legacyPollTask: Task<Void, Never>?
+    var legacySnapshotFingerprint: Int?
+    /// Set once the first snapshot applied, so later reconnects do not steal
+    /// the selected tab.
+    var hasProcessedInitialFocus = false
+
+    // MARK: - Topology state (mutated by the +Topology and +Panes extensions)
+
+    var workspaces: [String: HerdrControl.WorkspaceInfo] = [:]
+    var tabInfos: [String: HerdrControl.TabInfo] = [:]
+    /// herdr tab id → the tab modeling it.
+    var tabs: [String: TabModel] = [:]
+    /// herdr pane id → last known pane facts.
+    var paneInfos: [String: HerdrControl.PaneInfo] = [:]
+    /// terminal id → the surface view rendering it.
+    var paneViews: [String: Ghostty.TerminalView] = [:]
+    /// terminal id → the pane's session shim once its surface exists.
+    var paneSessions: [String: HerdrPaneSession] = [:]
+    var attachIds: [String: String] = [:]
+    var terminalByAttach: [String: String] = [:]
+    var attachQueue: [String] = []
+    var attachesInFlight = 0
+    var snapshotRequestsInFlight: Set<String> = []
+    var lastLayouts: [String: HerdrControl.LayoutSnapshot] = [:]
+    var pushedGeometry: [String: (cols: Int, rows: Int)] = [:]
+    var geometryTasks: [String: Task<Void, Never>] = [:]
+    var focusedPaneId: String?
+    var agentStatuses: [String: HerdrControl.AgentStatusChangedData] = [:]
+    var focusWatchdog: Task<Void, Never>?
+    var gatewayTabID: UUID?
+
+    // MARK: - Lifecycle
+
+    private init?(gateway: Ghostty.TerminalView, tabsModel: TabsModel, sessionName: String?) {
+        guard let app = gateway.appPtr else { return nil }
+        self.gatewayUUID = gateway.uuid
+        self.gateway = gateway
+        self.weakTabsModel = tabsModel
+        self.app = app
+        self.ghosttyApp = gateway.ghosttyApp
+        self.sessionName = sessionName
+        self.hostWindowId = gateway.windowId
+    }
+
+    /// Creates the controller for a gateway and opens its control stream.
+    /// nil only when the gateway has no Ghostty app yet.
+    @discardableResult
+    static func start(
+        on gateway: Ghostty.TerminalView,
+        tabsModel: TabsModel,
+        sessionName: String?
+    ) -> HerdrController? {
+        if let existing = controllers[gateway.uuid] {
+            return existing
+        }
+        guard let controller = HerdrController(gateway: gateway, tabsModel: tabsModel, sessionName: sessionName) else {
+            return nil
+        }
+        controllers[gateway.uuid] = controller
+        gateway.herdrController = controller
+        installForegroundObserver()
+        controller.markGatewayTab()
+        controller.connect()
+        NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gateway.uuid)
+        return controller
+    }
+
+    private static var foregroundObserver: NSObjectProtocol?
+
+    /// Every controller checks its stream when the app returns to the
+    /// foreground; installed once, on the first start.
+    private static func installForegroundObserver() {
+        guard foregroundObserver == nil else { return }
+        foregroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                for controller in all {
+                    controller.applicationDidBecomeActive()
+                }
+            }
+        }
+    }
+
+    /// The selected tab in `model` changed: its controllers size and attach
+    /// the newly visible panes first.
+    static func selectedTabDidChange(in model: TabsModel) {
+        for controller in all where controller.weakTabsModel === model {
+            controller.selectedTabDidChange()
+        }
+    }
+
+    private func markGatewayTab() {
+        guard let gateway,
+              let tabID = gateway.containingTabID,
+              let tab = tabsModel.tab(withID: tabID) else { return }
+        gatewayTabID = tab.id
+        tab.isHerdrGateway = true
+        tab.herdrSessionName = sessionName ?? "default"
+    }
+
+    var gatewayConnectionInfo: ConnectionInfo? {
+        gateway?.session?.connectionInfo
+    }
+
+    /// Command the exec channel runs on the host.
+    private var controlCommand: String {
+        SSHConfig.herdrControlCommandLine(sessionName: sessionName)
+    }
+
+    func connect() {
+        guard !didEnd, connectTask == nil else { return }
+        connectTask = Task { [weak self] in
+            await self?.performConnect()
+            self?.connectTask = nil
+        }
+    }
+
+    private func performConnect() async {
+        guard let gateway, !didEnd else { return }
+        guard HerdrChannelFactory.canOpen(for: gateway) else {
+            Self.logger.info("herdr control: gateway not ready, retrying")
+            scheduleReconnect()
+            return
+        }
+        do {
+            let pipe = try await HerdrChannelFactory.open(command: controlCommand, on: gateway)
+            let router = self.router
+            let gatewayUUID = self.gatewayUUID
+            let channel = HerdrControlChannel(
+                pipe: pipe,
+                onInbound: { inbound in
+                    switch inbound {
+                    case .output(let attachId, _, let bytes):
+                        router.write(attachId: attachId, bytes)
+                        return
+                    case .snapshot(let record):
+                        router.applySnapshot(record)
+                    default:
+                        break
+                    }
+                    Task { @MainActor in
+                        HerdrController.controller(forGateway: gatewayUUID)?.handleInbound(inbound)
+                    }
+                },
+                onClosed: { error in
+                    Task { @MainActor in
+                        HerdrController.controller(forGateway: gatewayUUID)?.channelDidClose(error)
+                    }
+                }
+            )
+            let opened = try await channel.open()
+            guard !didEnd else {
+                await channel.close()
+                return
+            }
+            self.channel = channel
+            let previousBoot = bootId
+            bootId = opened.boot_id
+            serverVersion = opened.version
+            serverPid = opened.capabilities?.server_pid
+            reconnectAttempt = 0
+            Self.logger.info("herdr control open: \(opened.version) boot=\(opened.boot_id) pid=\(opened.capabilities?.server_pid ?? 0)")
+
+            try await channel.request(
+                "events.subscribe",
+                HerdrControl.SubscribeParams(subscriptions: HerdrControl.topologySubscriptions)
+            )
+            let snapshot = try await channel.request(
+                "session.snapshot",
+                HerdrControl.EmptyParams(),
+                as: HerdrControl.SessionSnapshotResult.self
+            ).snapshot
+            guard self.channel === channel else { return }
+            if let previousBoot, previousBoot != opened.boot_id {
+                Self.logger.info("herdr server restarted (boot \(previousBoot) -> \(opened.boot_id)); rebuilding")
+            }
+            isActive = true
+            applySnapshot(snapshot)
+            subscribeAgentStatus()
+            NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gatewayUUID)
+        } catch {
+            Self.logger.error("herdr control connect failed: \(error.localizedDescription)")
+            if let channel {
+                await channel.close()
+                self.channel = nil
+            }
+            switch error {
+            case HerdrChannelError.herdrMissing(let why):
+                gateway.writeToGhostty(string: "\r\n\u{1b}[33mherdr control mode: \(why).\u{1b}[0m\r\n")
+                stop()
+            case HerdrChannelError.unsupportedServer(let why):
+                startLegacyMode(reason: why)
+            default:
+                scheduleReconnect()
+            }
+        }
+    }
+
+    private func subscribeAgentStatus() {
+        guard let channel else { return }
+        let subscriptions = paneInfos.keys.sorted().map {
+            HerdrControl.Subscription(type: "pane.agent_status_changed", pane_id: $0)
+        }
+        guard !subscriptions.isEmpty else { return }
+        Task {
+            try? await channel.request("events.subscribe", HerdrControl.SubscribeParams(subscriptions: subscriptions))
+        }
+    }
+
+    /// Adds an agent-status subscription for one newly seen pane.
+    func subscribeAgentStatus(paneId: String) {
+        guard let channel else { return }
+        Task {
+            try? await channel.request(
+                "events.subscribe",
+                HerdrControl.SubscribeParams(subscriptions: [
+                    HerdrControl.Subscription(type: "pane.agent_status_changed", pane_id: paneId)
+                ])
+            )
+        }
+    }
+
+    func channelDidClose(_ error: Error?) {
+        guard !didEnd else { return }
+        Self.logger.warning("herdr control stream closed: \(error?.localizedDescription ?? "eof")")
+        channel = nil
+        isActive = false
+        detachAllLocally()
+        NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gatewayUUID)
+        scheduleReconnect()
+    }
+
+    private func scheduleReconnect() {
+        guard !didEnd, reconnectTask == nil else { return }
+        // Gateway gone (tab closed) or its session dead: control mode is over.
+        guard let gateway, gateway.surface != nil else {
+            stop()
+            return
+        }
+        reconnectAttempt += 1
+        let delay = min(30.0, pow(2.0, Double(min(reconnectAttempt, 5))))
+        Self.logger.info("herdr control reconnect in \(delay)s (attempt \(self.reconnectAttempt))")
+        reconnectTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self, !Task.isCancelled else { return }
+            self.reconnectTask = nil
+            if Ghostty.isAppBackgroundedAtomic {
+                // Wait for the foreground; the resume path reconnects.
+                self.scheduleReconnect()
+                return
+            }
+            self.connect()
+        }
+    }
+
+    /// The app came back to the foreground: verify the stream is alive.
+    func applicationDidBecomeActive() {
+        guard !didEnd else { return }
+        if mode == .legacy {
+            Task { [weak self] in
+                await self?.legacyPollOnce()
+                self?.legacyReconcileAttaches()
+            }
+            return
+        }
+        if channel == nil {
+            reconnectTask?.cancel()
+            reconnectTask = nil
+            connect()
+            return
+        }
+        Task { [weak self] in
+            guard let self, let channel = self.channel else { return }
+            do {
+                try await channel.request("ping", HerdrControl.EmptyParams(), timeout: .seconds(5))
+            } catch {
+                await channel.close()
+            }
+        }
+    }
+
+    /// Ends control mode for this gateway: closes the stream and removes the
+    /// projected tabs.
+    func stop() {
+        guard !didEnd else { return }
+        didEnd = true
+        connectTask?.cancel()
+        reconnectTask?.cancel()
+        focusWatchdog?.cancel()
+        for task in geometryTasks.values { task.cancel() }
+        let channel = self.channel
+        self.channel = nil
+        Task { await channel?.close() }
+        stopLegacyMode()
+        detachAllLocally()
+        pruneAll()
+        Self.controllers.removeValue(forKey: gatewayUUID)
+        if let gateway {
+            gateway.herdrController = nil
+        }
+        if let gatewayTabID, let tab = tabsModel.tab(withID: gatewayTabID) {
+            tab.isHerdrGateway = false
+            tab.herdrSessionName = nil
+        }
+        NotificationCenter.default.post(name: .herdrControlModeDidEnd, object: gatewayUUID)
+        NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gatewayUUID)
+    }
+
+    /// Drops attach bookkeeping after the stream died; surfaces stay so the
+    /// reconnect can re-snapshot them in place.
+    private func detachAllLocally() {
+        router.removeAll()
+        attachIds.removeAll()
+        terminalByAttach.removeAll()
+        attachQueue.removeAll()
+        attachesInFlight = 0
+        snapshotRequestsInFlight.removeAll()
+        pushedGeometry.removeAll()
+        for session in paneSessions.values {
+            session.attachId = nil
+        }
+    }
+
+    // MARK: - Inbound dispatch
+
+    func handleInbound(_ inbound: HerdrControl.Inbound) {
+        guard !didEnd else { return }
+        switch inbound {
+        case .opened:
+            break
+        case .output:
+            break
+        case .snapshot(let record):
+            snapshotDidArrive(record)
+        case .gap(let gap):
+            requestSnapshot(attachId: gap.attach_id)
+        case .detached(let detached):
+            attachDidDetach(detached)
+        case .tabLayout(let layout):
+            applyLayout(layout)
+        case .layoutUpdated(let layout):
+            // The generic event carries outer rectangles; a `tab.layout`
+            // record with the inner ones follows every resize. Only let the
+            // event through when the pane set itself changed, so the two do
+            // not fight over ratios.
+            if let last = lastLayouts[layout.tab_id],
+               last.zoomed == layout.zoomed,
+               last.focused_pane_id == layout.focused_pane_id,
+               last.panes.map(\.pane_id) == layout.panes.map(\.pane_id) {
+                break
+            }
+            applyLayout(layout)
+        case .paneCreated(let pane):
+            paneDidAppear(pane)
+        case .paneUpdated(let pane):
+            paneDidUpdate(pane)
+        case .paneClosed(let closed):
+            paneDidClose(paneId: closed.pane_id)
+        case .paneExited:
+            break
+        case .paneFocused(let focused):
+            remoteFocusDidChange(paneId: focused.pane_id)
+        case .paneMoved(let moved):
+            paneDidMove(moved)
+        case .tabCreated(let tab):
+            ensureTab(tab)
+            reorderTabs()
+        case .tabClosed(let closed):
+            tabDidClose(tabId: closed.tab_id)
+        case .tabRenamed(let renamed):
+            tabDidRename(tabId: renamed.tab_id, label: renamed.label)
+        case .tabFocused(let focused):
+            remoteTabFocusDidChange(tabId: focused.tab_id)
+        case .tabMoved(let moved):
+            for tab in moved.tabs { tabInfos[tab.tab_id] = tab }
+            reorderTabs()
+        case .workspaceCreated(let workspace), .workspaceUpdated(let workspace):
+            workspaces[workspace.workspace_id] = workspace
+            refreshWorkspaceGroups()
+        case .workspaceClosed(let closed):
+            workspaces.removeValue(forKey: closed.workspace_id)
+        case .workspaceRenamed(let renamed):
+            if var workspace = workspaces[renamed.workspace_id] {
+                workspace = HerdrControl.WorkspaceInfo(
+                    workspace_id: workspace.workspace_id,
+                    label: renamed.label,
+                    number: workspace.number,
+                    focused: workspace.focused,
+                    active_tab_id: workspace.active_tab_id,
+                    agent_status: workspace.agent_status
+                )
+                workspaces[renamed.workspace_id] = workspace
+                refreshWorkspaceGroups()
+            }
+        case .workspaceFocused:
+            break
+        case .workspaceReordered:
+            refreshTopology()
+        case .agentStatusChanged(let change):
+            agentStatusDidChange(change)
+        case .unknown(let what):
+            Self.logger.debug("herdr control: ignored \(what)")
+        }
+    }
+
+    /// Re-fetches the whole snapshot; used when an event carries less than
+    /// we need (workspace reorders) or after a gap in topology events.
+    func refreshTopology() {
+        if mode == .legacy {
+            Task { [weak self] in await self?.legacyPollOnce() }
+            return
+        }
+        guard let channel else { return }
+        Task { [weak self] in
+            guard let snapshot = try? await channel.request(
+                "session.snapshot",
+                HerdrControl.EmptyParams(),
+                as: HerdrControl.SessionSnapshotResult.self
+            ).snapshot else { return }
+            self?.applySnapshot(snapshot)
+        }
+    }
+}

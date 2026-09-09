@@ -1,0 +1,76 @@
+//
+//  TerminalView+Herdr.swift
+//  rootshell
+//
+//  herdr control mode entry points on the terminal view: starting a
+//  controller on a gateway and echoing user intent from a projected pane.
+//
+//  Copyright (c) 2026 Kit Knox / Rootshell LLC
+//
+
+import Foundation
+
+extension Ghostty.TerminalView {
+
+    /// Whether this terminal can carry a herdr control stream: the same raw
+    /// byte transports that allow tmux -CC.
+    var allowsHerdrControlDiscoveryAttach: Bool { allowsTmuxControlDiscoveryAttach }
+
+    /// Turns this view into a herdr control-mode gateway for `sessionName`
+    /// (nil attaches to herdr's default session). Idempotent.
+    func startHerdrControlMode(sessionName: String?) {
+        guard allowsHerdrControlDiscoveryAttach,
+              let tabsModel = TmuxWindowRegistry.tabsModel(for: windowId) else { return }
+        HerdrController.start(on: self, tabsModel: tabsModel, sessionName: sessionName)
+    }
+
+    /// Auto-start hook: a connection configured for herdr control mode gets
+    /// its controller once the session is ready. The pty runs the user's
+    /// shell; the control channel is separate, so a resumed tssh session
+    /// starts it too.
+    func startHerdrControlModeIfConfigured() {
+        guard herdrController == nil,
+              let sshConfig = connectionConfig.sshConfigForHistory,
+              sshConfig.herdrControlModeEnabled else { return }
+        if let remoteCommand = sshConfig.remoteCommand, !remoteCommand.isEmpty { return }
+        startHerdrControlMode(sessionName: sshConfig.herdrSessionNameForConnection)
+    }
+
+    private var herdrPaneController: HerdrController? {
+        guard let binding = herdrPaneBinding else { return nil }
+        return HerdrController.controller(forGateway: binding.gatewayUUID)
+    }
+
+    /// User focus landed on this pane: make it herdr's focused pane too.
+    /// Programmatic focus paths never call this (they would oscillate focus
+    /// between two attached clients).
+    func requestHerdrSelectPane() {
+        herdrPaneController?.requestSelectPane(self)
+    }
+
+    func requestHerdrSplit(_ direction: SplitTree<SplitPaneView>.NewDirection) {
+        let horizontal: Bool
+        switch direction {
+        case .left, .right: horizontal = true
+        case .up, .down: horizontal = false
+        }
+        herdrPaneController?.requestSplit(self, horizontal: horizontal)
+    }
+
+    func requestHerdrToggleZoom() {
+        herdrPaneController?.requestToggleZoom(self)
+    }
+
+    func requestHerdrClosePane() {
+        herdrPaneController?.requestClosePane(self)
+    }
+
+    /// New tab from a pane or the gateway; lands in the pane's workspace.
+    func requestHerdrNewTab() -> Bool {
+        let controller = herdrPaneController ?? herdrController
+        guard let controller, controller.isActive else { return false }
+        let tab = containingTabID.flatMap { controller.tabsModel.tab(withID: $0) }
+        controller.requestNewTab(inWorkspaceOf: tab?.isHerdrWindow == true ? tab : nil)
+        return true
+    }
+}

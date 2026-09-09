@@ -103,7 +103,7 @@ private struct TabGroupHeaderIcon: View {
         switch groupID.kind {
         case .remoteDomain, .remoteHost:
             return domainCandidate(groupID.value)
-        case .local, .remoteNetwork, .tmux, .other:
+        case .local, .remoteNetwork, .tmux, .herdrWorkspace, .other:
             return nil
         }
     }
@@ -1896,6 +1896,7 @@ struct VerticalTabSidebar: View {
         case .local: return "terminal"
         case .remoteHost, .remoteDomain, .remoteNetwork: return "network"
         case .tmux: return "rectangle.stack"
+        case .herdrWorkspace: return MultiplexerType.herdr.iconName
         case .other: return "square.stack.3d.up"
         }
     }

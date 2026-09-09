@@ -59,7 +59,8 @@ extension MainView {
 
         // A native tree may include terminals and nonterminal panes, but never
         // edit a server-owned window or a mixed tree with bound tmux leaves.
-        guard !tab.isTmuxWindow, !tab.splitTree.terminalLeaves.contains(where: { $0.isTmuxPane }) else { return }
+        guard !tab.isTmuxWindow, !tab.isHerdrWindow,
+              !tab.splitTree.terminalLeaves.contains(where: { $0.isMultiplexerPane }) else { return }
         do {
             tab.splitTree = try tab.splitTree.moving(view: source, to: destination, direction: zone.direction)
             setFocusedPane(source, inTab: index)
@@ -109,6 +110,12 @@ extension MainView {
         // still splits locally.
         if focusedTerminal.isTmuxPane {
             focusedTerminal.requestTmuxSplit(direction)
+            return
+        }
+        // herdr control mode: same round trip; the `tab.layout` record that
+        // follows `pane.split` builds the pane surface and the native split.
+        if focusedTerminal.isHerdrPane {
+            focusedTerminal.requestHerdrSplit(direction)
             return
         }
 
@@ -227,6 +234,10 @@ extension MainView {
             terminal.requestTmuxToggleZoom()
             return
         }
+        if let terminal = focusedPane.asTerminal, terminal.isHerdrPane {
+            terminal.requestHerdrToggleZoom()
+            return
+        }
 
         guard let currentNode = terminals[selectedTabIndex].splitTree.root?.node(view: focusedPane) else { return }
 
@@ -278,6 +289,21 @@ extension MainView {
             }
             terminalToClose.requestTmuxKillPane()
             return
+        }
+        // herdr control mode: the server closes the pane and its topology
+        // events retire the surface (and the tab when it was the last pane).
+        if let terminalToClose = paneToClose.asTerminal, terminalToClose.isHerdrPane {
+            terminalToClose.requestHerdrClosePane()
+            return
+        }
+        // Closing a herdr gateway pane ends control mode first so the
+        // projected tabs go with it instead of lingering without a stream.
+        if let controller = paneToClose.asTerminal?.herdrController {
+            controller.stop()
+            guard let reindexed = terminals.firstIndex(where: {
+                $0.splitTree.contains(where: { $0 === paneToClose })
+            }) else { return }
+            tabIndex = reindexed
         }
 
         // tmux -CC gateway: tear down the window tabs/panes it projected BEFORE this

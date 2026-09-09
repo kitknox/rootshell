@@ -1227,6 +1227,29 @@ final class AgentAttentionCenter {
         }
     }
 
+    /// herdr's own agent status for a control-mode pane. Authoritative
+    /// while present: it replaces screen classification for that pane
+    /// without disturbing the detector state underneath it.
+    func applyHerdrStatus(
+        terminal: Ghostty.TerminalView,
+        status: String,
+        agentID: String?,
+        displayName: String?,
+        title: String?
+    ) {
+        let now = Date()
+        let changed = terminal.presentation.applyHerdrReport(
+            status: AgentAttentionStatus(rawValue: status) ?? .unknown,
+            agentID: agentID,
+            displayName: displayName,
+            now: now,
+            nextSequence: nextSeq
+        )
+        if changed {
+            publish(now: now)
+        }
+    }
+
     /// Title change from the terminal (already coalesced at 75ms).
     /// Runs identity + title-only rules with zero screen reads.
     func noteTitleChanged(terminal: Ghostty.TerminalView, title: String) {
@@ -1589,8 +1612,10 @@ final class AgentAttentionCenter {
         for model in TmuxWindowRegistry.allTabsModels() {
             for tab in model.tabs {
                 // tmux -CC gateway tabs render control-mode chrome,
-                // never an agent; scanning them is pure waste.
-                if tab.isTmuxGateway { continue }
+                // never an agent; scanning them is pure waste. A herdr
+                // gateway is the user's shell, but its agents live in the
+                // projected panes herdr reports on.
+                if tab.isTmuxGateway || tab.isHerdrGateway { continue }
                 for terminal in tab.splitTree.terminalLeaves {
                     live.insert(terminal.uuid)
                     if let monitor = monitors[terminal.uuid] {

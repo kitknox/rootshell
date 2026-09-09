@@ -489,6 +489,8 @@ extension MainView {
             // id=tmux-select-pane-user-only).
             if let terminal = focus.asTerminal, terminal.isTmuxPane {
                 terminal.requestTmuxSelectPane()
+            } else if let terminal = focus.asTerminal, terminal.isHerdrPane {
+                terminal.requestHerdrSelectPane()
             }
 
             Task { @MainActor in

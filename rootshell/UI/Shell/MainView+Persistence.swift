@@ -65,6 +65,11 @@ extension MainView {
         var persisted: [(tab: TabModel, serialized: SerializableTab)] = []
         persisted.reserveCapacity(terminals.count)
         for tab in terminals {
+            // herdr control-mode tabs are rebuilt from the server on the next
+            // attach; their panes are not sessions of their own.
+            if tab.isHerdrWindow || tab.splitTree.contains(where: { $0.asTerminal?.isHerdrPane == true }) {
+                continue
+            }
             let hasLivePane = tab.splitTree.contains { $0.asTerminal?.tmuxPaneBinding != nil }
             if tab.isTmuxWindow || hasLivePane {
                 // `tmuxWindowId` is set once adopted; a restored-but-not-yet-

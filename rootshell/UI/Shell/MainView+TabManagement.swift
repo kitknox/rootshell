@@ -425,10 +425,13 @@ extension MainView {
         if let controller = newTabTmuxController(for: terminal), controller.isActive {
             return NewTabRequest(target: .tmux(terminal.uuid, controller), localDirectory: nil)
         }
+        if let controller = HerdrController.controller(for: terminal), controller.isActive {
+            return NewTabRequest(target: .herdr(terminal.uuid), localDirectory: nil)
+        }
         switch terminal.connectionConfig {
         case .local:
-            // A stale tmux surface is not a real local shell.
-            guard !terminal.isTmuxPane else {
+            // A stale multiplexer surface is not a real local shell.
+            guard !terminal.isMultiplexerPane else {
                 return NewTabRequest(target: .connections, localDirectory: nil)
             }
             if let profileID = terminal.sourceProfileID {
@@ -489,6 +492,11 @@ extension MainView {
             for pane in panes where pane.uuid != terminalID {
                 if requestNewTmuxWindow(on: pane, ownedBy: controller) { return }
             }
+            unavailableNewTabRequest = request
+        case .herdr(let terminalID):
+            let panes = terminals.flatMap { $0.splitTree.terminalLeaves }
+            if let original = panes.first(where: { $0.uuid == terminalID }),
+               original.requestHerdrNewTab() { return }
             unavailableNewTabRequest = request
         case .connection(let original, let profileID):
             // Never reuse roam/cloud session IDs. Keep the effective config and
@@ -926,6 +934,22 @@ extension MainView {
             return
         }
 
+        // herdr control mode: a projected tab closes on the server; the
+        // `tab.closed` event prunes it here. A gateway tab ends control mode
+        // first so its projected tabs are removed while the stream is live.
+        if closingTab.isHerdrWindow, let controller = HerdrController.controller(forTab: closingTab),
+           controller.isActive {
+            controller.requestCloseTab(closingTab)
+            return
+        }
+        if closingTab.isHerdrGateway,
+           let controller = closingTab.splitTree.terminalLeaves.first(where: { $0.herdrController != nil })?.herdrController {
+            controller.stop()
+            guard let resolved = terminals.firstIndex(where: { $0.id == closingTab.id }) else { return }
+            closeTab(at: resolved)
+            return
+        }
+
         // Allow closing the last tab (will show empty state or new connection sheet)
         // guard terminals.count > 1 else { return }
 
@@ -1074,6 +1098,8 @@ extension MainView {
                     // ROOTSHELL-TMUX (id=tmux-select-pane-user-only)
                     if let terminal = pane.asTerminal, terminal.isTmuxPane {
                         terminal.requestTmuxSelectPane()
+                    } else if let terminal = pane.asTerminal, terminal.isHerdrPane {
+                        terminal.requestHerdrSelectPane()
                     }
 
                     ghosttyApp.appTick()
@@ -1162,6 +1188,8 @@ struct NewTabRequest {
         case local
         case connection(ConnectionConfig, UUID?)
         case tmux(UUID, TmuxController)
+        /// New herdr tab in the workspace of the captured pane or gateway.
+        case herdr(UUID)
         case connections
     }
 
@@ -1172,6 +1200,7 @@ struct NewTabRequest {
         switch target {
         case .local, .connections: return nil
         case .tmux: return String(localized: "New tmux Window")
+        case .herdr: return String(localized: "New herdr Tab")
         case .connection(let config, _):
             // Roaming transports decorate displayName with "roam". Use the
             // connection's own name here without removing user-authored text.

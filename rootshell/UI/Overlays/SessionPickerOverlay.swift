@@ -14,6 +14,8 @@ struct SessionPickerOverlay: View {
     let hasUserTyped: Bool
     @Binding var tmuxAttachMode: TmuxAutoMode
     let allowsTmuxControlAttach: Bool
+    @Binding var herdrAttachMode: HerdrAutoMode
+    let allowsHerdrControlAttach: Bool
     let onSelect: (MultiplexerSession) -> Void
     let onChangeSelection: (Int) -> Void
     let onDismiss: () -> Void
@@ -47,6 +49,17 @@ struct SessionPickerOverlay: View {
         Binding(
             get: { tmuxAttachMode == .control },
             set: { tmuxAttachMode = $0 ? .control : .regular }
+        )
+    }
+
+    private var showsHerdrAttachModeToggle: Bool {
+        allowsHerdrControlAttach && sessionTypes.contains(.herdr)
+    }
+
+    private var herdrControlModeBinding: Binding<Bool> {
+        Binding(
+            get: { herdrAttachMode == .control },
+            set: { herdrAttachMode = $0 ? .control : .regular }
         )
     }
 
@@ -119,6 +132,13 @@ struct SessionPickerOverlay: View {
                             .padding(.horizontal, 12)
                     }
 
+                    if showsHerdrAttachModeToggle {
+                        herdrAttachModeToggle(compact: isCompact)
+
+                        Divider()
+                            .padding(.horizontal, 12)
+                    }
+
                     // Footer
                     if KeyboardTracker.shared.isHardwareKeyboard {
                         // Hardware keyboard hints
@@ -170,10 +190,27 @@ struct SessionPickerOverlay: View {
     private func tmuxAttachModeToggle(compact: Bool) -> some View {
         Toggle(isOn: tmuxControlModeBinding) {
             Label {
-                Text("Control mode")
+                Text(isMixed ? "tmux control mode" : "Control mode")
                     .font(.system(size: compact ? 12 : 14, weight: .medium))
             } icon: {
                 Image(systemName: "rectangle.split.3x1")
+                    .font(.system(size: compact ? 11 : 13, weight: .medium))
+            }
+        }
+        .toggleStyle(.switch)
+        .controlSize(compact ? .small : .regular)
+        .padding(.horizontal, compact ? 16 : 20)
+        .padding(.vertical, compact ? 8 : 10)
+    }
+
+    @ViewBuilder
+    private func herdrAttachModeToggle(compact: Bool) -> some View {
+        Toggle(isOn: herdrControlModeBinding) {
+            Label {
+                Text(isMixed ? "herdr control mode" : "Control mode")
+                    .font(.system(size: compact ? 12 : 14, weight: .medium))
+            } icon: {
+                Image(systemName: MultiplexerType.herdr.iconName)
                     .font(.system(size: compact ? 11 : 13, weight: .medium))
             }
         }
@@ -358,6 +395,9 @@ struct SessionPickerOverlay: View {
     private func attachDescription(for session: MultiplexerSession) -> String {
         if session.type == .tmux, tmuxAttachMode == .control, allowsTmuxControlAttach {
             return "tmux -CC attach"
+        }
+        if session.type == .herdr, herdrAttachMode == .control, allowsHerdrControlAttach {
+            return "herdr control"
         }
         return "\(session.type.rawValue) attach"
     }

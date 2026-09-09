@@ -137,6 +137,9 @@ struct SSHConnectionHistoryEntry: Codable, Identifiable, Hashable, SyncableRecor
     // herdr auto-enable (optional for backward compatibility)
     var herdrAutoEnable: Bool?
 
+    // herdr launch mode (regular vs control). nil decodes as regular.
+    var herdrAutoMode: HerdrAutoMode?
+
     // zmx auto-enable (optional for backward compatibility)
     var zmxAutoEnable: Bool?
 
@@ -184,7 +187,7 @@ struct SSHConnectionHistoryEntry: Codable, Identifiable, Hashable, SyncableRecor
     init(username: String, host: String, port: Int = 22, authType: SSHAuthType,
          connectionProtocol: ConnectionProtocol? = nil,
          jumpHost: String? = nil, jumpPort: Int? = nil, jumpUsername: String? = nil, jumpAuthType: SSHAuthType? = nil,
-         lastUsed: Date = Date(), cachedIP: String? = nil, hssShorthand: String? = nil, agentConfig: SSHAgentConfig? = nil, gpgAgentConfig: GPGAgentConfig? = nil, portForwardConfig: PortForwardConfig? = nil, tmuxAutoEnable: Bool? = nil, tmuxAutoMode: TmuxAutoMode? = nil, herdrAutoEnable: Bool? = nil, zmxAutoEnable: Bool? = nil, launchCommand: String? = nil, launchCommandMode: SSHConfig.LaunchCommandMode? = nil,
+         lastUsed: Date = Date(), cachedIP: String? = nil, hssShorthand: String? = nil, agentConfig: SSHAgentConfig? = nil, gpgAgentConfig: GPGAgentConfig? = nil, portForwardConfig: PortForwardConfig? = nil, tmuxAutoEnable: Bool? = nil, tmuxAutoMode: TmuxAutoMode? = nil, herdrAutoEnable: Bool? = nil, herdrAutoMode: HerdrAutoMode? = nil, zmxAutoEnable: Bool? = nil, launchCommand: String? = nil, launchCommandMode: SSHConfig.LaunchCommandMode? = nil,
          terminalType: String? = nil,
          multiplexerSessionName: String? = nil,
          keyResolutionHints: [String: KeyResolutionHint]? = nil) {
@@ -207,6 +210,7 @@ struct SSHConnectionHistoryEntry: Codable, Identifiable, Hashable, SyncableRecor
         self.tmuxAutoEnable = tmuxAutoEnable
         self.tmuxAutoMode = tmuxAutoMode
         self.herdrAutoEnable = herdrAutoEnable
+        self.herdrAutoMode = herdrAutoMode
         self.zmxAutoEnable = zmxAutoEnable
         self.launchCommand = launchCommand
         self.launchCommandMode = launchCommandMode
@@ -222,7 +226,7 @@ struct SSHConnectionHistoryEntry: Codable, Identifiable, Hashable, SyncableRecor
          connectionProtocol: ConnectionProtocol? = nil,
          jumpHost: String? = nil, jumpPort: Int? = nil, jumpUsername: String? = nil, jumpAuthType: SSHAuthType? = nil,
          lastUsed: Date = Date(), cachedIP: String? = nil, hssShorthand: String? = nil,
-         agentConfig: SSHAgentConfig? = nil, gpgAgentConfig: GPGAgentConfig? = nil, portForwardConfig: PortForwardConfig? = nil, tmuxAutoEnable: Bool? = nil, tmuxAutoMode: TmuxAutoMode? = nil, herdrAutoEnable: Bool? = nil, zmxAutoEnable: Bool? = nil,
+         agentConfig: SSHAgentConfig? = nil, gpgAgentConfig: GPGAgentConfig? = nil, portForwardConfig: PortForwardConfig? = nil, tmuxAutoEnable: Bool? = nil, tmuxAutoMode: TmuxAutoMode? = nil, herdrAutoEnable: Bool? = nil, herdrAutoMode: HerdrAutoMode? = nil, zmxAutoEnable: Bool? = nil,
          launchCommand: String? = nil, launchCommandMode: SSHConfig.LaunchCommandMode? = nil, terminalType: String? = nil, multiplexerSessionName: String? = nil, keyResolutionHints: [String: KeyResolutionHint]? = nil,
          modifiedAt: Date? = nil, isDeleted: Bool = false) {
         self.id = id
@@ -244,6 +248,7 @@ struct SSHConnectionHistoryEntry: Codable, Identifiable, Hashable, SyncableRecor
         self.tmuxAutoEnable = tmuxAutoEnable
         self.tmuxAutoMode = tmuxAutoMode
         self.herdrAutoEnable = herdrAutoEnable
+        self.herdrAutoMode = herdrAutoMode
         self.zmxAutoEnable = zmxAutoEnable
         self.launchCommand = launchCommand
         self.launchCommandMode = launchCommandMode
@@ -259,7 +264,7 @@ struct SSHConnectionHistoryEntry: Codable, Identifiable, Hashable, SyncableRecor
     private enum CodingKeys: String, CodingKey {
         case id, username, host, port, authType, lastUsed, cachedIP
         case jumpHost, jumpPort, jumpUsername, jumpAuthType, tsshRelay
-        case hssShorthand, agentConfig, gpgAgentConfig, portForwardConfig, tmuxAutoEnable, tmuxAutoMode, herdrAutoEnable, zmxAutoEnable, launchCommand, launchCommandMode
+        case hssShorthand, agentConfig, gpgAgentConfig, portForwardConfig, tmuxAutoEnable, tmuxAutoMode, herdrAutoEnable, herdrAutoMode, zmxAutoEnable, launchCommand, launchCommandMode
         case connectionProtocol, keyResolutionHints
         case terminalType, multiplexerSessionName
         case modifiedAt, isDeleted
@@ -291,6 +296,7 @@ struct SSHConnectionHistoryEntry: Codable, Identifiable, Hashable, SyncableRecor
         tmuxAutoEnable = try container.decodeIfPresent(Bool.self, forKey: .tmuxAutoEnable)
         tmuxAutoMode = try container.decodeIfPresent(TmuxAutoMode.self, forKey: .tmuxAutoMode)
         herdrAutoEnable = try container.decodeIfPresent(Bool.self, forKey: .herdrAutoEnable)
+        herdrAutoMode = try container.decodeIfPresent(HerdrAutoMode.self, forKey: .herdrAutoMode)
         zmxAutoEnable = try container.decodeIfPresent(Bool.self, forKey: .zmxAutoEnable)
         launchCommand = try container.decodeIfPresent(String.self, forKey: .launchCommand)
         launchCommandMode = try container.decodeIfPresent(SSHConfig.LaunchCommandMode.self, forKey: .launchCommandMode)
@@ -477,6 +483,7 @@ class SSHConnectionHistoryManager: ObservableObject {
         tmuxAutoEnable: Bool? = nil,
         tmuxAutoMode: TmuxAutoMode? = nil,
         herdrAutoEnable: Bool? = nil,
+        herdrAutoMode: HerdrAutoMode? = nil,
         zmxAutoEnable: Bool? = nil,
         launchCommand: String? = nil,
         launchCommandMode: SSHConfig.LaunchCommandMode? = nil,
@@ -519,6 +526,9 @@ class SSHConnectionHistoryManager: ObservableObject {
             }
             if let herdrAutoEnable = herdrAutoEnable {
                 updated.herdrAutoEnable = herdrAutoEnable
+            }
+            if let herdrAutoMode = herdrAutoMode {
+                updated.herdrAutoMode = herdrAutoMode
             }
             if let zmxAutoEnable = zmxAutoEnable {
                 updated.zmxAutoEnable = zmxAutoEnable
@@ -579,6 +589,9 @@ class SSHConnectionHistoryManager: ObservableObject {
             if let herdrAutoEnable = herdrAutoEnable {
                 updated.herdrAutoEnable = herdrAutoEnable
             }
+            if let herdrAutoMode = herdrAutoMode {
+                updated.herdrAutoMode = herdrAutoMode
+            }
             if let zmxAutoEnable = zmxAutoEnable {
                 updated.zmxAutoEnable = zmxAutoEnable
             }
@@ -614,6 +627,7 @@ class SSHConnectionHistoryManager: ObservableObject {
                 tmuxAutoEnable: tmuxAutoEnable,
                 tmuxAutoMode: tmuxAutoMode,
                 herdrAutoEnable: herdrAutoEnable,
+                herdrAutoMode: herdrAutoMode,
                 zmxAutoEnable: zmxAutoEnable,
                 launchCommand: launchCommand,
                 launchCommandMode: launchCommandMode,
@@ -740,6 +754,10 @@ class SSHConnectionHistoryManager: ObservableObject {
                     envelopeVersion >= HistoryExtensionPayload.zmxAutoEnableVersion
                         ? remote.zmxAutoEnable
                         : (remote.zmxAutoEnable ?? existing.zmxAutoEnable)
+                let mergedHerdrAutoMode: HerdrAutoMode? =
+                    envelopeVersion >= HistoryExtensionPayload.herdrAutoModeVersion
+                        ? remote.herdrAutoMode
+                        : (remote.herdrAutoMode ?? existing.herdrAutoMode)
                 let updated = SSHConnectionHistoryEntry(
                     id: existingUUID,  // Keep local UUID for consistency
                     username: remote.username,
@@ -760,6 +778,7 @@ class SSHConnectionHistoryManager: ObservableObject {
                     tmuxAutoEnable: remote.tmuxAutoEnable ?? existing.tmuxAutoEnable,
                     tmuxAutoMode: remote.tmuxAutoMode ?? existing.tmuxAutoMode,
                     herdrAutoEnable: remote.herdrAutoEnable ?? existing.herdrAutoEnable,
+                    herdrAutoMode: mergedHerdrAutoMode,
                     zmxAutoEnable: mergedZmxAutoEnable,
                     launchCommand: remote.launchCommand ?? existing.launchCommand,
                     launchCommandMode: remote.launchCommandMode ?? existing.launchCommandMode,

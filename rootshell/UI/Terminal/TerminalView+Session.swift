@@ -688,6 +688,7 @@ extension Ghostty.TerminalView {
                 self.discoveredSessionTypes = result.types
                 self.sessionSelectionIndex = 0
                 self.tmuxDiscoveryAttachMode = self.preferredTmuxDiscoveryAttachMode
+                self.herdrDiscoveryAttachMode = self.preferredHerdrDiscoveryAttachMode
                 NotificationCenter.default.post(name: .ghosttySessionDiscoveryChanged, object: self)
             } catch {
                 Ghostty.logger.debug("Session discovery skipped: \(error.localizedDescription)")
@@ -816,6 +817,7 @@ extension Ghostty.TerminalView {
         discoveredSessions = nil
         discoveredSessionTypes = []
         tmuxDiscoveryAttachMode = .regular
+        herdrDiscoveryAttachMode = .regular
         sessionDiscoveryTask?.cancel()
         sessionDiscoveryTask = nil
         NotificationCenter.default.post(name: .ghosttySessionDiscoveryChanged, object: self)
@@ -850,6 +852,10 @@ extension Ghostty.TerminalView {
 
     private var preferredTmuxDiscoveryAttachMode: TmuxAutoMode {
         allowsTmuxControlDiscoveryAttach ? TmuxAutoMode.persistedDiscoveryAttachMode : .regular
+    }
+
+    private var preferredHerdrDiscoveryAttachMode: HerdrAutoMode {
+        allowsHerdrControlDiscoveryAttach ? HerdrAutoMode.persistedDiscoveryAttachMode : .regular
     }
 
     /// Moves session selection by delta, wrapping around.
@@ -902,6 +908,13 @@ extension Ghostty.TerminalView {
             attachCommand = "zellij attach \"\(escapedName)\""
             bindRawMultiplexer(.zellij, sessionName: session.name)
         case .herdr:
+            // Control mode keeps this shell and drives herdr over its own
+            // exec channel; nothing is typed into the pty.
+            if herdrDiscoveryAttachMode == .control, allowsHerdrControlDiscoveryAttach {
+                startHerdrControlMode(sessionName: session.name)
+                dismissSessionDiscovery()
+                return
+            }
             // Attach-or-create: resurrects a stopped session by spawning its
             // server. "default" is the literal name of the default session.
             attachCommand = "herdr session attach \"\(escapedName)\""

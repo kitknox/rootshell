@@ -138,6 +138,9 @@ extension Ghostty.TerminalView: TerminalSessionControllerHost {
         // Send tmux auto-connect and/or launch command if configured
         self.sendLaunchCommandIfConfigured()
 
+        // herdr control mode rides its own exec channel beside the shell.
+        self.startHerdrControlModeIfConfigured()
+
         // Discover multiplexer sessions in the background (if configured)
         self.discoverSessionsIfConfigured()
     }
@@ -171,6 +174,10 @@ extension Ghostty.TerminalView {
         #endif
     }
     var terminalHasTmuxController: Bool { tmuxController != nil }
+    func terminalMakeHerdrPaneSession() -> TerminalSession? {
+        guard let binding = herdrPaneBinding else { return nil }
+        return HerdrController.controller(forGateway: binding.gatewayUUID)?.makePaneSession(for: binding)
+    }
     var terminalSurfaceAvailable: Bool { surface != nil }
     var terminalSurfaceGridSize: (rows: UInt16, cols: UInt16)? {
         guard let surfaceSize else { return nil }

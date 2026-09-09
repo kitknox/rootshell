@@ -275,6 +275,10 @@ class SocketCommandServer {
             return SocketResponse(success: true, payload: try? JSONEncoder().encode(attachments))
         case .ping:
             return SocketResponse(success: true)
+        case .spawnPipedProcess:
+            return handleSpawnPipedProcess(request)
+        case .killPipedProcess:
+            return handleKillPipedProcess(request)
         case .executeCommand:
             // Note: executeCommand is handled specially in handleConnection
             // because it needs to stream output before returning
@@ -443,6 +447,101 @@ class SocketCommandServer {
 
     /// Handles executeCommand with streaming output
     /// Sends ExecuteOutputChunk messages during execution, then ExecuteComplete at the end
+    // MARK: - Piped processes
+
+    /// Live non-PTY children keyed by pid, so the app can end them by pid and
+    /// a finished child drops out on its own.
+    private static let pipedProcesses = PipedProcessRegistry()
+
+    private func handleSpawnPipedProcess(_ request: SocketRequest) -> SocketResponse {
+        guard let payload = request.payload else {
+            return SocketResponse(success: false, error: "Missing payload")
+        }
+        do {
+            let spawnRequest = try JSONDecoder().decode(SpawnPipedProcessRequest.self, from: payload)
+            let handoffID = UUID()
+            guard let socketPath = SessionManager.generateSocketPath(for: handoffID) else {
+                return SocketResponse(success: false, error: "App Group container not available")
+            }
+
+            var envConfig = EnvironmentBuilder.Config()
+            envConfig.resourcesDir = spawnRequest.resourcesDir
+            envConfig.enableShellIntegration = false
+            envConfig.paneToken = spawnRequest.paneToken
+            let environment = EnvironmentBuilder().build(with: envConfig)
+
+            var fds: [Int32] = [-1, -1]
+            guard socketpair(AF_UNIX, SOCK_STREAM, 0, &fds) == 0 else {
+                return SocketResponse(success: false, error: "socketpair failed: errno=\(errno)")
+            }
+            let appEnd = fds[0]
+            let childEnd = fds[1]
+
+            let process = Process()
+            let shell = spawnRequest.shell ?? "/bin/zsh"
+            process.executableURL = URL(fileURLWithPath: shell)
+            // A login shell so the user's PATH resolves the command.
+            process.arguments = ["-lc", "exec \(spawnRequest.command)"]
+            process.environment = environment
+            if let cwd = spawnRequest.workingDirectory {
+                process.currentDirectoryURL = URL(fileURLWithPath: cwd)
+            }
+            let childHandle = FileHandle(fileDescriptor: childEnd, closeOnDealloc: false)
+            process.standardInput = childHandle
+            process.standardOutput = childHandle
+            process.standardError = FileHandle.nullDevice
+            process.terminationHandler = { finished in
+                Self.pipedProcesses.remove(pid: finished.processIdentifier)
+                NSLog("Piped process \(finished.processIdentifier) exited: \(finished.terminationStatus)")
+            }
+            do {
+                try process.run()
+            } catch {
+                close(appEnd)
+                close(childEnd)
+                return SocketResponse(success: false, error: "spawn failed: \(error.localizedDescription)")
+            }
+            // The child holds its own copy; the helper keeps only the app's end
+            // until it has been handed over.
+            close(childEnd)
+            let pid = process.processIdentifier
+            Self.pipedProcesses.add(process)
+            NSLog("Spawned piped process \(pid): \(spawnRequest.command.prefix(80))")
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                defer { close(appEnd) }
+                var lastError: Error?
+                for attempt in 1...20 {
+                    do {
+                        try FDPassingServerImpl.sendFileDescriptor(appEnd, toSocketAtPath: socketPath)
+                        NSLog("Sent piped fd for pid \(pid) (attempt \(attempt))")
+                        return
+                    } catch {
+                        lastError = error
+                        usleep(100_000)
+                    }
+                }
+                NSLog("Failed to send piped fd for pid \(pid): \(String(describing: lastError))")
+                Self.pipedProcesses.kill(pid: pid)
+            }
+
+            let response = SpawnPipedProcessResponse(processID: pid, socketPath: socketPath)
+            return SocketResponse(success: true, payload: try JSONEncoder().encode(response))
+        } catch {
+            return SocketResponse(success: false, error: error.localizedDescription)
+        }
+    }
+
+    private func handleKillPipedProcess(_ request: SocketRequest) -> SocketResponse {
+        guard let payload = request.payload,
+              let killRequest = try? JSONDecoder().decode(KillPipedProcessRequest.self, from: payload)
+        else {
+            return SocketResponse(success: false, error: "Missing payload")
+        }
+        Self.pipedProcesses.kill(pid: killRequest.processID)
+        return SocketResponse(success: true)
+    }
+
     private func handleExecuteCommand(_ request: SocketRequest, clientSocket: Int32) {
         guard let payload = request.payload else {
             sendExecuteError("Missing payload", to: clientSocket)

@@ -407,6 +407,31 @@ extension Ghostty {
         }
         var isTmuxPane: Bool { tmuxPaneBinding != nil }
 
+        /// When set, this view renders one herdr control-mode pane: its
+        /// surface is an ordinary external-IO pipe surface fed by the
+        /// gateway's HerdrController (raw terminal bytes in, keystrokes out
+        /// as `terminal.input`). Keyed by herdr's terminal id, which survives
+        /// pane moves; pane and tab ids are rebound as herdr reports them.
+        struct HerdrPaneBinding: Equatable {
+            let gatewayUUID: UUID
+            let terminalId: String
+            var paneId: String
+            var tabId: String
+        }
+        var herdrPaneBinding: HerdrPaneBinding? {
+            didSet {
+                if (herdrPaneBinding == nil) != (oldValue == nil) {
+                    invalidateWritingAssistance(resetDocument: true)
+                    refreshPanePresentationTitle()
+                }
+            }
+        }
+        var isHerdrPane: Bool { herdrPaneBinding != nil }
+
+        /// A pane a multiplexer controller owns (tmux -CC or herdr control
+        /// mode): local split edits must round-trip through the server.
+        var isMultiplexerPane: Bool { isTmuxPane || isHerdrPane }
+
         /// Per-pane identity queried from tmux. A projected tmux surface has a
         /// synthetic Ghostty title such as "Pane%196", so its ordinary OSC
         /// title publisher cannot be used as the pane label.
@@ -485,6 +510,10 @@ extension Ghostty {
         /// topology onto native tabs/splits. Created lazily on the first
         /// reconcile. nil for pane views and non-tmux sessions.
         var tmuxController: TmuxController?
+
+        /// Set on the gateway view while it drives a herdr session in
+        /// control mode. nil for pane views and non-herdr sessions.
+        var herdrController: HerdrController?
 
         /// Gateway session object the transport rebinding in
         /// `applyTmuxReconcile` last ran for. A title-only batch on the same
@@ -757,6 +786,7 @@ extension Ghostty {
         var hasUserTyped: Bool = false
         var sessionSelectionIndex: Int = 0
         var tmuxDiscoveryAttachMode: TmuxAutoMode = TmuxAutoMode.persistedDiscoveryAttachMode
+        var herdrDiscoveryAttachMode: HerdrAutoMode = HerdrAutoMode.persistedDiscoveryAttachMode
         var sessionDiscoveryTask: Task<Void, Never>?
 
         // MARK: Restoration State

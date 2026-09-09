@@ -95,6 +95,7 @@ extension LocalShellSession {
             tmuxAutoEnable: config.tmuxAutoEnable,
             tmuxAutoMode: config.tmuxAutoMode,
             herdrAutoEnable: config.herdrAutoEnable,
+            herdrAutoMode: config.herdrAutoMode,
             zmxAutoEnable: config.zmxAutoEnable,
             remoteCommand: config.remoteCommand,
             remoteCommandPolicy: config.remoteCommandPolicy,

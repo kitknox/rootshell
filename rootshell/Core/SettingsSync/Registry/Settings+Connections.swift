@@ -11,6 +11,7 @@ extension ProfileSortOrder: SettingValue {}
 extension KeyAuthRequirement: SettingValue {}
 extension KeyStorageLevel: SettingValue {}
 extension TmuxAutoMode: SettingValue {}
+extension HerdrAutoMode: SettingValue {}
 extension TmuxTabCloseAction: SettingValue {}
 extension SessionDiscoverySortOrder: SettingValue {}
 extension MoshConfig.PredictionMode: SettingValue {}
@@ -145,6 +146,15 @@ nonisolated extension Settings {
         static let herdrSessionDiscovery = SettingKey(
             "herdrSessionDiscoveryEnabled", default: true, group: .multiplexer, configKey: "herdr-session-discovery-enabled",
             title: String(localized: "Discover herdr Sessions", comment: "Setting title"))
+        static let herdrDiscoveryAttachMode = SettingKey(
+            "herdrDiscoveryAttachMode", default: HerdrAutoMode.regular, group: .multiplexer, configKey: "herdr-discovery-attach-mode",
+            title: String(localized: "herdr Attach Mode", comment: "Setting title"))
+        static let herdrAutoHideGatewayOnAttach = SettingKey(
+            "herdrAutoHideGatewayOnAttach", default: false, group: .multiplexer, configKey: "herdr-auto-hide-gateway-on-attach",
+            title: String(localized: "Auto-hide herdr Gateway on Attach", comment: "Setting title"))
+        static let herdrControlHistoryLimitBytes = SettingKey(
+            "herdrControlHistoryLimitBytes", default: 1_048_576, group: .multiplexer, configKey: "herdr-control-history-limit-bytes",
+            title: String(localized: "herdr Control Scrollback Limit", comment: "Setting title"))
         static let zmxSessionName = SettingKey(
             "zmxSessionName", default: "", group: .multiplexer, configKey: "zmx-session-name",
             title: String(localized: "zmx Session Name", comment: "Setting title"))
@@ -176,6 +186,7 @@ nonisolated extension Settings {
             tmuxAutoHideGatewayOnAttach.erased, tmuxDiscoveryAttachMode.erased,
             tmuxTabCloseAction.erased, zellijSessionDiscovery.erased, herdrSessionName.erased,
             herdrCustomCommand.erased, herdrSessionDiscovery.erased,
+            herdrDiscoveryAttachMode.erased, herdrAutoHideGatewayOnAttach.erased, herdrControlHistoryLimitBytes.erased,
             zmxSessionName.erased, zmxCustomCommand.erased, zmxSessionDiscovery.erased, localSessionDiscovery.erased,
             sessionDiscoverySortOrder.erased, tabExposeMultiplexer.erased,
             tmuxHiddenWindowsBySession, tmuxLastSessionByConnection,

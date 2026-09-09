@@ -156,6 +156,30 @@ public class HelperConnection {
         try await socketConnection.inspectLocalMultiplexers()
     }
 
+    /// Spawns a long-lived non-PTY command and returns its pid plus the
+    /// session socket where the helper delivers the app's end of its stdio.
+    public func spawnPipedProcess(
+        command: String,
+        workingDirectory: String? = nil,
+        shell: String? = nil,
+        paneToken: String? = nil
+    ) async throws -> (processID: Int32, socketPath: String) {
+        try await socketConnection.spawnPipedProcess(
+            command: command,
+            cwd: workingDirectory,
+            shell: shell,
+            paneToken: paneToken
+        )
+    }
+
+    public func killPipedProcess(processID: Int32) async {
+        do {
+            try await socketConnection.killPipedProcess(processID: processID)
+        } catch {
+            Ghostty.logger.error("Failed to kill piped process \(processID): \(error)")
+        }
+    }
+
     /// Resizes a shell session
     public func resizeShell(
         sessionID: UUID,

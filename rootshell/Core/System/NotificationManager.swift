@@ -19,6 +19,9 @@ extension Notification.Name {
 
     /// Posted after a tmux -CC pane is bound to a local surface, so pending push routes can retry.
     static let tmuxPaneBindingsChanged = Notification.Name("com.rootshell.tmuxPaneBindingsChanged")
+
+    /// Posted when a herdr control-mode pane surface appears or retires.
+    static let herdrPaneBindingsChanged = Notification.Name("com.rootshell.herdrPaneBindingsChanged")
 }
 
 @MainActor

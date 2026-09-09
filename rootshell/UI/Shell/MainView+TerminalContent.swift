@@ -583,6 +583,20 @@ extension MainView {
                     }
                 ),
                 allowsTmuxControlAttach: focusedTerminal.allowsTmuxControlDiscoveryAttach,
+                herdrAttachMode: Binding(
+                    get: { focusedTerminal.herdrDiscoveryAttachMode },
+                    set: { newValue in
+                        let resolvedValue = focusedTerminal.allowsHerdrControlDiscoveryAttach
+                            ? newValue
+                            : .regular
+                        focusedTerminal.herdrDiscoveryAttachMode = resolvedValue
+                        if focusedTerminal.allowsHerdrControlDiscoveryAttach {
+                            HerdrAutoMode.persistedDiscoveryAttachMode = resolvedValue
+                        }
+                        NotificationCenter.default.post(name: .ghosttySessionDiscoveryChanged, object: focusedTerminal)
+                    }
+                ),
+                allowsHerdrControlAttach: focusedTerminal.allowsHerdrControlDiscoveryAttach,
                 onSelect: { session in
                     focusedTerminal.attachToSession(session)
                 },

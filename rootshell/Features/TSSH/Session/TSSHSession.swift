@@ -321,6 +321,16 @@ final class TrzszSession: TerminalSession {
         return try await goTransport.runRemoteCommand(command)
     }
 
+    /// Opens a long-lived auxiliary exec channel on this session's transport.
+    /// Not subject to the one-probe slot: the channel streams for as long as
+    /// the caller keeps it, and dies with the transport.
+    func openExecChannel(_ command: String) async throws -> AsyncBytePipe {
+        guard let goTransport else {
+            throw TrzszError.connectionFailed("No transport for exec channel")
+        }
+        return try await goTransport.openExecChannel(command)
+    }
+
     /// SSH client kept alive during QUIC establishment
     /// Must be closed after QUIC connection is established
     private var spawnSSHClient: SSHClient?
