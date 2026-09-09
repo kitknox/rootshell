@@ -483,7 +483,13 @@ final class SplitTreeHostingView: UIView {
         let creditH = separatorCredit ? cellH : 0
         func walk(_ node: SplitTree<SplitPaneView>.Node) -> (h: CGFloat, v: CGFloat) {
             switch node {
-            case .leaf:
+            case .leaf(let view):
+                // A herdr pane's chrome is measured, so the budget never
+                // hands the server a column the surface cannot render.
+                if let terminal = view.asTerminal, terminal.isHerdrPane {
+                    let chrome = herdrChrome(for: terminal, cellW: cellW, cellH: cellH)
+                    return (h: chrome.w, v: chrome.h)
+                }
                 return (h: padX * 2, v: padY * 2)
             case .split(let split):
                 let left = walk(split.left)
@@ -722,11 +728,12 @@ final class SplitTreeHostingView: UIView {
         else { return frame }
         let scale = terminal.contentScaleFactor > 0 ? terminal.contentScaleFactor : terminal.traitCollection.displayScale
         guard scale > 0 else { return frame }
-        let padX = CGFloat(PaddingManager.shared.effectivePaddingX)
-        let padY = CGFloat(PaddingManager.shared.effectivePaddingY)
+        let cellW = CGFloat(size.cell_width_px) / scale
+        let cellH = CGFloat(size.cell_height_px) / scale
+        let chrome = herdrChrome(for: terminal, cellW: cellW, cellH: cellH)
         // Round up so a fractional cell width never floors the grid short.
-        let maxW = ceil(CGFloat(grid.cols) * CGFloat(size.cell_width_px) / scale + padX * 2)
-        let maxH = ceil(CGFloat(grid.rows) * CGFloat(size.cell_height_px) / scale + padY * 2)
+        let maxW = ceil(CGFloat(grid.cols) * cellW + chrome.w)
+        let maxH = ceil(CGFloat(grid.rows) * cellH + chrome.h)
         // The slot math rounds to whole points and can come up a fraction
         // short of the grid; take the sub-point overlap into the divider
         // rather than a missing column. A larger shortfall is real.
@@ -737,6 +744,44 @@ final class SplitTreeHostingView: UIView {
         clamped.size.width = fit(frame.width, to: maxW)
         clamped.size.height = fit(frame.height, to: maxH)
         return clamped
+    }
+
+    /// The non-grid space a herdr pane's slot spends, as ghostty actually
+    /// measures it: the padding ghostty applies plus whatever the wrapper
+    /// insets, taken from the view size that produced the last grid. The
+    /// window padding alone under-counts it and the surface comes out a
+    /// cell short of the server's rect, so every full-width row wraps.
+    /// The measurement carries the sub-cell remainder of that frame; a
+    /// slot sized from it yields exactly the target grid, and a budget
+    /// sized from it errs short by under a cell, never long.
+    private func herdrChrome(
+        for terminal: Ghostty.TerminalView,
+        cellW: CGFloat,
+        cellH: CGFloat
+    ) -> (w: CGFloat, h: CGFloat) {
+        let padX = CGFloat(PaddingManager.shared.effectivePaddingX)
+        let padY = CGFloat(PaddingManager.shared.effectivePaddingY)
+        var chrome = (w: padX * 2, h: padY * 2)
+        guard let footprint = terminal.herdrGridFootprint, footprint.cols > 0, footprint.rows > 0,
+              cellW > 0, cellH > 0 else { return chrome }
+        // The wrapper the slot frames, versus the terminal view inside it.
+        var insetW: CGFloat = 0
+        var insetH: CGFloat = 0
+        if let container = attachedContainers[ObjectIdentifier(terminal)],
+           container.bounds.width > 0, terminal.bounds.width > 0 {
+            insetW = max(0, container.bounds.width - terminal.bounds.width)
+            insetH = max(0, container.bounds.height - terminal.bounds.height)
+        }
+        let measuredW = footprint.size.width - CGFloat(footprint.cols) * cellW + insetW
+        let measuredH = footprint.size.height - CGFloat(footprint.rows) * cellH + insetH
+        // The footprint pairs a frame with the grid ghostty derived from it,
+        // so the measurement is consistent whatever frame it came from. It
+        // can exceed the padding by more than a cell: a slot that came out
+        // one column short leaves that whole column in the remainder. Only
+        // an impossible value (negative, or several cells) is refused.
+        if measuredW >= 0, measuredW < chrome.w + cellW * 3 { chrome.w = measuredW }
+        if measuredH >= 0, measuredH < chrome.h + cellH * 3 { chrome.h = measuredH }
+        return chrome
     }
 
     /// Read-only frame the given pane occupies (or would occupy) in the

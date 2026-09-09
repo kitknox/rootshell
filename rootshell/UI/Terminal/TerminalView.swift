@@ -428,6 +428,12 @@ extension Ghostty {
         }
         var isHerdrPane: Bool { herdrPaneBinding != nil }
 
+        /// The view size that produced the grid last pushed to the herdr
+        /// session. The split host measures the chrome ghostty really applies
+        /// from it (padding, wrapper insets, rounding) instead of assuming
+        /// the window padding, which came up a cell short on both axes.
+        var herdrGridFootprint: (size: CGSize, cols: Int, rows: Int)?
+
         /// The grid herdr laid this pane out with. The split host trims the
         /// pane's slot to it so the surface never exceeds the server PTY.
         var herdrTargetGrid: (cols: Int, rows: Int)? {
@@ -4339,6 +4345,19 @@ extension Ghostty {
             // Update spinner width if animating (for responsive joke truncation)
             connectionProgress.updateTerminalWidth(Int(surfaceSize.columns))
 
+            // Recorded on every pass, ahead of the grid cache: the frame can
+            // change without the grid, and the latest pairing is the one the
+            // split host should measure chrome from.
+            if isHerdrPane {
+                let footprint = (size: bounds.size, cols: Int(surfaceSize.columns), rows: Int(surfaceSize.rows))
+                if herdrGridFootprint.map({ $0.size != footprint.size || $0.cols != footprint.cols || $0.rows != footprint.rows }) ?? true {
+                    herdrGridFootprint = footprint
+                    // A new measurement can move the clamp; the host re-lays
+                    // out once and settles, since a repeat pairing is a no-op.
+                    enclosingSplitHost?.setNeedsLayout()
+                }
+            }
+
             // tmux single-pane window: the pane IS the window, so push this
             // window's per-window tmux size from the pane's OWN grid. This runs
             // after ghostty_surface_set_size, so surfaceSize is fresh — unlike
@@ -4419,7 +4438,6 @@ extension Ghostty {
                 pixelWidth: UInt16(size.width * scale),
                 pixelHeight: UInt16(size.height * scale)
             )
-
             do {
                 invalidateWritingAssistance()
                 try session.setSize(ptySize)
