@@ -100,7 +100,8 @@ nonisolated enum HerdrControl {
         let pane_id: String
         /// "left", "right", "up", or "down".
         let direction: String
-        let amount: Int
+        /// Fraction of the split to move.
+        let amount: Double
     }
 
     // MARK: - Responses and records

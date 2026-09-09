@@ -891,6 +891,31 @@ extension MainView {
         performTmuxClose(action, tab: tab, pane: pane, controller: controller, windowId: windowId)
     }
 
+    /// The tmux close-action setting applies to herdr tabs too: close on the
+    /// server, or detach (hide has no herdr meaning and detaches instead).
+    @MainActor
+    func performHerdrClose(_ action: TmuxTabCloseAction, tab: TerminalTab, controller: HerdrController) {
+        switch action {
+        case .closeWindow:
+            controller.requestCloseTab(tab)
+        case .detachSession, .hideTab:
+            controller.detach(closeGateway: false)
+        case .detachSessionAndCloseGateway:
+            controller.detach(closeGateway: true)
+        case .ask:
+            pendingHerdrCloseTabID = tab.id
+        }
+    }
+
+    @MainActor
+    func runPendingHerdrClose(_ action: TmuxTabCloseAction) {
+        defer { pendingHerdrCloseTabID = nil }
+        guard let id = pendingHerdrCloseTabID,
+              let tab = terminals.first(where: { $0.id == id }),
+              let controller = HerdrController.controller(forTab: tab), controller.isActive else { return }
+        performHerdrClose(action, tab: tab, controller: controller)
+    }
+
     func closeTab(at index: Int) {
         // Validate index before accessing array
         guard terminals.indices.contains(index) else { return }
@@ -939,7 +964,12 @@ extension MainView {
         // first so its projected tabs are removed while the stream is live.
         if closingTab.isHerdrWindow, let controller = HerdrController.controller(forTab: closingTab),
            controller.isActive {
-            controller.requestCloseTab(closingTab)
+            let action = TmuxTabCloseAction.current
+            if action == .ask {
+                pendingHerdrCloseTabID = closingTab.id
+            } else {
+                performHerdrClose(action, tab: closingTab, controller: controller)
+            }
             return
         }
         if closingTab.isHerdrGateway,

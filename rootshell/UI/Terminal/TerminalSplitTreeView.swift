@@ -578,6 +578,12 @@ final class SplitTreeHostingView: UIView {
     /// region, so this is exact.
     fileprivate func commitDividerToTmux(node: SplitTree<SplitPaneView>.Node, ratio: Double) {
         guard case .split(let split) = node else { return }
+        // herdr control mode: the server owns the layout; send the ratio
+        // change and let its `tab.layout` record reflow the panes.
+        if let leftView = split.left.leftmostLeaf().asTerminal, leftView.isHerdrPane {
+            leftView.requestHerdrResize(horizontal: split.direction == .horizontal, delta: ratio - split.ratio)
+            return
+        }
         guard let leftView = split.left.leftmostLeaf().asTerminal,
               leftView.isTmuxPane, let cells = effectiveTmuxWindowCells() else { return }
         let horizontal = split.direction == .horizontal

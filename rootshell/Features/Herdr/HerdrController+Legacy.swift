@@ -47,14 +47,14 @@ final class HerdrLegacyPaneStream {
                     let line = buffer.subdata(in: buffer.startIndex..<newline)
                     buffer.removeSubrange(buffer.startIndex...newline)
                     guard let self else { return }
-                    if await self.handle(line: line) {
+                    if self.handle(line: line) {
                         ended = true
                         break
                     }
                 }
             }
             guard let self else { return }
-            await self.readerDidEnd()
+            self.readerDidEnd()
         }
     }
 

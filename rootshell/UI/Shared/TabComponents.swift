@@ -14,11 +14,13 @@ struct TmuxTabBadge: Equatable {
     enum Role: Equatable {
         case gateway
         case window
+        case herdrWindow
 
         var systemImage: String {
             switch self {
             case .gateway: return "star.fill"
             case .window: return "t.square.fill"
+            case .herdrWindow: return "h.square.fill"
             }
         }
     }
@@ -152,16 +154,27 @@ enum TmuxTabBadgeResolver {
     /// the per-tab O(n²) of `badge(for:allTabs:)`); the top tab bar also stores
     /// the resolved badge so `TabBarItem` equality can compare it directly
     /// instead of re-deriving order from `allTabs`.
+    /// The gateway terminal UUID of a herdr control-mode family. Kept apart
+    /// from `ownerID(for:)`, which feeds tmux grouping.
+    static func herdrOwnerID(for tab: TabModel) -> UUID? {
+        if tab.isHerdrWindow {
+            return tab.owningGatewayTerminalUUID
+        }
+        guard tab.isHerdrGateway else { return nil }
+        return tab.splitTree.terminalLeaves.first(where: { $0.herdrController != nil })?.uuid
+    }
+
     static func badge(for tab: TabModel, gatewayOwnerIDs: [UUID]) -> TmuxTabBadge? {
         guard let role = role(for: tab),
-              let ownerID = ownerID(for: tab) else { return nil }
+              let ownerID = ownerID(for: tab) ?? herdrOwnerID(for: tab) else { return nil }
         let groupIndex = gatewayOwnerIDs.firstIndex(of: ownerID) ?? 0
         return TmuxTabBadge(role: role, groupIndex: groupIndex)
     }
 
     private static func role(for tab: TabModel) -> TmuxTabBadge.Role? {
-        if tab.isTmuxGateway { return .gateway }
+        if tab.isTmuxGateway || tab.isHerdrGateway { return .gateway }
         if tab.isTmuxWindow { return .window }
+        if tab.isHerdrWindow { return .herdrWindow }
         return nil
     }
 
@@ -190,7 +203,7 @@ enum TmuxTabBadgeResolver {
         var seen = Set<UUID>()
         var ids: [UUID] = []
         for tab in tabs {
-            guard let id = ownerID(for: tab), seen.insert(id).inserted else { continue }
+            guard let id = ownerID(for: tab) ?? herdrOwnerID(for: tab), seen.insert(id).inserted else { continue }
             ids.append(id)
         }
         return ids
@@ -265,6 +278,16 @@ struct TmuxTabBadgeView: View {
                 .cornerRadius(4)
                 .badgeVibrancyCompensated(compensateVibrancy)
                 .accessibilityLabel("tmux window")
+        case .herdrWindow:
+            Text("H")
+                .font(.caption2)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(color.opacity(0.15))
+                .foregroundColor(color)
+                .cornerRadius(4)
+                .badgeVibrancyCompensated(compensateVibrancy)
+                .accessibilityLabel("herdr tab")
         }
     }
 }

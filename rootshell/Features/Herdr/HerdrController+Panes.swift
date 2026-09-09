@@ -129,7 +129,7 @@ extension HerdrController {
                 as: HerdrControl.TerminalAttached.self
             )
             guard self.channel === channel, paneSessions[terminalId] === session else {
-                try? await channel.request("terminal.detach", HerdrControl.AttachTarget(attach_id: attached.attach_id))
+                _ = try? await channel.request("terminal.detach", HerdrControl.AttachTarget(attach_id: attached.attach_id))
                 return
             }
             attachIds[terminalId] = attached.attach_id

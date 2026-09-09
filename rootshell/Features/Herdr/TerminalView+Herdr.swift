@@ -57,6 +57,18 @@ extension Ghostty.TerminalView {
         herdrPaneController?.requestSplit(self, horizontal: horizontal)
     }
 
+    /// Divider drag on this (left or top) pane's split: `delta` is the ratio
+    /// change, positive when the pane grew.
+    func requestHerdrResize(horizontal: Bool, delta: Double) {
+        let direction: String
+        if horizontal {
+            direction = delta > 0 ? "right" : "left"
+        } else {
+            direction = delta > 0 ? "down" : "up"
+        }
+        herdrPaneController?.requestResize(self, direction: direction, amount: abs(delta))
+    }
+
     func requestHerdrToggleZoom() {
         herdrPaneController?.requestToggleZoom(self)
     }

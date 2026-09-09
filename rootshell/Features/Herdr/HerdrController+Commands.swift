@@ -94,8 +94,13 @@ extension HerdrController {
         send("pane.zoom", HerdrControl.PaneZoomParams(pane_id: binding.paneId, mode: "toggle"))
     }
 
-    func requestResize(_ view: Ghostty.TerminalView, direction: String, amount: Int) {
-        guard let binding = view.herdrPaneBinding else { return }
+    /// Divider drag: grow or shrink the pane by a fraction of its split.
+    func requestResize(_ view: Ghostty.TerminalView, direction: String, amount: Double) {
+        guard let binding = view.herdrPaneBinding, amount > 0.001 else { return }
+        if mode == .legacy {
+            legacyCommand("pane resize --pane \(binding.paneId) --direction \(direction) --amount \(String(format: "%.3f", amount))")
+            return
+        }
         send("pane.resize", HerdrControl.PaneResizeParams(pane_id: binding.paneId, direction: direction, amount: amount))
     }
 

@@ -32,17 +32,10 @@ final class PanePresentationState {
     /// this pane's row; semantic edges are separately rolled up by the center.
     private(set) var oscProgressActivity: OSCProgressActivity?
 
-    /// herdr's agent report for a control-mode pane. Authoritative while
-    /// present; the server tracks the agent's own state ladder.
-    private(set) var herdrAgentRow: AgentRowState?
-
     /// Pane-local attention rollup, including plain command completions and
     /// generic OSC progress. Live OSC state is authoritative until cleared,
     /// except over a detected blocker.
     var attentionStatus: AgentAttentionStatus? {
-        if let herdrAgentRow {
-            return herdrAgentRow.status == .unknown ? nil : herdrAgentRow.status
-        }
         if isDetectedBlocked { return .blocked }
         if let oscProgressActivity {
             return oscProgressActivity.phase.status
@@ -71,14 +64,6 @@ final class PanePresentationState {
     /// Full sidebar card state. OSC progress enriches detected rows, or
     /// supplies a generic Activity row when no detector owns the pane.
     var agentRow: AgentRowState? {
-        if let herdrAgentRow {
-            guard herdrAgentRow.status != .unknown, herdrAgentRow.agentID != nil else { return nil }
-            var row = herdrAgentRow
-            if let progressText = oscProgressActivity?.progressText {
-                row.taskProgress = progressText
-            }
-            return row
-        }
         if var row = detectedAgentRow {
             if let activity = oscProgressActivity, row.status != .blocked {
                 row.status = activity.phase.status
@@ -108,49 +93,6 @@ final class PanePresentationState {
     init(paneID: UUID, title: String = "Terminal") {
         self.paneID = paneID
         self.title = title
-    }
-
-    /// Replaces the herdr report. Returns true when the row's semantics
-    /// changed and the center should republish. `unknown` with no agent
-    /// clears the overlay.
-    func applyHerdrReport(
-        status: AgentAttentionStatus,
-        agentID: String?,
-        displayName: String?,
-        now: Date,
-        nextSequence: () -> UInt64
-    ) -> Bool {
-        let cleared = status == .unknown && agentID == nil
-        if cleared {
-            guard herdrAgentRow != nil else { return false }
-            herdrAgentRow = nil
-            return true
-        }
-        var row = herdrAgentRow ?? AgentRowState(status: status)
-        let statusChanged = herdrAgentRow?.status != status
-        let identityChanged = row.agentID != agentID || row.agentDisplayName != displayName
-        guard statusChanged || identityChanged || herdrAgentRow == nil else { return false }
-        row.status = status
-        row.agentID = agentID
-        row.agentDisplayName = displayName ?? agentID
-        if statusChanged {
-            row.stateChangeSeq = nextSequence()
-            switch status {
-            case .working:
-                if row.workingSince == nil { row.workingSince = now }
-                row.finishedAt = nil
-                row.unread = false
-            case .done, .failed, .blocked:
-                row.finishedAt = now
-                row.workingSince = nil
-                row.unread = true
-            case .idle, .paused, .unknown:
-                row.workingSince = nil
-                row.unread = false
-            }
-        }
-        herdrAgentRow = row
-        return true
     }
 
     /// Apply a normalized OSC progress state. The caller supplies the global

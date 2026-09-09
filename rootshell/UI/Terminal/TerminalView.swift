@@ -1441,6 +1441,11 @@ extension Ghostty {
                     guard let self else { return }
                     if let controller = self.tmuxController {
                         controller.resetForDiscard(outputLines: 0, outputBytes: droppedBytes)
+                    } else if let binding = self.herdrPaneBinding {
+                        // A herdr pane's screen is now gapped; ask the
+                        // server for a fresh snapshot instead of guessing.
+                        HerdrController.controller(forGateway: binding.gatewayUUID)?
+                            .pipelineDidOverflow(terminalId: binding.terminalId)
                     } else if self.isTmuxGatewaySurfaceActive
                                 || self.restoredWasTmuxGateway || self.isRestoringLocalTmux
                                 || self.tmuxResumeRequested {

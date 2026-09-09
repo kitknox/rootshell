@@ -33,6 +33,10 @@ extension HerdrController {
         for layout in snapshot.layouts {
             applyLayout(layout)
         }
+        // The snapshot is the whole truth about agents: a pane missing from
+        // it lost its agent, so it gets a clearing report.
+        let vanished = agentStatuses.keys.filter { paneId in !snapshot.agents.contains { $0.pane_id == paneId } }
+        agentStatuses.removeAll()
         for agent in snapshot.agents {
             agentStatuses[agent.pane_id] = HerdrControl.AgentStatusChangedData(
                 pane_id: agent.pane_id,
@@ -42,6 +46,12 @@ extension HerdrController {
                 title: agent.title,
                 display_agent: agent.display_agent,
                 state_labels: nil
+            )
+        }
+        for paneId in vanished {
+            guard let info = paneInfos[paneId], let view = paneViews[info.terminal_id] else { continue }
+            AgentAttentionCenter.shared.applyHerdrStatus(
+                terminal: view, status: "unknown", agentID: nil, displayName: nil, title: nil
             )
         }
         publishAgentStatuses()
@@ -57,6 +67,18 @@ extension HerdrController {
         // Re-attach every pane whose surface already runs, focused tab first.
         queueAttaches(priorityTab: tabsModel.selectedTabID)
         pushGeometryForVisibleTabs()
+        autoHideGatewayIfWanted()
+        publishProjectPaths()
+    }
+
+    /// herdr knows each pane's directory; hand it to agent attention so the
+    /// sidebar shows the project without probing the host.
+    func publishProjectPaths() {
+        for pane in paneInfos.values {
+            guard let view = paneViews[pane.terminal_id],
+                  let path = pane.foreground_cwd ?? pane.cwd, path.hasPrefix("/") else { continue }
+            AgentAttentionCenter.shared.applyHerdrProjectPath(terminal: view, path: path)
+        }
     }
 
     // MARK: - Tabs
@@ -173,9 +195,15 @@ extension HerdrController {
     }
 
     func paneDidUpdate(_ pane: HerdrControl.PaneInfo) {
+        let previous = paneInfos[pane.pane_id]
         paneInfos[pane.pane_id] = pane
         if let tab = tabs[pane.tab_id] {
             refreshTitle(of: tab)
+        }
+        let path = pane.foreground_cwd ?? pane.cwd
+        if let path, path.hasPrefix("/"), path != (previous?.foreground_cwd ?? previous?.cwd),
+           let view = paneViews[pane.terminal_id] {
+            AgentAttentionCenter.shared.applyHerdrProjectPath(terminal: view, path: path)
         }
         if let view = paneViews[pane.terminal_id], view.userOverrideTitle == nil,
            let title = pane.title ?? pane.terminal_title, !title.isEmpty, view.title != title {
@@ -440,8 +468,21 @@ extension HerdrController {
     // MARK: - Agent state
 
     func agentStatusDidChange(_ change: HerdrControl.AgentStatusChangedData) {
-        agentStatuses[change.pane_id] = change
-        publishAgentStatuses()
+        // No agent left on the pane: drop it so a later snapshot does not
+        // resurrect a stale entry, and hand the pane back to detection.
+        if change.agent == nil, AgentAttentionStatus(rawValue: change.agent_status) ?? .unknown == .unknown {
+            agentStatuses.removeValue(forKey: change.pane_id)
+        } else {
+            agentStatuses[change.pane_id] = change
+        }
+        guard let info = paneInfos[change.pane_id], let view = paneViews[info.terminal_id] else { return }
+        AgentAttentionCenter.shared.applyHerdrStatus(
+            terminal: view,
+            status: change.agent_status,
+            agentID: change.agent,
+            displayName: change.display_agent,
+            title: change.title
+        )
     }
 
     /// Hands herdr's authoritative agent facts to the attention center.

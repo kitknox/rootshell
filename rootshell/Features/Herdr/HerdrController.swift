@@ -92,6 +92,11 @@ final class HerdrController {
     var legacyGrids: [String: (rows: Int, cols: Int)] = [:]
     var legacyPollTask: Task<Void, Never>?
     var legacySnapshotFingerprint: Int?
+    var didAutoHideGateway = false
+    /// Periodic ping while the stream is open; a missed answer closes it so
+    /// the reconnect path re-snapshots instead of waiting on a dead link.
+    private var healthTask: Task<Void, Never>?
+    private static let healthInterval: Duration = .seconds(30)
     /// Set once the first snapshot applied, so later reconnects do not steal
     /// the selected tab.
     var hasProcessedInitialFocus = false
@@ -272,6 +277,7 @@ final class HerdrController {
             isActive = true
             applySnapshot(snapshot)
             subscribeAgentStatus()
+            startHealthPing(on: channel)
             NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gatewayUUID)
         } catch {
             Self.logger.error("herdr control connect failed: \(error.localizedDescription)")
@@ -315,9 +321,35 @@ final class HerdrController {
         }
     }
 
+    private func startHealthPing(on channel: HerdrControlChannel) {
+        healthTask?.cancel()
+        healthTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.healthInterval)
+                guard let self, self.channel === channel else { return }
+                if Ghostty.isAppBackgroundedAtomic { continue }
+                do {
+                    try await channel.request("ping", HerdrControl.EmptyParams(), timeout: .seconds(10))
+                } catch {
+                    Self.logger.warning("herdr health ping failed: \(error.localizedDescription)")
+                    await channel.close()
+                    return
+                }
+            }
+        }
+    }
+
+    /// A pane's output writer dropped bytes: its screen is unreliable until
+    /// the server re-snapshots it.
+    func pipelineDidOverflow(terminalId: String) {
+        guard mode == .raw, let attachId = attachIds[terminalId] else { return }
+        requestSnapshot(attachId: attachId)
+    }
+
     func channelDidClose(_ error: Error?) {
         guard !didEnd else { return }
         Self.logger.warning("herdr control stream closed: \(error?.localizedDescription ?? "eof")")
+        healthTask?.cancel()
         channel = nil
         isActive = false
         detachAllLocally()
@@ -374,11 +406,60 @@ final class HerdrController {
         }
     }
 
+    /// User-initiated detach: ends control mode, optionally closing the
+    /// gateway tab too. The herdr session keeps running on the host.
+    func detach(closeGateway: Bool) {
+        let gatewayView = gateway
+        let windowId = hostWindowId
+        stop()
+        guard closeGateway, let gatewayView else { return }
+        // Same routing a dying tab uses: the .closeSplit observer resolves
+        // the window from the posted view and runs the normal cleanup.
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: .closeSplit,
+                object: gatewayView,
+                userInfo: ["windowId": windowId]
+            )
+        }
+    }
+
+    /// Whether the gateway tab was hidden by the auto-hide setting.
+    var isGatewayTabHidden: Bool {
+        gatewayTabID.flatMap { tabsModel.tab(withID: $0) }?.isHiddenTmuxWindow == true
+    }
+
+    func showGatewayTab() {
+        guard let gatewayTabID, let tab = tabsModel.tab(withID: gatewayTabID), tab.isHiddenTmuxWindow else { return }
+        tab.isHiddenTmuxWindow = false
+        tabsModel.selectedTabID = tab.id
+        tabsModel.pendingScrollToTabID = tab.id
+    }
+
+    /// Opt-in: once projected tabs exist, hide the gateway shell tab and land
+    /// on the first projected tab. One-shot so a later "Show Gateway Tab"
+    /// sticks.
+    func autoHideGatewayIfWanted() {
+        guard !didAutoHideGateway,
+              SettingsStore.shared.value(Settings.Multiplexer.herdrAutoHideGatewayOnAttach),
+              let gatewayTabID, let gatewayTab = tabsModel.tab(withID: gatewayTabID),
+              !gatewayTab.isHiddenTmuxWindow else { return }
+        let mine = Set(tabs.values.map(\.id))
+        guard let first = tabsModel.tabs.first(where: { mine.contains($0.id) }) else { return }
+        didAutoHideGateway = true
+        gatewayTab.isHiddenTmuxWindow = true
+        if tabsModel.selectedTabID == gatewayTab.id {
+            tabsModel.selectedTabID = first.id
+            tabsModel.pendingScrollToTabID = first.id
+        }
+    }
+
     /// Ends control mode for this gateway: closes the stream and removes the
     /// projected tabs.
     func stop() {
         guard !didEnd else { return }
         didEnd = true
+        healthTask?.cancel()
         connectTask?.cancel()
         reconnectTask?.cancel()
         focusWatchdog?.cancel()
@@ -396,6 +477,12 @@ final class HerdrController {
         if let gatewayTabID, let tab = tabsModel.tab(withID: gatewayTabID) {
             tab.isHerdrGateway = false
             tab.herdrSessionName = nil
+            if tab.isHiddenTmuxWindow {
+                tab.isHiddenTmuxWindow = false
+            }
+            if !tabsModel.tabs.contains(where: { $0.id == tabsModel.selectedTabID }) {
+                tabsModel.selectedTabID = tab.id
+            }
         }
         NotificationCenter.default.post(name: .herdrControlModeDidEnd, object: gatewayUUID)
         NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gatewayUUID)

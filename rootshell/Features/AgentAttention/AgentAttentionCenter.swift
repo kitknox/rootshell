@@ -121,6 +121,16 @@ final class AgentAttentionCenter {
     /// Strongly-owned per-pane monitors, keyed by pane UUID.
     @ObservationIgnored private var monitors: [UUID: AgentPaneMonitor] = [:]
 
+    /// herdr reports that arrived before their pane had a monitor.
+    /// (id=herdr-agent-authority)
+    private struct PendingHerdrReport {
+        let status: AgentAttentionStatus
+        let agentID: String?
+        let displayName: String?
+    }
+    @ObservationIgnored private var pendingHerdrReports: [UUID: PendingHerdrReport] = [:]
+    @ObservationIgnored private var pendingHerdrProjectPaths: [UUID: String] = [:]
+
     /// Gateways with a pane-directory query outstanding. One query answers for
     /// every pane on a gateway, so several panes identifying at once must not
     /// each fire one. (id=agent-project)
@@ -1040,6 +1050,10 @@ final class AgentAttentionCenter {
     /// tmux -CC pane rides its gateway's session, everything else owns its own.
     private func sessionOwner(for monitor: AgentPaneMonitor) -> Ghostty.TerminalView? {
         guard let terminal = monitor.terminal else { return nil }
+        if let herdr = terminal.herdrPaneBinding {
+            // A herdr pane's surface is local; its host is the gateway's.
+            return HerdrController.controller(forGateway: herdr.gatewayUUID)?.gateway ?? terminal
+        }
         guard let binding = terminal.tmuxPaneBinding else { return terminal }
         for model in TmuxWindowRegistry.allTabsModels() {
             for tab in model.tabs {
@@ -1122,6 +1136,31 @@ final class AgentAttentionCenter {
         // identification (as an ordinary pane does) would have found nothing.
         for monitor in touched where monitor.agent != nil {
             requestRepositoryFacts(for: monitor)
+        }
+    }
+
+    /// herdr reported a pane's directory (snapshot or `pane_updated`). Same
+    /// treatment as tmux's out-of-band path: no probe, cached facts applied.
+    func applyHerdrProjectPath(terminal: Ghostty.TerminalView, path raw: String) {
+        guard let monitor = monitors[terminal.uuid] else {
+            pendingHerdrProjectPaths[terminal.uuid] = raw
+            return
+        }
+        let path = AgentProjectPath.normalize(raw)
+        guard let label = AgentProjectPath.label(forPath: path) else { return }
+        var changed = monitor.noteProject(
+            AgentProjectIdentity(
+                hostKey: sessionOwner(for: monitor).map(Self.hostKey(for:)),
+                path: path,
+                label: label,
+                branch: nil,
+                source: .tmux
+            )
+        )
+        changed = applyCachedRepoFacts(to: monitor) || changed
+        if changed { publish(now: Date()) }
+        if monitor.agent != nil {
+            _ = requestRepositoryFacts(for: monitor)
         }
     }
 
@@ -1227,9 +1266,10 @@ final class AgentAttentionCenter {
         }
     }
 
-    /// herdr's own agent status for a control-mode pane. Authoritative
-    /// while present: it replaces screen classification for that pane
-    /// without disturbing the detector state underneath it.
+    /// herdr's own agent status for a control-mode pane. Goes through the
+    /// pane monitor like a screen classification would, so badges, rows,
+    /// rollups, and notifications all follow herdr. A report that lands
+    /// before the monitor exists is held for `reconcile`.
     func applyHerdrStatus(
         terminal: Ghostty.TerminalView,
         status: String,
@@ -1237,16 +1277,52 @@ final class AgentAttentionCenter {
         displayName: String?,
         title: String?
     ) {
-        let now = Date()
-        let changed = terminal.presentation.applyHerdrReport(
+        let report = PendingHerdrReport(
             status: AgentAttentionStatus(rawValue: status) ?? .unknown,
             agentID: agentID,
-            displayName: displayName,
-            now: now,
-            nextSequence: nextSeq
+            displayName: displayName
         )
+        guard let monitor = monitors[terminal.uuid] else {
+            pendingHerdrReports[terminal.uuid] = report
+            return
+        }
+        applyHerdrReport(report, to: monitor)
+    }
+
+    private func applyHerdrReport(_ report: PendingHerdrReport, to monitor: AgentPaneMonitor) {
+        let now = Date()
+        let hadAgent = monitor.agent != nil
+        let changed = monitor.applyExternalReport(
+            status: report.status,
+            agentID: report.agentID,
+            displayName: report.displayName,
+            now: now,
+            seq: nextSeq
+        )
+        if !hadAgent, monitor.agent != nil {
+            // Same follow-ups a screen identification gets, minus the probe
+            // when herdr already told us the directory.
+            if monitor.project == nil {
+                requestProjectIfNeeded(for: monitor, now: now)
+            } else if monitor.project?.branch == nil {
+                if !applyCachedRepoFacts(to: monitor) {
+                    _ = requestRepositoryFacts(for: monitor, now: now)
+                }
+            }
+        }
         if changed {
             publish(now: now)
+        }
+    }
+
+    /// Applies reports and directories that arrived before a monitor did.
+    private func drainPendingHerdrState(for monitor: AgentPaneMonitor) {
+        if let path = pendingHerdrProjectPaths.removeValue(forKey: monitor.paneUUID),
+           let terminal = monitor.terminal {
+            applyHerdrProjectPath(terminal: terminal, path: path)
+        }
+        if let report = pendingHerdrReports.removeValue(forKey: monitor.paneUUID) {
+            applyHerdrReport(report, to: monitor)
         }
     }
 
@@ -1261,6 +1337,8 @@ final class AgentAttentionCenter {
         // Title identity and title-only rules are agent machinery; task
         // detection is driven purely by content-change scans.
         guard AgentAttentionSettings.detectionEnabled else { return }
+        // herdr names the agent and its state for this pane.
+        guard !monitor.externalAuthority else { return }
 
         let manifest = AgentDetectionManifest.bundled
         let now = Date()
@@ -1622,12 +1700,14 @@ final class AgentAttentionCenter {
                         monitor.updateOwners(tab: tab, tabsModel: model)
                     } else {
                         topologyChanged = true
-                        monitors[terminal.uuid] = AgentPaneMonitor(
+                        let monitor = AgentPaneMonitor(
                             paneUUID: terminal.uuid,
                             terminal: terminal,
                             tab: tab,
                             tabsModel: model
                         )
+                        monitors[terminal.uuid] = monitor
+                        drainPendingHerdrState(for: monitor)
                         if scheduleInitialScans {
                             scanDeadlines.schedule(terminal.uuid, at: now)
                         }
@@ -1635,6 +1715,8 @@ final class AgentAttentionCenter {
                 }
             }
         }
+        pendingHerdrReports = pendingHerdrReports.filter { live.contains($0.key) || monitors[$0.key] == nil }
+        pendingHerdrProjectPaths = pendingHerdrProjectPaths.filter { live.contains($0.key) || monitors[$0.key] == nil }
         for uuid in monitors.keys where !live.contains(uuid) {
             topologyChanged = true
             monitors.removeValue(forKey: uuid)
@@ -1728,6 +1810,10 @@ final class AgentAttentionCenter {
         )
         // Peeled chrome declares a multiplexer nothing configured.
         monitor.noteMultiplexerChrome(input.hadMultiplexerChrome)
+
+        // herdr owns identity and state here; the screen only served the
+        // project bookkeeping above. (id=herdr-agent-authority)
+        if monitor.externalAuthority { return true }
 
         if monitor.agent == nil {
             if AgentAttentionSettings.detectionEnabled,

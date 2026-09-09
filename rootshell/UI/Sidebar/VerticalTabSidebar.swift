@@ -306,6 +306,7 @@ struct VerticalTabSidebar: View {
     // Context-menu dialog state (rename window/session, detach). Shared
     // with the top tab bar via TmuxTabMenu.swift.
     @State private var tmuxDialogs = TmuxTabDialogCoordinator()
+    @State private var herdrDialogs = HerdrTabDialogCoordinator()
 
     // Keyboard navigation: arrow keys move the highlight, Return selects,
     // typing filters. The search field is a UIKit-backed `SidebarSearchField`
@@ -659,6 +660,7 @@ struct VerticalTabSidebar: View {
         .ignoresSafeArea(.keyboard)
         .background(sidebarShortcutCatchers)
         .tmuxTabDialogs(coordinator: tmuxDialogs, controller: tmuxController)
+        .herdrTabDialogs(coordinator: herdrDialogs)
         .sheet(item: $dashboardRequest) { request in
             TmuxSessionDashboardView(controller: request.controller)
                 .themedSheet(
@@ -1918,10 +1920,12 @@ struct VerticalTabSidebar: View {
     private func flatRowMenu(for tab: TabModel) -> some View {
         connectionAddressCopyItems(for: tab)
         connectionInfoItem(for: tab)
+        HerdrTabMenuItems(tab: tab, dialogs: herdrDialogs)
         transferAndThemeItems(for: tab)
         moveToWindowItems(for: tab)
         groupOverrideMenuItem(for: tab)
         Divider()
+        HerdrGatewayDetachMenuItem(tab: tab, dialogs: herdrDialogs)
         Button(role: .destructive) {
             onCloseTab(tab.id)
         } label: {

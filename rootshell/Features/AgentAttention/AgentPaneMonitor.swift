@@ -39,8 +39,15 @@ final class AgentPaneMonitor {
         case title
         case screen
         case command
+        /// A multiplexer (herdr control mode) reported it out of band.
+        case external
     }
     private(set) var identitySource: IdentitySource?
+
+    /// herdr reports this pane's agent and its state; screen classification,
+    /// title identity, and settle-based completion stand down while set.
+    /// (id=herdr-agent-authority)
+    private(set) var externalAuthority = false
 
     /// This pane is showing a multiplexer the app does not drive, so its
     /// screen is ONE window of several and the visible window can change
@@ -525,7 +532,7 @@ final class AgentPaneMonitor {
     /// doneUnseen when the tab isn't viewed).
     @discardableResult
     func updateLivenessEdges(now: Date) -> Bool {
-        guard agent != nil else {
+        guard agent != nil, !externalAuthority else {
             pendingDoneSince = nil
             return false
         }
@@ -725,6 +732,75 @@ final class AgentPaneMonitor {
         startupGraceUntil = isSwitch ? now.addingTimeInterval(Tuning.startupGrace) : nil
         refreshScreenEvent(now: now)
         return true
+    }
+
+    /// Applies a herdr agent report. A report with no agent hands the pane
+    /// back to the screen detector. Returns true when display state changed.
+    /// (id=herdr-agent-authority)
+    @discardableResult
+    func applyExternalReport(
+        status: AgentAttentionStatus,
+        agentID: String?,
+        displayName: String?,
+        now: Date,
+        seq: () -> UInt64
+    ) -> Bool {
+        guard let agentID, status != .unknown else {
+            let had = externalAuthority
+            externalAuthority = false
+            if had, agent != nil {
+                clearAgent()
+                return true
+            }
+            return had
+        }
+        var changed = !externalAuthority
+        externalAuthority = true
+        if agent?.id != agentID {
+            let known = AgentDetectionManifest.bundled.agent(withID: agentID)
+                ?? AgentDetectionManifest.Agent(
+                    id: agentID,
+                    displayName: displayName ?? agentID,
+                    commands: [],
+                    titlePatterns: [],
+                    screenSignatures: [],
+                    rules: []
+                )
+            changed = adoptAgent(known, source: .external, now: now) || changed
+            startupGraceUntil = nil
+        }
+        let newState: AgentScreenState
+        switch status {
+        case .idle, .done, .failed: newState = .idle
+        case .working, .paused: newState = .working
+        case .blocked: newState = .blocked
+        case .unknown: newState = .unknown
+        }
+        if stableState != newState {
+            changed = commit(newState, now: now, seq: seq) || changed
+        }
+        // herdr's word is final: no settle window promotes idle to done.
+        pendingDoneSince = nil
+        switch status {
+        case .done, .failed:
+            if finishedAt == nil { finishedAt = now }
+            workingSince = nil
+            if !isViewedNow() {
+                if status == .done, !doneUnseen {
+                    doneUnseen = true
+                    eventState.recordCompletion(.done)
+                    changed = true
+                } else if status == .failed, !failedUnseen {
+                    failedUnseen = true
+                    eventState.recordCompletion(.failed)
+                    changed = true
+                }
+            }
+            refreshScreenEvent(now: now)
+        default:
+            break
+        }
+        return changed
     }
 
     func clearAgent() {

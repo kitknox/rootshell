@@ -348,6 +348,7 @@ struct TabBar: View {
     /// (TmuxTabMenu.swift). TabBar is a stable child of MainView, so this
     /// @State persists across menu presentations.
     @State private var tmuxDialogs = TmuxTabDialogCoordinator()
+    @State private var herdrDialogs = HerdrTabDialogCoordinator()
 
     /// Gates the attention dot on tabs. (id=agent-attention)
     @Setting(Settings.CodingAgents.attentionBadges) private var attentionBadgesEnabled
@@ -371,6 +372,7 @@ struct TabBar: View {
         // 32pt pill aligns with the full-height add/settings controls.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .tmuxTabDialogs(coordinator: tmuxDialogs, controller: tmuxController)
+        .herdrTabDialogs(coordinator: herdrDialogs)
         .overlay {
             if canAcceptWindowTransferDrop {
                 Color.clear
@@ -527,6 +529,7 @@ struct TabBar: View {
             onNewTmuxWindow: onNewTmuxWindow,
             onShowTmuxSessions: onShowTmuxSessions
         )
+        HerdrTabMenuItems(tab: tab, dialogs: herdrDialogs)
         if canTransferToNearby(tab) {
             Button {
                 onTransferToNearby(tab)
@@ -580,6 +583,7 @@ struct TabBar: View {
             controller: tmuxController(tab),
             dialogs: tmuxDialogs
         )
+        HerdrGatewayDetachMenuItem(tab: tab, dialogs: herdrDialogs)
         Button(role: .destructive) {
             onCloseTab(index)
         } label: {

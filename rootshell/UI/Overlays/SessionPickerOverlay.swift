@@ -203,11 +203,18 @@ struct SessionPickerOverlay: View {
         .padding(.vertical, compact ? 8 : 10)
     }
 
+    /// The host's herdr lacks control streams: control mode still works,
+    /// but with server-rendered panes and polled topology.
+    private var herdrControlIsDegraded: Bool {
+        sessions.contains { $0.type == .herdr && $0.supportsControlStream == false }
+    }
+
     @ViewBuilder
     private func herdrAttachModeToggle(compact: Bool) -> some View {
         Toggle(isOn: herdrControlModeBinding) {
             Label {
-                Text(isMixed ? "herdr control mode" : "Control mode")
+                let base = isMixed ? "herdr control mode" : "Control mode"
+                Text(herdrControlIsDegraded ? "\(base) (degraded, upgrade herdr)" : base)
                     .font(.system(size: compact ? 12 : 14, weight: .medium))
             } icon: {
                 Image(systemName: MultiplexerType.herdr.iconName)

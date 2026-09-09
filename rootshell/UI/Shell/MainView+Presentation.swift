@@ -195,6 +195,12 @@ extension MainView {
             } message: {
                 Text("Choose what to do with this tmux control-mode tab.")
             }
+            // Kept as a modifier: inlining another dialog here pushes this
+            // chain past the type-checker's budget.
+            .modifier(HerdrCloseTabDialogModifier(
+                pendingTabID: $pendingHerdrCloseTabID,
+                run: { action in runPendingHerdrClose(action) }
+            ))
             .confirmationDialog(
                 "New Tab",
                 isPresented: Binding(
@@ -453,4 +459,31 @@ extension MainView {
             }
     }
 
+}
+
+/// "Ask Each Time" close of a herdr control-mode tab: close on the host,
+/// detach, or detach and close the gateway.
+private struct HerdrCloseTabDialogModifier: ViewModifier {
+    @Binding var pendingTabID: UUID?
+    let run: (TmuxTabCloseAction) -> Void
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(
+            "Close herdr Tab",
+            isPresented: Binding(
+                get: { pendingTabID != nil },
+                set: { if !$0 { pendingTabID = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Close herdr Tab") { run(.closeWindow) }
+                .keyboardShortcut(.defaultAction)
+            Button("Detach from herdr") { run(.detachSession) }
+            Button("Detach & Close Gateway") { run(.detachSessionAndCloseGateway) }
+            Button("Cancel", role: .cancel) { pendingTabID = nil }
+                .keyboardShortcut(.cancelAction)
+        } message: {
+            Text("Closing removes the tab from the herdr session on the host. Detaching leaves the session running and returns the gateway tab to its shell.")
+        }
+    }
 }
