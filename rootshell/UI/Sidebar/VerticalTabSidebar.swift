@@ -103,7 +103,7 @@ private struct TabGroupHeaderIcon: View {
         switch groupID.kind {
         case .remoteDomain, .remoteHost:
             return domainCandidate(groupID.value)
-        case .local, .remoteNetwork, .tmux, .herdrWorkspace, .other:
+        case .local, .remoteNetwork, .tmux, .herdr, .other:
             return nil
         }
     }
@@ -462,6 +462,9 @@ struct VerticalTabSidebar: View {
         case hiddenHeader(ownerID: UUID, count: Int, expanded: Bool)
         /// A hidden tmux window, listed under the expanded disclosure.
         case hiddenWindowRow
+        /// A herdr workspace inside a gateway family, when the session has
+        /// more than one. `tab` is the workspace's first projected tab.
+        case herdrWorkspaceHeader(ownerID: UUID, workspaceId: String, title: String, count: Int, collapsed: Bool)
         /// Section header for the project-grouped inbox. `count` is the number
         /// of agent tabs inside; `rollup` is their worst attention state, shown
         /// in place of the chevron while collapsed so a folded section still
@@ -510,6 +513,9 @@ struct VerticalTabSidebar: View {
             if case .groupHeader(let groupID, _, _, _, _) = kind { return "group-\(groupID.rawValue)" }
             if case .hiddenHeader = kind { return "hidden-\(tab.id.uuidString)" }
             if case .projectHeader(let key, _, _, _, _) = kind { return "project-\(key)" }
+            if case .herdrWorkspaceHeader(let ownerID, let workspaceId, _, _, _) = kind {
+                return "herdr-ws-\(ownerID.uuidString)-\(workspaceId)"
+            }
             if case .agentPane(let paneID) = kind {
                 return "pane-\(tab.id.uuidString)-\(paneID.uuidString)"
             }
@@ -522,7 +528,8 @@ struct VerticalTabSidebar: View {
                 return .none
             case .flat:
                 return .local
-            case .gatewayHeader, .agentPane, .hiddenHeader, .hiddenWindowRow, .projectHeader:
+            case .gatewayHeader, .agentPane, .hiddenHeader, .hiddenWindowRow, .projectHeader,
+                    .herdrWorkspaceHeader:
                 return .none
             case .windowRow:
                 // Placeholders have no server window to move yet.
@@ -540,8 +547,9 @@ struct VerticalTabSidebar: View {
             case .groupHeader(let groupID, _, _, _, _):
                 return groupID
             case .gatewayHeader(_, _, let ownerID):
-                return .tmux(ownerID: ownerID)
-            case .flat, .windowRow, .agentPane, .hiddenHeader, .hiddenWindowRow, .projectHeader:
+                return tab.isHerdrGateway ? .herdr(ownerID: ownerID) : .tmux(ownerID: ownerID)
+            case .flat, .windowRow, .agentPane, .hiddenHeader, .hiddenWindowRow, .projectHeader,
+                    .herdrWorkspaceHeader:
                 return nil
             }
         }
@@ -671,16 +679,22 @@ struct VerticalTabSidebar: View {
         }
         .onChange(of: collapsedGateways) { _, newValue in
             let known = Set(tabsModel.tabs.compactMap { tab -> UUID? in
-                guard tab.isTmuxGateway || tab.isTmuxWindow else { return nil }
-                return TmuxTabBadgeResolver.ownerID(for: tab)
+                if tab.isTmuxGateway || tab.isTmuxWindow {
+                    return TmuxTabBadgeResolver.ownerID(for: tab)
+                }
+                return TmuxTabBadgeResolver.herdrOwnerID(for: tab)
             })
             TabSidebarCollapseStore.save(newValue, knownGateways: known)
         }
         .onChange(of: collapsedGroups) { _, newValue in
-            TabSidebarGroupCollapseStore.save(
-                newValue,
-                knownGroups: Set(tabsModel.availableGroups.map { $0.id.rawValue })
-            )
+            // herdr workspace headers collapse under their own keys, which
+            // no group id carries.
+            var known = Set(tabsModel.availableGroups.map { $0.id.rawValue })
+            for tab in tabsModel.tabs where tab.isHerdrWindow {
+                guard let ownerID = tab.owningGatewayTerminalUUID, let workspaceId = tab.herdrWorkspaceId else { continue }
+                known.insert(Self.herdrWorkspaceCollapseKey(ownerID: ownerID, workspaceId: workspaceId))
+            }
+            TabSidebarGroupCollapseStore.save(newValue, knownGroups: known)
         }
         .onChange(of: tabsModel.availableGroups.map { $0.id.rawValue }) { _, _ in
             if !canReorderSections {
@@ -1167,6 +1181,8 @@ struct VerticalTabSidebar: View {
             } else {
                 toggleGatewayCollapse(ownerID)
             }
+        case .herdrWorkspaceHeader(let ownerID, let workspaceId, _, _, _):
+            toggleHerdrWorkspaceCollapse(ownerID: ownerID, workspaceId: workspaceId)
         default:
             activateRow(row)
         }
@@ -1189,6 +1205,8 @@ struct VerticalTabSidebar: View {
             }
         case .hiddenWindowRow:
             showHiddenWindow(row.tab)
+        case .herdrWorkspaceHeader(let ownerID, let workspaceId, _, _, _):
+            toggleHerdrWorkspaceCollapse(ownerID: ownerID, workspaceId: workspaceId)
         case .gatewayHeader:
             // A hidden gateway keeps its header as the group's structure;
             // activating it shows + selects. (id=tmux-hidden-gateway)
@@ -1220,6 +1238,21 @@ struct VerticalTabSidebar: View {
                 collapsedGroups.remove(groupID.rawValue)
             } else {
                 collapsedGroups.insert(groupID.rawValue)
+            }
+        }
+    }
+
+    private static func herdrWorkspaceCollapseKey(ownerID: UUID, workspaceId: String) -> String {
+        "herdr-ws:\(ownerID.uuidString.lowercased())/\(workspaceId)"
+    }
+
+    private func toggleHerdrWorkspaceCollapse(ownerID: UUID, workspaceId: String) {
+        let key = Self.herdrWorkspaceCollapseKey(ownerID: ownerID, workspaceId: workspaceId)
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            if collapsedGroups.contains(key) {
+                collapsedGroups.remove(key)
+            } else {
+                collapsedGroups.insert(key)
             }
         }
     }
@@ -1265,6 +1298,8 @@ struct VerticalTabSidebar: View {
     private func showHiddenGateway(_ tab: TabModel) {
         if let controller = tmuxController(tab) {
             controller.showGatewayTab(andSelect: true)
+        } else if tab.isHerdrGateway, let controller = HerdrController.controller(forAnyTab: tab) {
+            controller.showGatewayTab()
         } else {
             tab.isHiddenTmuxWindow = false
             onSelectTab(tab.id)
@@ -1296,6 +1331,7 @@ struct VerticalTabSidebar: View {
         let isDocked: Bool
         let staysOpenOnSelect: Bool
         let tmuxDialogs: ObjectIdentifier
+        let herdrDialogs: ObjectIdentifier
         let presentation: Presentation
     }
 
@@ -1311,12 +1347,13 @@ struct VerticalTabSidebar: View {
             isDocked: isDocked,
             staysOpenOnSelect: staysOpenOnSelect,
             tmuxDialogs: ObjectIdentifier(tmuxDialogs),
+            herdrDialogs: ObjectIdentifier(herdrDialogs),
             presentation: presentation
         )
     }
 
     /// Header text/count/collapse state lives in RowKind. These are the
-    /// remaining inputs used by group header labels.
+    /// remaining inputs used by group and herdr workspace header labels.
     private struct SidebarHeaderMenuPresentation: Equatable {
         let indentLevel: Int
         let isHighlighted: Bool
@@ -1363,14 +1400,6 @@ struct VerticalTabSidebar: View {
                         isHighlighted: isHighlighted
                     )
                 } menu: {
-                    // A herdr workspace group stands in for the gateway
-                    // header a tmux family gets: same admin and detach items.
-                    if groupID.kind == .herdrWorkspace,
-                       let member = tabsModel.tabs.first(where: { tabsModel.effectiveGroupID(for: $0) == groupID }) {
-                        HerdrTabMenuItems(tab: member, dialogs: herdrDialogs)
-                        Divider()
-                        HerdrGatewayDetachMenuItem(tab: member, dialogs: herdrDialogs)
-                    }
                     moveGroupToWindowItems(for: groupID, isGateway: false)
                 }
                 .equatable()
@@ -1387,7 +1416,31 @@ struct VerticalTabSidebar: View {
                 SidebarContextMenuRow(identity: menuRowIdentity(for: row, presentation: header)) {
                     header
                 } menu: {
-                    gatewayHeaderMenu(for: row.tab, ownerID: ownerID)
+                    if row.tab.isHerdrGateway {
+                        herdrGatewayHeaderMenu(for: row.tab)
+                    } else {
+                        gatewayHeaderMenu(for: row.tab, ownerID: ownerID)
+                    }
+                }
+                .equatable()
+            case .herdrWorkspaceHeader(_, _, let title, let count, let collapsed):
+                SidebarContextMenuRow(
+                    identity: menuRowIdentity(for: row, presentation: SidebarHeaderMenuPresentation(
+                        indentLevel: row.visualIndentLevel,
+                        isHighlighted: isHighlighted,
+                        metrics: metrics,
+                        accentTint: accentTint
+                    ))
+                ) {
+                    herdrWorkspaceHeaderRow(
+                        row: row,
+                        title: title,
+                        count: count,
+                        collapsed: collapsed,
+                        isHighlighted: isHighlighted
+                    )
+                } menu: {
+                    HerdrTabMenuItems(tab: row.tab, dialogs: herdrDialogs)
                 }
                 .equatable()
             case .hiddenHeader(let ownerID, let count, let expanded):
@@ -1649,7 +1702,7 @@ struct VerticalTabSidebar: View {
                     accentTint: accentTint,
                     onClose: {}
                 )
-            case .agentPane, .hiddenHeader, .projectHeader:
+            case .agentPane, .hiddenHeader, .projectHeader, .herdrWorkspaceHeader:
                 EmptyView()
             }
         }
@@ -1690,7 +1743,7 @@ struct VerticalTabSidebar: View {
             case .projectHeader, .flat, .windowRow:
                 return true
             case .groupHeader, .gatewayHeader, .agentPane, .hiddenHeader,
-                    .hiddenWindowRow:
+                    .hiddenWindowRow, .herdrWorkspaceHeader:
                 return false
             }
         }
@@ -1906,7 +1959,7 @@ struct VerticalTabSidebar: View {
         case .local: return "terminal"
         case .remoteHost, .remoteDomain, .remoteNetwork: return "network"
         case .tmux: return "rectangle.stack"
-        case .herdrWorkspace: return MultiplexerType.herdr.iconName
+        case .herdr: return MultiplexerType.herdr.iconName
         case .other: return "square.stack.3d.up"
         }
     }
@@ -2014,6 +2067,71 @@ struct VerticalTabSidebar: View {
             onCloseTab(tab.id)
         } label: {
             Label("Close Tab", systemImage: "xmark")
+        }
+    }
+
+    /// Context menu for a herdr gateway header: the family's admin items,
+    /// then detach ahead of the gateway's own close.
+    @ViewBuilder
+    private func herdrGatewayHeaderMenu(for tab: TabModel) -> some View {
+        connectionAddressCopyItems(for: tab)
+        connectionInfoItem(for: tab)
+        HerdrTabMenuItems(tab: tab, dialogs: herdrDialogs)
+        transferAndThemeItems(for: tab)
+        groupOverrideMenuItem(for: tab)
+        Divider()
+        HerdrGatewayDetachMenuItem(tab: tab, dialogs: herdrDialogs)
+        Button(role: .destructive) {
+            onCloseTab(tab.id)
+        } label: {
+            Label("Close Tab", systemImage: "xmark")
+        }
+    }
+
+    /// A workspace inside a herdr gateway family, between the gateway
+    /// header and the workspace's projected tabs.
+    private func herdrWorkspaceHeaderRow(
+        row: SidebarRow,
+        title: String,
+        count: Int,
+        collapsed: Bool,
+        isHighlighted: Bool
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "chevron.right")
+                .font(.system(size: metrics.rowIconSize - 2, weight: .semibold))
+                .foregroundColor(.secondary)
+                .rotationEffect(.degrees(collapsed ? 0 : 90))
+                .frame(width: metrics.rowButtonTarget, height: metrics.rowButtonTarget)
+
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: metrics.rowIconSize - 1))
+                .foregroundColor(.secondary)
+
+            Text(title)
+                .font(.system(size: metrics.subtitleSize + 1, weight: .medium))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+
+            if collapsed {
+                Text("(\(count))")
+                    .font(.system(size: metrics.subtitleSize, weight: .regular))
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 8)
+        .padding(.leading, CGFloat(row.visualIndentLevel) * 20)
+        .frame(height: max(32, metrics.rowHeight - 12))
+        .contentShape(Rectangle())
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isHighlighted ? accentTint.opacity(0.22) : .clear)
+        )
+        .onTapGesture {
+            highlightedRowID = row.id
+            activateRow(row)
         }
     }
 
@@ -2163,7 +2281,7 @@ struct VerticalTabSidebar: View {
                     toTargetID: target.tab.id
                 )
             case .groupHeader, .gatewayHeader, .agentPane, .hiddenHeader,
-                    .hiddenWindowRow, .projectHeader:
+                    .hiddenWindowRow, .projectHeader, .herdrWorkspaceHeader:
                 break
             }
             return
@@ -2211,11 +2329,20 @@ struct VerticalTabSidebar: View {
             onReorderClass(orderedIDs, draggingID)
 
         case .local:
+            // A projected herdr tab nested under its gateway reorders only
+            // among its workspace siblings: the sidebar nests the family by
+            // workspace, so a move across that boundary would show nowhere.
+            // One the user moved into an ordinary group renders flat there
+            // and drags like any other tab.
+            if isNestedUnderHerdrGateway(source.tab), !Self.isHerdrWorkspaceSibling(source.tab, target.tab) {
+                return
+            }
             if tabsModel.isGroupedModeEnabled {
                 switch target.kind {
                 case .flat, .gatewayHeader, .windowRow:
                     moveDraggedTab(draggingID, near: target.tab.id)
-                case .groupHeader, .agentPane, .hiddenHeader, .hiddenWindowRow, .projectHeader:
+                case .groupHeader, .agentPane, .hiddenHeader, .hiddenWindowRow, .projectHeader,
+                        .herdrWorkspaceHeader:
                     return
                 }
                 return
@@ -2231,7 +2358,8 @@ struct VerticalTabSidebar: View {
             switch target.kind {
             case .flat, .gatewayHeader:
                 break
-            case .groupHeader, .windowRow, .agentPane, .hiddenHeader, .hiddenWindowRow, .projectHeader:
+            case .groupHeader, .windowRow, .agentPane, .hiddenHeader, .hiddenWindowRow, .projectHeader,
+                    .herdrWorkspaceHeader:
                 return
             }
             // Live indices from the model (robust to a stale captured `rows`);
@@ -2275,14 +2403,31 @@ struct VerticalTabSidebar: View {
 
     private func firstMoveTarget(inGroup groupID: TabGroupID, excluding draggingID: UUID) -> UUID? {
         guard let group = tabsModel.availableGroups.first(where: { $0.id == groupID }) else { return nil }
-        if groupID.kind == .tmux,
+        if groupID.kind == .tmux || groupID.kind == .herdr,
            let gatewayID = group.tabIDs.first(where: { id in
                guard id != draggingID, let tab = tabsModel.tab(withID: id) else { return false }
-               return tab.isTmuxGateway
+               return tab.isTmuxGateway || tab.isHerdrGateway
            }) {
             return gatewayID
         }
         return group.tabIDs.first { $0 != draggingID }
+    }
+
+    /// Mirrors the row builders: grouped mode nests a projected tab under its
+    /// gateway only while its effective group is that family; flat mode
+    /// nests it whenever the gateway is in the list.
+    private func isNestedUnderHerdrGateway(_ tab: TabModel) -> Bool {
+        guard tab.isHerdrWindow, let owner = tab.owningGatewayTerminalUUID else { return false }
+        if tabsModel.isGroupedModeEnabled {
+            return tabsModel.effectiveGroupID(for: tab) == .herdr(ownerID: owner)
+        }
+        return tabsModel.tabs.contains { $0.isHerdrGateway && TmuxTabBadgeResolver.herdrOwnerID(for: $0) == owner }
+    }
+
+    private static func isHerdrWorkspaceSibling(_ source: TabModel, _ target: TabModel) -> Bool {
+        target.isHerdrWindow
+            && target.owningGatewayTerminalUUID == source.owningGatewayTerminalUUID
+            && target.herdrWorkspaceId == source.herdrWorkspaceId
     }
 
     private func moveDraggedTab(_ draggingID: UUID, near targetID: UUID) {
@@ -2375,13 +2520,18 @@ struct VerticalTabSidebar: View {
         gatewayOwnerIDs: [UUID]
     ) -> SidebarGatewayHeaderItem {
         let controller = tmuxController(row.tab)
-        let isActive = tabsModel.effectiveGroupID(for: tabsModel.selectedTab) == .tmux(ownerID: ownerID)
+        let isHerdr = row.tab.isHerdrGateway
+        let familyID: TabGroupID = isHerdr ? .herdr(ownerID: ownerID) : .tmux(ownerID: ownerID)
+        let isActive = tabsModel.effectiveGroupID(for: tabsModel.selectedTab) == familyID
+        let host: String? = isHerdr
+            ? tabsModel.groupHostLabel(for: row.tab)
+            // TmuxController is not observable, so this is a plain read and is
+            // safe to resolve at parent scope and compare in `==`.
+            : controller?.connectionKey ?? controller?.gatewaySourceDisplayName
         return SidebarGatewayHeaderItem(
             tab: row.tab,
             tmuxBadge: TmuxTabBadgeResolver.badge(for: row.tab, gatewayOwnerIDs: gatewayOwnerIDs),
-            // TmuxController is not observable, so this is a plain read and is
-            // safe to resolve at parent scope and compare in `==`.
-            host: controller?.connectionKey ?? controller?.gatewaySourceDisplayName,
+            host: host,
             collapsed: collapsed,
             windowCount: windowCount,
             isSelected: isSelected,
@@ -2390,10 +2540,17 @@ struct VerticalTabSidebar: View {
             indentLevel: row.indentLevel,
             metrics: metrics,
             accentTint: accentTint,
+            showsDashboard: !isHerdr,
             isDocked: isDocked,
             staysOpenOnSelect: staysOpenOnSelect,
             onToggleCollapse: { toggleGatewayCollapse(ownerID) },
-            onNewWindow: { onNewTmuxWindow(row.tab) },
+            onNewWindow: {
+                if isHerdr {
+                    HerdrController.controller(forGateway: ownerID)?.requestNewTab(inWorkspaceOf: nil)
+                } else {
+                    onNewTmuxWindow(row.tab)
+                }
+            },
             onShowDashboard: {
                 showTmuxSessionsLocally(row.tab)
             },
@@ -2687,6 +2844,10 @@ struct VerticalTabSidebar: View {
                 rows.append(contentsOf: buildTmuxGatewayGroupRows(from: groupTabs, ownerID: ownerID))
                 continue
             }
+            if let ownerID = group.id.herdrOwnerID {
+                rows.append(contentsOf: buildHerdrGatewayGroupRows(from: groupTabs, ownerID: ownerID))
+                continue
+            }
 
             let groupRows = buildRows(from: groupTabs).map { $0.indented() }
             let collapsed = !isFiltering && collapsedGroups.contains(group.id.rawValue)
@@ -2827,6 +2988,88 @@ struct VerticalTabSidebar: View {
         return rows
     }
 
+    /// A herdr gateway family: the gateway header, then its projected tabs
+    /// nested under workspace headers when the session has more than one
+    /// workspace. Same shape as a tmux family. (id=herdr-gateway-family)
+    private func buildHerdrGatewayGroupRows(from tabs: [TabModel], ownerID: UUID) -> [SidebarRow] {
+        let isFiltering = !normalizedSearchFilter.isEmpty
+
+        func matches(_ tab: TabModel) -> Bool {
+            !isFiltering || searchFilterMatches(tab)
+        }
+
+        guard let gateway = tabs.first(where: {
+                  $0.isHerdrGateway && TmuxTabBadgeResolver.herdrOwnerID(for: $0) == ownerID
+              }),
+              let gatewayFlatIndex = tabsModel.index(of: gateway.id) else {
+            return buildRows(from: tabs)
+        }
+
+        let children = tabs.filter { $0.id != gateway.id && !$0.isHiddenTmuxWindow }
+        let matchingChildren = children.filter(matches)
+        let headerMatches = matches(gateway)
+        if isFiltering && !headerMatches && matchingChildren.isEmpty {
+            return []
+        }
+
+        let collapsed = !isFiltering && collapsedGateways.contains(ownerID)
+        var rows = [
+            SidebarRow(
+                tab: gateway,
+                kind: .gatewayHeader(collapsed: collapsed, windowCount: children.filter(\.isHerdrWindow).count, ownerID: ownerID),
+                flatIndex: gatewayFlatIndex
+            )
+        ]
+        guard !collapsed else { return rows }
+
+        let shown = isFiltering ? (headerMatches ? children : matchingChildren) : children
+        var workspaceOrder: [String] = []
+        var byWorkspace: [String: [TabModel]] = [:]
+        var others: [TabModel] = []
+        for child in shown {
+            if child.isHerdrWindow, let workspaceId = child.herdrWorkspaceId {
+                if byWorkspace[workspaceId] == nil { workspaceOrder.append(workspaceId) }
+                byWorkspace[workspaceId, default: []].append(child)
+            } else {
+                others.append(child)
+            }
+        }
+
+        let showsWorkspaces = workspaceOrder.count > 1
+        for workspaceId in workspaceOrder {
+            let members = byWorkspace[workspaceId] ?? []
+            var indent = 1
+            if showsWorkspaces, let first = members.first {
+                let key = Self.herdrWorkspaceCollapseKey(ownerID: ownerID, workspaceId: workspaceId)
+                let workspaceCollapsed = !isFiltering && collapsedGroups.contains(key)
+                let title = members.lazy.compactMap(\.herdrWorkspaceLabel).first(where: { !$0.isEmpty }) ?? workspaceId
+                rows.append(SidebarRow(
+                    tab: first,
+                    kind: .herdrWorkspaceHeader(
+                        ownerID: ownerID,
+                        workspaceId: workspaceId,
+                        title: title,
+                        count: members.count,
+                        collapsed: workspaceCollapsed
+                    ),
+                    flatIndex: tabsModel.index(of: first.id) ?? gatewayFlatIndex,
+                    indentLevel: 1
+                ))
+                if workspaceCollapsed { continue }
+                indent = 2
+            }
+            for member in members {
+                guard let flatIndex = tabsModel.index(of: member.id) else { continue }
+                rows.append(SidebarRow(tab: member, kind: .flat, flatIndex: flatIndex, indentLevel: indent))
+            }
+        }
+        for other in others {
+            guard let flatIndex = tabsModel.index(of: other.id) else { continue }
+            rows.append(SidebarRow(tab: other, kind: .flat, flatIndex: flatIndex, indentLevel: 1))
+        }
+        return rows
+    }
+
     private func buildRows(from tabs: [TabModel]) -> [SidebarRow] {
         let filter = normalizedSearchFilter
         let isFiltering = !filter.isEmpty
@@ -2836,6 +3079,14 @@ struct VerticalTabSidebar: View {
         for tab in tabs where tab.isTmuxGateway {
             if let ownerID = TmuxTabBadgeResolver.ownerID(for: tab) {
                 gatewayByOwner[ownerID] = tab
+            }
+        }
+        // herdr families nest under their gateway here too; a projected tab
+        // whose gateway is absent from this list renders flat.
+        var herdrGatewayByOwner: [UUID: TabModel] = [:]
+        for tab in tabs where tab.isHerdrGateway {
+            if let ownerID = TmuxTabBadgeResolver.herdrOwnerID(for: tab) {
+                herdrGatewayByOwner[ownerID] = tab
             }
         }
 
@@ -2863,8 +3114,19 @@ struct VerticalTabSidebar: View {
                 // Emitted with its gateway group below.
                 continue
             }
+            if tab.isHerdrWindow,
+               let owner = tab.owningGatewayTerminalUUID,
+               herdrGatewayByOwner[owner] != nil {
+                continue
+            }
 
             guard let flatIndex = tabsModel.index(of: tab.id) else { continue }
+
+            if tab.isHerdrGateway, let ownerID = TmuxTabBadgeResolver.herdrOwnerID(for: tab) {
+                let family = [tab] + tabs.filter { $0.isHerdrWindow && $0.owningGatewayTerminalUUID == ownerID }
+                rows.append(contentsOf: buildHerdrGatewayGroupRows(from: family, ownerID: ownerID))
+                continue
+            }
 
             if tab.isTmuxGateway, let ownerID = TmuxTabBadgeResolver.ownerID(for: tab) {
                 let allWindows = windowsByOwner[ownerID] ?? []
@@ -3268,6 +3530,8 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
     let indentLevel: Int
     let metrics: SidebarMetrics
     let accentTint: Color
+    /// tmux offers its sessions dashboard; a herdr gateway has none.
+    var showsDashboard: Bool = true
     /// Included in equality because the tap callback's focus routing captures
     /// these values, even when the header's appearance is otherwise identical.
     let isDocked: Bool
@@ -3298,6 +3562,7 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
             && lhs.indentLevel == rhs.indentLevel
             && lhs.metrics == rhs.metrics
             && lhs.accentTint == rhs.accentTint
+            && lhs.showsDashboard == rhs.showsDashboard
             && lhs.isDocked == rhs.isDocked
             && lhs.staysOpenOnSelect == rhs.staysOpenOnSelect
             && lhs.previewAnchors === rhs.previewAnchors
@@ -3308,7 +3573,7 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
         // The tab's mirror, not controller.currentSessionName: TmuxController
         // isn't observable, so a rename wouldn't re-render this row.
         let subtitle = Self.subtitle(
-            sessionName: tab.tmuxSessionName,
+            sessionName: tab.tmuxSessionName ?? tab.herdrSessionName,
             host: host,
             collapsedWindowCount: collapsed ? windowCount : nil
         )
@@ -3355,18 +3620,20 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
                 }
                 .buttonStyle(.plain)
                 .frame(width: metrics.trailingAccessoryWidth, alignment: .center)
-                .help("New tmux window")
+                .help(showsDashboard ? "New tmux window" : "New herdr tab")
 
-                Button(action: onShowDashboard) {
-                    Image(systemName: "rectangle.stack")
-                        .font(.system(size: metrics.rowIconSize, weight: .medium))
-                        .foregroundColor(accentTint)
-                        .frame(width: metrics.rowButtonTarget, height: metrics.rowButtonTarget)
-                        .contentShape(Rectangle())
+                if showsDashboard {
+                    Button(action: onShowDashboard) {
+                        Image(systemName: "rectangle.stack")
+                            .font(.system(size: metrics.rowIconSize, weight: .medium))
+                            .foregroundColor(accentTint)
+                            .frame(width: metrics.rowButtonTarget, height: metrics.rowButtonTarget)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: metrics.trailingAccessoryWidth, alignment: .center)
+                    .help("tmux sessions")
                 }
-                .buttonStyle(.plain)
-                .frame(width: metrics.trailingAccessoryWidth, alignment: .center)
-                .help("tmux sessions")
 
                 SidebarRowCloseButton(
                     isCloseHovered: $isCloseHovered,

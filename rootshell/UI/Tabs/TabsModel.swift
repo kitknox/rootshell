@@ -51,7 +51,9 @@ nonisolated struct TabGroupID: Hashable, Codable, Sendable, Identifiable {
         case remoteDomain
         case remoteNetwork
         case tmux
-        case herdrWorkspace
+        /// A herdr control-mode family: the gateway tab and its projected
+        /// tabs, mirroring `.tmux`.
+        case herdr
         case other
     }
 
@@ -67,15 +69,18 @@ nonisolated struct TabGroupID: Hashable, Codable, Sendable, Identifiable {
         case .remoteDomain: return "domain:\(value)"
         case .remoteNetwork: return "network:\(value)"
         case .tmux: return "tmux:\(value)"
-        case .herdrWorkspace: return "herdr:\(value)"
+        case .herdr: return "herdr:\(value)"
         case .other: return "other:\(value)"
         }
     }
 
-    /// One group per herdr workspace per gateway, so two gateways attached
-    /// to sessions with the same workspace ids never merge.
-    static func herdrWorkspace(ownerID: UUID, workspaceId: String) -> TabGroupID {
-        TabGroupID(kind: .herdrWorkspace, value: "\(ownerID.uuidString.lowercased())/\(workspaceId)")
+    static func herdr(ownerID: UUID) -> TabGroupID {
+        TabGroupID(kind: .herdr, value: ownerID.uuidString.lowercased())
+    }
+
+    /// The gateway terminal UUID backing a `.herdr` group (nil for other kinds).
+    var herdrOwnerID: UUID? {
+        kind == .herdr ? UUID(uuidString: value) : nil
     }
 
     static let local = TabGroupID(kind: .local, value: "local")
@@ -114,7 +119,7 @@ nonisolated struct TabGroupID: Hashable, Codable, Sendable, Identifiable {
             return value
         case .tmux:
             return "tmux"
-        case .herdrWorkspace:
+        case .herdr:
             return "herdr"
         case .other:
             return value.isEmpty ? String(localized: "Other", comment: "Tab group title for uncategorized terminals") : value
@@ -1158,7 +1163,10 @@ final class TabsModel {
             return groupingCache
         }
 
-        let groupableTabs = tabs.filter { !$0.isHiddenTmuxWindow || $0.isTmuxGateway || $0.isTmuxWindow }
+        // A hidden gateway still heads its family, tmux or herdr.
+        let groupableTabs = tabs.filter {
+            !$0.isHiddenTmuxWindow || $0.isTmuxGateway || $0.isTmuxWindow || $0.isHerdrGateway || $0.isHerdrWindow
+        }
         let visibleTabs = tabs.filter { !$0.isHiddenTmuxWindow }
         let autoIDs = autoGroupIDs(for: groupableTabs)
         let validIDs = Set(autoIDs.values)
@@ -1174,11 +1182,16 @@ final class TabsModel {
             if buckets[id] == nil { order.append(id) }
             buckets[id, default: []].append(tab.id)
         }
+        let byID = Dictionary(uniqueKeysWithValues: groupableTabs.map { ($0.id, $0) })
         for (groupID, tabIDs) in buckets {
-            buckets[groupID] = TabOrderRules.applyingPreferredOrder(
+            var ordered = TabOrderRules.applyingPreferredOrder(
                 sidebarGroupTabOrders[groupID.rawValue] ?? [],
                 to: tabIDs
             )
+            if groupID.kind == .herdr {
+                ordered = Self.groupedByHerdrWorkspace(ordered, byID: byID)
+            }
+            buckets[groupID] = ordered
         }
 
         let snapshot = GroupingSnapshot(
@@ -1190,6 +1203,32 @@ final class TabsModel {
         )
         groupingCache = snapshot
         return snapshot
+    }
+
+    /// A herdr family reads gateway first, then each workspace's projected
+    /// tabs contiguous in the order the workspaces first appear. The sidebar
+    /// nests the family that way, so navigation must agree with it whatever
+    /// order a drag left in the preferred list.
+    private static func groupedByHerdrWorkspace(_ ids: [UUID], byID: [UUID: TabModel]) -> [UUID] {
+        var gateway: [UUID] = []
+        var workspaceOrder: [String] = []
+        var byWorkspace: [String: [UUID]] = [:]
+        var rest: [UUID] = []
+        for id in ids {
+            guard let tab = byID[id] else {
+                rest.append(id)
+                continue
+            }
+            if tab.isHerdrGateway {
+                gateway.append(id)
+            } else if tab.isHerdrWindow, let workspaceId = tab.herdrWorkspaceId {
+                if byWorkspace[workspaceId] == nil { workspaceOrder.append(workspaceId) }
+                byWorkspace[workspaceId, default: []].append(id)
+            } else {
+                rest.append(id)
+            }
+        }
+        return gateway + workspaceOrder.flatMap { byWorkspace[$0] ?? [] } + rest
     }
 
     private func navigationSnapshot() -> NavigationSnapshot {
@@ -1825,13 +1864,15 @@ final class TabsModel {
     }
 
     private func groupTitle(for id: TabGroupID, tabIDs: [UUID], byID: [UUID: TabModel]) -> String {
-        if id.kind == .herdrWorkspace {
-            // Workspace label, then the session it belongs to.
+        if id.kind == .herdr {
+            // Session name, then host: the same shape as a tmux family.
             let tabs = tabIDs.compactMap { byID[$0] }
-            let label = tabs.lazy.compactMap(\.herdrWorkspaceLabel).first(where: { !$0.isEmpty })
-            let session = tabs.first?.owningGatewayTerminalUUID
-                .flatMap { HerdrController.controller(forGateway: $0)?.sessionName }
-            return TabOrderRules.scopeTitle(components: [label, session], fallback: id.title)
+            let gateway = tabs.first(where: { $0.isHerdrGateway })
+            let session = gateway?.herdrSessionName
+                ?? tabs.first?.owningGatewayTerminalUUID
+                    .flatMap { HerdrController.controller(forGateway: $0)?.sessionName }
+            let host = gateway.flatMap { groupHostLabel(for: $0) }
+            return TabOrderRules.scopeTitle(components: [session, host], fallback: id.title)
         }
         guard id.kind == .tmux else { return id.title }
         if let gateway = tabIDs.compactMap({ byID[$0] }).first(where: { $0.isTmuxGateway }) {
@@ -1981,9 +2022,8 @@ final class TabsModel {
 
         var ids: [UUID: TabGroupID] = [:]
         for tab in groupableTabs {
-            if tab.isHerdrWindow, let ownerID = tab.owningGatewayTerminalUUID,
-               let workspaceId = tab.herdrWorkspaceId {
-                ids[tab.id] = .herdrWorkspace(ownerID: ownerID, workspaceId: workspaceId)
+            if let ownerID = TmuxTabBadgeResolver.herdrOwnerID(for: tab) {
+                ids[tab.id] = .herdr(ownerID: ownerID)
             } else if let ownerID = Self.tmuxOwnerID(for: tab) {
                 ids[tab.id] = .tmux(ownerID: ownerID)
             } else if let host = hostByTab[tab.id] {
@@ -2021,6 +2061,12 @@ final class TabsModel {
         }
         let hasLiveTmuxPane = tab.splitTree.contains { $0.asTerminal?.tmuxPaneBinding != nil }
         return hasLiveTmuxPane ? tab.owningGatewayTerminalUUID : nil
+    }
+
+    /// The host a tab's connection groups under, for labels outside the
+    /// grouping itself (a gateway family's header).
+    func groupHostLabel(for tab: TabModel) -> String? {
+        Self.groupHost(for: tab, allTabs: tabs)
     }
 
     private static func groupHost(for tab: TabModel, allTabs: [TabModel]) -> String? {
