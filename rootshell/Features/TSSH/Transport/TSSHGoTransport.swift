@@ -799,6 +799,13 @@ final class TrzszGoTransport: NSObject {
         return TrzszExecPipe(channelRef: channelRef, transportRef: tRef)
     }
 
+    func openPTYChannel(_ command: String, cols: Int, rows: Int) async throws -> HerdrPTYChannel {
+        guard let transportRef else { throw TrzszError.connectionFailed("No transport for auxiliary PTY") }
+        return try await HerdrTSSHPTYChannel.open(
+            transport: transportRef, command: command, term: terminalType, cols: cols, rows: rows
+        )
+    }
+
     /// Opens a session stream with PTY
     /// - Parameters:
     ///   - cols: Terminal columns

@@ -140,7 +140,7 @@ extension Ghostty.TerminalView {
 
     // MARK: - Scroll Event Helper
 
-    /// Send native scroll deltas to the captured terminal app.
+    /// Send scroll deltas to the captured application or server viewport.
     func sendNativeScrollEvent(deltaX: CGFloat, deltaY: CGFloat) {
         guard let surface = surface else { return }
         guard abs(deltaX) > 0.1 || abs(deltaY) > 0.1 else { return }
@@ -149,6 +149,11 @@ extension Ghostty.TerminalView {
         let scrollPosition = lastMousePosition != .zero
             ? lastMousePosition
             : CGPoint(x: bounds.width / 2, y: bounds.height / 2)
+
+        if usesHerdrFallbackScrolling && !ghostty_surface_mouse_captured(surface) {
+            sendHerdrFallbackScroll(deltaY: deltaY, at: scrollPosition)
+            return
+        }
 
         ghostty_surface_mouse_pos(
             surface,
@@ -332,7 +337,7 @@ extension Ghostty.TerminalView {
         #if targetEnvironment(macCatalyst)
         return !trackpadSwipeBindingsAllDisabled
         #else
-        return isTouchScrollMode && !isMouseCaptured && !trackpadSwipeBindingsAllDisabled
+        return isTouchScrollMode && !isMouseCaptured && !usesHerdrFallbackScrolling && !trackpadSwipeBindingsAllDisabled
         #endif
     }
 
@@ -827,19 +832,19 @@ extension Ghostty.TerminalView {
         setupTrackpadTabSwipe()
 
         // Observe capture mode changes to enable/disable gestures
-        iosCaptureCancellable = $isMouseCaptured
+        iosCaptureCancellable = $isMouseCaptured.combineLatest($usesHerdrFallbackScrolling)
+            .removeDuplicates { $0.0 == $1.0 && $0.1 == $1.1 }
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] isCaptured in
+            .sink { [weak self] isCaptured, fallbackScrolling in
                 guard let self else { return }
                 let scrollMode = self.isTouchScrollMode
+                let forwardsScroll = isCaptured || fallbackScrolling
 
-                // Enable gestures in capture mode (UIScrollView is disabled)
-                // Disable gestures in non-capture mode (UIScrollView handles with momentum)
-                self.trackpadScrollGesture?.isEnabled = isCaptured
-                self.twoFingerScrollGesture?.isEnabled = isCaptured
+                // Server scrollback uses these gestures even at a shell prompt.
+                self.trackpadScrollGesture?.isEnabled = forwardsScroll
+                self.twoFingerScrollGesture?.isEnabled = forwardsScroll
 
-                // Enable capture scroll gestures when both captured AND in scroll mode
-                self.captureScrollPanGesture?.isEnabled = isCaptured && scrollMode
+                self.captureScrollPanGesture?.isEnabled = forwardsScroll && scrollMode
                 self.captureLongPressGesture?.isEnabled = isCaptured && scrollMode
 
                 // Update selection long press - disable during capture even in scroll mode

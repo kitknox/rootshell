@@ -2355,15 +2355,16 @@ extension Ghostty.TerminalView {
 
     func handleMouseUp(at point: CGPoint) {
         stopCaptureAutoScroll()
+        defer {
+            mousePressed = false
+            selectionMouseDragActive = false
+        }
         guard let surface = surface else { return }
 
         let mods = currentMouseMods()
         let pixelPoint = viewToPixelCoordinates(point)
         ghostty_surface_mouse_pos(surface, pixelPoint.x, pixelPoint.y, mods)
         sendMouseButton(GHOSTTY_MOUSE_RELEASE, button: Self.pressedMouseButton, mods: mods)
-
-        mousePressed = false
-        selectionMouseDragActive = false
     }
 }
 
@@ -2916,7 +2917,7 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
             if isMouseCaptured != captured {
                 isMouseCaptured = captured
             }
-            guard captured else { return false }
+            guard captured || usesHerdrFallbackScrolling else { return false }
             // The scroll-wheel forwarding gesture and the dedicated trackpad
             // tab-swipe gesture are mutually exclusive
             // (`shouldRecognizeSimultaneouslyWith` returns false). In capture
@@ -3050,7 +3051,7 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
             if horizontalIntent {
                 return false
             }
-            return scrollModeCaptureActive
+            return (isMouseCaptured || usesHerdrFallbackScrolling) && isTouchScrollMode
         }
         // Two-finger long press for new connection works in scroll mode even during capture
         if gestureRecognizer === twoFingerLongPressGesture && isMouseCaptured {

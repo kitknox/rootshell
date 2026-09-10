@@ -9,8 +9,30 @@
 //
 
 import Foundation
+import UIKit
 
 extension Ghostty.TerminalView {
+
+    /// Scroll the server viewport when the child has not requested the mouse.
+    /// Captured applications use Ghostty's usual protocol encoding instead.
+    func sendHerdrFallbackScroll(deltaY: CGFloat, at point: CGPoint) {
+        guard let pane = session as? HerdrPaneSession,
+              let stream = pane.controller?.legacyStreams[pane.terminalId],
+              let size = surfaceSize,
+              size.columns > 0, size.rows > 0,
+              size.cell_width_px > 0, size.cell_height_px > 0 else { return }
+        let scale = Double(contentScaleFactor)
+        let cellWidth = Double(size.cell_width_px) / scale
+        let cellHeight = Double(size.cell_height_px) / scale
+        let steps = herdrFallbackScroll.consume(delta: Double(deltaY), cellHeight: cellHeight)
+        guard steps != 0 else { return }
+        let padding = PaddingManager.shared.configPadding()
+        stream.sendScroll(
+            steps: steps,
+            column: min(Int(size.columns), Int(max(0, Double(point.x) - Double(padding.x)) / cellWidth) + 1),
+            row: min(Int(size.rows), Int(max(0, Double(point.y) - Double(padding.y)) / cellHeight) + 1)
+        )
+    }
 
     /// Whether this terminal can carry a herdr control stream: the same raw
     /// byte transports that allow tmux -CC.

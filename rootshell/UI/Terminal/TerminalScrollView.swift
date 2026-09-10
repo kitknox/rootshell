@@ -261,9 +261,10 @@ extension Ghostty {
             isCaptured = false
         }
 
-        // In capture mode, route touches directly to terminalView
-        // This bypasses UIScrollView's touch interception
-        if isCaptured {
+        // Captured apps and server scrollback use TerminalView's gestures.
+        // Bypass UIScrollView's touch interception; pointer capture remains
+        // independent so uncaptured fallback panes can select text normally.
+        if isCaptured || terminalView.usesHerdrFallbackScrolling {
             // But first check if the touch lands on an interactive floating
             // overlay so it still receives taps during mouse capture — otherwise
             // the in-bounds fall-through below hands the touch to terminalView
@@ -685,10 +686,12 @@ extension Ghostty {
 
     private func setupMouseCaptureObserver() {
         // Observe mouse capture state to toggle scroll behavior
-        mouseCapturedCancellable = terminalView.$isMouseCaptured
+        mouseCapturedCancellable = terminalView.$isMouseCaptured.combineLatest(terminalView.$usesHerdrFallbackScrolling)
+            .removeDuplicates { $0.0 == $1.0 && $0.1 == $1.1 }
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] isCaptured in
+            .sink { [weak self] isCaptured, fallbackScrolling in
                 guard let self = self else { return }
+                let forwardsScroll = isCaptured || fallbackScrolling
 
                 // In mouse capture mode (tmux, vim):
                 // - Disable UIScrollView scrolling AND its pan gesture
@@ -696,19 +699,19 @@ extension Ghostty {
                 // - Remove UIContextMenuInteraction (its gesture cancels touches)
                 // - TerminalView's gesture recognizer handles scroll wheel → mouse_scroll
                 //
-                // In non-capture mode:
+                // Without capture or server scrollback:
                 // - iOS/iPadOS: UIScrollView handles scrolling with native momentum
                 // - Mac Catalyst: UIScrollView handles native momentum while
                 //   TerminalView stays pinned under its blank range model
                 // - scrollViewDidScroll → scroll_to_row for Ghostty scrollback
-                // - Context menu available for copy/paste
+                // Context menus depend only on actual pointer capture.
                 // Prevent scroll view from cancelling touches delivered to terminal
-                self.scrollView.canCancelContentTouches = !isCaptured
+                self.scrollView.canCancelContentTouches = !forwardsScroll
 
                 #if targetEnvironment(macCatalyst)
-                self.scrollView.panGestureRecognizer.isEnabled = !isCaptured
+                self.scrollView.panGestureRecognizer.isEnabled = !forwardsScroll
                 #else
-                self.scrollView.panGestureRecognizer.isEnabled = !isCaptured
+                self.scrollView.panGestureRecognizer.isEnabled = !forwardsScroll
                 // Remove/add context menu interaction on iOS/iPadOS only
                 // UIContextMenuInteraction's internal gesture recognizer cancels touches,
                 // which breaks tmux divider dragging on iPad
@@ -773,12 +776,13 @@ extension Ghostty {
     /// still renders the terminal.
     private func applyVerticalScrollState(isCaptured: Bool) {
         let multiplexerActive = terminalView.multiplexerScrollActive
-        let nativeScrollActive = !isCaptured || multiplexerActive
+        let forwardsScroll = isCaptured || terminalView.usesHerdrFallbackScrolling
+        let nativeScrollActive = !forwardsScroll || multiplexerActive
         scrollView.showsVerticalScrollIndicator = nativeScrollActive
         scrollView.isScrollEnabled = nativeScrollActive
-        scrollView.panGestureRecognizer.isEnabled = !isCaptured
+        scrollView.panGestureRecognizer.isEnabled = !forwardsScroll
         updateRubberBandScrollBehavior()
-        if isCaptured || multiplexerActive {
+        if forwardsScroll || multiplexerActive {
             resetSmoothScrollOffset()
         }
     }
@@ -787,6 +791,7 @@ extension Ghostty {
         return useRubberBandScrollback &&
             !useLineScrollback &&
             !terminalView.isMouseCaptured &&
+            !terminalView.usesHerdrFallbackScrolling &&
             !terminalView.multiplexerScrollActive
     }
 
@@ -1421,7 +1426,8 @@ extension Ghostty {
 
         let workItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            let nativeScrollActive = !self.terminalView.isMouseCaptured || self.terminalView.multiplexerScrollActive
+            let nativeScrollActive = !(self.terminalView.isMouseCaptured || self.terminalView.usesHerdrFallbackScrolling)
+                || self.terminalView.multiplexerScrollActive
             self.scrollView.showsVerticalScrollIndicator = nativeScrollActive
             self.restoreNativeScrollIndicatorWorkItem = nil
         }

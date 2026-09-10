@@ -322,6 +322,10 @@ extension Ghostty {
             }
         }
 
+        /// Server-rendered panes own scrollback even when the application does
+        /// not capture the pointer. Keep scroll routing separate from selection.
+        @Published var usesHerdrFallbackScrolling = false
+
         /// User-toggled override that force-disables mouse reporting for this terminal.
         /// When active, native text selection and scrolling work even when the
         /// terminal program has mouse reporting enabled (tmux, vim, etc.).
@@ -1141,6 +1145,7 @@ extension Ghostty {
         // Mouse/trackpad state
         var mousePressed = false
         var selectionMouseDragActive = false
+        var herdrFallbackScroll = HerdrFallbackScroll()
 
         /// Last known mouse position for discrete scroll wheel events (Mac Catalyst)
         var lastMousePosition: CGPoint = .zero
@@ -1978,7 +1983,7 @@ extension Ghostty {
                 && !rightBinding.isAppTabNavigation
             appTabSwipePanGesture?.isEnabled = scrollMode
                 && (leftBinding.isAppTabNavigation || rightBinding.isAppTabNavigation)
-            captureScrollPanGesture?.isEnabled = scrollMode && captured
+            captureScrollPanGesture?.isEnabled = scrollMode && (captured || usesHerdrFallbackScrolling)
             captureLongPressGesture?.isEnabled = scrollMode && captured
             pinchZoomGesture?.isEnabled = scrollMode
             let twoFingerLongPressDuration = TwoFingerLongPressSetting.storedDuration()
@@ -4451,11 +4456,9 @@ extension Ghostty {
         }
 
         var shouldUseOutputCoalescer: Bool {
-            // tmux control mode gateway: the session output IS the control
-            // stream that drives every pane's reconcile + rendering, so it is
-            // latency-sensitive and must not be batched. Pane surfaces render
-            // from the viewer terminal and have no session at all.
-            if tmuxController != nil || isTmuxPane { return false }
+            // Multiplexer streams drive pane rendering. Herdr already frames
+            // synchronized output; batching it again adds latency to typed echo.
+            if tmuxController != nil || herdrController != nil || isMultiplexerPane { return false }
             switch connectionConfig {
             case .ssh, .local:
                 return true

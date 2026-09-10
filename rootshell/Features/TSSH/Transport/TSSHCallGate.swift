@@ -579,6 +579,24 @@ actor TSSHCallGate {
         }
     }
 
+    func openExecPTY(on ref: TSSHTransportRef, command: String, term: String, rows: Int, cols: Int) async throws -> Int64 {
+        let transport = registry.withLock { $0.transports[ref] }
+        guard let transport else { throw TSSHCallGateError.unknownTransport }
+        nonisolated(unsafe) let t = transport
+        return try await runOnWorker {
+            var channelRef: Int64 = 0
+            try t.openExecPTY(command, term: term, rows: rows, cols: cols, ret0_: &channelRef)
+            return channelRef
+        }
+    }
+
+    func execResizePTY(on ref: TSSHTransportRef, channelRef: Int64, rows: Int, cols: Int) async throws {
+        let transport = registry.withLock { $0.transports[ref] }
+        guard let transport else { throw TSSHCallGateError.unknownTransport }
+        nonisolated(unsafe) let t = transport
+        try await runOnWorker { try t.execResizePTY(channelRef, rows: rows, cols: cols) }
+    }
+
     /// Read up to `maxBytes` of the command's stdout. Blocks on the
     /// concurrent worker until data arrives; nil on clean EOF.
     func execRead(

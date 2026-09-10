@@ -3,124 +3,15 @@
 //  rootshell
 //
 //  Degraded control mode for a herdr without control streams: topology
-//  comes from polling `herdr api snapshot`, and each visible pane rides its
-//  own `herdr terminal session control` channel carrying server-rendered
-//  frames. Input and resizes go back the same way; commands run the CLI.
+//  comes from polling `herdr api snapshot`, and each visited pane rides its
+//  own PTY running `herdr terminal attach`. The stock client translates
+//  mouse input and scrollback; JSON frame streams remain a compatibility fallback.
 //
 //  Copyright (c) 2026 Kit Knox / Rootshell LLC
 //
 
 import Foundation
 import os
-
-/// One `herdr terminal session control` exec channel for a visible pane.
-@MainActor
-final class HerdrLegacyPaneStream {
-    let terminalId: String
-    let paneId: String
-    private let pipe: AsyncBytePipe
-    private let sink: OutputSink
-    private var readerTask: Task<Void, Never>?
-    private(set) var closed = false
-    var onClosed: (() -> Void)?
-
-    init(terminalId: String, paneId: String, pipe: AsyncBytePipe, sink: OutputSink) {
-        self.terminalId = terminalId
-        self.paneId = paneId
-        self.pipe = pipe
-        self.sink = sink
-    }
-
-    func start() {
-        let pipe = self.pipe
-        readerTask = Task { [weak self] in
-            var buffer = Data()
-            var ended = false
-            while !Task.isCancelled, !ended {
-                do {
-                    guard let chunk = try await pipe.read(maxBytes: 64 * 1024) else { break }
-                    buffer.append(chunk)
-                } catch {
-                    break
-                }
-                while let newline = buffer.firstIndex(of: 0x0A) {
-                    let line = buffer.subdata(in: buffer.startIndex..<newline)
-                    buffer.removeSubrange(buffer.startIndex...newline)
-                    guard let self else { return }
-                    if self.handle(line: line) {
-                        ended = true
-                        break
-                    }
-                }
-            }
-            guard let self else { return }
-            self.readerDidEnd()
-        }
-    }
-
-    private struct FrameLine: Decodable {
-        let type: String
-        let full: Bool?
-        let bytes: String?
-    }
-
-    /// Returns true when the server closed the stream.
-    private func handle(line: Data) -> Bool {
-        guard !line.isEmpty, let frame = try? HerdrControl.decoder.decode(FrameLine.self, from: line) else {
-            return false
-        }
-        switch frame.type {
-        case "terminal.frame":
-            guard let encoded = frame.bytes, let bytes = Data(base64Encoded: encoded) else { return false }
-            var out = Data("\u{1b}[?2026h".utf8)
-            if frame.full == true {
-                out.append(contentsOf: "\u{1b}[0m\u{1b}[H\u{1b}[2J".utf8)
-            }
-            out.append(bytes)
-            out.append(contentsOf: "\u{1b}[?2026l".utf8)
-            sink.emit(out)
-            return false
-        case "terminal.closed":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private func readerDidEnd() {
-        guard !closed else { return }
-        closed = true
-        onClosed?()
-    }
-
-    private func send(_ object: [String: Any]) {
-        guard !closed, var line = try? JSONSerialization.data(withJSONObject: object) else { return }
-        line.append(0x0A)
-        let pipe = self.pipe
-        Task { try? await pipe.write(line) }
-    }
-
-    func sendInput(_ data: Data) {
-        send(["type": "terminal.input", "bytes": data.base64EncodedString()])
-    }
-
-    func resize(cols: Int, rows: Int) {
-        send(["type": "terminal.resize", "cols": cols, "rows": rows])
-    }
-
-    func close() {
-        guard !closed else { return }
-        closed = true
-        readerTask?.cancel()
-        let pipe = self.pipe
-        Task {
-            var release = Data("{\"type\":\"terminal.release\"}".utf8)
-            release.append(0x0A)
-            try? await pipe.write(release)
-            await pipe.close()
-        }
-    }
-}
 
 extension HerdrController {
 
@@ -136,7 +27,7 @@ extension HerdrController {
         reconnectAttempt = 0
         Self.logger.info("herdr control: degraded mode (\(reason))")
         gateway?.writeToGhostty(string:
-            "\r\n\u{1b}[33mherdr control mode: \(reason). Running in degraded mode: visible panes only, server-rendered. Upgrade herdr on the host for full control mode.\u{1b}[0m\r\n")
+            "\r\n\u{1b}[33mherdr control mode: \(reason). Running with server-rendered panes. Upgrade herdr on the host for raw control streams.\u{1b}[0m\r\n")
         NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gatewayUUID)
         legacyPollTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -149,11 +40,11 @@ extension HerdrController {
     func stopLegacyMode() {
         legacyPollTask?.cancel()
         legacyPollTask = nil
-        for stream in legacyStreams.values {
-            stream.close()
-        }
+        for opening in legacyOpening.values { opening.task.cancel() }
+        for terminalId in Array(legacyStreams.keys) { legacyCloseStream(terminalId) }
         legacyStreams.removeAll()
-        legacyOpening.removeAll()
+        // Keep pending opens until their cleanup finishes; a late successful
+        // open must close its PTY before another attempt can take ownership.
     }
 
     /// Runs one herdr CLI invocation on the gateway's connection and
@@ -174,7 +65,10 @@ extension HerdrController {
     }
 
     func legacyPollOnce() async {
-        guard mode == .legacy, !didEnd, let gateway, HerdrChannelFactory.canOpen(for: gateway) else { return }
+        guard mode == .legacy, !didEnd, !legacySuspended,
+              let gateway, HerdrChannelFactory.canOpen(for: gateway) else { return }
+        // Reattach dropped streams even if the topology fingerprint is unchanged.
+        defer { legacyReconcileAttaches() }
         do {
             let output = try await legacyRun(args: "api snapshot")
             guard mode == .legacy, !didEnd else { return }
@@ -207,59 +101,127 @@ extension HerdrController {
         gateway?.writeToGhostty(string: "\r\n\u{1b}[33mherdr control mode: \(message)\u{1b}[0m\r\n")
     }
 
-    /// Only the selected tab's panes hold a channel; the rest release
-    /// theirs so a large session never opens dozens of exec channels.
+    /// Open panes lazily, then retain visited panes across tab switches so
+    /// their screen, selection and server viewport stay ready to return to.
     func legacyReconcileAttaches() {
-        guard mode == .legacy else { return }
-        let selected = tabsModel.selectedTabID
+        guard mode == .legacy, !didEnd else { return }
         for (terminalId, session) in paneSessions {
-            let visible = paneViews[terminalId]?.containingTabID == selected && !Ghostty.isAppBackgroundedAtomic
-            if visible {
+            if legacySuspended || Ghostty.isAppBackgroundedAtomic {
+                legacyOpening[terminalId]?.task.cancel()
+                legacyCloseStream(terminalId)
+            } else if legacyPaneIsVisible(terminalId) {
                 legacyOpenStream(for: session)
-            } else if let stream = legacyStreams.removeValue(forKey: terminalId) {
-                stream.close()
             }
+        }
+    }
+
+    private func legacyPaneIsVisible(_ terminalId: String) -> Bool {
+        guard !didEnd, !legacySuspended, !Ghostty.isAppBackgroundedAtomic,
+              let tabId = paneViews[terminalId]?.containingTabID else { return false }
+        return tabId == tabsModel.selectedTabID
+    }
+
+    private func legacyCanFinishOpen(_ terminalId: String) -> Bool {
+        !didEnd && mode == .legacy && !legacySuspended && !Ghostty.isAppBackgroundedAtomic
+            && paneViews[terminalId] != nil
+    }
+
+    func legacyCloseStream(_ terminalId: String) {
+        if let stream = legacyStreams.removeValue(forKey: terminalId) {
+            legacyClosing[terminalId] = stream.close()
         }
     }
 
     private func legacyOpenStream(for session: HerdrPaneSession) {
         let terminalId = session.terminalId
-        guard legacyStreams[terminalId] == nil, !legacyOpening.contains(terminalId),
+        guard legacyStreams[terminalId] == nil, legacyOpening[terminalId] == nil,
               let gateway, let grid = legacyGrids[terminalId] ?? legacySurfaceGrid(terminalId),
               let paneId = paneInfos.values.first(where: { $0.terminal_id == terminalId })?.pane_id else { return }
-        legacyOpening.insert(terminalId)
-        if let view = paneViews[terminalId] {
-            TerminalBellSuppressor.suppressRebuild(view.uuid)
-        }
-        let command = SSHConfig.herdrCommandLine(
-            sessionName: sessionName,
-            args: "terminal session control \(paneId) --takeover --cols \(grid.cols) --rows \(grid.rows)"
-        )
-        Task { [weak self] in
-            defer { self?.legacyOpening.remove(terminalId) }
+        let generation = UUID()
+        let task = Task { [weak self] in
+            defer {
+                if self?.legacyOpening[terminalId]?.id == generation {
+                    self?.legacyOpening.removeValue(forKey: terminalId)
+                }
+            }
             do {
-                let pipe = try await HerdrChannelFactory.open(command: command, on: gateway)
-                guard let self, self.mode == .legacy, self.paneSessions[terminalId] === session else {
+                await self?.legacyClosing[terminalId]?.value
+                try Task.checkCancellation()
+                guard let self, self.legacyCanFinishOpen(terminalId),
+                      self.paneSessions[terminalId] === session else { return }
+                self.legacyClosing.removeValue(forKey: terminalId)
+                let pipe: AsyncBytePipe
+                if self.legacyPTYUnavailable {
+                    pipe = try await self.legacyOpenJSON(paneId: paneId, grid: grid, gateway: gateway)
+                } else {
+                    let command = HerdrAttachCommand.make(
+                        sessionName: self.sessionName,
+                        terminalId: terminalId
+                    )
+                    do {
+                        pipe = try await HerdrChannelFactory.openPTY(
+                            command: command, cols: grid.cols, rows: grid.rows, on: gateway
+                        )
+                    } catch {
+                        try Task.checkCancellation()
+                        if case HerdrPTYError.unavailable = error {
+                            self.legacyUseJSON(reason: error.localizedDescription)
+                        } else if HerdrPTYError.isRequestRejection(error) {
+                            self.legacyUseJSON(reason: error.localizedDescription)
+                        } else { throw error }
+                        // Retry through the normal poll after the failed PTY is closed.
+                        return
+                    }
+                }
+                guard !Task.isCancelled, self.legacyCanFinishOpen(terminalId),
+                      self.legacyOpening[terminalId]?.id == generation,
+                      self.paneSessions[terminalId] === session else {
                     await pipe.close()
                     return
                 }
+                if let view = self.paneViews[terminalId] { TerminalBellSuppressor.suppressRebuild(view.uuid) }
                 let stream = HerdrLegacyPaneStream(
                     terminalId: terminalId,
                     paneId: paneId,
                     pipe: pipe,
                     sink: session.outputSink
                 )
-                stream.onClosed = { [weak self, weak stream] in
+                stream.onClosed = { [weak self, weak stream] error in
                     guard let self, let stream, self.legacyStreams[terminalId] === stream else { return }
-                    self.legacyStreams.removeValue(forKey: terminalId)
+                    self.legacyCloseStream(terminalId)
+                    if let error {
+                        if case HerdrPTYError.unavailable = error {
+                            self.legacyUseJSON(reason: error.localizedDescription)
+                        } else { self.legacyNotice(error.localizedDescription) }
+                    }
                 }
                 self.legacyStreams[terminalId] = stream
                 stream.start()
+                // A live resize may have happened while PTY allocation awaited.
+                if let latest = self.legacyGrids[terminalId], latest != grid {
+                    stream.resize(cols: latest.cols, rows: latest.rows)
+                }
             } catch {
+                guard !Task.isCancelled else { return }
                 HerdrController.logger.warning("herdr degraded attach \(terminalId) failed: \(error.localizedDescription)")
                 self?.legacyNotice("pane attach failed: \(error.localizedDescription)")
             }
         }
+        legacyOpening[terminalId] = (generation, task)
+    }
+
+    private func legacyOpenJSON(paneId: String, grid: (rows: Int, cols: Int), gateway: Ghostty.TerminalView) async throws -> AsyncBytePipe {
+        let command = SSHConfig.herdrCommandLine(
+            sessionName: sessionName,
+            args: "terminal session control \(LoginShellCommand.singleQuoted(paneId)) --takeover --cols \(grid.cols) --rows \(grid.rows)"
+        )
+        return try await HerdrChannelFactory.open(command: command, on: gateway)
+    }
+
+    private func legacyUseJSON(reason: String) {
+        guard !legacyPTYUnavailable else { return }
+        legacyPTYUnavailable = true
+        legacyNotice("\(reason). Using JSON pane frames; mouse input is unavailable in this fallback.")
     }
 
     private func legacySurfaceGrid(_ terminalId: String) -> (rows: Int, cols: Int)? {
@@ -282,8 +244,9 @@ extension HerdrController {
     }
 
     func legacyPaneDidStop(_ session: HerdrPaneSession) {
+        legacyOpening[session.terminalId]?.task.cancel()
         legacyGrids.removeValue(forKey: session.terminalId)
-        legacyStreams.removeValue(forKey: session.terminalId)?.close()
+        legacyCloseStream(session.terminalId)
     }
 
     /// Runs a CLI command for a user action and polls right after so the

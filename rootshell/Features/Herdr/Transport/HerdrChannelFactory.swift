@@ -73,6 +73,33 @@ enum HerdrChannelFactory {
         throw ChannelError.unsupportedSession
     }
 
+    /// A child PTY on the gateway's existing connection, owned by one pane.
+    static func openPTY(command: String, cols: Int, rows: Int, on owner: Ghostty.TerminalView) async throws -> HerdrPTYChannel {
+        #if targetEnvironment(macCatalyst)
+        if owner.connectionConfig.underlyingSSHConfig == nil {
+            guard await HelperConnection.shared.ensureHelperRunning() else {
+                throw ChannelError.helperUnavailable
+            }
+            return try await HerdrLocalPTYChannel.open(
+                command: command, cols: cols, rows: rows, paneToken: owner.uuid.uuidString
+            )
+        }
+        #endif
+        if let trzsz = TmuxController.gatewayTrzszSession(for: owner.session) {
+            return try await trzsz.openPTYChannel(command, cols: cols, rows: rows)
+        }
+        #if canImport(Citadel)
+        if let citadel = owner.session as? CitadelSSHSession {
+            guard let client = citadel.client else { throw ChannelError.notConnected }
+            let term = owner.connectionConfig.underlyingSSHConfig?.effectiveTerminalType ?? "xterm-256color"
+            return try await HerdrCitadelPTYChannel.open(
+                client: client, command: command, term: term, cols: cols, rows: rows
+            )
+        }
+        #endif
+        throw HerdrPTYError.unavailable("This connection cannot open an auxiliary PTY")
+    }
+
     #if targetEnvironment(macCatalyst)
     private static func openLocal(command: String, paneToken: String) async throws -> AsyncBytePipe {
         guard await HelperConnection.shared.ensureHelperRunning() else {

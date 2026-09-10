@@ -256,6 +256,9 @@ extension HerdrController {
             tabId: pane.tab_id
         )
         if let existing = paneViews[pane.terminal_id] {
+            if existing.usesHerdrFallbackScrolling != (mode == .legacy) {
+                existing.usesHerdrFallbackScrolling = mode == .legacy
+            }
             if existing.herdrPaneBinding != binding {
                 existing.herdrPaneBinding = binding
             }
@@ -271,6 +274,7 @@ extension HerdrController {
         let view = Ghostty.TerminalView(app, ghosttyApp: ghosttyApp, connectionConfig: .local(), windowId: hostWindowId)
         view.setOverlayOwnsKeyboard(tabsModel.overlayOwnsKeyboard)
         view.herdrPaneBinding = binding
+        view.usesHerdrFallbackScrolling = mode == .legacy
         if let title = pane.title ?? pane.terminal_title, !title.isEmpty {
             view.title = title
         }
@@ -326,7 +330,8 @@ extension HerdrController {
             terminalByAttach.removeValue(forKey: attachId)
             router.unregister(attachId: attachId)
         }
-        legacyStreams.removeValue(forKey: terminalId)?.close()
+        legacyOpening[terminalId]?.task.cancel()
+        legacyCloseStream(terminalId)
         legacyGrids.removeValue(forKey: terminalId)
         paneSessions.removeValue(forKey: terminalId)
         paneViews.removeValue(forKey: terminalId)

@@ -331,6 +331,13 @@ final class TrzszSession: TerminalSession {
         return try await goTransport.openExecChannel(command)
     }
 
+    func openPTYChannel(_ command: String, cols: Int, rows: Int) async throws -> HerdrPTYChannel {
+        guard let goTransport else {
+            throw TrzszError.connectionFailed("No transport for auxiliary PTY")
+        }
+        return try await goTransport.openPTYChannel(command, cols: cols, rows: rows)
+    }
+
     /// SSH client kept alive during QUIC establishment
     /// Must be closed after QUIC connection is established
     private var spawnSSHClient: SSHClient?

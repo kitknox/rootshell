@@ -88,7 +88,10 @@ final class HerdrController {
     }
     var mode: Mode = .raw
     var legacyStreams: [String: HerdrLegacyPaneStream] = [:]
-    var legacyOpening: Set<String> = []
+    var legacyOpening: [String: (id: UUID, task: Task<Void, Never>)] = [:]
+    var legacyClosing: [String: Task<Void, Never>] = [:]
+    var legacyPTYUnavailable = false
+    var legacySuspended = false
     var legacyGrids: [String: (rows: Int, cols: Int)] = [:]
     var legacyPollTask: Task<Void, Never>?
     var legacySnapshotFingerprint: Int?
@@ -182,6 +185,7 @@ final class HerdrController {
     }
 
     private static var foregroundObserver: NSObjectProtocol?
+    private static var backgroundObserver: NSObjectProtocol?
 
     /// Every controller checks its stream when the app returns to the
     /// foreground; installed once, on the first start.
@@ -194,7 +198,18 @@ final class HerdrController {
         ) { _ in
             MainActor.assumeIsolated {
                 for controller in all {
+                    controller.legacySuspended = false
                     controller.applicationDidBecomeActive()
+                }
+            }
+        }
+        backgroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                for controller in all where controller.mode == .legacy {
+                    controller.legacySuspended = true
+                    controller.legacyReconcileAttaches()
                 }
             }
         }
@@ -395,8 +410,15 @@ final class HerdrController {
     /// A pane's output writer dropped bytes: its screen is unreliable until
     /// the server re-snapshots it.
     func pipelineDidOverflow(terminalId: String) {
-        guard mode == .raw, let attachId = attachIds[terminalId] else { return }
-        requestSnapshot(attachId: attachId)
+        guard !didEnd else { return }
+        if mode == .legacy {
+            // A new attach starts with a complete rendered frame. Continuing
+            // incremental output after lost bytes would leave a damaged screen.
+            legacyCloseStream(terminalId)
+            legacyReconcileAttaches()
+        } else if let attachId = attachIds[terminalId] {
+            requestSnapshot(attachId: attachId)
+        }
     }
 
     func channelDidClose(_ error: Error?) {
