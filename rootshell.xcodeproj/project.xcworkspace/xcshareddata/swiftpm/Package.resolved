@@ -1,5 +1,5 @@
 {
-  "originHash" : "718351ee53cf0ad6d6b52b40377a5986832722d7adfd75b2064881de3df84be2",
+  "originHash" : "165f1553e938855169ff46f5676a637fd7ea4b28b787d76907965a086810ecdd",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -377,15 +377,6 @@
       "state" : {
         "revision" : "04632dc753f873116ab048076fd6474d429bbcd0",
         "version" : "4.4.8"
-      }
-    },
-    {
-      "identity" : "trzsz-ssh-rootshell",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/kitknox/trzsz-ssh-rootshell.git",
-      "state" : {
-        "revision" : "4fe268be72f0e89e2f6dc2f5c3ede30909d6de57",
-        "version" : "0.2.3"
       }
     },
     {

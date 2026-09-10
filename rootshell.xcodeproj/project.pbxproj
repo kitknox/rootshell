@@ -1608,7 +1608,7 @@
 				47JOE0002FA00000AABB0000 /* XCRemoteSwiftPackageReference "joe-rootshell" */,
 				47JQPKG02FB00000AABB0000 /* XCRemoteSwiftPackageReference "jq-rootshell" */,
 				9CE133DDBCF3D8D79F649B5F /* XCRemoteSwiftPackageReference "ghosttykit-rootshell" */,
-				47TSSH0002FC00000AABB0000 /* XCRemoteSwiftPackageReference "trzsz-ssh-rootshell" */,
+				47TSSH0002FC00000AABB0000 /* XCLocalSwiftPackageReference "../trzsz-ssh/.build/local-package" */,
 				47HLX0002FD00000AABB0000 /* XCRemoteSwiftPackageReference "helix-rootshell" */,
 				47CURL0002FE0000AABB0000 /* XCRemoteSwiftPackageReference "curl_ios-rootshell" */,
 				47XZPKG02FF00000AABB0000 /* XCRemoteSwiftPackageReference "xz_ios-rootshell" */,
@@ -6352,6 +6352,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/RootshellPushKit;
 		};
+		47TSSH0002FC00000AABB0000 /* XCLocalSwiftPackageReference "../trzsz-ssh/.build/local-package" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../trzsz-ssh/.build/local-package";
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -6507,14 +6511,6 @@
 				version = 0.1.0;
 			};
 		};
-		47TSSH0002FC00000AABB0000 /* XCRemoteSwiftPackageReference "trzsz-ssh-rootshell" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/kitknox/trzsz-ssh-rootshell.git";
-			requirement = {
-				kind = exactVersion;
-				version = 0.2.3;
-			};
-		};
 		47XZPKG02FF00000AABB0000 /* XCRemoteSwiftPackageReference "xz_ios-rootshell" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/kitknox/xz_ios-rootshell.git";
@@ -6666,12 +6662,12 @@
 		};
 		47TSSH0112FC00000AABB0001 /* TrzszSSH */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 47TSSH0002FC00000AABB0000 /* XCRemoteSwiftPackageReference "trzsz-ssh-rootshell" */;
+			package = 47TSSH0002FC00000AABB0000 /* XCLocalSwiftPackageReference "../trzsz-ssh/.build/local-package" */;
 			productName = TrzszSSH;
 		};
 		47TSSH0122FC00000AABB0002 /* VPNTunnel */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 47TSSH0002FC00000AABB0000 /* XCRemoteSwiftPackageReference "trzsz-ssh-rootshell" */;
+			package = 47TSSH0002FC00000AABB0000 /* XCLocalSwiftPackageReference "../trzsz-ssh/.build/local-package" */;
 			productName = VPNTunnel;
 		};
 		47VPN0502F460000BBCC0050 /* Citadel */ = {
