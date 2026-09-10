@@ -13,6 +13,20 @@ import UIKit
 
 extension Ghostty.TerminalView {
 
+    /// Fixed space outside the grid. TerminalScrollView pins the terminal to
+    /// its full viewport on both platforms, so it adds no wrapper inset.
+    /// Fractional space left after fitting cells belongs to the viewport,
+    /// never to this padding budget.
+    var herdrLayoutChrome: CGSize {
+        let scale = contentScaleFactor > 0 ? contentScaleFactor : traitCollection.displayScale
+        return HerdrGeometry.chrome(
+            paddingX: PaddingManager.shared.effectivePaddingX,
+            paddingY: PaddingManager.shared.effectivePaddingY,
+            scale: scale,
+            bottomInsetPixels: currentBottomInsetPixels()
+        )
+    }
+
     /// Scroll the server viewport when the child has not requested the mouse.
     /// Captured applications use Ghostty's usual protocol encoding instead.
     func sendHerdrFallbackScroll(deltaY: CGFloat, at point: CGPoint) {

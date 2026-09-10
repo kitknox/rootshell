@@ -409,8 +409,10 @@ extension HerdrController {
         let cell = horizontal ? metrics.cellW : metrics.cellH
         let pad = horizontal ? metrics.padX : metrics.padY
         switch node {
-        case .pane(_, let rect):
-            return CGFloat(horizontal ? rect.width : rect.height) * cell + pad * 2
+        case .pane(let paneId, let rect):
+            let chrome = paneInfos[paneId].flatMap { paneViews[$0.terminal_id] }?.herdrLayoutChrome
+            let inset = chrome.map { horizontal ? $0.width : $0.height } ?? pad * 2
+            return CGFloat(horizontal ? rect.width : rect.height) * cell + inset
         case .split(let splitHorizontal, let first, let second):
             let a = neededPoints(first, horizontal: horizontal, metrics: metrics)
             let b = neededPoints(second, horizontal: horizontal, metrics: metrics)
@@ -427,8 +429,8 @@ extension HerdrController {
         return HerdrLayoutTree.Metrics(
             cellW: CGFloat(size.cell_width_px) / scale,
             cellH: CGFloat(size.cell_height_px) / scale,
-            padX: CGFloat(PaddingManager.shared.effectivePaddingX),
-            padY: CGFloat(PaddingManager.shared.effectivePaddingY),
+            padX: HerdrGeometry.padding(PaddingManager.shared.effectivePaddingX, scale: scale),
+            padY: HerdrGeometry.padding(PaddingManager.shared.effectivePaddingY, scale: scale),
             divider: SplitTreeHostingView.dividerVisibleThickness
         )
     }
