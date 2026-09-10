@@ -57,6 +57,9 @@ nonisolated extension Settings {
         static let tmuxDebugLogging = SettingKey(
             "tmuxDebugLoggingEnabled", default: false, group: .system, policy: .deviceOnly,
             title: String(localized: "tmux Debug Logging", comment: "Setting title"))
+        static let herdrForceFallback = SettingKey(
+            "herdrForceFallbackEnabled", default: false, group: .system, policy: .deviceOnly,
+            title: String(localized: "Force herdr Fallback Mode", comment: "Setting title"))
         static let agentDetectionCapture = SettingKey(
             "agentDetectionCaptureEnabled", default: false, group: .system, policy: .deviceOnly,
             title: String(localized: "Record Detection Snapshots", comment: "Setting title"))
@@ -97,7 +100,8 @@ nonisolated extension Settings {
             cloudKitMigratedToCustomZone.erased, cloudKitZoneChangeToken.erased, cloudKitLastSyncDate,
             resumeDebugLogging.erased, lifecycleDebugLogging.erased, lifecycleSyncRendererDrain.erased,
             lifecycleVerboseWiFiPollLogging.erased, sshDebugLogging.erased, vncDebugLogging.erased,
-            tmuxDebugLogging.erased, agentDetectionCapture.erased, ghosttyBookmarkNames, applePressAndHold.erased,
+            tmuxDebugLogging.erased, herdrForceFallback.erased, agentDetectionCapture.erased,
+            ghosttyBookmarkNames, applePressAndHold.erased,
             sparkleAutomaticChecks.erased, sparkleCheckInterval.erased,
             configOverlayBookmark.erased, configOverlayExternalPath.erased, configOverlayWriteBack.erased,
         ]

@@ -15,6 +15,7 @@ struct DebugSettingsView: View {
     @AppStorage(SSHDebugLogger.enabledKey) private var sshDebugLogging: Bool = false
     @AppStorage(VNCDebugLogger.enabledKey) private var vncDebugLogging: Bool = false
     @AppStorage(TmuxDebugLogger.enabledKey) private var tmuxDebugLogging: Bool = false
+    @Setting(Settings.System.herdrForceFallback) private var herdrForceFallback
     @AppStorage(AgentDetectionCapture.enabledKey) private var agentCaptureEnabled: Bool = false
     @AppStorage(
         "vpnConnectionDebugLoggingEnabled",
@@ -252,6 +253,17 @@ struct DebugSettingsView: View {
                 Text("tmux Log File")
             } footer: {
                 Text("Log is stored at Documents/.ghostty/tmux_debug.log. Use “Capture tmux State” while reproducing a hang to snapshot the current state.")
+            }
+
+            // MARK: - herdr Control Mode Debug
+
+            Section {
+                Toggle("Force herdr Fallback Mode", isOn: $herdrForceFallback)
+                    .themedRow()
+            } header: {
+                Text("herdr Control Mode")
+            } footer: {
+                Text("Uses polled snapshots and server-rendered panes even when herdr supports raw control streams. Applies on the next herdr control-mode attachment; detach and reattach to test without restarting herdr. This setting stays on this device.")
             }
 
             #if !CHINA_BUILD

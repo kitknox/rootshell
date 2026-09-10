@@ -18,16 +18,17 @@ extension HerdrController {
     private static let legacyPollInterval: Duration = .seconds(2)
     private static let legacyMaxResponseBytes = 8 * 1024 * 1024
 
-    /// Switches to the degraded mode after `control.open` showed the host
-    /// herdr has no control stream.
-    func startLegacyMode(reason: String) {
+    /// Uses the stock client when control streams are unavailable or fallback
+    /// mode was explicitly requested in Debug settings.
+    func startLegacyMode(reason: String, recommendUpgrade: Bool = true) {
         guard mode == .raw, !didEnd else { return }
         mode = .legacy
         isActive = true
         reconnectAttempt = 0
         Self.logger.info("herdr control: degraded mode (\(reason))")
+        let upgradeHint = recommendUpgrade ? " Upgrade herdr on the host for raw control streams." : ""
         gateway?.writeToGhostty(string:
-            "\r\n\u{1b}[33mherdr control mode: \(reason). Running with server-rendered panes. Upgrade herdr on the host for raw control streams.\u{1b}[0m\r\n")
+            "\r\n\u{1b}[33mherdr control mode: \(reason). Running with server-rendered panes.\(upgradeHint)\u{1b}[0m\r\n")
         NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gatewayUUID)
         legacyPollTask = Task { [weak self] in
             while !Task.isCancelled {

@@ -118,7 +118,10 @@ final class AgentPaneMonitor {
         // not observable from here. tmux CONTROL MODE is unaffected, because
         // its gateway reports each pane's own directory out of band.
         // (id=agent-project)
-        guard !isInsideRawMultiplexer else { return false }
+        // herdr supplies the pane identity and directory independently of
+        // its rendered borders. Screen heuristics must not veto that report
+        // or the repository facts subsequently resolved for it.
+        guard candidate.source == .herdr || !isInsideRawMultiplexer else { return false }
         var candidate = candidate
 
         if let current = project, !authoritative, candidate.repositoryRoot == nil {

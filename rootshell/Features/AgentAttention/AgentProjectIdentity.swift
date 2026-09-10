@@ -26,6 +26,9 @@ nonisolated struct AgentProjectIdentity: Equatable, Sendable {
         case tmux = 2
         /// A command we ran on the host reported it.
         case probe = 3
+        /// herdr's server reported this exact pane's foreground directory.
+        /// Unlike a process-tree probe, this is tied to the pane's identity.
+        case herdr = 4
 
         static func < (lhs: Source, rhs: Source) -> Bool {
             lhs.rawValue < rhs.rawValue

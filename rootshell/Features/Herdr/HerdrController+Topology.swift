@@ -76,7 +76,7 @@ extension HerdrController {
     func publishProjectPaths() {
         for pane in paneInfos.values {
             guard let view = paneViews[pane.terminal_id],
-                  let path = pane.foreground_cwd ?? pane.cwd, path.hasPrefix("/") else { continue }
+                  let path = pane.projectPath else { continue }
             AgentAttentionCenter.shared.applyHerdrProjectPath(terminal: view, path: path)
         }
     }
@@ -206,8 +206,8 @@ extension HerdrController {
         if let tab = tabs[pane.tab_id] {
             refreshTitle(of: tab)
         }
-        let path = pane.foreground_cwd ?? pane.cwd
-        if let path, path.hasPrefix("/"), path != (previous?.foreground_cwd ?? previous?.cwd),
+        let path = pane.projectPath
+        if let path, path != previous?.projectPath,
            let view = paneViews[pane.terminal_id] {
             AgentAttentionCenter.shared.applyHerdrProjectPath(terminal: view, path: path)
         }

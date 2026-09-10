@@ -210,6 +210,17 @@ nonisolated enum HerdrControl {
         let cwd: String?
         let foreground_cwd: String?
         let state_labels: [String: String]?
+
+        /// Prefer the foreground process, falling back to the shell when
+        /// the server cannot resolve a usable foreground directory.
+        var projectPath: String? {
+            for value in [foreground_cwd, cwd] {
+                guard let value else { continue }
+                let path = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if path.hasPrefix("/") { return path }
+            }
+            return nil
+        }
     }
 
     struct AgentInfo: Decodable, Sendable {

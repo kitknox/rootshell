@@ -256,6 +256,10 @@ final class HerdrController {
             scheduleReconnect()
             return
         }
+        if SettingsStore.shared.value(Settings.System.herdrForceFallback) {
+            startLegacyMode(reason: "fallback forced in Debug settings", recommendUpgrade: false)
+            return
+        }
         do {
             let pipe = try await HerdrChannelFactory.open(command: controlCommand, on: gateway)
             let router = self.router

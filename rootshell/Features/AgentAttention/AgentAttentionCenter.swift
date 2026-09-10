@@ -543,7 +543,7 @@ final class AgentAttentionCenter {
     @discardableResult
     private func hideRepositoryFacts(from monitor: AgentPaneMonitor) -> Bool {
         guard let project = monitor.project else { return false }
-        guard project.source == .osc7 else {
+        guard project.source == .osc7 || project.source == .herdr else {
             // A tmux/direct probe supplied the directory itself, so it is
             // command-derived too. Drop it, then recover any free OSC 7 value
             // that may have arrived while the stronger answer was installed.
@@ -622,6 +622,25 @@ final class AgentAttentionCenter {
     @discardableResult
     private func resolveReportedProject(for monitor: AgentPaneMonitor) -> Bool {
         guard let terminal = monitor.terminal else { return false }
+        if let binding = terminal.herdrPaneBinding {
+            // The surface has a .local() configuration even over SSH. Read
+            // both the host and the current pane directory from its gateway;
+            // replayed OSC 7 may describe an older shell directory instead
+            // of the foreground agent, and must not overwrite this identity.
+            guard let controller = HerdrController.controller(forGateway: binding.gatewayUUID),
+                  let gateway = controller.gateway,
+                  let path = controller.paneInfos[binding.paneId]?.projectPath,
+                  let label = AgentProjectPath.label(forPath: path) else { return false }
+            return monitor.noteProject(
+                AgentProjectIdentity(
+                    hostKey: Self.hostKey(for: gateway),
+                    path: path,
+                    label: label,
+                    branch: nil,
+                    source: .herdr
+                )
+            )
+        }
         // `sessionProvidedPwd` is the background-safe cache of the same value,
         // so a directory reported while backgrounded is not lost.
         let reported = terminal.pwd ?? terminal.sessionProvidedPwd
@@ -778,11 +797,13 @@ final class AgentAttentionCenter {
         let paths = hasPathNeedingRefresh ? relevantPaths : []
 
         // A pane that owns its own SSH connection and still has no directory
-        // can have one discovered from its token. tmux panes never need this:
-        // the gateway already answers for them, and the token belongs to the
-        // gateway's shell rather than to any individual pane.
+        // can have one discovered from its token. Control-mode panes already
+        // get their directories from the server; a process-tree search can
+        // find the gateway's shell rather than the pane's foreground process.
         let paneToken: String? = {
-            guard monitor.project == nil, monitor.terminal?.tmuxPaneBinding == nil else { return nil }
+            guard monitor.project == nil,
+                  monitor.terminal?.tmuxPaneBinding == nil,
+                  monitor.terminal?.herdrPaneBinding == nil else { return nil }
             // REMOTE panes only. The lookup identifies a pane by its position
             // in the ssh process tree; run locally it walks the helper's own
             // ancestors and returns some unrelated process's directory, which
@@ -1047,12 +1068,12 @@ final class AgentAttentionCenter {
     }
 
     /// The pane holding the connection this pane's directories live behind: a
-    /// tmux -CC pane rides its gateway's session, everything else owns its own.
+    /// tmux -CC or herdr pane rides its gateway's session.
     private func sessionOwner(for monitor: AgentPaneMonitor) -> Ghostty.TerminalView? {
         guard let terminal = monitor.terminal else { return nil }
         if let herdr = terminal.herdrPaneBinding {
             // A herdr pane's surface is local; its host is the gateway's.
-            return HerdrController.controller(forGateway: herdr.gatewayUUID)?.gateway ?? terminal
+            return HerdrController.controller(forGateway: herdr.gatewayUUID)?.gateway
         }
         guard let binding = terminal.tmuxPaneBinding else { return terminal }
         for model in TmuxWindowRegistry.allTabsModels() {
@@ -1139,22 +1160,25 @@ final class AgentAttentionCenter {
         }
     }
 
-    /// herdr reported a pane's directory (snapshot or `pane_updated`). Same
-    /// treatment as tmux's out-of-band path: no probe, cached facts applied.
+    /// herdr reported a pane's directory (snapshot or `pane_updated`).
+    /// The directory is free server metadata; Git facts use the gateway's
+    /// connection and the same repository cache as ordinary panes.
     func applyHerdrProjectPath(terminal: Ghostty.TerminalView, path raw: String) {
         guard let monitor = monitors[terminal.uuid] else {
             pendingHerdrProjectPaths[terminal.uuid] = raw
             return
         }
         let path = AgentProjectPath.normalize(raw)
-        guard let label = AgentProjectPath.label(forPath: path) else { return }
+        guard path.hasPrefix("/"),
+              let owner = sessionOwner(for: monitor),
+              let label = AgentProjectPath.label(forPath: path) else { return }
         var changed = monitor.noteProject(
             AgentProjectIdentity(
-                hostKey: sessionOwner(for: monitor).map(Self.hostKey(for:)),
+                hostKey: Self.hostKey(for: owner),
                 path: path,
                 label: label,
                 branch: nil,
-                source: .tmux
+                source: .herdr
             )
         )
         changed = applyCachedRepoFacts(to: monitor) || changed
@@ -1291,7 +1315,6 @@ final class AgentAttentionCenter {
 
     private func applyHerdrReport(_ report: PendingHerdrReport, to monitor: AgentPaneMonitor) {
         let now = Date()
-        let hadAgent = monitor.agent != nil
         let changed = monitor.applyExternalReport(
             status: report.status,
             agentID: report.agentID,
@@ -1299,18 +1322,10 @@ final class AgentAttentionCenter {
             now: now,
             seq: nextSeq
         )
-        if !hadAgent, monitor.agent != nil {
-            // Same follow-ups a screen identification gets, minus the probe
-            // when herdr already told us the directory.
-            if monitor.project == nil {
-                requestProjectIfNeeded(for: monitor, now: now)
-            } else if monitor.project?.branch == nil {
-                if !applyCachedRepoFacts(to: monitor) {
-                    _ = requestRepositoryFacts(for: monitor, now: now)
-                }
-            }
-        }
-        if changed {
+        // A status event is also a chance to refresh Git metadata, including
+        // for panes never visited/rendered and after an early probe failure.
+        let projectChanged = refreshProject(for: monitor, now: now)
+        if changed || projectChanged {
             publish(now: now)
         }
     }
@@ -1727,6 +1742,41 @@ final class AgentAttentionCenter {
         return topologyChanged
     }
 
+    /// Repository enrichment also runs for server-reported agents with no
+    /// readable surface (unvisited panes, replay, or a busy terminal parser).
+    @discardableResult
+    private func refreshProject(for monitor: AgentPaneMonitor, now: Date) -> Bool {
+        // Catch a directory reported before this monitor existed (restore,
+        // reattach, or detection enabled mid-session): `notePwdChanged` only
+        // fires on the edge, and that edge may already have passed.
+        var changed = resolveReportedProject(for: monitor)
+        if changed {
+            // Another pane on this host may already have resolved this very
+            // directory. Applying the cached answer here is not just an
+            // optimisation: a cached path is EXCLUDED from the next probe's
+            // path list, so without this the pane would be skipped as
+            // "already answered" and never receive the branch at all.
+            changed = applyCachedRepoFacts(to: monitor) || changed
+        }
+
+        // Self-heal: an identified agent with no project yet re-requests one,
+        // rate-limited. This is the path that recovers a pane whose gateway
+        // was not ready to answer at identification. (id=agent-project)
+        // Self-heal covers BOTH gaps: no project yet, and a project whose
+        // repository facts were never asked for. The second case is the local
+        // shell: the probe fires at identification, OSC 7 resolves the
+        // directory a moment later, and nothing re-requested the branch — so
+        // the card sat on a project with no branch forever.
+        if monitor.agent != nil,
+           monitor.project == nil || needsRepositoryRefresh(for: monitor, now: now) {
+            requestProjectIfNeeded(for: monitor, now: now)
+        } else if monitor.agent != nil, monitor.project?.branch == nil {
+            // Facts are cached but this pane has not taken them yet.
+            changed = applyCachedRepoFacts(to: monitor) || changed
+        }
+        return changed
+    }
+
     // MARK: - Heavy scan (terminal mutex, budgeted)
 
     /// Returns false only when the terminal mutex was contended and nothing
@@ -1735,6 +1785,11 @@ final class AgentAttentionCenter {
     /// mutex for long stretches, and a parked main thread is what turned
     /// into the 0x8BADF00D watchdog kills on build 131.
     private func scan(_ monitor: AgentPaneMonitor, now: Date) -> Bool {
+        if monitor.externalAuthority {
+            monitor.lastScanAt = now
+            refreshProject(for: monitor, now: now)
+            return true
+        }
         guard let terminal = monitor.terminal, let surface = terminal.surface,
               let size = terminal.surfaceSize
         else { return true }
@@ -1774,33 +1829,7 @@ final class AgentAttentionCenter {
         monitor.noteAltScreen(altActive)
         monitor.lastSeenTitle = terminal.sessionProvidedTitle ?? ""
 
-        // Catch a directory reported before this monitor existed (restore,
-        // reattach, or detection enabled mid-session): `notePwdChanged` only
-        // fires on the edge, and that edge may already have passed.
-        if resolveReportedProject(for: monitor) {
-            // Another pane on this host may already have resolved this very
-            // directory. Applying the cached answer here is not just an
-            // optimisation: a cached path is EXCLUDED from the next probe's
-            // path list, so without this the pane would be skipped as
-            // "already answered" and never receive the branch at all.
-            applyCachedRepoFacts(to: monitor)
-        }
-
-        // Self-heal: an identified agent with no project yet re-requests one,
-        // rate-limited. This is the path that recovers a pane whose gateway
-        // was not ready to answer at identification. (id=agent-project)
-        // Self-heal covers BOTH gaps: no project yet, and a project whose
-        // repository facts were never asked for. The second case is the local
-        // shell: the probe fires at identification, OSC 7 resolves the
-        // directory a moment later, and nothing re-requested the branch — so
-        // the card sat on a project with no branch forever.
-        if monitor.agent != nil,
-           monitor.project == nil || needsRepositoryRefresh(for: monitor, now: now) {
-            requestProjectIfNeeded(for: monitor, now: now)
-        } else if monitor.agent != nil, monitor.project?.branch == nil {
-            // Facts are cached but this pane has not taken them yet.
-            if applyCachedRepoFacts(to: monitor) { publish(now: now) }
-        }
+        refreshProject(for: monitor, now: now)
 
         let input = AgentDetectionInput(
             lines: lines,
@@ -1810,10 +1839,6 @@ final class AgentAttentionCenter {
         )
         // Peeled chrome declares a multiplexer nothing configured.
         monitor.noteMultiplexerChrome(input.hadMultiplexerChrome)
-
-        // herdr owns identity and state here; the screen only served the
-        // project bookkeeping above. (id=herdr-agent-authority)
-        if monitor.externalAuthority { return true }
 
         if monitor.agent == nil {
             if AgentAttentionSettings.detectionEnabled,
