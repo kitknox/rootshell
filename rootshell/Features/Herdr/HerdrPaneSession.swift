@@ -13,6 +13,56 @@
 
 import Foundation
 
+/// Replies to our CSI 18 t probes come from the terminal parser, unlike
+/// ghostty_surface_size, which reports a resize before the IO thread applies it.
+nonisolated struct HerdrGridReports {
+    struct Grid: Equatable, Sendable {
+        let cols: Int
+        let rows: Int
+    }
+
+    var pending = 0
+    private var carry = Data()
+
+    mutating func consume(_ data: Data) -> (forward: Data, grids: [Grid]) {
+        guard pending > 0 || !carry.isEmpty else { return (data, []) }
+        let bytes = Array(carry + data)
+        carry.removeAll(keepingCapacity: true)
+        var forward = Data()
+        var grids: [Grid] = []
+        var index = 0
+        while index < bytes.count {
+            let start = index
+            guard pending > 0, bytes[index] == 0x1b else {
+                forward.append(bytes[index]); index += 1
+                continue
+            }
+            index += 1
+            if index == bytes.count { carry.append(contentsOf: bytes[start...]); break }
+            guard bytes[index] == 0x5b else { forward.append(0x1b); continue }
+            index += 1
+            while index < bytes.count, index - start < 64,
+                  (0x30...0x3f).contains(bytes[index]) { index += 1 }
+            if index == bytes.count, index - start < 64 {
+                carry.append(contentsOf: bytes[start...]); break
+            }
+            if index < bytes.count, bytes[index] == 0x74 {
+                let params = String(decoding: bytes[(start + 2)..<index], as: UTF8.self)
+                    .split(separator: ";", omittingEmptySubsequences: false)
+                if params.count == 3, params[0] == "8",
+                   let rows = Int(params[1]), let cols = Int(params[2]), rows > 0, cols > 0 {
+                    grids.append(Grid(cols: cols, rows: rows))
+                    pending -= 1
+                    index += 1
+                    continue
+                }
+            }
+            forward.append(contentsOf: bytes[start..<index])
+        }
+        return (forward, grids)
+    }
+}
+
 /// Off-main fan-out of raw terminal records to pane sinks, keyed by attach id.
 /// The channel actor calls into this directly so output never waits for the
 /// main actor.
@@ -22,17 +72,21 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
 
     private enum QueueItem {
         case data(Data)
+        case snapshot(Data, cols: Int, rows: Int)
         /// A layout boundary: everything after it waits until released.
         case barrier(UInt64)
 
         var byteCount: Int {
-            if case .data(let data) = self { return data.count }
-            return 0
+            switch self {
+            case .data(let data), .snapshot(let data, _, _): return data.count
+            case .barrier: return 0
+            }
         }
     }
 
     private let lock = UnfairLock()
     private var sinks: [String: OutputSink] = [:]
+    private var grids: [String: (cols: Int, rows: Int)] = [:]
     /// Per attach, records not yet delivered, in arrival order. Non-empty
     /// while the sink is missing (the snapshot follows the attach response
     /// on the stream and can beat the main-actor hop that registers it),
@@ -64,6 +118,7 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
     func unregister(attachId: String) {
         lock.withLock {
             _ = sinks.removeValue(forKey: attachId)
+            grids.removeValue(forKey: attachId)
             if let dropped = queues.removeValue(forKey: attachId) {
                 queuedBytes -= dropped.reduce(0) { $0 + $1.byteCount }
             }
@@ -104,6 +159,7 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
     func removeAll() {
         lock.withLock {
             sinks.removeAll()
+            grids.removeAll()
             queues.removeAll()
             queuedBytes = 0
             barriers.removeAll()
@@ -115,6 +171,31 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
 
     func setPane(_ paneId: String, attachId: String) {
         lock.withLock { attachByPane[paneId] = attachId }
+    }
+
+    func updateGrid(attachId: String, cols: Int, rows: Int) {
+        lock.withLock { grids[attachId] = (cols, rows) }
+        flush(attachId)
+    }
+
+    func isWaitingForGrid(attachId: String) -> Bool {
+        lock.withLock {
+            for item in queues[attachId] ?? [] {
+                if case .snapshot(_, let cols, let rows) = item {
+                    return grids[attachId]?.cols != cols || grids[attachId]?.rows != rows
+                }
+            }
+            return false
+        }
+    }
+
+    /// Output drawn for a grid the surface could not take cannot be replayed
+    /// later as incremental bytes. Resume only from a complete snapshot.
+    func invalidate(attachId: String) {
+        lock.withLock {
+            overflowed.insert(attachId)
+            dropQueue(attachId)
+        }
     }
 
     /// Places a barrier behind everything these panes have received so far;
@@ -155,41 +236,38 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
         queues[attachId] = barriersOnly.isEmpty ? nil : barriersOnly
     }
 
-    private func deliver(attachId: String, _ data: Data, isSnapshot: Bool) {
+    private func deliver(attachId: String, _ item: QueueItem, isSnapshot: Bool) {
         var overflowNow = false
-        let sink: OutputSink? = lock.withLock {
+        lock.withLock {
             if overflowed.contains(attachId) {
                 // Only the snapshot we asked for can make the screen whole.
-                guard isSnapshot else { return nil }
+                guard isSnapshot else { return }
                 overflowed.remove(attachId)
                 dropQueue(attachId)
-            }
-            let queued = !(queues[attachId]?.isEmpty ?? true)
-            if let sink = sinks[attachId], !draining.contains(attachId), !queued {
-                return sink
             }
             // A snapshot is never dropped: it replaces whatever this attach
             // had queued, and it is the only thing that can end an overflow.
             // It may exceed the shared budget briefly; the server caps it.
             if isSnapshot {
                 dropQueue(attachId)
-            } else if queuedBytes + data.count > Self.maxQueuedBytes {
+            } else if queuedBytes + item.byteCount > Self.maxQueuedBytes {
                 // Over budget: this attach's backlog is now incomplete, so
                 // discard it all and recover from a fresh snapshot.
                 dropQueue(attachId)
                 overflowed.insert(attachId)
                 overflowNow = true
-                return nil
+                return
             }
-            queues[attachId, default: []].append(.data(data))
-            queuedBytes += data.count
-            return nil
+            queues[attachId, default: []].append(item)
+            queuedBytes += item.byteCount
         }
         if overflowNow {
             onOverflow?(attachId)
             return
         }
-        sink?.emit(data)
+        // All deliveries share the same drain, including live output. A
+        // main-actor layout release cannot overtake a channel snapshot emit.
+        flush(attachId)
     }
 
     /// Drains one attach's queue in order up to the first live barrier.
@@ -214,7 +292,14 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
                     if barriers.contains(id) { break }
                     queue.removeFirst()
                 }
-                guard case .data(let data)? = queue.first else {
+                let data: Data
+                switch queue.first {
+                case .data(let bytes):
+                    data = bytes
+                case .snapshot(let bytes, let cols, let rows)
+                    where grids[attachId]?.cols == cols && grids[attachId]?.rows == rows:
+                    data = bytes
+                default:
                     queues[attachId] = queue
                     draining.remove(attachId)
                     return nil
@@ -230,11 +315,14 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
     }
 
     func write(attachId: String, _ data: Data) {
-        deliver(attachId: attachId, data, isSnapshot: false)
+        deliver(attachId: attachId, .data(data), isSnapshot: false)
     }
 
     func applySnapshot(_ record: HerdrControl.SnapshotRecord) {
-        deliver(attachId: record.attach_id, Self.replayBytes(for: record.snapshot), isSnapshot: true)
+        deliver(attachId: record.attach_id, .snapshot(
+            Self.replayBytes(for: record.snapshot),
+            cols: record.snapshot.state.cols, rows: record.snapshot.state.rows
+        ), isSnapshot: true)
     }
 
     /// Composes the byte sequence that rebuilds a surface from a snapshot:
@@ -325,6 +413,11 @@ final class HerdrPaneSession: TerminalSession {
     var attachId: String?
     private(set) weak var controller: HerdrController?
 
+    private(set) var parserGrid: HerdrGridReports.Grid?
+    private var wantedParserGrid: HerdrGridReports.Grid?
+    private var gridReports = HerdrGridReports()
+    private var gridProbeTask: Task<Void, Never>?
+
     /// Delivered off-main by the router; mirrors the callback properties.
     let outputSink = OutputSink()
 
@@ -363,6 +456,8 @@ final class HerdrPaneSession: TerminalSession {
     func stop() {
         guard isRunning else { return }
         isRunning = false
+        gridProbeTask?.cancel()
+        gridProbeTask = nil
         controller?.paneSessionDidStop(self)
     }
 
@@ -374,11 +469,48 @@ final class HerdrPaneSession: TerminalSession {
         controller?.paneGridDidChange(self, rows: Int(size.rows), cols: Int(size.cols))
     }
 
+    /// Polling schedules another query; only an exact parser reply permits
+    /// replay. A delay or timeout never counts as a resize acknowledgement.
+    func confirmParserGrid(cols: Int, rows: Int) {
+        let wanted = HerdrGridReports.Grid(cols: cols, rows: rows)
+        wantedParserGrid = wanted
+        guard parserGrid != wanted, gridProbeTask == nil, isRunning else { return }
+        gridProbeTask = Task { [weak self] in
+            defer { self?.gridProbeTask = nil }
+            var lastProbe = ContinuousClock.now
+            while let self, self.isRunning, !Task.isCancelled,
+                  self.parserGrid != self.wantedParserGrid {
+                if self.gridReports.pending == 0 || lastProbe.duration(to: .now) >= .seconds(1) {
+                    self.gridReports.pending += 1
+                    // A resize can split a VT sequence. Cancel that partial
+                    // sequence; the controller replaces the screen afterwards.
+                    self.outputSink.emit(Data("\u{18}\u{1b}[18t".utf8))
+                    lastProbe = .now
+                }
+                do { try await Task.sleep(for: .milliseconds(20)) }
+                catch { break }
+            }
+        }
+    }
+
+    /// Called only for the response pipe, so keyboard/paste input does not
+    /// get mistaken for an internal probe reply.
+    func consumeParserGridReports(_ data: Data) -> Data {
+        let result = gridReports.consume(data)
+        for grid in result.grids {
+            parserGrid = grid
+            controller?.paneParserGridDidChange(self, cols: grid.cols, rows: grid.rows)
+        }
+        return result.forward
+    }
+
     /// The pane went away on the server: end the session so the tab's
     /// ordinary close path runs.
     func endedRemotely() {
         guard isRunning else { return }
         isRunning = false
+        gridProbeTask?.cancel()
+        gridProbeTask = nil
         onSessionEnd?()
     }
 }

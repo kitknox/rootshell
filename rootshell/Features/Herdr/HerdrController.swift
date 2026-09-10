@@ -69,7 +69,10 @@ final class HerdrController {
     // MARK: - Channel state
 
     private(set) var channel: HerdrControlChannel?
-    let router = HerdrOutputRouter()
+    var router = HerdrOutputRouter()
+    private var streamGeneration = UUID()
+    var topologyRefreshTask: Task<Void, Never>?
+    var topologyRefreshWanted = false
     private(set) var bootId: String?
     private(set) var serverVersion: String?
     private(set) var serverPid: Int?
@@ -136,12 +139,18 @@ final class HerdrController {
     var attachIds: [String: String] = [:]
     var terminalByAttach: [String: String] = [:]
     var attachQueue: [String] = []
-    var attachesInFlight = 0
+    var attachesInFlight: [String: UUID] = [:]
+    var attachRetries: [String: Task<Void, Never>] = [:]
     var snapshotRequestsInFlight: Set<String> = []
     /// Attaches that asked for another snapshot while one was in flight.
     var snapshotRetryWanted: Set<String> = []
     var lastLayouts: [String: HerdrControl.LayoutSnapshot] = [:]
+    /// Inner pane rectangles from the raw stream, rather than the generic
+    /// snapshot's layout in the server TUI's viewport.
+    var controlLayouts: [String: HerdrControl.LayoutSnapshot] = [:]
     var pushedGeometry: [String: (cols: Int, rows: Int)] = [:]
+    var confirmedGeometry: Set<String> = []
+    var panesNeedingSnapshot: Set<String> = []
     var geometryTasks: [String: Task<Void, Never>] = [:]
     var focusedPaneId: String?
     var agentStatuses: [String: HerdrControl.AgentStatusChangedData] = [:]
@@ -262,13 +271,20 @@ final class HerdrController {
         }
         do {
             let pipe = try await HerdrChannelFactory.open(command: controlCommand, on: gateway)
-            let router = self.router
+            // A late callback from an old stream must never reach a newly
+            // attached pane, even if the server reuses an attach id.
+            let generation = UUID()
+            streamGeneration = generation
+            let router = HerdrOutputRouter()
+            self.router = router
             let gatewayUUID = self.gatewayUUID
             // Dropped output leaves a screen nothing downstream can repair;
             // only a fresh snapshot does.
             router.onOverflow = { attachId in
                 Task { @MainActor in
-                    HerdrController.controller(forGateway: gatewayUUID)?.requestSnapshot(attachId: attachId)
+                    guard let controller = HerdrController.controller(forGateway: gatewayUUID),
+                          controller.streamGeneration == generation else { return }
+                    controller.requestSnapshot(attachId: attachId)
                 }
             }
             let channel = HerdrControlChannel(
@@ -285,21 +301,26 @@ final class HerdrController {
                         // any redraw at the new size can reach a surface
                         // still on the old grid; released once resized.
                         let barrier = router.holdOutput(forPanes: layout.panes.map(\.pane_id))
-                        Task { @MainActor in
-                            HerdrController.controller(forGateway: gatewayUUID)?
-                                .handleTabLayout(layout, barrier: barrier)
+                        await MainActor.run {
+                            guard let controller = HerdrController.controller(forGateway: gatewayUUID),
+                                  controller.streamGeneration == generation else { return }
+                            controller.handleTabLayout(layout, barrier: barrier)
                         }
                         return
                     default:
                         break
                     }
-                    Task { @MainActor in
-                        HerdrController.controller(forGateway: gatewayUUID)?.handleInbound(inbound)
+                    await MainActor.run {
+                        guard let controller = HerdrController.controller(forGateway: gatewayUUID),
+                              controller.streamGeneration == generation else { return }
+                        controller.handleInbound(inbound)
                     }
                 },
                 onClosed: { error in
                     Task { @MainActor in
-                        HerdrController.controller(forGateway: gatewayUUID)?.channelDidClose(error)
+                        guard let controller = HerdrController.controller(forGateway: gatewayUUID),
+                              controller.streamGeneration == generation else { return }
+                        controller.channelDidClose(error)
                     }
                 }
             )
@@ -577,6 +598,7 @@ final class HerdrController {
             router.release(barrier: barrier)
             return
         }
+        controlLayouts[layout.tab_id] = layout
         applyLayout(layout, barrier: barrier)
         if layoutReleases[barrier] == nil {
             router.release(barrier: barrier)
@@ -584,16 +606,27 @@ final class HerdrController {
     }
 
     private func detachAllLocally() {
+        streamGeneration = UUID()
+        topologyRefreshTask?.cancel()
+        topologyRefreshTask = nil
+        topologyRefreshWanted = false
+        for task in attachRetries.values { task.cancel() }
+        attachRetries.removeAll()
+        for task in geometryTasks.values { task.cancel() }
+        geometryTasks.removeAll()
         for release in layoutReleases.values { release.deadline?.cancel() }
         layoutReleases.removeAll()
         router.removeAll()
         attachIds.removeAll()
         terminalByAttach.removeAll()
         attachQueue.removeAll()
-        attachesInFlight = 0
+        attachesInFlight.removeAll()
         snapshotRequestsInFlight.removeAll()
         snapshotRetryWanted.removeAll()
         pushedGeometry.removeAll()
+        confirmedGeometry.removeAll()
+        controlLayouts.removeAll()
+        panesNeedingSnapshot.removeAll()
         for session in paneSessions.values {
             session.attachId = nil
         }
@@ -631,12 +664,16 @@ final class HerdrController {
             applyLayout(layout)
         case .paneCreated(let pane):
             paneDidAppear(pane)
+            refreshTopology()
         case .paneUpdated(let pane):
             paneDidUpdate(pane)
         case .paneClosed(let closed):
             paneDidClose(paneId: closed.pane_id)
-        case .paneExited:
-            break
+        case .paneExited(let exited):
+            // Natural shell exit need not emit pane.closed or tab.closed.
+            // Reconcile the surviving topology, including the last tab and
+            // workspace, without sending a close command back to the server.
+            paneDidClose(paneId: exited.pane_id)
         case .paneFocused(let focused):
             remoteFocusDidChange(paneId: focused.pane_id)
         case .paneMoved(let moved):
@@ -644,6 +681,7 @@ final class HerdrController {
         case .tabCreated(let tab):
             ensureTab(tab)
             reorderTabs()
+            refreshTopology()
         case .tabClosed(let closed):
             tabDidClose(tabId: closed.tab_id)
         case .tabRenamed(let renamed):
@@ -658,6 +696,7 @@ final class HerdrController {
             refreshWorkspaceGroups()
         case .workspaceClosed(let closed):
             workspaces.removeValue(forKey: closed.workspace_id)
+            refreshTopology()
         case .workspaceRenamed(let renamed):
             if var workspace = workspaces[renamed.workspace_id] {
                 workspace = HerdrControl.WorkspaceInfo(
@@ -689,14 +728,25 @@ final class HerdrController {
             Task { [weak self] in await self?.legacyPollOnce() }
             return
         }
-        guard let channel else { return }
-        Task { [weak self] in
-            guard let snapshot = try? await channel.request(
-                "session.snapshot",
-                HerdrControl.EmptyParams(),
-                as: HerdrControl.SessionSnapshotResult.self
-            ).snapshot else { return }
-            self?.applySnapshot(snapshot)
+        guard let channel, isActive else { return }
+        topologyRefreshWanted = true
+        guard topologyRefreshTask == nil else { return }
+        topologyRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            defer { if self.channel === channel { self.topologyRefreshTask = nil } }
+            while self.topologyRefreshWanted, !Task.isCancelled, self.channel === channel {
+                self.topologyRefreshWanted = false
+                do {
+                    let snapshot = try await channel.request(
+                        "session.snapshot", HerdrControl.EmptyParams(),
+                        as: HerdrControl.SessionSnapshotResult.self
+                    ).snapshot
+                    guard self.channel === channel, !Task.isCancelled else { return }
+                    self.applySnapshot(snapshot)
+                } catch {
+                    Self.logger.warning("herdr topology refresh failed: \(error.localizedDescription)")
+                }
+            }
         }
     }
 }

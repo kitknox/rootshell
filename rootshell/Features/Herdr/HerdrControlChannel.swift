@@ -44,21 +44,21 @@ actor HerdrControlChannel {
     private static let defaultTimeout: Duration = .seconds(15)
 
     private let pipe: AsyncBytePipe
-    private let onInbound: @Sendable (HerdrControl.Inbound) -> Void
+    private let onInbound: @Sendable (HerdrControl.Inbound) async -> Void
     private let onClosed: @Sendable (Error?) -> Void
 
     private var nextRequestId: UInt64 = 1
     private var pending: [String: CheckedContinuation<Data, Error>] = [:]
     private var readerTask: Task<Void, Never>?
     private var closed = false
-    private var writeQueue: Task<Void, Never>?
+    private var writeQueue: Task<Void, Error>?
 
     /// Facts from `control.open`, set once the stream is up.
     private(set) var opened: HerdrControl.ControlOpened?
 
     init(
         pipe: AsyncBytePipe,
-        onInbound: @escaping @Sendable (HerdrControl.Inbound) -> Void,
+        onInbound: @escaping @Sendable (HerdrControl.Inbound) async -> Void,
         onClosed: @escaping @Sendable (Error?) -> Void
     ) {
         self.pipe = pipe
@@ -164,10 +164,11 @@ actor HerdrControlChannel {
         // reply could otherwise land in `dispatch` with nothing to match.
         let response: Data = try await withCheckedThrowingContinuation { continuation in
             pending[id] = continuation
+            let write = enqueueWrite(line)
             Task { [weak self] in
                 guard let self else { return }
                 do {
-                    try await self.pipe.write(line)
+                    try await write.value
                 } catch {
                     await self.fail(id: id, error: error)
                 }
@@ -211,10 +212,24 @@ actor HerdrControlChannel {
         }
         line.append(0x0A)
         do {
-            try await pipe.write(line)
+            try await enqueueWrite(line).value
         } catch {
             Self.logger.warning("herdr input write failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Actor reentrancy must not interleave JSON lines or reorder a resize
+    /// and the attach/input that follows it while a transport write awaits.
+    private func enqueueWrite(_ line: Data) -> Task<Void, Error> {
+        let previous = writeQueue
+        let pipe = self.pipe
+        let write = Task {
+            if let previous { try await previous.value }
+            try Task.checkCancellation()
+            try await pipe.write(line)
+        }
+        writeQueue = write
+        return write
     }
 
     private func timeOut(id: String, method: String) {
@@ -255,7 +270,7 @@ actor HerdrControlChannel {
         }
     }
 
-    private func dispatch(_ line: Data) {
+    private func dispatch(_ line: Data) async {
         if let head = try? HerdrControl.decoder.decode(HerdrControl.LineHead.self, from: line),
            let id = head.id, head.type == nil, head.event == nil {
             if let continuation = pending.removeValue(forKey: id) {
@@ -266,7 +281,7 @@ actor HerdrControlChannel {
             return
         }
         if let inbound = HerdrControl.decodeInbound(line) {
-            onInbound(inbound)
+            await onInbound(inbound)
         }
     }
 

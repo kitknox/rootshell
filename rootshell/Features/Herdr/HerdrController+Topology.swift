@@ -31,7 +31,16 @@ extension HerdrController {
         }
         prune(tabIds: Set(snapshot.tabs.map(\.tab_id)), paneIds: livePaneIds, terminalIds: liveTerminalIds)
         for layout in snapshot.layouts {
-            applyLayout(layout)
+            // Generic snapshots use the server TUI's area. Preserve a raw
+            // layout for the same pane set so a topology refresh cannot
+            // resize an attached terminal back to that unrelated viewport.
+            if mode == .raw, let controlled = controlLayouts[layout.tab_id],
+               controlled.zoomed == layout.zoomed,
+               Set(controlled.panes.map(\.pane_id)) == Set(layout.panes.map(\.pane_id)) {
+                applyLayout(controlled)
+            } else {
+                applyLayout(layout)
+            }
         }
         // The snapshot is the whole truth about agents: a pane missing from
         // it lost its agent, so it gets a clearing report.
@@ -112,6 +121,8 @@ extension HerdrController {
         } else if tabsModel.selectedTabID == nil {
             tabsModel.selectedTabID = tab.id
         }
+        // Raw layouts can precede the polled creation events.
+        if let layout = lastLayouts[info.tab_id] { applyLayout(layout) }
     }
 
     func tabDidClose(tabId: String) {
@@ -198,6 +209,7 @@ extension HerdrController {
         if isNew {
             subscribeAgentStatus(paneId: pane.pane_id)
         }
+        if let layout = lastLayouts[pane.tab_id] { applyLayout(layout) }
     }
 
     func paneDidUpdate(_ pane: HerdrControl.PaneInfo) {
@@ -218,13 +230,21 @@ extension HerdrController {
     }
 
     func paneDidClose(paneId: String) {
-        guard let info = paneInfos.removeValue(forKey: paneId) else { return }
+        guard let info = paneInfos.removeValue(forKey: paneId) else {
+            refreshTopology()
+            return
+        }
+        if !paneInfos.values.contains(where: { $0.tab_id == info.tab_id }) {
+            tabInfos.removeValue(forKey: info.tab_id)
+        }
         prune(
             tabIds: Set(tabInfos.keys),
             paneIds: Set(paneInfos.keys),
             terminalIds: Set(paneInfos.values.map(\.terminal_id))
         )
-        _ = info
+        // Closing the final pane may remove its tab without a tab.closed
+        // event. Let the authoritative snapshot decide what survived.
+        refreshTopology()
     }
 
     func paneDidMove(_ moved: HerdrControl.PaneMovedData) {
@@ -305,7 +325,10 @@ extension HerdrController {
             tabs.removeValue(forKey: tabId)
             tabInfos.removeValue(forKey: tabId)
             lastLayouts.removeValue(forKey: tabId)
+            controlLayouts.removeValue(forKey: tabId)
             pushedGeometry.removeValue(forKey: tabId)
+            confirmedGeometry.remove(tabId)
+            geometryTasks.removeValue(forKey: tabId)?.cancel()
             if wasSelected {
                 tabsModel.selectedTabID = neighbor ?? tabsModel.tabs.first?.id
             }
@@ -323,6 +346,10 @@ extension HerdrController {
     }
 
     private func retirePane(view: Ghostty.TerminalView, terminalId: String) {
+        attachQueue.removeAll { $0 == terminalId }
+        attachRetries.removeValue(forKey: terminalId)?.cancel()
+        attachesInFlight.removeValue(forKey: terminalId)
+        panesNeedingSnapshot.remove(terminalId)
         view.isLogicallyFocused = false
         view.shouldBecomeFirstResponderWhenReady = false
         view.herdrTargetGrid = nil
@@ -356,8 +383,8 @@ extension HerdrController {
     // MARK: - Layout
 
     func applyLayout(_ layout: HerdrControl.LayoutSnapshot, barrier: UInt64? = nil) {
-        guard let tab = tabs[layout.tab_id] else { return }
         lastLayouts[layout.tab_id] = layout
+        guard let tab = tabs[layout.tab_id] else { return }
         guard let node = HerdrLayoutTree.build(layout) else { return }
         guard let root = buildSplitNode(node) else {
             // A pane view is missing (out-of-order event); the next layout
@@ -370,6 +397,7 @@ extension HerdrController {
         // so a clamp there would pin the pane to the last snapshot forever.
         for pane in layout.panes {
             guard let terminalId = paneInfos[pane.pane_id]?.terminal_id, let view = paneViews[terminalId] else { continue }
+            view.containingTabID = tab.id
             view.herdrTargetGrid = mode == .raw ? (cols: pane.rect.width, rows: pane.rect.height) : nil
         }
         var zoomed: SplitTree<SplitPaneView>.Node?
@@ -378,6 +406,7 @@ extension HerdrController {
             zoomed = .leaf(view: view)
         }
         tab.splitTree = SplitTree(root: root, zoomed: zoomed)
+        showPanesIfSelected(in: tab)
         if let barrier {
             armLayoutRelease(for: layout, barrier: barrier)
         }
@@ -475,6 +504,17 @@ extension HerdrController {
 
     // MARK: - Focus
 
+    /// A selected tab can still be empty when MainView handles selection.
+    /// Panes created before that selection carry explicit hidden visibility
+    /// into surface creation. Reconcile when their tree actually arrives;
+    /// first-frame and tab-switch retries deliberately do not unhide panes.
+    func showPanesIfSelected(in tab: TabModel) {
+        guard tabsModel.selectedTabID == tab.id, !Ghostty.isAppBackgroundedAtomic else { return }
+        for view in tab.splitTree.terminalLeaves where !view.isTabVisible {
+            view.setOcclusion(true)
+        }
+    }
+
     /// Makes `view` the focused pane of `tab` (logical focus plus first
     /// responder when the tab is visible). Mirrors TmuxController.focusPane.
     func focusPane(_ view: Ghostty.TerminalView, in tab: TabModel) {
@@ -536,6 +576,7 @@ extension HerdrController {
         guard let info = paneInfos[paneId], let tab = tabs[info.tab_id] else { return }
         tabsModel.selectedTabID = tab.id
         tabsModel.pendingScrollToTabID = tab.id
+        showPanesIfSelected(in: tab)
         if focus, let view = paneViews[info.terminal_id] {
             focusPane(view, in: tab)
         }

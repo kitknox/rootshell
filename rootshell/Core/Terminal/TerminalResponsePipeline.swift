@@ -185,6 +185,8 @@ final class TerminalResponsePipeline {
     private func dispatch(_ data: Data, to session: TerminalSession?) {
         guard let session else { return }
         guard let host else { return }
+        let data = (session as? HerdrPaneSession)?.consumeParserGridReports(data) ?? data
+        guard !data.isEmpty else { return }
 
         if host.terminalResponseHasTmuxController {
             let filtered = Self.stripTerminalReports(

@@ -60,12 +60,27 @@ extension HerdrController {
             ?? workspaces.values.first(where: \.focused)?.workspace_id
             ?? workspaces.keys.sorted().first
         guard let workspaceId else { return }
-        pendingNewTabSelectionUntil = Date().addingTimeInterval(5)
         if mode == .legacy {
+            pendingNewTabSelectionUntil = Date().addingTimeInterval(5)
             legacyCommand("tab create --workspace \(workspaceId)")
             return
         }
-        send("tab.create", HerdrControl.TabCreateParams(workspace_id: workspaceId))
+        guard let channel else { return }
+        Task { [weak self] in
+            do {
+                let created = try await channel.request(
+                    "tab.create", HerdrControl.TabCreateParams(workspace_id: workspaceId),
+                    as: HerdrControl.TabCreatedResult.self
+                )
+                guard let self, self.channel === channel else { return }
+                self.ensureTab(created.tab)
+                self.paneDidAppear(created.root_pane)
+                self.selectTab(containingPane: created.root_pane.pane_id, focusPane: true)
+                self.refreshTopology()
+            } catch {
+                Self.logger.warning("herdr tab.create failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     func requestCloseTab(_ tab: TabModel) {

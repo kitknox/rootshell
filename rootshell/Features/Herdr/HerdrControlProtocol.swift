@@ -251,6 +251,11 @@ nonisolated enum HerdrControl {
         let snapshot: SessionSnapshot
     }
 
+    struct TabCreatedResult: Decodable {
+        let tab: TabInfo
+        let root_pane: PaneInfo
+    }
+
     struct TerminalCursor: Decodable, Sendable {
         let x: Int
         let y: Int
