@@ -36,7 +36,7 @@ actor HerdrCitadelPTYChannel: HerdrPTYChannel {
             pump = Task {
                 do {
                     try await client.withPTYExec(request, command: command, agentDelegate: nil) { inbound, writer in
-                        try await self.didOpen(writer)
+                        try self.didOpen(writer)
                         for try await chunk in inbound {
                             try Task.checkCancellation()
                             switch chunk {

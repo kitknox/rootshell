@@ -311,23 +311,23 @@ public class HelperConnection {
     /// Ensures helper is running, launching it if necessary (non-sandboxed mode only)
     /// Returns true if helper is available (either existing or newly launched)
     public func ensureHelperRunning() async -> Bool {
-        ensureLock.lock()
-        if let inFlightEnsure {
-            ensureLock.unlock()
-            return await inFlightEnsure.value
-        }
-
-        let created = Task {
-            defer {
-                self.ensureLock.lock()
-                self.inFlightEnsure = nil
-                self.ensureLock.unlock()
+        let task = ensureLock.withLock {
+            if let inFlightEnsure {
+                return inFlightEnsure
             }
-            return await self.performEnsureHelperRunning()
+
+            let created = Task {
+                defer {
+                    self.ensureLock.withLock {
+                        self.inFlightEnsure = nil
+                    }
+                }
+                return await self.performEnsureHelperRunning()
+            }
+            inFlightEnsure = created
+            return created
         }
-        inFlightEnsure = created
-        ensureLock.unlock()
-        return await created.value
+        return await task.value
     }
 
     private func performEnsureHelperRunning() async -> Bool {

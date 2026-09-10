@@ -226,7 +226,7 @@ class SessionManager {
             return false
         }
 
-        var size = PTYSize(rows: rows, cols: cols, xpixel: 0, ypixel: 0)
+        let size = PTYSize(rows: rows, cols: cols, xpixel: 0, ypixel: 0)
         do {
             try PTYManagerImpl.resizePTY(session.pty.masterFD, size: size)
             return true

@@ -41,16 +41,20 @@ final class HerdrLocalPTYChannel: HerdrPTYChannel {
         try await output.read(maxBytes: maxBytes)
     }
 
+    // Explicit isolation overrides inference from the nonisolated transport protocols.
+    @MainActor
     func write(_ data: Data) async throws {
         guard let session, session.isRunning else { throw HerdrPTYError.closed }
         session.sendInput(data)
     }
 
+    @MainActor
     func resize(cols: Int, rows: Int) async throws {
         guard let session, session.isRunning else { throw HerdrPTYError.closed }
         try session.setSize(TerminalPTY.TerminalSize(rows: UInt16(clamping: rows), cols: UInt16(clamping: cols)))
     }
 
+    @MainActor
     func close() async {
         output.finish(discard: true)
         session?.onSessionEnd = nil

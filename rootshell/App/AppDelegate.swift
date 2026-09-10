@@ -203,7 +203,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                        object: nil, queue: .main) { _ in
             WedgeBreadcrumbLogger.shared.critical("UIKit.didBecomeActive.begin")
             Ghostty.isSecureDrawProhibitedAtomic = false
-            PreviewRenderingLifecycle.scheduleResumeAfterActivation()
+            // These observers run on .main. Keep preview lifecycle changes
+            // synchronous with the secure-draw latch.
+            MainActor.assumeIsolated {
+                PreviewRenderingLifecycle.scheduleResumeAfterActivation()
+            }
             LifecycleDebugLogger.shared.checkpoint("SECURE.latch.clear")
             let appState = String(describing: UIApplication.shared.applicationState)
             ForegroundActivationGate.shared.markDidBecomeActive(appState: appState)
@@ -230,7 +234,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         nc.addObserver(forName: UIApplication.willResignActiveNotification,
                        object: nil, queue: .main) { _ in
             Ghostty.isSecureDrawProhibitedAtomic = true
-            PreviewRenderingLifecycle.suspend()
+            MainActor.assumeIsolated {
+                PreviewRenderingLifecycle.suspend()
+            }
             LifecycleDebugLogger.shared.checkpoint("SECURE.latch.arm", ms: nil, [
                 ("trigger", "willResignActive"),
             ])
@@ -242,7 +248,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         nc.addObserver(forName: UIApplication.didEnterBackgroundNotification,
                        object: nil, queue: .main) { _ in
             Ghostty.isSecureDrawProhibitedAtomic = true
-            PreviewRenderingLifecycle.didEnterBackground()
+            MainActor.assumeIsolated {
+                PreviewRenderingLifecycle.didEnterBackground()
+            }
             LifecycleDebugLogger.shared.checkpoint("SECURE.latch.arm", ms: nil, [
                 ("trigger", "didEnterBackground"),
             ])
@@ -263,7 +271,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             // A lock that reaches us here rather than via willResignActive must
             // still close the secure-draw gate.
             Ghostty.isSecureDrawProhibitedAtomic = true
-            PreviewRenderingLifecycle.suspend()
+            MainActor.assumeIsolated {
+                PreviewRenderingLifecycle.suspend()
+            }
             LifecycleDebugLogger.shared.checkpoint("SECURE.latch.arm", ms: nil, [
                 ("trigger", "protectedDataWillBecomeUnavailable"),
             ])

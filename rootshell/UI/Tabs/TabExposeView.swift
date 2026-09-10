@@ -247,11 +247,11 @@ final class TabExposeView: UIView, TabExposeControllerObserver, PreviewRendering
             primary.scrollCellIntoView(id: controller.highlightedTabID, animated: false)
             startDisplayLink()
             if controller.wantsFirstResponderFallback {
-                becomeFirstResponder()
+                _ = becomeFirstResponder()
             }
         } else {
             stopDisplayLink()
-            if isFirstResponder { resignFirstResponder() }
+            if isFirstResponder { _ = resignFirstResponder() }
             isHidden = true
             accessibilityViewIsModal = false
             hero.releaseContents()
