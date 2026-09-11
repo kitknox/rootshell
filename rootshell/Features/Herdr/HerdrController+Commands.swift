@@ -111,9 +111,10 @@ extension HerdrController {
     }
 
     /// The user focused a pane: keep herdr's active pane in sync. Remote
-    /// follows and watchdog re-asserts never call this. The stock CLI has
-    /// no focus-by-id, so degraded mode leaves herdr's focus alone.
+    /// follows and watchdog re-asserts never call this. Vanilla endpoint
+    /// focus belongs to our client, independently of the CLI's focus.
     func requestSelectPane(_ view: Ghostty.TerminalView) {
+        if let state = view.herdrEndpointPane { state.focus(); return }
         guard let binding = view.herdrPaneBinding, isActive, mode == .raw else { return }
         send("pane.focus", HerdrControl.PaneTarget(pane_id: binding.paneId))
     }
@@ -381,6 +382,7 @@ extension HerdrController {
 
     func requestFocusTab(_ tab: TabModel) {
         guard let tabId = tab.herdrTabId else { return }
+        if mode == .legacy, !endpointUnsupported { reconcileEndpoint(); return }
         send("tab.focus", HerdrControl.TabTarget(tab_id: tabId))
     }
 }

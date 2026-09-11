@@ -91,6 +91,15 @@ final class HerdrController {
     }
     var mode: Mode = .raw
     var legacyStreams: [String: HerdrLegacyPaneStream] = [:]
+    // Vanilla 0.9.0 endpoint; independent of our fork's raw control channel.
+    var endpoint: HerdrEndpointChannel?
+    var endpointOpening: Task<Void, Never>?
+    var endpointUnsupported = false
+    var endpointProbed = false
+    var endpointActive = true
+    var endpointTabID: String?
+    var endpointSize: HerdrTabGeometryState.Size?
+    var endpointLayouts: [String: HerdrControl.LayoutSnapshot] = [:]
     var legacyOpening: [String: (id: UUID, task: Task<Void, Never>)] = [:]
     var legacyClosing: [String: Task<Void, Never>] = [:]
     var legacyPTYUnavailable = false
@@ -461,6 +470,10 @@ final class HerdrController {
     func pipelineDidOverflow(terminalId: String) {
         guard !didEnd else { return }
         if mode == .legacy {
+            if !endpointUnsupported {
+                endpoint?.close(error: HerdrEndpointWire.Failure.invalid("surface output dropped; reconnecting for a full frame"))
+                return
+            }
             // A new attach starts with a complete rendered frame. Continuing
             // incremental output after lost bytes would leave a damaged screen.
             legacyCloseStream(terminalId)

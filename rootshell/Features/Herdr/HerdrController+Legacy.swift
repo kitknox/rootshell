@@ -2,10 +2,9 @@
 //  HerdrController+Legacy.swift
 //  rootshell
 //
-//  Degraded control mode for a herdr without control streams: topology
-//  comes from polling `herdr api snapshot`, and each visited pane rides its
-//  own PTY running `herdr terminal attach`. The stock client translates
-//  mouse input and scrollback; JSON frame streams remain a compatibility fallback.
+//  Fallback control mode uses the vanilla endpoint for frames and input,
+//  with `herdr api snapshot` supplying native tab identities. Older servers
+//  retain the PTY `herdr terminal attach` compatibility path below.
 //
 //  Copyright (c) 2026 Kit Knox / Rootshell LLC
 //
@@ -29,7 +28,7 @@ extension HerdrController {
         connectionError = nil
         reconnectAttempt = 0
         Self.logger.info("herdr control: degraded mode (\(reason))")
-        let upgradeHint = forced ? "" : " Upgrade herdr on the host for raw control streams."
+        let upgradeHint = " Vanilla herdr 0.9.0 supports native scrolling and selection."
         gateway?.writeToGhostty(string:
             "\r\n\u{1b}[33mherdr control mode: \(reason). Running with server-rendered panes.\(upgradeHint)\u{1b}[0m\r\n")
         publishSessionState()
@@ -42,6 +41,12 @@ extension HerdrController {
     }
 
     func stopLegacyMode() {
+        endpointOpening?.cancel()
+        endpointOpening = nil
+        let previousEndpoint = endpoint
+        endpoint = nil
+        previousEndpoint?.close()
+        for view in paneViews.values { view.herdrEndpointPane?.disconnect() }
         legacyPollTask?.cancel()
         legacyPollTask = nil
         for opening in legacyOpening.values { opening.task.cancel() }
@@ -233,6 +238,10 @@ extension HerdrController {
     /// their screen, selection and server viewport stay ready to return to.
     func legacyReconcileAttaches() {
         guard mode == .legacy, !didEnd else { return }
+        if !endpointUnsupported {
+            reconcileEndpoint()
+            return
+        }
         for (terminalId, session) in paneSessions {
             if legacySuspended || Ghostty.isAppBackgroundedAtomic {
                 legacyOpening[terminalId]?.task.cancel()
@@ -360,11 +369,21 @@ extension HerdrController {
     }
 
     func legacyInput(_ session: HerdrPaneSession, _ data: Data) {
+        if !endpointUnsupported {
+            paneViews[session.terminalId]?.herdrEndpointPane?.sendText(String(decoding: data, as: UTF8.self))
+            return
+        }
         legacyStreams[session.terminalId]?.sendInput(data)
     }
 
     func legacyGridDidChange(_ session: HerdrPaneSession, rows: Int, cols: Int) {
         guard rows >= 2, cols >= 4 else { return }
+        if !endpointUnsupported {
+            session.confirmParserGrid(cols: cols, rows: rows)
+            paneViews[session.terminalId]?.herdrEndpointPane?.commitPendingFrame()
+            reconcileEndpoint()
+            return
+        }
         legacyGrids[session.terminalId] = (rows, cols)
         if let stream = legacyStreams[session.terminalId] {
             stream.resize(cols: cols, rows: rows)
@@ -374,6 +393,8 @@ extension HerdrController {
     }
 
     func legacyPaneDidStop(_ session: HerdrPaneSession) {
+        paneViews[session.terminalId]?.herdrEndpointPane?.disconnect()
+        paneViews[session.terminalId]?.herdrEndpointPane = nil
         legacyOpening[session.terminalId]?.task.cancel()
         legacyGrids.removeValue(forKey: session.terminalId)
         legacyCloseStream(session.terminalId)

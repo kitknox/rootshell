@@ -328,6 +328,12 @@ extension Ghostty {
         /// Server-rendered panes own scrollback even when the application does
         /// not capture the pointer. Keep scroll routing separate from selection.
         @Published var usesHerdrFallbackScrolling = false
+        var herdrEndpointPane: HerdrEndpointPane?
+
+        var hasTerminalTextSelection: Bool {
+            if let herdrEndpointPane { return herdrEndpointPane.hasSelection }
+            return surface.map { ghostty_surface_has_selection($0) } ?? false
+        }
 
         /// User-toggled override that force-disables mouse reporting for this terminal.
         /// When active, native text selection and scrolling work even when the
@@ -2551,6 +2557,14 @@ extension Ghostty {
             mods: ghostty_input_mods_e = Ghostty.Input.Mods.none.cMods
         ) {
             invalidateWritingAssistance()
+            if let state = herdrEndpointPane {
+                if state.capturesMouse {
+                    state.mouse(kind: action == GHOSTTY_MOUSE_PRESS ? 0 : 1,
+                                button: button == GHOSTTY_MOUSE_RIGHT ? 1 : (button == GHOSTTY_MOUSE_MIDDLE ? 2 : 0),
+                                at: lastMousePosition)
+                } else if action == GHOSTTY_MOUSE_RELEASE { state.endDrag() }
+                return
+            }
             guard let surface = surface else { return }
             Self.ghosttyAPIQueue.async {
                 ghostty_surface_mouse_button(surface, action, button, mods)
@@ -2560,6 +2574,10 @@ extension Ghostty {
         /// Send mouse scroll event to Ghostty on background queue to avoid blocking main thread.
         func sendMouseScroll(deltaX: Double, deltaY: Double, mods: ghostty_input_scroll_mods_t = Ghostty.Input.ScrollMods.none.cMods) {
             invalidateWritingAssistance()
+            if let state = herdrEndpointPane {
+                state.scroll(deltaX: CGFloat(deltaX), deltaY: CGFloat(deltaY), at: lastMousePosition)
+                return
+            }
             guard let surface = surface else { return }
             Self.ghosttyAPIQueue.async {
                 ghostty_surface_mouse_scroll(surface, deltaX, deltaY, mods)
@@ -2662,6 +2680,7 @@ extension Ghostty {
         /// Dispatch a terminal binding action off the main thread so heavy
         /// mailbox contention doesn't block UI responsiveness.
         func performActionAsync(_ action: String) {
+            if herdrEndpointPane?.action(action) == true { return }
             invalidateWritingAssistance()
             guard let surface = surface else { return }
             let len = action.utf8CString.count
@@ -2726,6 +2745,7 @@ extension Ghostty {
             selectionUIExternallyOccluded = occluded
             pointerInteraction?.invalidate()
             if occluded {
+                herdrEndpointPane?.cancelInteraction()
                 removeSelectionHandleViewsFromWindow()
                 hideSelectionHandles(animated: false)
                 hideSelectionMagnifier(animated: false)
@@ -2744,6 +2764,7 @@ extension Ghostty {
             guard selectionUISwipeSuppressed != suppressed else { return }
             selectionUISwipeSuppressed = suppressed
             if suppressed {
+                herdrEndpointPane?.cancelInteraction()
                 removeSelectionHandleViewsFromWindow()
                 hideSelectionHandles(animated: false)
                 hideSelectionMagnifier(animated: false)
@@ -3022,12 +3043,8 @@ extension Ghostty {
         /// Clears stale touch/selection state when entering background.
         /// Prevents ghost selections from touches that were interrupted by app switch.
         func clearTouchState() {
-            let preserveTouchSelection: Bool
-            if let surface {
-                preserveTouchSelection = ghostty_surface_has_selection(surface)
-            } else {
-                preserveTouchSelection = false
-            }
+            herdrEndpointPane?.cancelInteraction()
+            let preserveTouchSelection = hasTerminalTextSelection
 
             isSelecting = false
             selectionStartPoint = nil
@@ -4493,6 +4510,10 @@ extension Ghostty {
         /// Updates the mouse capture state and publishes changes.
         /// Called from handleScrollbar() and scroll events to detect mode changes.
         func updateMouseCaptureState() {
+            if let state = herdrEndpointPane {
+                if isMouseCaptured != state.capturesMouse { isMouseCaptured = state.capturesMouse }
+                return
+            }
             guard let surface = surface else {
                 if isMouseCaptured {
                     isMouseCaptured = false
@@ -4519,6 +4540,7 @@ extension Ghostty {
         /// `skipResign` is safe when unfocusing the old terminal.
         @discardableResult
         override func focusDidChange(_ focused: Bool, skipResign: Bool = false) -> Bool {
+            if !focused { herdrEndpointPane?.cancelInteraction() }
             #if os(iOS) && !targetEnvironment(macCatalyst)
             if focused && !iPadVisorController.permitsFocus(self) { return false }
             #endif
@@ -5030,6 +5052,7 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
     }
     
     func handleScrollbar(total: UInt64, offset: UInt64, len: UInt64) {
+        if herdrEndpointPane != nil { return }
         // While multiplexer tracking owns the scrollbar values, drop
         // native callbacks (which fire for the alt screen the multiplexer
         // is on, with useless at-bottom values that would clobber the
@@ -5087,6 +5110,7 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
     /// handleScrollbarUpdate path sizes the document and flashes
     /// UIScrollView's native scroll indicator.
     func applyMultiplexerScrollSample(_ sample: Ghostty.MultiplexerScrollIndicatorObserver.Sample?) {
+        guard herdrEndpointPane == nil else { return }
         guard let sample = sample else {
             // Tracking ended. Restore the pre-tracking native scrollbar
             // state so TerminalScrollView resizes its document view back
@@ -5150,6 +5174,20 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
         let maxOffset = total > len ? total - len : 0
         let offset = min(sample.history > sample.oy ? sample.history - sample.oy : 0, maxOffset)
 
+        applyExternalScrollbar(total: total, offset: offset, len: len)
+    }
+
+    /// Shared indicator sink. Endpoint metadata must never bind the pane to
+    /// the raw tmux/zellij text detector merely to borrow its scrollbar UI.
+    func applyHerdrEndpointScroll(_ scroll: HerdrEndpointSurface.Scroll?) {
+        applyExternalScrollbar(total: scroll?.total ?? 0, offset: scroll?.top ?? 0, len: scroll?.viewport_rows ?? 0)
+        if scroll == nil { multiplexerScrollActive = false }
+        updateScrollIndicatorLayout()
+        updateScrollIndicatorVisibility(animated: true, reveal: Date().timeIntervalSinceReferenceDate <= scrollIndicatorRevealDeadline)
+    }
+
+    private func applyExternalScrollbar(total: UInt64, offset: UInt64, len: UInt64) {
+        let changed = scrollbarTotal != total || scrollbarOffset != offset || scrollbarLen != len || !multiplexerScrollActive
         scrollbarTotal = total
         scrollbarOffset = offset
         scrollbarLen = len
@@ -5159,7 +5197,7 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
         if !multiplexerScrollActive {
             multiplexerScrollActive = true
         }
-        NotificationCenter.default.post(name: .ghosttyDidUpdateScrollbar, object: self)
+        if changed { NotificationCenter.default.post(name: .ghosttyDidUpdateScrollbar, object: self) }
     }
 
     func handleProgressReport(_ report: Ghostty.Action.ProgressReport) {
@@ -5228,6 +5266,7 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
     /// - Parameter action: The action string (e.g., "scroll_to_row:100", "select_all")
     /// - Returns: True if the action was performed successfully
     func performAction(_ action: String) -> Bool {
+        if herdrEndpointPane?.action(action) == true { return true }
         invalidateWritingAssistance()
         guard let surface = surface else { return false }
         let len = action.utf8CString.count
@@ -5482,6 +5521,11 @@ extension Ghostty.TerminalView {
         unshiftedCodepoint: UInt32 = 0
     ) -> Bool {
         invalidateWritingAssistance()
+        if let state = herdrEndpointPane {
+            state.sendKey(keyCode, action: action, mods: mods,
+                          text: text.flatMap { KeyCode.isUIKeyInputSentinel($0) ? nil : $0 }, unshifted: unshiftedCodepoint)
+            return true
+        }
         guard let surface = surface else { return false }
         guard let nativeKeycode = Ghostty.Input.nativeKeyCode(for: keyCode) else { return false }
 

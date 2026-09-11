@@ -291,7 +291,8 @@ extension HerdrController {
     /// rootshell actually shows.
     func paneGridDidChange(_ session: HerdrPaneSession, rows: Int, cols: Int) {
         if mode == .legacy {
-            // rootshell owns pane sizes here; the server has no tab geometry.
+            // The stock endpoint negotiates the selected tab's surface; old
+            // attach-only servers still resize each pane independently.
             legacyGridDidChange(session, rows: rows, cols: cols)
             return
         }
@@ -312,6 +313,10 @@ extension HerdrController {
     /// A surface-size callback is intent. This reply proves the parser has
     /// applied the resize, and is the only path that releases resized output.
     func paneParserGridDidChange(_ session: HerdrPaneSession, cols: Int, rows: Int) {
+        if mode == .legacy, !endpointUnsupported {
+            paneViews[session.terminalId]?.herdrEndpointPane?.commitPendingFrame()
+            return
+        }
         guard mode == .raw, paneSessions[session.terminalId] === session,
               let size = paneViews[session.terminalId]?.surfaceSize,
               Int(size.columns) == cols, Int(size.rows) == rows else { return }
@@ -325,6 +330,7 @@ extension HerdrController {
     /// tab's cell budget may have changed even though every pane is still
     /// clamped to the last server grid.
     func hostLayoutDidChange(for view: Ghostty.TerminalView) {
+        if mode == .legacy, !endpointUnsupported { reconcileEndpoint(); return }
         guard mode == .raw else { return }
         scheduleGeometryPush(from: view)
         pumpAttachQueue()
@@ -332,6 +338,7 @@ extension HerdrController {
     }
 
     func pushGeometryForHostedTabs() {
+        if mode == .legacy, !endpointUnsupported { reconcileEndpoint(); return }
         for tab in tabs.values {
             guard let view = geometryView(in: tab) else { continue }
             scheduleGeometryPush(from: view)

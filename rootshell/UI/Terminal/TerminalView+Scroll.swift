@@ -150,6 +150,11 @@ extension Ghostty.TerminalView {
             ? lastMousePosition
             : CGPoint(x: bounds.width / 2, y: bounds.height / 2)
 
+        if let state = herdrEndpointPane {
+            state.scroll(deltaX: deltaX, deltaY: deltaY, at: scrollPosition)
+            return
+        }
+
         if usesHerdrFallbackScrolling && !ghostty_surface_mouse_captured(surface) {
             sendHerdrFallbackScroll(deltaY: deltaY, at: scrollPosition)
             return

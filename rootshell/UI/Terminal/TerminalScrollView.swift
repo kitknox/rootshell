@@ -1953,6 +1953,14 @@ extension Ghostty {
 
         let deltaRows = row - lastSentRow
 
+        if let state = terminalView.herdrEndpointPane {
+            resetSmoothScrollOffset()
+            guard row != lastSentRow else { return }
+            lastSentRow = row
+            state.scrollToRow(row)
+            return
+        }
+
         if terminalView.multiplexerScrollActive {
             resetSmoothScrollOffset()
             guard row != lastSentRow else { return }

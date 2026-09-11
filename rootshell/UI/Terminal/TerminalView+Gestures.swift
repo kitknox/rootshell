@@ -57,6 +57,10 @@ extension Ghostty.TerminalView {
         if !lastContextMenuTriggerWasPencil {
             reloadInputViews()
         }
+        if let state = herdrEndpointPane, !isMouseCaptured, lastContextMenuTriggerWasFinger {
+            state.clearSelection()
+            return
+        }
 
         #if !targetEnvironment(macCatalyst)
         // Clear any existing text selection by sending a click at the tap location.
@@ -88,6 +92,14 @@ extension Ghostty.TerminalView {
         guard let surface = surface else { return }
 
         let point = gesture.location(in: self)
+        if let state = herdrEndpointPane {
+            if gesture.state == .began || gesture.state == .changed { state.mouseMove(at: point) }
+            else if gesture.state == .ended || gesture.state == .cancelled {
+                state.mouseUp(at: point)
+                stopRightClickMonitoring()
+            }
+            return
+        }
 
         switch gesture.state {
         case .began, .changed:
@@ -144,6 +156,7 @@ extension Ghostty.TerminalView {
             }
 #endif
             lastMousePosition = point
+            if herdrEndpointPane?.capturesMouse == true, !mousePressed { herdrEndpointPane?.mouseMove(at: point) }
 
             // Send hover position to Ghostty so apps like tmux can track cursor position
             // This is critical for tmux divider detection - tmux needs to know the cursor
@@ -193,6 +206,7 @@ extension Ghostty.TerminalView {
     /// Handle single-finger pan for text selection on iOS/iPadOS
     /// Uses movement (not long press) to trigger selection, avoiding conflict with context menu
     @objc func handleSelectionPan(_ gesture: UIPanGestureRecognizer) {
+        if herdrEndpointPane != nil { handleEndpointSelectionGesture(gesture); return }
         // Don't handle selection in capture mode - let finger drag handle mouse events
         guard !isMouseCaptured, let surface = surface else { return }
 
@@ -304,6 +318,12 @@ extension Ghostty.TerminalView {
     }
 
     private func cancelSelectionForMultiTouch(at point: CGPoint?) {
+        if let state = herdrEndpointPane {
+            state.clearSelection()
+            isSelecting = false
+            hideSelectionMagnifier(animated: false)
+            return
+        }
         guard isSelectionDelayPending || isSelecting else { return }
 
         selectionDelayTimer?.invalidate()
@@ -375,6 +395,7 @@ extension Ghostty.TerminalView {
 
     /// Handle long press for text selection in scroll mode
     @objc func handleSelectionLongPress(_ gesture: UILongPressGestureRecognizer) {
+        if herdrEndpointPane != nil { handleEndpointSelectionGesture(gesture); return }
         let location = gesture.location(in: self)
 
         switch gesture.state {
@@ -682,6 +703,23 @@ extension Ghostty.TerminalView {
 
     #if targetEnvironment(macCatalyst)
     @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+        if let state = herdrEndpointPane, !state.capturesMouse {
+            let location = gesture.location(in: self)
+            switch gesture.state {
+            case .began:
+                NotificationCenter.default.post(name: .focusSplit, object: self)
+                isSelecting = true
+                state.beginSelection(at: location)
+            case .changed: state.drag(to: location)
+            case .ended, .cancelled, .failed:
+                state.endDrag()
+                isSelecting = false
+                if gesture.state == .ended, state.hasSelection,
+                   SettingsStore.shared.value(Settings.Selection.copyOnSelect) { state.copy() }
+            default: break
+            }
+            return
+        }
         guard let surface = surface else { return }
 
         let location = gesture.location(in: self)
@@ -883,6 +921,7 @@ extension Ghostty.TerminalView {
 extension Ghostty.TerminalView {
 
     override func copy(_ sender: Any?) {
+        if let state = herdrEndpointPane { state.copy(); return }
         guard let surface = surface else { return }
 
         // Check if there's a selection
@@ -1393,6 +1432,11 @@ extension Ghostty.TerminalView {
         if recordHistory {
             ClipboardHistoryManager.shared.record(text, source: .paste)
         }
+        if let state = herdrEndpointPane {
+            state.sendText(text, paste: true)
+            NotificationCenter.default.post(name: .ghosttyDidReceiveInput, object: self)
+            return true
+        }
         text.withCString { ptr in
             ghostty_surface_text(surface, ptr, UInt(text.utf8.count))
         }
@@ -1407,8 +1451,7 @@ extension Ghostty.TerminalView {
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         if action == #selector(copy(_:)) {
-            guard let surface = surface else { return false }
-            return ghostty_surface_has_selection(surface)
+            return hasTerminalTextSelection
         }
         if action == #selector(paste(_:)) {
             // Use non-prompting detection APIs here. UIKit re-validates this on
@@ -1897,7 +1940,7 @@ extension Ghostty.TerminalView {
     // scroll position to prevent visual scrolling while maintaining native physics.
 
     /// Track which mouse button is currently pressed for proper release event
-    private static var pressedMouseButton: ghostty_input_mouse_button_e = GHOSTTY_MOUSE_LEFT
+    static var pressedMouseButton: ghostty_input_mouse_button_e = GHOSTTY_MOUSE_LEFT
 
     #if !targetEnvironment(macCatalyst)
     // Track if mouse down was cancelled because touch became multi-finger (scroll gesture)
@@ -2294,6 +2337,7 @@ extension Ghostty.TerminalView {
     }
 
     func handleMouseDown(at point: CGPoint, isRightClick: Bool = false) {
+        if let state = herdrEndpointPane { state.mouseDown(at: point, right: isRightClick); return }
         invalidateWritingAssistance()
         stopCaptureAutoScroll()
         guard let surface = surface else { return }
@@ -2349,6 +2393,7 @@ extension Ghostty.TerminalView {
     }
 
     func handleMouseMove(at point: CGPoint) {
+        if let state = herdrEndpointPane { state.mouseMove(at: point); return }
         guard let surface = surface else { return }
 
         let pixelPoint = viewToPixelCoordinates(point)
@@ -2364,6 +2409,7 @@ extension Ghostty.TerminalView {
     }
 
     func handleMouseUp(at point: CGPoint) {
+        if let state = herdrEndpointPane { state.mouseUp(at: point); return }
         stopCaptureAutoScroll()
         defer {
             mousePressed = false
@@ -2493,6 +2539,7 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
 
             // Capture the start position FIRST before any delay
             setRightClickStartPosition(location)
+            lastMousePosition = location
 
             // Send right-click press to terminal
             let pixelPoint = viewToPixelCoordinates(location)
@@ -2587,7 +2634,7 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
         } else {
             // UIContextMenuInteraction (right-click) supplies no suggested edit
             // actions, so use responder-chain commands rather than closures.
-            if let surface = surface, ghostty_surface_has_selection(surface) {
+            if hasTerminalTextSelection {
                 menuItems.append(UICommand(
                     title: String(localized: "Copy"),
                     image: UIImage(systemName: "doc.on.doc"),
@@ -3200,6 +3247,21 @@ extension Ghostty.TerminalView {
     /// Compute selection bounds plus the geometry needed to map handle drags
     /// back into viewport cell coordinates.
     private func selectionHandleMetrics() -> SelectionHandleMetrics? {
+        if let state = herdrEndpointPane {
+            guard state.hasSelection, let selection = state.selection, let pane = state.pane,
+                  let geometry = state.geometry else { return nil }
+            let (start, end) = selection.ordered
+            let top = pane.scroll?.top ?? 0
+            let startRow = Int(start.row) - Int(top), endRow = Int(end.row) - Int(top)
+            let cellW = Double(geometry.cellWidth), cellH = Double(geometry.cellHeight)
+            let padX = Double(geometry.padX), padY = Double(geometry.padY)
+            let y1 = max(0, min(startRow, pane.inner.height - 1)), y2 = max(0, min(endRow, pane.inner.height - 1))
+            return (SelectionCell(col: start.column, row: y1), SelectionCell(col: end.column, row: y2),
+                CGPoint(x: Double(start.column) * cellW + padX, y: Double(y1 + 1) * cellH + padY),
+                CGPoint(x: Double(end.column + 1) * cellW + padX, y: Double(y2) * cellH + padY),
+                cellW, cellH, padX, padY, pane.inner.width, pane.inner.height,
+                startRow >= 0 && startRow < pane.inner.height, endRow >= 0 && endRow < pane.inner.height)
+        }
         guard let surface = surface, ghostty_surface_has_selection(surface) else { return nil }
 
         // Which endpoints fall within the viewport. read_selection clamps an
@@ -3564,6 +3626,7 @@ extension Ghostty.TerminalView {
     // MARK: - Handle Drag Pan
 
     @objc func handleHandleDragPan(_ gesture: UIPanGestureRecognizer) {
+        if herdrEndpointPane != nil { handleEndpointHandleGesture(gesture); return }
         guard let surface = surface else { return }
         let location = gesture.location(in: self)
         let mods = Ghostty.Input.Mods.none.cMods
@@ -3886,7 +3949,7 @@ extension Ghostty.TerminalView {
 
         guard let metrics = selectionHandleMetrics() else {
             hideSelectionHandles(animated: false)
-            if let surface, ghostty_surface_has_selection(surface) {
+            if hasTerminalTextSelection {
                 return
             }
             selectionWasTouchInitiated = false
@@ -3895,7 +3958,7 @@ extension Ghostty.TerminalView {
 
         guard metrics.startVisible || metrics.endVisible else {
             hideSelectionHandles(animated: false)
-            if let surface, ghostty_surface_has_selection(surface) {
+            if hasTerminalTextSelection {
                 return
             }
             selectionWasTouchInitiated = false

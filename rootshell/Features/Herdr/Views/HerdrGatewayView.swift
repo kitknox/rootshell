@@ -15,8 +15,6 @@ struct HerdrGatewayView: View {
         let isForced: Bool
     }
 
-    private static let installCommand = "curl -fsSL https://github.com/kitknox/herdr/releases/download/rootshell-channel/install.sh | sh"
-
     let tabID: UUID?
     let windowID: String
     let sessionName: String
@@ -160,21 +158,13 @@ struct HerdrGatewayView: View {
 
     private func fallbackSection(_ fallback: Fallback) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Enable full control mode")
+            Text("herdr fallback mode")
                 .font(.title3.weight(.semibold))
-            Text("This session is using fallback mode. Install the rootshell herdr fork on the host for full control mode support.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            CopyableValueBlock(
-                title: String(localized: "Install command", comment: "herdr fallback gateway: command to install the rootshell fork"),
-                value: Self.installCommand,
-                font: .system(.callout, design: .monospaced)
-            )
-            Text("Run the command in a shell on that host, then detach and reconnect to herdr.")
+            Text("Vanilla herdr 0.9.0 or newer supports native scroll indicators and live text selection in fallback mode.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             if fallback.isForced {
-                Text("Fallback mode was forced in Debug settings. Turn off “Force herdr Fallback Mode” before reconnecting.")
+                Text("Fallback mode is forced in Debug settings.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

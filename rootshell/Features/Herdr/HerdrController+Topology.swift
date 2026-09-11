@@ -40,7 +40,11 @@ extension HerdrController {
             // Generic snapshots use the server TUI's area. Preserve a raw
             // layout for the same pane set so a topology refresh cannot
             // resize an attached terminal back to that unrelated viewport.
-            if mode == .raw, let controlled = controlLayouts[layout.tab_id],
+            if mode == .legacy, let projected = endpointLayouts[layout.tab_id],
+               Set(projected.panes.map(\.pane_id)).isSubset(of: Set(layout.panes.map(\.pane_id))),
+               projected.zoomed == layout.zoomed {
+                applyLayout(projected)
+            } else if mode == .raw, let controlled = controlLayouts[layout.tab_id],
                controlled.zoomed == layout.zoomed,
                Set(controlled.panes.map(\.pane_id)) == Set(layout.panes.map(\.pane_id)) {
                 applyLayout(controlled)
@@ -341,6 +345,7 @@ extension HerdrController {
             tabInfos.removeValue(forKey: tabId)
             lastLayouts.removeValue(forKey: tabId)
             controlLayouts.removeValue(forKey: tabId)
+            endpointLayouts.removeValue(forKey: tabId)
             tabGeometryStates.removeValue(forKey: tabId)
             geometryTasks.removeValue(forKey: tabId)?.cancel()
         }
@@ -372,6 +377,8 @@ extension HerdrController {
     }
 
     private func retirePane(view: Ghostty.TerminalView, terminalId: String) {
+        view.herdrEndpointPane?.disconnect()
+        view.herdrEndpointPane = nil
         view.endHerdrTitleAttachment()
         attachQueue.removeAll { $0 == terminalId }
         attachRetries.removeValue(forKey: terminalId)?.cancel()
@@ -416,11 +423,15 @@ extension HerdrController {
         lastLayouts[layout.tab_id] = layout
         guard let tab = tabs[layout.tab_id] else { return }
         guard let node = HerdrLayoutTree.build(layout) else { return }
-        guard let root = buildSplitNode(node) else {
+        guard let builtRoot = buildSplitNode(node) else {
             // A pane view is missing (out-of-order event); the next layout
             // record for this tab retries.
             return
         }
+        // Zoom projects only one pane; keep the hidden split leaves alive so
+        // unzoom does not discard their session, selection, or surface.
+        let root = layout.zoomed && endpointLayouts[layout.tab_id] != nil
+            ? (tab.splitTree.root ?? builtRoot) : builtRoot
         // Each pane keeps exactly the grid herdr gave it, whatever slot the
         // ratio math hands it (id=herdr-chromeless).
         // Degraded mode sizes each pane from its own grid (`terminal.resize`),
@@ -431,8 +442,8 @@ extension HerdrController {
             // A generic snapshot describes the server TUI's viewport. Let
             // the initial native host use its full space until our raw layout
             // arrives; clamping to the TUI first causes a shrink/grow bounce.
-            view.herdrTargetGrid = mode == .raw && tabGeometryStates[layout.tab_id]?.hasRequested == true
-                && controlLayouts[layout.tab_id] != nil
+            view.herdrTargetGrid = (mode == .raw && tabGeometryStates[layout.tab_id]?.hasRequested == true
+                && controlLayouts[layout.tab_id] != nil) || endpointLayouts[layout.tab_id] == layout
                 ? (cols: pane.rect.width, rows: pane.rect.height) : nil
         }
         var zoomed: SplitTree<SplitPaneView>.Node?
