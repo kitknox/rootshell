@@ -164,23 +164,44 @@ extension HerdrController {
         reorderTabs()
     }
 
+    /// Confirmed server order with unacknowledged user moves layered on top.
+    func projectedTabOrder() -> [String] {
+        let orderedIDs = tabOrder.orderedIDs(
+            in: tabsModel.tabs.compactMap { tab in
+                guard let id = tab.herdrTabId, tabs[id] === tab else { return nil }
+                return tabInfos[id]
+            },
+            workspaceNumbers: workspaces.mapValues(\.number)
+        )
+        return pendingTabReorders.reduce(orderedIDs) { $1.applying(to: $0) }
+    }
+
     /// Orders this gateway's projected tabs by workspace then server list order,
     /// permuting only the slots they already occupy.
     func reorderTabs() {
+        tabOrderDeferredForDrag = false
         let mine = Set(tabs.values.map(\.id))
         let slots = tabsModel.tabs.indices.filter { mine.contains(tabsModel.tabs[$0].id) }
         guard slots.count > 1 else { return }
         let current = slots.map { tabsModel.tabs[$0] }
-        let orderedIDs = tabOrder.orderedIDs(
-            in: current.compactMap { tab in tab.herdrTabId.flatMap { tabInfos[$0] } },
-            workspaceNumbers: workspaces.mapValues(\.number)
-        )
-        let sorted = orderedIDs.compactMap { tabs[$0] }
-        guard sorted.count == current.count else { return }
-        if current.elementsEqual(sorted, by: { $0 === $1 }) { return }
-        for (slot, tab) in zip(slots, sorted) {
-            tabsModel.tabs[slot] = tab
+        // Hover moves are local until drop. In particular, fallback's regular
+        // snapshots must not erase a drag before its final order is committed.
+        if current.contains(where: { TabTransferCoordinator.shared.isActiveDrag(sourceWindowId: hostWindowId, tabID: $0.id) }) {
+            tabOrderDeferredForDrag = true
+            return
         }
+        let sorted = projectedTabOrder().compactMap { tabs[$0] }
+        guard sorted.count == current.count else { return }
+        if !current.elementsEqual(sorted, by: { $0 === $1 }) {
+            var reordered = tabsModel.tabs
+            for (slot, tab) in zip(slots, sorted) {
+                reordered[slot] = tab
+            }
+            tabsModel.tabs = reordered
+        }
+        // A remembered native group permutation must not mask a server move,
+        // even when the backing array was already in the confirmed order.
+        tabsModel.synchronizeHerdrGroupOrder(sorted.map(\.id), ownerID: gatewayUUID)
     }
 
     /// Workspace labels feed the tab group titles; bump grouping so the

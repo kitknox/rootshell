@@ -105,10 +105,10 @@ extension MainView {
                 reorderTabsPreservingSlots(orderedClassIDs: orderedIDs, draggedID: draggedID)
             },
             onMoveTab: { from, to in
-                moveTab(from: from, to: to)
+                moveTab(from: from, to: to, commitRemoteOrder: false)
             },
             onReorderEnded: { draggedID in
-                commitTabReorderToTmux(draggedID: draggedID)
+                commitTabReorder(draggedID: draggedID)
             },
             onNewTab: {
                 // addNewTab opens the connection sidebar (right overlay).

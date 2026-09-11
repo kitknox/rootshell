@@ -752,7 +752,7 @@ extension MainView {
 
     /// Move a tab from one position to another (user gesture: sidebar drag
     /// or Move Left/Right context menu)
-    func moveTab(from sourceIndex: Int, to destinationIndex: Int) {
+    func moveTab(from sourceIndex: Int, to destinationIndex: Int, commitRemoteOrder: Bool = true) {
         guard sourceIndex != destinationIndex,
               sourceIndex >= 0, sourceIndex < terminals.count,
               destinationIndex >= 0, destinationIndex < terminals.count else { return }
@@ -771,26 +771,23 @@ extension MainView {
             selectedTabIndex = newIndex
         }
 
-        // tmux window tabs: mirror the user's reorder to the server so the
-        // order sticks (and propagates to other attached clients) instead of
-        // snapping back at the next reconcile.
-        if !tabsModel.isProjectGroupingActive {
-            TmuxController.syncWindowOrderAfterUserMove(of: movingTab, in: terminals)
+        if commitRemoteOrder {
+            commitTabReorder(draggedID: movingTab.id)
         }
     }
 
     /// Reorder tabs WITHIN the raw slots occupied by the given class
     /// members, leaving every other tab's raw index untouched (the sidebar's
-    /// tmux-WINDOW drag path; regular tabs use the top bar's raw `moveTab`).
-    /// The sidebar groups tmux window tabs under their gateway, so visually
+    /// multiplexer sibling drag path; regular tabs use raw `moveTab`).
+    /// The sidebar nests multiplexer tabs under their gateway, so visually
     /// adjacent rows can be far apart in the raw array; a raw remove+insert
     /// move would shift unrelated tabs that sit between them.
     /// `orderedClassIDs` is the class's complete membership in its new
     /// order; `draggedID` is the row the user moved.
     ///
     /// Local-only: live drag steps call this on every hover change; the
-    /// tmux server commit happens ONCE per gesture via
-    /// `commitTabReorderToTmux` at drop time.
+    /// multiplexer server commit happens ONCE per gesture via
+    /// `commitTabReorder` at drop time.
     func reorderTabsPreservingSlots(orderedClassIDs: [UUID], draggedID: UUID) {
         let selectedTabId = terminals.indices.contains(selectedTabIndex)
             ? terminals[selectedTabIndex].id
@@ -803,12 +800,13 @@ extension MainView {
         }
     }
 
-    /// Commit a finished sidebar drag: push the dragged tmux window tab's
-    /// final order to the server with one move-window (user gesture, never
-    /// reconcile-driven; no-op for non-tmux tabs or unchanged order).
-    func commitTabReorderToTmux(draggedID: UUID) {
-        guard let draggedTab = terminals.first(where: { $0.id == draggedID }) else { return }
+    /// Commit a completed user reorder to its owning multiplexer. Project
+    /// arrangements are local; server reconciliation never calls this.
+    func commitTabReorder(draggedID: UUID) {
+        guard !tabsModel.isProjectGroupingActive,
+              let draggedTab = terminals.first(where: { $0.id == draggedID }) else { return }
         TmuxController.syncWindowOrderAfterUserMove(of: draggedTab, in: terminals)
+        HerdrController.syncTabOrderAfterUserMove(of: draggedTab, in: tabsModel)
     }
 }
 

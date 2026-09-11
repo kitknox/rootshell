@@ -111,6 +111,10 @@ final class HerdrController {
     /// Reconnects and later close events never bootstrap another shell.
     var hasProcessedInitialSnapshot = false
     var newTabTasks: [UUID: Task<Void, Never>] = [:]
+    var tabReorderTask: Task<Void, Never>?
+    var pendingTabReorders: [HerdrTabOrder.Move] = []
+    var tabReorderRevision: UInt64 = 0
+    var tabOrderDeferredForDrag = false
     var emptySessionCreationID: UUID?
     var newTabError: String?
     var connectionError: String?
@@ -660,6 +664,10 @@ final class HerdrController {
         streamGeneration = UUID()
         for view in paneViews.values { view.endHerdrTitleAttachment() }
         cancelNewTabRequests()
+        tabReorderTask?.cancel()
+        tabReorderTask = nil
+        pendingTabReorders.removeAll()
+        tabOrderDeferredForDrag = false
         topologyRefreshTask?.cancel()
         topologyRefreshTask = nil
         topologyRefreshWanted = false

@@ -1580,6 +1580,40 @@ final class TabsModel {
         navigationSnapshot().indexByID[id]
     }
 
+    /// Workspace siblings in the user's current presentation. A sidebar drag
+    /// can belong to a different group from the selected tab's navigation set.
+    func herdrReorderTabIDs(for tab: TabModel) -> [String]? {
+        guard tab.isHerdrWindow, let ownerID = tab.owningGatewayTerminalUUID,
+              let workspaceID = tab.herdrWorkspaceId else { return nil }
+        let ordered: [TabModel]
+        switch orderProjection.mode {
+        case .flat:
+            ordered = tabs
+        case .userGrouped:
+            let groupID = TabGroupID.herdr(ownerID: ownerID)
+            guard effectiveGroupID(for: tab) == groupID,
+                  let group = availableGroups.first(where: { $0.id == groupID }) else { return nil }
+            ordered = group.tabIDs.compactMap { self.tab(withID: $0) }
+        case .projectGrouped:
+            return nil
+        }
+        return ordered.filter {
+            $0.isHerdrWindow && $0.owningGatewayTerminalUUID == ownerID && $0.herdrWorkspaceId == workspaceID
+        }.compactMap(\.herdrTabId)
+    }
+
+    /// Server order also governs the native herdr group. Custom groups and
+    /// project orders keep their independent presentation preferences.
+    func synchronizeHerdrGroupOrder(_ orderedIDs: [UUID], ownerID: UUID) {
+        let groupID = TabGroupID.herdr(ownerID: ownerID)
+        guard let group = availableGroups.first(where: { $0.id == groupID }) else { return }
+        let members = Set(group.tabIDs)
+        guard let replacement = TabOrderRules.replacingSubsequence(
+            orderedIDs.filter { members.contains($0) }, in: group.tabIDs
+        ), replacement != group.tabIDs else { return }
+        sidebarGroupTabOrders[groupID.rawValue] = replacement
+    }
+
     /// Reorder two visible tabs according to the active presentation. Flat
     /// mode updates canonical order; user/project lenses update only their own
     /// remembered order so switching modes is lossless.
@@ -1669,7 +1703,7 @@ final class TabsModel {
     }
 
     /// Replace only the slots occupied by `orderedIDs` inside the active
-    /// projection. Used for tmux sibling drags where gateway/ordinary tabs
+    /// projection. Used for multiplexer sibling drags where gateway/ordinary tabs
     /// interleave the visual section and must keep their positions.
     func setActiveOrderSubsequence(_ orderedIDs: [UUID]) {
         switch orderProjection.mode {
@@ -1682,16 +1716,17 @@ final class TabsModel {
             withAnimation(.snappy(duration: 0.28, extraBounce: 0.0)) {
                 tabs = replacement.compactMap { byID[$0] }
             }
-        case .userGrouped(let groupID):
-            guard let groupID,
+        case .userGrouped:
+            guard let firstID = orderedIDs.first, let firstTab = tab(withID: firstID),
+                  let groupID = effectiveGroupID(for: firstTab),
+                  orderedIDs.allSatisfy({ effectiveGroupID(for: tab(withID: $0)) == groupID }),
                   let fullOrder = availableGroups.first(where: { $0.id == groupID })?.tabIDs,
                   let replacement = TabOrderRules.replacingSubsequence(
                     orderedIDs,
                     in: fullOrder
                   ) else { return }
             sidebarGroupTabOrders[groupID.rawValue] = replacement
-            // Keep tmux server-order synchronization compatible with the
-            // existing raw-slot based controller.
+            // Keep the canonical sibling slots aligned for multiplexer drags.
             let rawIDs = tabs.map(\.id)
             if let rawReplacement = TabOrderRules.replacingSubsequence(
                 orderedIDs,

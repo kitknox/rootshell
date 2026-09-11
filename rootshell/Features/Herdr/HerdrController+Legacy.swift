@@ -54,9 +54,14 @@ extension HerdrController {
     /// Runs one herdr CLI invocation on the gateway's connection and
     /// returns its stdout.
     func legacyRun(args: String) async throws -> Data {
+        try await legacyRun(command: SSHConfig.herdrCommandLine(sessionName: sessionName, args: args), method: args)
+    }
+
+    /// Socket requests stop at the first complete JSON response; nc may keep
+    /// its stdin open after herdr replies, so waiting for process exit can hang.
+    private func legacyRun(command: String, method: String, input: Data? = nil) async throws -> Data {
         try Task.checkCancellation()
         guard let gateway else { throw HerdrChannelError.closed }
-        let command = SSHConfig.herdrCommandLine(sessionName: sessionName, args: args)
         let pipe = try await HerdrChannelFactory.open(command: command, on: gateway)
         defer { Task { await pipe.close() } }
         try Task.checkCancellation()
@@ -65,11 +70,17 @@ extension HerdrController {
             group.addTask {
                 try await withTaskCancellationHandler {
                     var output = Data()
+                    if let input { try await pipe.write(input) }
                     while let chunk = try await pipe.read(maxBytes: 64 * 1024) {
                         try Task.checkCancellation()
                         output.append(chunk)
                         if output.count > limit {
                             throw HerdrChannelError.malformed("herdr output exceeds \(limit) bytes")
+                        }
+                        if input != nil,
+                           let line = output.split(separator: 0x0A, omittingEmptySubsequences: false)
+                            .dropLast().first(where: { $0.first == UInt8(ascii: "{") }) {
+                            return Data(line)
                         }
                     }
                     try Task.checkCancellation()
@@ -80,7 +91,7 @@ extension HerdrController {
             }
             group.addTask {
                 try await Task.sleep(for: .seconds(15))
-                throw HerdrChannelError.timedOut(method: args)
+                throw HerdrChannelError.timedOut(method: method)
             }
             defer { group.cancelAll() }
             return try await group.next()!
@@ -93,8 +104,12 @@ extension HerdrController {
     func legacyRequest<Result: Decodable>(args: String, as: Result.Type) async throws -> Result {
         let output = try await legacyRun(args: args)
         try Task.checkCancellation()
+        return try decodeLegacyResponse(output, method: args, as: Result.self)
+    }
+
+    private func decodeLegacyResponse<Result: Decodable>(_ output: Data, method: String, as: Result.Type) throws -> Result {
         guard let line = output.split(separator: 0x0A).last(where: { $0.first == UInt8(ascii: "{") }) else {
-            throw HerdrChannelError.malformed("herdr \(args) returned no JSON")
+            throw HerdrChannelError.malformed("herdr \(method) returned no JSON")
         }
         let data = Data(line)
         if let error = try HerdrControl.decoder.decode(HerdrControl.LineHead.self, from: data).error {
@@ -103,14 +118,72 @@ extension HerdrController {
         return try HerdrControl.decoder.decode(HerdrControl.Response<Result>.self, from: data).result
     }
 
+    /// Stock herdr supports tab.move on its API but has no matching CLI
+    /// subcommand. Ask herdr for its resolved socket (including session/env
+    /// overrides), then use a one-shot bridge on the gateway's existing host.
+    func legacyMoveTab(_ params: HerdrControl.TabMoveParams) async throws -> HerdrControl.TabListResult {
+        struct Status: Decodable {
+            struct Server: Decodable {
+                let socket: String
+                let running: Bool
+                let compatible: Bool?
+            }
+            let server: Server
+        }
+        let statusOutput = try await legacyRun(args: "status --json")
+        guard let start = statusOutput.firstIndex(of: UInt8(ascii: "{")),
+              let end = statusOutput.lastIndex(of: UInt8(ascii: "}")), start <= end else {
+            throw HerdrChannelError.malformed("herdr status returned no JSON")
+        }
+        let status = try HerdrControl.decoder.decode(Status.self, from: Data(statusOutput[start...end])).server
+        guard status.running, !status.socket.isEmpty else { throw HerdrChannelError.closed }
+        guard status.compatible != false else {
+            throw HerdrChannelError.unsupportedServer("herdr client and server protocols do not match")
+        }
+        // Python is common on Linux hosts; macOS also ships a Unix-socket nc.
+        // Choose once, before sending anything: transport failures are never
+        // retried through another bridge after an ambiguous write.
+        let python = """
+        import socket, sys
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(15)
+            connection.connect(sys.argv[1])
+            connection.sendall(sys.stdin.buffer.readline())
+            sys.stdout.buffer.write(connection.makefile('rb').readline(\(Self.legacyMaxResponseBytes + 1)))
+        """
+        let socket = LoginShellCommand.singleQuoted(status.socket)
+        let script = LoginShellCommand.pathPrefix + """
+        if command -v python3 >/dev/null 2>&1; then
+            exec python3 -c \(LoginShellCommand.singleQuoted(python)) \(socket)
+        elif command -v nc >/dev/null 2>&1; then
+            exec nc -U \(socket)
+        else
+            printf '%s\\n' '{"error":{"code":"socket_bridge_unavailable","message":"Tab reordering in fallback mode needs python3 or nc with Unix socket support on the host"}}'
+        fi
+        """
+        var request = try JSONEncoder().encode(HerdrControl.Request(
+            id: "rootshell:tab.move:\(UUID().uuidString)", method: "tab.move", params: params
+        ))
+        request.append(0x0A)
+        let output = try await legacyRun(
+            command: LoginShellCommand.runInPOSIXShell(script), method: "tab.move", input: request
+        )
+        return try decodeLegacyResponse(output, method: "tab.move", as: HerdrControl.TabListResult.self)
+    }
+
     func legacyPollOnce() async {
         guard mode == .legacy, !didEnd, !legacySuspended,
               let gateway, HerdrChannelFactory.canOpen(for: gateway) else { return }
         // Reattach dropped streams even if the topology fingerprint is unchanged.
         defer { legacyReconcileAttaches() }
+        let generation = streamGeneration
+        let orderRevision = tabReorderRevision
         do {
             let output = try await legacyRun(args: "api snapshot")
-            guard mode == .legacy, !didEnd else { return }
+            guard mode == .legacy, !didEnd, streamGeneration == generation else { return }
+            // A poll started before a completed move cannot put its old order
+            // back over the response. The next poll reads the saved order.
+            guard orderRevision == tabReorderRevision else { return }
             // The reply is one JSON line; tolerate chatter around it.
             guard let line = output.split(separator: 0x0A).last(where: { $0.first == UInt8(ascii: "{") }) else {
                 let text = String(decoding: output.prefix(200), as: UTF8.self)
@@ -134,7 +207,8 @@ extension HerdrController {
             legacySnapshotFingerprint = fingerprint
             applySnapshot(snapshot)
         } catch {
-            guard !didEnd, !Task.isCancelled else { return }
+            guard !didEnd, !Task.isCancelled, streamGeneration == generation,
+                  tabReorderRevision == orderRevision else { return }
             isActive = false
             connectionError = error.localizedDescription
             publishSessionState()

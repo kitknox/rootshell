@@ -164,6 +164,11 @@ extension MainView {
             // Delivered on .main, so MainActor access is safe here.
             MainActor.assumeIsolated {
                 tabTransferDropOverlayVisible = TabTransferCoordinator.shared.canAcceptActiveDrag(in: windowId)
+                // Apply server changes held during hover once a drop commits
+                // its intent, or an abandoned drag expires without committing.
+                for controller in HerdrController.all where controller.hostWindowId == windowId && controller.tabOrderDeferredForDrag {
+                    controller.reorderTabs()
+                }
             }
         }
         observerBag.track(tabTransferDragObserver)

@@ -14,6 +14,91 @@ import os
 
 extension HerdrController {
 
+    /// Called only by completed user moves. Project/custom group orders are
+    /// presentation preferences; native workspace order belongs to herdr.
+    static func syncTabOrderAfterUserMove(of tab: TabModel, in model: TabsModel) {
+        guard let controller = controller(forTab: tab),
+              controller.isActive, !controller.didEnd,
+              let tabID = tab.herdrTabId, let workspaceID = tab.herdrWorkspaceId,
+              controller.tabs[tabID] === tab,
+              let orderedIDs = model.herdrReorderTabIDs(for: tab) else { return }
+        let siblings = Set(orderedIDs)
+        let currentOrder = controller.projectedTabOrder().filter { siblings.contains($0) }
+        guard orderedIDs != currentOrder,
+              let move = HerdrTabOrder.Move(tabID: tabID, workspaceID: workspaceID, orderedIDs: orderedIDs)
+        else { return }
+        controller.enqueueTabReorder(move)
+    }
+
+    private func enqueueTabReorder(_ move: HerdrTabOrder.Move) {
+        guard isActive, !didEnd, mode == .legacy || channel != nil else { return }
+        let channel = self.channel
+        pendingTabReorders.append(move)
+        guard tabReorderTask == nil else { return }
+        let generation = streamGeneration
+        tabReorderTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if self.streamGeneration == generation { self.tabReorderTask = nil }
+            }
+            while self.reorderIsCurrent(generation), let move = self.pendingTabReorders.first {
+                do {
+                    // Public tab numbers survive moves. Only the fresh list
+                    // gives the pre-removal boundary that tab.move accepts.
+                    let listed: HerdrControl.TabListResult
+                    if let channel {
+                        listed = try await channel.request(
+                            "tab.list", HerdrControl.TabListParams(workspace_id: move.workspaceID),
+                            as: HerdrControl.TabListResult.self
+                        )
+                    } else {
+                        listed = try await self.legacyRequest(
+                            args: "tab list --workspace \(LoginShellCommand.singleQuoted(move.workspaceID))",
+                            as: HerdrControl.TabListResult.self
+                        )
+                    }
+                    guard self.reorderIsCurrent(generation) else { return }
+                    let confirmed: HerdrControl.TabListResult
+                    if let params = move.params(in: listed.tabs) {
+                        if let channel {
+                            confirmed = try await channel.request("tab.move", params, as: HerdrControl.TabListResult.self)
+                        } else {
+                            confirmed = try await self.legacyMoveTab(params)
+                        }
+                        guard self.reorderIsCurrent(generation) else { return }
+                    } else {
+                        confirmed = listed
+                        if !listed.tabs.contains(where: { $0.tab_id == move.tabID })
+                            || !listed.tabs.contains(where: { $0.tab_id == move.placement.anchorID }) {
+                            self.refreshTopology()
+                        }
+                    }
+                    self.finishTabReorder()
+                    self.applyTabOrder(confirmed.tabs, workspaceID: move.workspaceID)
+                } catch {
+                    guard self.reorderIsCurrent(generation) else { return }
+                    self.finishTabReorder()
+                    Self.logger.warning("herdr tab reorder failed: \(error.localizedDescription)")
+                    if self.mode == .legacy { self.legacyNotice("tab reorder failed: \(error.localizedDescription)") }
+                    self.reorderTabs()
+                    // A timeout may already have moved the tab. Read back
+                    // server state instead of retrying an ambiguous command.
+                    self.refreshTopology()
+                }
+            }
+        }
+    }
+
+    private func reorderIsCurrent(_ generation: UUID) -> Bool {
+        !Task.isCancelled && !didEnd && streamGeneration == generation
+    }
+
+    private func finishTabReorder() {
+        pendingTabReorders.removeFirst()
+        tabReorderRevision &+= 1
+        if mode == .legacy { legacySnapshotFingerprint = nil }
+    }
+
     private func send<P: Encodable>(_ method: String, _ params: P) {
         guard let channel else { return }
         Task {

@@ -244,8 +244,8 @@ struct VerticalTabSidebar: View {
     /// Selects the containing tab and focuses one exact split pane.
     let onSelectPane: (UUID, UUID) -> Void
     let onCloseTab: (UUID) -> Void
-    /// Live drag-reorder step for tmux WINDOW tabs: the gateway's window
-    /// membership in its new order, plus the dragged tab. Slot-permutation
+    /// Live drag-reorder step for tmux windows or herdr workspace tabs:
+    /// sibling membership in its new order, plus the dragged tab. Slot-permutation
     /// semantics — unrelated tabs keep their raw indices
     /// (reorderTabsPreservingSlots). Local-only; the server commit happens
     /// once via `onReorderEnded`.
@@ -254,8 +254,8 @@ struct VerticalTabSidebar: View {
     /// (from, to), matching the top tab bar — lets a regular tab cross tmux
     /// gateway groups. Wired to `moveTab(from:to:)`.
     let onMoveTab: (Int, Int) -> Void
-    /// Drop finished: commit the dragged tab's final order (tmux
-    /// move-window for window tabs; user gesture, never reconcile-driven).
+    /// Drop finished: commit the dragged tab's final multiplexer order
+    /// (user gesture, never reconcile-driven).
     let onReorderEnded: (UUID) -> Void
     let onNewTab: () -> Void
     let onDismiss: () -> Void
@@ -2334,7 +2334,20 @@ struct VerticalTabSidebar: View {
             // workspace, so a move across that boundary would show nowhere.
             // One the user moved into an ordinary group renders flat there
             // and drags like any other tab.
-            if isNestedUnderHerdrGateway(source.tab), !Self.isHerdrWorkspaceSibling(source.tab, target.tab) {
+            if isNestedUnderHerdrGateway(source.tab) {
+                let sourceGroup = tabsModel.effectiveGroupID(for: source.tab)
+                // Expanded custom groups may contain other tabs from this
+                // workspace. Only the source's displayed group participates.
+                let siblingIDs = rows.filter { row in
+                    row.dragClass == .local
+                        && Self.isHerdrWorkspaceSibling(source.tab, row.tab)
+                        && (!tabsModel.isGroupedModeEnabled || tabsModel.effectiveGroupID(for: row.tab) == sourceGroup)
+                }.map(\.tab.id)
+                guard Self.isHerdrWorkspaceSibling(source.tab, target.tab),
+                      let moved = TabOrderRules.moving(
+                        draggingID, to: target.tab.id, in: siblingIDs
+                      ) else { return }
+                onReorderClass(moved, draggingID)
                 return
             }
             if tabsModel.isGroupedModeEnabled {
@@ -2457,9 +2470,9 @@ struct VerticalTabSidebar: View {
         }
         guard let draggingID = draggingRowID else { return false }
         draggingRowID = nil
-        let shouldCommitTmuxOrder = !dragAssignedGroup
+        let shouldCommitRemoteOrder = !dragAssignedGroup && !projectGroupingActive
         dragAssignedGroup = false
-        if shouldCommitTmuxOrder {
+        if shouldCommitRemoteOrder {
             onReorderEnded(draggingID)
         }
         TabTransferCoordinator.shared.clearDrag()

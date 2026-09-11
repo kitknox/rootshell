@@ -222,12 +222,13 @@ struct TabDragModifier: ViewModifier {
                    tabsModel.index(of: tab.id) != nil {
                     let selectedID = tabsModel.selectedTabID
 
-                    withAnimation(.snappy(duration: 0.28, extraBounce: 0.0)) {
-                        _ = tabsModel.moveTabInActiveOrder(
+                    let didMove = withAnimation(.snappy(duration: 0.28, extraBounce: 0.0)) {
+                        let moved = tabsModel.moveTabInActiveOrder(
                             movingID: tab.id,
                             toTargetID: orderedTabs[target].id
                         )
                         dragState.reset()
+                        return moved
                     }
 
                     // Selection is ID-keyed, so it follows the moved tab automatically;
@@ -236,10 +237,11 @@ struct TabDragModifier: ViewModifier {
                         tabsModel.selectedTabID = selectedID
                     }
 
-                    // Commit a tmux window tab's reorder to the server
+                    // Commit a multiplexer tab's reorder to the server
                     // (user gesture, never reconcile-driven).
-                    if !tabsModel.isProjectGroupingActive {
+                    if didMove, !tabsModel.isProjectGroupingActive {
                         TmuxController.syncWindowOrderAfterUserMove(of: tab, in: tabsModel.tabs)
+                        HerdrController.syncTabOrderAfterUserMove(of: tab, in: tabsModel)
                     }
                 } else {
                     withAnimation(.snappy(duration: 0.28, extraBounce: 0.0)) {
