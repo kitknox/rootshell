@@ -246,6 +246,14 @@ extension Ghostty {
     /// Override hit testing to bypass UIScrollView in capture mode
     /// This ensures touches reach TerminalView for tmux divider dragging, etc.
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        // The gateway replaces the terminal's input surface. Route clicks and
+        // scrolling to its hosted controls before capture, scrollbar, or
+        // Catalyst's transparent-scroll-view routing can claim the event.
+        if let gatewayView = terminalView.herdrGatewayHost?.view,
+           let hitView = gatewayView.hitTest(convert(point, to: gatewayView), with: event) {
+            return hitView
+        }
+
         // Query Ghostty directly for capture state (don't rely on cached isMouseCaptured)
         // This ensures we have the current state at the moment of touch
         let isCaptured: Bool

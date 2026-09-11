@@ -4,7 +4,8 @@ import Foundation
 import UIKit
 
 extension HerdrController {
-    var showsGatewayStatus: Bool { !didEnd && tabs.isEmpty }
+    /// The gateway stays covered until detaching returns it to its shell.
+    var showsGatewayStatus: Bool { !didEnd }
 
     func publishSessionState() {
         gateway?.updateHerdrGatewayOverlay()

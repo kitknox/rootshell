@@ -972,7 +972,7 @@ extension Ghostty {
         /// Cursor registration token while hovered (Mac Catalyst only)
         var cursorToken: UUID?
 
-        private func clearCursorRegistration() {
+        func clearCursorRegistration() {
             if let cursorToken {
                 CatalystCursorCoordinator.shared.unregister(cursorToken)
                 self.cursorToken = nil

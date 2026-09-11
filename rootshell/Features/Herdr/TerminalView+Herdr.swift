@@ -24,12 +24,25 @@ extension Ghostty.TerminalView {
             if hadOverlay, isLogicallyFocused { _ = becomeFirstResponder() }
             return
         }
+        #if targetEnvironment(macCatalyst)
+        // Installing the overlay need not produce a hover exit. Release any
+        // terminal cursor immediately, including while the mouse is stationary.
+        clearCursorRegistration()
+        #endif
         let content = HerdrGatewayView(
+            tabID: containingTabID,
+            windowID: windowId,
             sessionName: controller.sessionName ?? "default",
             hasSnapshot: controller.hasProcessedInitialSnapshot,
+            hasTabs: !controller.tabs.isEmpty,
             isActive: controller.isActive,
             isCreating: controller.emptySessionCreationID != nil,
             errorMessage: controller.newTabError ?? controller.connectionError,
+            fallback: controller.mode == .legacy ? .init(
+                reason: controller.legacyFallbackReason,
+                latestNotice: controller.legacyLatestNotice,
+                isForced: controller.legacyFallbackForced
+            ) : nil,
             newTab: { [weak controller] in controller?.requestNewTab(workspaceID: nil) },
             retryConnection: { [weak controller] in controller?.applicationDidBecomeActive() },
             detach: { [weak controller] in controller?.detach(closeGateway: false) }
@@ -38,6 +51,7 @@ extension Ghostty.TerminalView {
             host.rootView = content
         } else {
             let host = UIHostingController(rootView: content)
+            host.view.backgroundColor = .clear
             host.view.translatesAutoresizingMaskIntoConstraints = false
             var responder: UIResponder? = next
             while responder != nil, !(responder is UIViewController) { responder = responder?.next }

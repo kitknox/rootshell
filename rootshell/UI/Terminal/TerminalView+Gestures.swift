@@ -110,6 +110,15 @@ extension Ghostty.TerminalView {
     #endif
 
     @objc func handleHoverGesture(_ gesture: UIHoverGestureRecognizer) {
+        // A hosted gateway is a descendant of this view, so hover events
+        // still reach us. Let its controls own the pointer instead of sending
+        // positions to the covered shell and reapplying its terminal cursor.
+        guard herdrController?.showsGatewayStatus != true else {
+            #if targetEnvironment(macCatalyst)
+            clearCursorRegistration()
+            #endif
+            return
+        }
         switch gesture.state {
         case .began, .changed:
             // Track mouse position for discrete scroll wheel events
@@ -2373,6 +2382,7 @@ extension Ghostty.TerminalView {
 
 extension Ghostty.TerminalView: UIPointerInteractionDelegate {
     public func pointerInteraction(_ interaction: UIPointerInteraction, styleFor region: UIPointerRegion) -> UIPointerStyle? {
+        guard herdrController?.showsGatewayStatus != true else { return nil }
         #if targetEnvironment(macCatalyst)
         // On Mac Catalyst, return nil to let NSCursor handle cursor management.
         // UIPointerInteraction cursors "leak" beyond view bounds on Catalyst.
@@ -2906,6 +2916,12 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
     }
 
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        // Tap and Catalyst long-press recognizers have no delegate, so the
+        // shouldReceive-touch exclusion alone cannot keep them off the overlay.
+        // Also gate scroll gestures, which may begin without a touch event.
+        if gestureRecognizer.view === self, herdrController?.showsGatewayStatus == true {
+            return false
+        }
         if let shouldBegin = shouldBeginTrackpadTabSwipeGesture(gestureRecognizer) {
             return shouldBegin
         }

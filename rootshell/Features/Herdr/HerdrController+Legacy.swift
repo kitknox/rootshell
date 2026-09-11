@@ -20,13 +20,16 @@ extension HerdrController {
 
     /// Uses the stock client when control streams are unavailable or fallback
     /// mode was explicitly requested in Debug settings.
-    func startLegacyMode(reason: String, recommendUpgrade: Bool = true) {
+    func startLegacyMode(reason: String, forced: Bool = false) {
         guard mode == .raw, !didEnd else { return }
         mode = .legacy
+        legacyFallbackReason = reason
+        legacyFallbackForced = forced
         isActive = false
+        connectionError = nil
         reconnectAttempt = 0
         Self.logger.info("herdr control: degraded mode (\(reason))")
-        let upgradeHint = recommendUpgrade ? " Upgrade herdr on the host for raw control streams." : ""
+        let upgradeHint = forced ? "" : " Upgrade herdr on the host for raw control streams."
         gateway?.writeToGhostty(string:
             "\r\n\u{1b}[33mherdr control mode: \(reason). Running with server-rendered panes.\(upgradeHint)\u{1b}[0m\r\n")
         publishSessionState()
@@ -140,11 +143,15 @@ extension HerdrController {
         }
     }
 
-    /// Degraded mode has no stream to report through, so a failure the user
-    /// would otherwise see only as missing tabs goes to the gateway shell,
-    /// once per distinct message.
+    /// Show the latest compatibility notice in the overlay, while writing
+    /// each distinct message to the gateway shell only once.
     func legacyNotice(_ message: String) {
-        guard !didEnd, legacyNoticesShown.insert(message).inserted else { return }
+        guard !didEnd else { return }
+        if legacyLatestNotice != message {
+            legacyLatestNotice = message
+            publishSessionState()
+        }
+        guard legacyNoticesShown.insert(message).inserted else { return }
         gateway?.writeToGhostty(string: "\r\n\u{1b}[33mherdr control mode: \(message)\u{1b}[0m\r\n")
     }
 

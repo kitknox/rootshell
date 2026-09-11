@@ -98,6 +98,10 @@ final class HerdrController {
     var legacyGrids: [String: (rows: Int, cols: Int)] = [:]
     var legacyPollTask: Task<Void, Never>?
     var legacySnapshotFingerprint: Int?
+    /// Keep fallback details available while the overlay covers the shell.
+    var legacyFallbackReason: String?
+    var legacyFallbackForced = false
+    var legacyLatestNotice: String?
     /// Degraded-mode failures already written to the gateway; each distinct
     /// message shows once so a repeating poll does not flood the shell.
     var legacyNoticesShown: Set<String> = []
@@ -277,7 +281,7 @@ final class HerdrController {
             return
         }
         if SettingsStore.shared.value(Settings.System.herdrForceFallback) {
-            startLegacyMode(reason: "fallback forced in Debug settings", recommendUpgrade: false)
+            startLegacyMode(reason: "fallback forced in Debug settings", forced: true)
             return
         }
         do {
