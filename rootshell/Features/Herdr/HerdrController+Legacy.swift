@@ -175,6 +175,7 @@ extension HerdrController {
 
     func legacyCloseStream(_ terminalId: String) {
         if let stream = legacyStreams.removeValue(forKey: terminalId) {
+            paneViews[terminalId]?.endHerdrTitleAttachment()
             legacyClosing[terminalId] = stream.close()
         }
     }
@@ -243,6 +244,7 @@ extension HerdrController {
                     }
                 }
                 self.legacyStreams[terminalId] = stream
+                self.paneViews[terminalId]?.beginHerdrTitleAttachment()
                 stream.start()
                 // A live resize may have happened while PTY allocation awaited.
                 if let latest = self.legacyGrids[terminalId], latest != grid {

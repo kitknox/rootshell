@@ -634,12 +634,15 @@ final class TabModel: Identifiable {
     func startObserving(preserveExistingTitle: Bool = false) {
         observationCancellables.removeAll()
         cancelPendingTitlePublication()
+        if isHerdrWindow {
+            HerdrController.controller(forTab: self)?.refreshTitle(of: self)
+        }
 
         // Resolve the focused pane first (not the terminal shim) so a focused
         // non-terminal pane isn't silently skipped in favor of a background
         // terminal.
         guard let pane = focusedPane ?? splitTree.first else {
-            if title != "Terminal" {
+            if !isHerdrWindow, title != "Terminal" {
                 title = "Terminal"
             }
             recomputeRoamProtocol()
@@ -678,6 +681,7 @@ final class TabModel: Identifiable {
         // (id=tmux-window-title-single-writer)
         if !preserveExistingTitle,
            !isTmuxWindow,
+           !isHerdrWindow,
            let resolved = Self.resolveTitle(rawTitle: focusedTerminal.title, on: focusedTerminal),
            title != resolved {
             title = resolved
@@ -703,7 +707,9 @@ final class TabModel: Identifiable {
                 guard let self, let focusedTerminal else { return }
                 // tmux window tabs: reconcile is the sole title writer.
                 // (id=tmux-window-title-single-writer)
-                if self.isTmuxWindow { return }
+                // herdr resolves live titles and metadata in its controller;
+                // delayed publisher values must not become a second writer.
+                if self.isTmuxWindow || self.isHerdrWindow { return }
                 if !hasReceivedRealTitle {
                     if Self.shouldUseFallbackTitle(newTitle) {
                         return

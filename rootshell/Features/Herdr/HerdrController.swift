@@ -222,9 +222,14 @@ final class HerdrController {
             forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
         ) { _ in
             MainActor.assumeIsolated {
-                for controller in all where controller.mode == .legacy {
-                    controller.legacySuspended = true
-                    controller.legacyReconcileAttaches()
+                for controller in all {
+                    // Ghostty suppresses title callbacks while backgrounded.
+                    // Let metadata seed titles again until live OSC resumes.
+                    for view in controller.paneViews.values { view.endHerdrTitleAttachment() }
+                    if controller.mode == .legacy {
+                        controller.legacySuspended = true
+                        controller.legacyReconcileAttaches()
+                    }
                 }
             }
         }
@@ -508,6 +513,14 @@ final class HerdrController {
             connect()
             return
         }
+        for terminalId in attachIds.keys {
+            if let view = paneViews[terminalId], view.herdrTitleState.attachmentID == nil {
+                view.beginHerdrTitleAttachment()
+            }
+        }
+        // An idle application's last title may have arrived while Ghostty's
+        // background gate discarded callbacks, with no further OSC to replay.
+        refreshTopology()
         Task { [weak self] in
             guard let self, let channel = self.channel else { return }
             do {
@@ -625,6 +638,7 @@ final class HerdrController {
 
     private func detachAllLocally() {
         streamGeneration = UUID()
+        for view in paneViews.values { view.endHerdrTitleAttachment() }
         cancelNewTabRequests()
         topologyRefreshTask?.cancel()
         topologyRefreshTask = nil

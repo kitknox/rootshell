@@ -38,6 +38,8 @@ extension HerdrController {
             paneGridDidChange(session, rows: Int(size.rows), cols: Int(size.columns))
         }
         if let existing = attachIds[session.terminalId] {
+            session.attachId = existing
+            paneViews[session.terminalId]?.beginHerdrTitleAttachment()
             updateRouterGrid(terminalId: session.terminalId)
             router.register(attachId: existing, sink: session.outputSink)
             return
@@ -47,6 +49,7 @@ extension HerdrController {
 
     func paneSessionDidStop(_ session: HerdrPaneSession) {
         guard paneSessions[session.terminalId] === session else { return }
+        paneViews[session.terminalId]?.endHerdrTitleAttachment()
         paneSessions.removeValue(forKey: session.terminalId)
         attachRetries.removeValue(forKey: session.terminalId)?.cancel()
         attachesInFlight.removeValue(forKey: session.terminalId)
@@ -163,6 +166,7 @@ extension HerdrController {
             attachIds[terminalId] = attached.attach_id
             terminalByAttach[attached.attach_id] = terminalId
             session.attachId = attached.attach_id
+            view.beginHerdrTitleAttachment()
             if let paneId = paneInfos.values.first(where: { $0.terminal_id == terminalId })?.pane_id {
                 router.setPane(paneId, attachId: attached.attach_id)
             }
@@ -200,9 +204,7 @@ extension HerdrController {
             panesNeedingSnapshot.remove(terminalId)
         }
         let state = record.snapshot.state
-        if view.userOverrideTitle == nil, let title = state.title, !title.isEmpty, view.title != title {
-            view.title = title
-        }
+        view.seedHerdrTitle(state.title)
         if let cwd = state.cwd, cwd.hasPrefix("/") {
             view.handlePwdChange(cwd)
         }
@@ -244,6 +246,7 @@ extension HerdrController {
         guard let terminalId = terminalByAttach.removeValue(forKey: detached.attach_id) else { return }
         attachIds.removeValue(forKey: terminalId)
         router.unregister(attachId: detached.attach_id)
+        paneViews[terminalId]?.endHerdrTitleAttachment()
         paneSessions[terminalId]?.attachId = nil
         snapshotRequestsInFlight.remove(detached.attach_id)
         snapshotRetryWanted.remove(detached.attach_id)

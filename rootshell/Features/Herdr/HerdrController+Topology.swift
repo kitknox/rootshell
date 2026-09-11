@@ -77,6 +77,7 @@ extension HerdrController {
                 selectTab(containingPane: focusedPane, focusPane: true)
             }
         }
+        for tab in tabs.values { refreshTitle(of: tab) }
         // Re-attach every pane whose surface already runs, focused tab first.
         queueAttaches(priorityTab: tabsModel.selectedTabID)
         pushGeometryForVisibleTabs()
@@ -116,7 +117,6 @@ extension HerdrController {
         tab.herdrTabId = info.tab_id
         tab.herdrWorkspaceId = info.workspace_id
         tab.owningGatewayTerminalUUID = gatewayUUID
-        tab.title = info.label
         tabs[info.tab_id] = tab
         tabsModel.tabs.append(tab)
         refreshTitle(of: tab)
@@ -156,22 +156,6 @@ extension HerdrController {
         )
         if let tab = tabs[tabId] {
             refreshTitle(of: tab)
-        }
-    }
-
-    /// Tab title precedence: the focused pane's reported title, else herdr's
-    /// tab label.
-    func refreshTitle(of tab: TabModel) {
-        guard let tabId = tab.herdrTabId, let info = tabInfos[tabId] else { return }
-        let focusedTitle = paneInfos.values
-            .first { $0.tab_id == tabId && $0.focused }
-            .flatMap { pane -> String? in
-                let title = pane.title ?? pane.terminal_title
-                return title?.isEmpty == false ? title : nil
-            }
-        let title = focusedTitle ?? info.label
-        if tab.title != title {
-            tab.title = title
         }
     }
 
@@ -220,17 +204,15 @@ extension HerdrController {
     func paneDidUpdate(_ pane: HerdrControl.PaneInfo) {
         let previous = paneInfos[pane.pane_id]
         paneInfos[pane.pane_id] = pane
-        if let tab = tabs[pane.tab_id] {
+        if let view = paneViews[pane.terminal_id] {
+            view.seedHerdrTitle(pane.title ?? pane.terminal_title)
+        } else if let tab = tabs[pane.tab_id] {
             refreshTitle(of: tab)
         }
         let path = pane.projectPath
         if let path, path != previous?.projectPath,
            let view = paneViews[pane.terminal_id] {
             AgentAttentionCenter.shared.applyHerdrProjectPath(terminal: view, path: path)
-        }
-        if let view = paneViews[pane.terminal_id], view.userOverrideTitle == nil,
-           let title = pane.title ?? pane.terminal_title, !title.isEmpty, view.title != title {
-            view.title = title
         }
     }
 
@@ -290,6 +272,7 @@ extension HerdrController {
             if let tab = tabs[pane.tab_id], existing.containingTabID != tab.id {
                 existing.containingTabID = tab.id
             }
+            existing.seedHerdrTitle(pane.title ?? pane.terminal_title)
             return
         }
         guard let ghosttyApp else {
@@ -300,9 +283,6 @@ extension HerdrController {
         view.setOverlayOwnsKeyboard(tabsModel.overlayOwnsKeyboard)
         view.herdrPaneBinding = binding
         view.usesHerdrFallbackScrolling = mode == .legacy
-        if let title = pane.title ?? pane.terminal_title, !title.isEmpty {
-            view.title = title
-        }
         if let tab = tabs[pane.tab_id] {
             view.containingTabID = tab.id
             view.setOcclusion(tabsModel.selectedTabID == tab.id)
@@ -310,6 +290,7 @@ extension HerdrController {
             view.setOcclusion(false)
         }
         paneViews[pane.terminal_id] = view
+        view.seedHerdrTitle(pane.title ?? pane.terminal_title)
         NotificationCenter.default.post(name: .herdrPaneBindingsChanged, object: nil)
     }
 
@@ -365,6 +346,7 @@ extension HerdrController {
     }
 
     private func retirePane(view: Ghostty.TerminalView, terminalId: String) {
+        view.endHerdrTitleAttachment()
         attachQueue.removeAll { $0 == terminalId }
         attachRetries.removeValue(forKey: terminalId)?.cancel()
         attachesInFlight.removeValue(forKey: terminalId)
@@ -437,6 +419,7 @@ extension HerdrController {
            let view = paneViews[terminalId], tab.focusedPane !== view {
             focusPane(view, in: tab)
         }
+        refreshTitle(of: tab)
         tabsModel.syncDisplayedTab()
         // Ratios changed under the panes; force each surface to re-sync its
         // grid after the layout pass (mirrors the tmux path).

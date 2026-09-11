@@ -233,7 +233,10 @@ extension Ghostty {
 
         /// Title set by the user via the context menu (overrides session-provided title)
         var userOverrideTitle: String? {
-            didSet { refreshPanePresentationTitle() }
+            didSet {
+                refreshPanePresentationTitle()
+                if isHerdrPane { publishHerdrTitle() }
+            }
         }
 
         /// Title provided by the terminal session (from escape sequences)
@@ -424,6 +427,11 @@ extension Ghostty {
         }
         var herdrPaneBinding: HerdrPaneBinding? {
             didSet {
+                if herdrPaneBinding?.terminalId != oldValue?.terminalId
+                    || herdrPaneBinding?.gatewayUUID != oldValue?.gatewayUUID {
+                    endHerdrTitleAttachment()
+                    herdrTitleState = HerdrPaneTitleState()
+                }
                 if (herdrPaneBinding == nil) != (oldValue == nil) {
                     invalidateWritingAssistance(resetDocument: true)
                     refreshPanePresentationTitle()
@@ -431,6 +439,7 @@ extension Ghostty {
             }
         }
         var isHerdrPane: Bool { herdrPaneBinding != nil }
+        var herdrTitleState = HerdrPaneTitleState()
 
         /// The grid herdr laid this pane out with. The split host trims the
         /// pane's slot to it so the surface never exceeds the server PTY.
@@ -4681,6 +4690,10 @@ extension Ghostty.TerminalView: TerminalKeyboardAccessoryHost {
 
 extension Ghostty.TerminalView: GhosttyActionDelegate {
     func handleTitleChange(_ title: String) {
+        if isHerdrPane {
+            handleHerdrTitleChange(title)
+            return
+        }
         // Coalesce rapid title changes with a timer (0.075s, like macOS)
         // This prevents flickering and excessive updates
         titleChangeTimer?.invalidate()
@@ -4756,7 +4769,9 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
     /// Runs before SwiftUI's first post-resume render so stale values never
     /// reach the UI.
     func replayCachedSessionStateOnForeground() {
-        if userOverrideTitle == nil,
+        if isHerdrPane {
+            publishHerdrTitle()
+        } else if userOverrideTitle == nil,
            let cached = sessionProvidedTitle,
            cached != title {
             title = cached
