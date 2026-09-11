@@ -3,8 +3,8 @@
 //  rootshell
 //
 //  User intent flows back to herdr as socket API requests; the resulting
-//  events and layout records reshape the local tabs. Nothing here mutates
-//  the local topology directly.
+//  events and layout records reshape the local tabs. Creation responses
+//  also project the returned tab and pane so focus follows the exact request.
 //
 //  Copyright (c) 2026 Kit Knox / Rootshell LLC
 //
@@ -55,32 +55,104 @@ extension HerdrController {
         send("pane.close", HerdrControl.PaneTarget(pane_id: binding.paneId))
     }
 
-    func requestNewTab(inWorkspaceOf tab: TabModel?) {
-        let workspaceId = tab?.herdrWorkspaceId
-            ?? workspaces.values.first(where: \.focused)?.workspace_id
-            ?? workspaces.keys.sorted().first
-        guard let workspaceId else { return }
-        if mode == .legacy {
-            pendingNewTabSelectionUntil = Date().addingTimeInterval(5)
-            legacyCommand("tab create --workspace \(workspaceId)")
-            return
-        }
-        guard let channel else { return }
-        Task { [weak self] in
+    @discardableResult
+    func requestNewTab(inWorkspaceOf tab: TabModel?) -> Bool {
+        requestNewTab(workspaceID: tab?.herdrWorkspaceId)
+    }
+
+    /// Capture the workspace, not a pane that may disappear while a New Tab
+    /// chooser is open. Empty-session creation is shared by attach and every
+    /// New Tab entry point; repeated clicks cannot bootstrap extra workspaces.
+    @discardableResult
+    func requestNewTab(workspaceID preferredWorkspaceID: String?) -> Bool {
+        guard !didEnd, isActive, hasProcessedInitialSnapshot else { return false }
+        guard emptySessionCreationID == nil else { return true }
+        let channel = self.channel
+        guard mode == .legacy || channel != nil else { return false }
+        let generation = streamGeneration
+        let requestID = UUID()
+        if tabs.isEmpty { emptySessionCreationID = requestID }
+        newTabError = nil
+        newTabTasks[requestID] = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                self.newTabTasks.removeValue(forKey: requestID)
+                if self.emptySessionCreationID == requestID { self.emptySessionCreationID = nil }
+                if self.streamGeneration == generation, !self.didEnd { self.publishSessionState() }
+            }
+            guard self.creationIsCurrent(generation) else { return }
             do {
-                let created = try await channel.request(
-                    "tab.create", HerdrControl.TabCreateParams(workspace_id: workspaceId),
-                    as: HerdrControl.TabCreatedResult.self
-                )
-                guard let self, self.channel === channel else { return }
+                // A close event can precede workspace.closed or a legacy poll.
+                // Only a definitive rejection is safe to retry; a timeout may
+                // already have created a shell on the host.
+                let created: HerdrControl.TabCreatedResult
+                do {
+                    created = try await self.createTab(
+                        workspaceID: self.newTabWorkspace(preferred: preferredWorkspaceID), channel: channel
+                    )
+                } catch HerdrChannelError.remote(let code, _) where code == "workspace_not_found" {
+                    let snapshot = try await self.creationSnapshot(channel: channel)
+                    guard self.creationIsCurrent(generation) else { return }
+                    self.applySnapshot(snapshot)
+                    created = try await self.createTab(
+                        workspaceID: self.newTabWorkspace(preferred: preferredWorkspaceID), channel: channel
+                    )
+                }
+                guard self.creationIsCurrent(generation) else { return }
+                if let workspace = created.workspace { self.workspaces[workspace.workspace_id] = workspace }
                 self.ensureTab(created.tab)
                 self.paneDidAppear(created.root_pane)
+                self.reorderTabs()
+                self.refreshWorkspaceGroups()
                 self.selectTab(containingPane: created.root_pane.pane_id, focusPane: true)
+                self.autoHideGatewayIfWanted()
                 self.refreshTopology()
             } catch {
-                Self.logger.warning("herdr tab.create failed: \(error.localizedDescription)")
+                guard self.creationIsCurrent(generation) else { return }
+                Self.logger.warning("herdr tab creation failed: \(error.localizedDescription)")
+                self.newTabError = error.localizedDescription
+                self.presentNewTabErrorIfNeeded()
+                self.refreshTopology()
             }
         }
+        publishSessionState()
+        return true
+    }
+
+    private func creationIsCurrent(_ generation: UUID) -> Bool {
+        !Task.isCancelled && !didEnd && streamGeneration == generation
+    }
+
+    private func newTabWorkspace(preferred: String?) -> String? {
+        if let preferred, workspaces[preferred] != nil { return preferred }
+        return workspaces.values.first(where: \.focused)?.workspace_id
+            ?? workspaces.values.min(by: { ($0.number, $0.workspace_id) < ($1.number, $1.workspace_id) })?.workspace_id
+    }
+
+    private func createTab(workspaceID: String?, channel: HerdrControlChannel?) async throws -> HerdrControl.TabCreatedResult {
+        if let channel {
+            if let workspaceID {
+                return try await channel.request(
+                    "tab.create", HerdrControl.TabCreateParams(workspace_id: workspaceID),
+                    as: HerdrControl.TabCreatedResult.self
+                )
+            }
+            return try await channel.request(
+                "workspace.create", HerdrControl.WorkspaceCreateParams(), as: HerdrControl.TabCreatedResult.self
+            )
+        }
+        let args = workspaceID.map { "tab create --workspace \(LoginShellCommand.singleQuoted($0)) --focus" }
+            ?? "workspace create --focus"
+        return try await legacyRequest(args: args, as: HerdrControl.TabCreatedResult.self)
+    }
+
+    private func creationSnapshot(channel: HerdrControlChannel?) async throws -> HerdrControl.SessionSnapshot {
+        if let channel {
+            return try await channel.request(
+                "session.snapshot", HerdrControl.EmptyParams(), as: HerdrControl.SessionSnapshotResult.self
+            ).snapshot
+        }
+        return try await legacyRequest(args: "api snapshot", as: HerdrControl.SessionSnapshotResult.self).snapshot
     }
 
     func requestCloseTab(_ tab: TabModel) {

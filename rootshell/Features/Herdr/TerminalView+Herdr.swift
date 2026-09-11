@@ -9,9 +9,52 @@
 //
 
 import Foundation
+import SwiftUI
 import UIKit
 
 extension Ghostty.TerminalView {
+
+    func updateHerdrGatewayOverlay() {
+        guard let controller = herdrController, controller.showsGatewayStatus else {
+            let hadOverlay = herdrGatewayHost != nil
+            herdrGatewayHost?.willMove(toParent: nil)
+            herdrGatewayHost?.view.removeFromSuperview()
+            herdrGatewayHost?.removeFromParent()
+            herdrGatewayHost = nil
+            if hadOverlay, isLogicallyFocused { _ = becomeFirstResponder() }
+            return
+        }
+        let content = HerdrGatewayView(
+            sessionName: controller.sessionName ?? "default",
+            hasSnapshot: controller.hasProcessedInitialSnapshot,
+            isActive: controller.isActive,
+            isCreating: controller.emptySessionCreationID != nil,
+            errorMessage: controller.newTabError ?? controller.connectionError,
+            newTab: { [weak controller] in controller?.requestNewTab(workspaceID: nil) },
+            retryConnection: { [weak controller] in controller?.applicationDidBecomeActive() },
+            detach: { [weak controller] in controller?.detach(closeGateway: false) }
+        )
+        if let host = herdrGatewayHost {
+            host.rootView = content
+        } else {
+            let host = UIHostingController(rootView: content)
+            host.view.translatesAutoresizingMaskIntoConstraints = false
+            var responder: UIResponder? = next
+            while responder != nil, !(responder is UIViewController) { responder = responder?.next }
+            let parent = responder as? UIViewController
+            parent?.addChild(host)
+            addSubview(host.view)
+            NSLayoutConstraint.activate([
+                host.view.leadingAnchor.constraint(equalTo: leadingAnchor),
+                host.view.trailingAnchor.constraint(equalTo: trailingAnchor),
+                host.view.topAnchor.constraint(equalTo: topAnchor),
+                host.view.bottomAnchor.constraint(equalTo: bottomAnchor)
+            ])
+            host.didMove(toParent: parent)
+            herdrGatewayHost = host
+        }
+        if isFirstResponder { _ = resignFirstResponder() }
+    }
 
     /// Fixed space outside the grid. TerminalScrollView pins the terminal to
     /// its full viewport on both platforms, so it adds no wrapper inset.
@@ -119,7 +162,6 @@ extension Ghostty.TerminalView {
         let controller = herdrPaneController ?? herdrController
         guard let controller, controller.isActive else { return false }
         let tab = containingTabID.flatMap { controller.tabsModel.tab(withID: $0) }
-        controller.requestNewTab(inWorkspaceOf: tab?.isHerdrWindow == true ? tab : nil)
-        return true
+        return controller.requestNewTab(inWorkspaceOf: tab?.isHerdrWindow == true ? tab : nil)
     }
 }

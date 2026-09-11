@@ -87,6 +87,10 @@ nonisolated enum HerdrControl {
         var focus = true
     }
 
+    struct WorkspaceCreateParams: Encodable {
+        var focus = true
+    }
+
     struct TabRenameParams: Encodable {
         let tab_id: String
         let label: String
@@ -252,6 +256,8 @@ nonisolated enum HerdrControl {
     }
 
     struct TabCreatedResult: Decodable {
+        /// workspace.create includes the workspace as well as its initial tab.
+        let workspace: WorkspaceInfo?
         let tab: TabInfo
         let root_pane: PaneInfo
     }

@@ -1502,6 +1502,7 @@ extension Ghostty.TerminalView {
 
     /// Sends user input to the appropriate destination based on platform
     func sendUserInput(_ data: Data, documentMutation: TerminalCorrectionContext.Mutation? = nil) {
+        guard herdrController?.showsGatewayStatus != true else { return }
         // Input and UIKit document mutations are serialized on the main actor.
         // Rendering output is not an edit to an application's logical input.
         if let documentMutation {
@@ -2854,6 +2855,11 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
 
 extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        if let overlay = herdrGatewayHost?.view,
+           let touchView = touch.view,
+           touchView === overlay || touchView.isDescendant(of: overlay) {
+            return false
+        }
         // The brightness HUD is an interactive `UIHostingController` view (a
         // horizontal `Slider`) added as a subview of this terminal view. Without
         // this exclusion the terminal's tab-swipe pan (`appTabSwipePanGesture`)

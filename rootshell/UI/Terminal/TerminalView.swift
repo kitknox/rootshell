@@ -528,6 +528,7 @@ extension Ghostty {
         /// Set on the gateway view while it drives a herdr session in
         /// control mode. nil for pane views and non-herdr sessions.
         var herdrController: HerdrController?
+        var herdrGatewayHost: UIHostingController<HerdrGatewayView>?
 
         /// Gateway session object the transport rebinding in
         /// `applyTmuxReconcile` last ran for. A title-only batch on the same
@@ -3558,7 +3559,7 @@ extension Ghostty {
         }
         
         override var canBecomeFirstResponder: Bool {
-            return true
+            return herdrController?.showsGatewayStatus != true
         }
 
         #if targetEnvironment(macCatalyst)
@@ -3573,6 +3574,7 @@ extension Ghostty {
 
         @discardableResult
         override func becomeFirstResponder() -> Bool {
+            guard herdrController?.showsGatewayStatus != true else { return false }
             #if os(iOS) && !targetEnvironment(macCatalyst)
             guard iPadVisorController.permitsFocus(self) else { return false }
             #endif

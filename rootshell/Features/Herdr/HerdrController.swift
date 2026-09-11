@@ -70,7 +70,7 @@ final class HerdrController {
 
     private(set) var channel: HerdrControlChannel?
     var router = HerdrOutputRouter()
-    private var streamGeneration = UUID()
+    private(set) var streamGeneration = UUID()
     var topologyRefreshTask: Task<Void, Never>?
     var topologyRefreshWanted = false
     private(set) var bootId: String?
@@ -102,8 +102,14 @@ final class HerdrController {
     /// message shows once so a repeating poll does not flood the shell.
     var legacyNoticesShown: Set<String> = []
     var didAutoHideGateway = false
-    /// A tab the user just asked for should be selected when herdr reports it.
-    var pendingNewTabSelectionUntil: Date?
+    var rehideGatewayAfterEmpty = false
+    /// Consumed by the first successful snapshot, including an empty one.
+    /// Reconnects and later close events never bootstrap another shell.
+    var hasProcessedInitialSnapshot = false
+    var newTabTasks: [UUID: Task<Void, Never>] = [:]
+    var emptySessionCreationID: UUID?
+    var newTabError: String?
+    var connectionError: String?
 
     /// Output held for a tab's panes until their surfaces take the layout.
     struct LayoutRelease {
@@ -188,8 +194,8 @@ final class HerdrController {
         gateway.herdrController = controller
         installForegroundObserver()
         controller.markGatewayTab()
+        controller.publishSessionState()
         controller.connect()
-        NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gateway.uuid)
         return controller
     }
 
@@ -351,12 +357,17 @@ final class HerdrController {
                 Self.logger.info("herdr server restarted (boot \(previousBoot) -> \(opened.boot_id)); rebuilding")
             }
             isActive = true
+            connectionError = nil
             applySnapshot(snapshot)
             subscribeAgentStatus()
             startHealthPing(on: channel)
             NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gatewayUUID)
         } catch {
+            guard !didEnd else { return }
             Self.logger.error("herdr control connect failed: \(error.localizedDescription)")
+            connectionError = error.localizedDescription
+            isActive = false
+            publishSessionState()
             if let channel {
                 await channel.close()
                 self.channel = nil
@@ -452,8 +463,9 @@ final class HerdrController {
         healthTask?.cancel()
         channel = nil
         isActive = false
+        connectionError = error?.localizedDescription
         detachAllLocally()
-        NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gatewayUUID)
+        publishSessionState()
         scheduleReconnect()
     }
 
@@ -530,7 +542,9 @@ final class HerdrController {
     }
 
     func showGatewayTab() {
-        guard let gatewayTabID, let tab = tabsModel.tab(withID: gatewayTabID), tab.isHiddenTmuxWindow else { return }
+        rehideGatewayAfterEmpty = false
+        didAutoHideGateway = true
+        guard let gatewayTabID, let tab = tabsModel.tab(withID: gatewayTabID) else { return }
         tab.isHiddenTmuxWindow = false
         tabsModel.selectedTabID = tab.id
         tabsModel.pendingScrollToTabID = tab.id
@@ -540,13 +554,14 @@ final class HerdrController {
     /// on the first projected tab. One-shot so a later "Show Gateway Tab"
     /// sticks.
     func autoHideGatewayIfWanted() {
-        guard !didAutoHideGateway,
+        guard !didAutoHideGateway || rehideGatewayAfterEmpty,
               SettingsStore.shared.value(Settings.Multiplexer.herdrAutoHideGatewayOnAttach),
               let gatewayTabID, let gatewayTab = tabsModel.tab(withID: gatewayTabID),
               !gatewayTab.isHiddenTmuxWindow else { return }
         let mine = Set(tabs.values.map(\.id))
         guard let first = tabsModel.tabs.first(where: { mine.contains($0.id) }) else { return }
         didAutoHideGateway = true
+        rehideGatewayAfterEmpty = false
         gatewayTab.isHiddenTmuxWindow = true
         if tabsModel.selectedTabID == gatewayTab.id {
             tabsModel.selectedTabID = first.id
@@ -559,6 +574,8 @@ final class HerdrController {
     func stop() {
         guard !didEnd else { return }
         didEnd = true
+        isActive = false
+        cancelNewTabRequests()
         healthTask?.cancel()
         connectTask?.cancel()
         reconnectTask?.cancel()
@@ -573,6 +590,7 @@ final class HerdrController {
         Self.controllers.removeValue(forKey: gatewayUUID)
         if let gateway {
             gateway.herdrController = nil
+            gateway.updateHerdrGatewayOverlay()
         }
         if let gatewayTabID, let tab = tabsModel.tab(withID: gatewayTabID) {
             tab.isHerdrGateway = false
@@ -607,6 +625,7 @@ final class HerdrController {
 
     private func detachAllLocally() {
         streamGeneration = UUID()
+        cancelNewTabRequests()
         topologyRefreshTask?.cancel()
         topologyRefreshTask = nil
         topologyRefreshWanted = false

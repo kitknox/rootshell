@@ -19,6 +19,10 @@ extension HerdrController {
     // MARK: - Snapshot
 
     func applySnapshot(_ snapshot: HerdrControl.SessionSnapshot) {
+        guard !didEnd else { return }
+        let isInitialSnapshot = !hasProcessedInitialSnapshot
+        hasProcessedInitialSnapshot = true
+        if !snapshot.tabs.isEmpty { newTabError = nil }
         workspaces = Dictionary(uniqueKeysWithValues: snapshot.workspaces.map { ($0.workspace_id, $0) })
         for tab in snapshot.tabs {
             tabInfos[tab.tab_id] = tab
@@ -66,10 +70,10 @@ extension HerdrController {
         publishAgentStatuses()
         reorderTabs()
         refreshWorkspaceGroups()
-        if let focusedPane = snapshot.focused_pane_id {
-            focusedPaneId = focusedPane
-            if !hasProcessedInitialFocus {
-                hasProcessedInitialFocus = true
+        focusedPaneId = snapshot.focused_pane_id
+        if !hasProcessedInitialFocus {
+            hasProcessedInitialFocus = true
+            if let focusedPane = snapshot.focused_pane_id {
                 selectTab(containingPane: focusedPane, focusPane: true)
             }
         }
@@ -78,6 +82,10 @@ extension HerdrController {
         pushGeometryForVisibleTabs()
         autoHideGatewayIfWanted()
         publishProjectPaths()
+        publishSessionState()
+        if isInitialSnapshot, snapshot.tabs.isEmpty {
+            requestNewTab(workspaceID: nil)
+        }
     }
 
     /// herdr knows each pane's directory; hand it to agent attention so the
@@ -112,17 +120,14 @@ extension HerdrController {
         tabs[info.tab_id] = tab
         tabsModel.tabs.append(tab)
         refreshTitle(of: tab)
-        // A tab the user just asked for lands in front, like a native new
-        // tab; tabs other clients create stay where they are.
-        if let until = pendingNewTabSelectionUntil, until > Date() {
-            pendingNewTabSelectionUntil = nil
-            tabsModel.selectedTabID = tab.id
-            tabsModel.pendingScrollToTabID = tab.id
-        } else if tabsModel.selectedTabID == nil {
+        // Creation responses select their exact tab; unrelated events never
+        // consume a pending New Tab action (including in legacy mode).
+        if tabsModel.selectedTabID == nil {
             tabsModel.selectedTabID = tab.id
         }
         // Raw layouts can precede the polled creation events.
         if let layout = lastLayouts[info.tab_id] { applyLayout(layout) }
+        publishSessionState()
     }
 
     func tabDidClose(tabId: String) {
@@ -310,6 +315,11 @@ extension HerdrController {
 
     /// Tears down views and tabs herdr no longer has.
     func prune(tabIds: Set<String>, paneIds: Set<String>, terminalIds: Set<String>) {
+        let staleTabs = tabs.filter { !tabIds.contains($0.key) }
+        let removedIDs = Set(staleTabs.values.map(\.id))
+        let selectedID = tabsModel.selectedTabID
+        let removesSelection = selectedID.map { removedIDs.contains($0) } ?? false
+        let neighbor = removesSelection ? selectedID.flatMap { tabsModel.groupedCloseNeighbor(for: $0) } : nil
         for (paneId, _) in paneInfos where !paneIds.contains(paneId) {
             paneInfos.removeValue(forKey: paneId)
         }
@@ -317,11 +327,8 @@ extension HerdrController {
         for (terminalId, view) in staleViews {
             retirePane(view: view, terminalId: terminalId)
         }
-        let staleTabs = tabs.filter { !tabIds.contains($0.key) }
-        for (tabId, tab) in staleTabs {
-            let wasSelected = tabsModel.selectedTabID == tab.id
-            let neighbor = wasSelected ? tabsModel.groupedCloseNeighbor(for: tab.id) : nil
-            tabsModel.tabs.removeAll { $0.id == tab.id }
+        tabsModel.tabs.removeAll { removedIDs.contains($0.id) }
+        for (tabId, _) in staleTabs {
             tabs.removeValue(forKey: tabId)
             tabInfos.removeValue(forKey: tabId)
             lastLayouts.removeValue(forKey: tabId)
@@ -329,10 +336,22 @@ extension HerdrController {
             pushedGeometry.removeValue(forKey: tabId)
             confirmedGeometry.remove(tabId)
             geometryTasks.removeValue(forKey: tabId)?.cancel()
-            if wasSelected {
-                tabsModel.selectedTabID = neighbor ?? tabsModel.tabs.first?.id
-            }
         }
+        if let focusedPaneId, !paneIds.contains(focusedPaneId) { self.focusedPaneId = nil }
+        if tabs.isEmpty {
+            focusWatchdog?.cancel()
+            revealEmptyGatewayIfNeeded()
+        }
+        if removesSelection {
+            let visible = tabsModel.tabs.filter { !$0.isHiddenTmuxWindow }
+            let replacement = tabs.isEmpty ? gatewayTabID : nil
+            tabsModel.selectedTabID = replacement
+                ?? visible.first(where: { $0.id == neighbor })?.id
+                ?? visible.first(where: { $0.owningGatewayTerminalUUID == gatewayUUID })?.id
+                ?? visible.first?.id
+            tabsModel.pendingScrollToTabID = tabsModel.selectedTabID
+        }
+        publishSessionState()
         if !staleViews.isEmpty {
             NotificationCenter.default.post(name: .herdrPaneBindingsChanged, object: nil)
         }

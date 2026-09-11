@@ -59,6 +59,7 @@ struct HerdrTabMenuItems: View {
             } label: {
                 Label("New herdr Tab", systemImage: "plus.rectangle.on.rectangle")
             }
+            .disabled(controller.emptySessionCreationID != nil)
             if tab.isHerdrWindow, controller.isGatewayTabHidden {
                 Button {
                     controller.showGatewayTab()

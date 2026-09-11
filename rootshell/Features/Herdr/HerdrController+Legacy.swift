@@ -23,13 +23,13 @@ extension HerdrController {
     func startLegacyMode(reason: String, recommendUpgrade: Bool = true) {
         guard mode == .raw, !didEnd else { return }
         mode = .legacy
-        isActive = true
+        isActive = false
         reconnectAttempt = 0
         Self.logger.info("herdr control: degraded mode (\(reason))")
         let upgradeHint = recommendUpgrade ? " Upgrade herdr on the host for raw control streams." : ""
         gateway?.writeToGhostty(string:
             "\r\n\u{1b}[33mherdr control mode: \(reason). Running with server-rendered panes.\(upgradeHint)\u{1b}[0m\r\n")
-        NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gatewayUUID)
+        publishSessionState()
         legacyPollTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.legacyPollOnce()
@@ -51,18 +51,53 @@ extension HerdrController {
     /// Runs one herdr CLI invocation on the gateway's connection and
     /// returns its stdout.
     func legacyRun(args: String) async throws -> Data {
+        try Task.checkCancellation()
         guard let gateway else { throw HerdrChannelError.closed }
         let command = SSHConfig.herdrCommandLine(sessionName: sessionName, args: args)
         let pipe = try await HerdrChannelFactory.open(command: command, on: gateway)
-        var output = Data()
         defer { Task { await pipe.close() } }
-        while let chunk = try await pipe.read(maxBytes: 64 * 1024) {
-            output.append(chunk)
-            if output.count > Self.legacyMaxResponseBytes {
-                throw HerdrChannelError.malformed("herdr output exceeds \(Self.legacyMaxResponseBytes) bytes")
+        try Task.checkCancellation()
+        let limit = Self.legacyMaxResponseBytes
+        return try await withThrowingTaskGroup(of: Data.self) { group in
+            group.addTask {
+                try await withTaskCancellationHandler {
+                    var output = Data()
+                    while let chunk = try await pipe.read(maxBytes: 64 * 1024) {
+                        try Task.checkCancellation()
+                        output.append(chunk)
+                        if output.count > limit {
+                            throw HerdrChannelError.malformed("herdr output exceeds \(limit) bytes")
+                        }
+                    }
+                    try Task.checkCancellation()
+                    return output
+                } onCancel: {
+                    Task { await pipe.close() }
+                }
             }
+            group.addTask {
+                try await Task.sleep(for: .seconds(15))
+                throw HerdrChannelError.timedOut(method: args)
+            }
+            defer { group.cancelAll() }
+            return try await group.next()!
         }
-        return output
+    }
+
+    /// CLI failures are JSON error responses too. Decode them before the
+    /// success shape so creation can distinguish a vanished workspace from
+    /// an uncertain transport failure.
+    func legacyRequest<Result: Decodable>(args: String, as: Result.Type) async throws -> Result {
+        let output = try await legacyRun(args: args)
+        try Task.checkCancellation()
+        guard let line = output.split(separator: 0x0A).last(where: { $0.first == UInt8(ascii: "{") }) else {
+            throw HerdrChannelError.malformed("herdr \(args) returned no JSON")
+        }
+        let data = Data(line)
+        if let error = try HerdrControl.decoder.decode(HerdrControl.LineHead.self, from: data).error {
+            throw HerdrChannelError.remote(code: error.code, message: error.message)
+        }
+        return try HerdrControl.decoder.decode(HerdrControl.Response<Result>.self, from: data).result
     }
 
     func legacyPollOnce() async {
@@ -77,11 +112,18 @@ extension HerdrController {
             guard let line = output.split(separator: 0x0A).last(where: { $0.first == UInt8(ascii: "{") }) else {
                 let text = String(decoding: output.prefix(200), as: UTF8.self)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                legacyNotice("herdr api snapshot returned no JSON" + (text.isEmpty ? " (empty output)" : ": \(text)"))
-                return
+                throw HerdrChannelError.malformed("herdr api snapshot returned no JSON" + (text.isEmpty ? " (empty output)" : ": \(text)"))
             }
             let fingerprint = line.hashValue
-            guard fingerprint != legacySnapshotFingerprint else { return }
+            if let error = try HerdrControl.decoder.decode(HerdrControl.LineHead.self, from: Data(line)).error {
+                throw HerdrChannelError.remote(code: error.code, message: error.message)
+            }
+            isActive = true
+            connectionError = nil
+            guard fingerprint != legacySnapshotFingerprint else {
+                publishSessionState()
+                return
+            }
             let snapshot = try HerdrControl.decoder.decode(
                 HerdrControl.Response<HerdrControl.SessionSnapshotResult>.self,
                 from: Data(line)
@@ -89,6 +131,10 @@ extension HerdrController {
             legacySnapshotFingerprint = fingerprint
             applySnapshot(snapshot)
         } catch {
+            guard !didEnd, !Task.isCancelled else { return }
+            isActive = false
+            connectionError = error.localizedDescription
+            publishSessionState()
             Self.logger.warning("herdr degraded poll failed: \(error.localizedDescription)")
             legacyNotice("snapshot poll failed: \(error.localizedDescription)")
         }
