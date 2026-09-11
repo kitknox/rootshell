@@ -57,18 +57,27 @@ extension HerdrController {
 
     @discardableResult
     func requestNewTab(inWorkspaceOf tab: TabModel?) -> Bool {
-        requestNewTab(workspaceID: tab?.herdrWorkspaceId)
+        let target = newTabTarget(inWorkspaceOf: tab)
+        return requestNewTab(workspaceID: target.workspaceID, afterTabID: target.afterTabID)
     }
 
-    /// Capture the workspace, not a pane that may disappear while a New Tab
-    /// chooser is open. Empty-session creation is shared by attach and every
-    /// New Tab entry point; repeated clicks cannot bootstrap extra workspaces.
+    /// Capture stable tab/workspace IDs before a chooser can change focus.
+    /// Gateway actions use the resolved workspace's active tab as their anchor.
+    func newTabTarget(inWorkspaceOf tab: TabModel?) -> (workspaceID: String?, afterTabID: String?) {
+        let workspaceID = newTabWorkspace(preferred: tab?.herdrWorkspaceId)
+        return (workspaceID, tab?.herdrTabId ?? workspaceID.flatMap { workspaces[$0]?.active_tab_id })
+    }
+
+    /// Empty-session creation is shared by attach and every New Tab entry
+    /// point; repeated clicks cannot bootstrap extra workspaces.
     @discardableResult
-    func requestNewTab(workspaceID preferredWorkspaceID: String?) -> Bool {
+    func requestNewTab(workspaceID preferredWorkspaceID: String?, afterTabID: String? = nil) -> Bool {
         guard !didEnd, isActive, hasProcessedInitialSnapshot else { return false }
         guard emptySessionCreationID == nil else { return true }
         let channel = self.channel
         guard mode == .legacy || channel != nil else { return false }
+        let workspaceID = newTabWorkspace(preferred: preferredWorkspaceID)
+        let anchorID = afterTabID ?? workspaceID.flatMap { workspaces[$0]?.active_tab_id }
         let generation = streamGeneration
         let requestID = UUID()
         if tabs.isEmpty { emptySessionCreationID = requestID }
@@ -106,6 +115,22 @@ extension HerdrController {
                 self.refreshWorkspaceGroups()
                 self.selectTab(containingPane: created.root_pane.pane_id, focusPane: true)
                 self.autoHideGatewayIfWanted()
+                if let channel, let anchorID {
+                    do {
+                        try await self.positionNewTab(created.tab, after: anchorID, channel: channel, generation: generation)
+                    } catch {
+                        guard self.creationIsCurrent(generation) else { return }
+                        // Creation already succeeded. A rejected/timed-out move
+                        // must never retry creation or claim the shell was lost.
+                        Self.logger.warning("herdr new tab placement failed: \(error.localizedDescription)")
+                        self.presentTabErrorIfNeeded(
+                            title: String(localized: "Couldn’t Position herdr Tab"),
+                            message: String(localized: "The tab was created, but couldn’t be placed beside the original tab.")
+                                + "\n\n" + error.localizedDescription
+                        )
+                    }
+                }
+                guard self.creationIsCurrent(generation) else { return }
                 self.refreshTopology()
             } catch {
                 guard self.creationIsCurrent(generation) else { return }
@@ -121,6 +146,26 @@ extension HerdrController {
 
     private func creationIsCurrent(_ generation: UUID) -> Bool {
         !Task.isCancelled && !didEnd && streamGeneration == generation
+    }
+
+    private func positionNewTab(
+        _ tab: HerdrControl.TabInfo,
+        after anchorID: String,
+        channel: HerdrControlChannel,
+        generation: UUID
+    ) async throws {
+        // Read after creation: another client may have closed or moved the
+        // anchor, and stable public tab numbers are not insertion positions.
+        let listed = try await channel.request(
+            "tab.list", HerdrControl.TabListParams(workspace_id: tab.workspace_id),
+            as: HerdrControl.TabListResult.self
+        )
+        guard creationIsCurrent(generation) else { return }
+        applyTabOrder(listed.tabs, workspaceID: tab.workspace_id)
+        guard let params = HerdrTabOrder.moveParams(for: tab.tab_id, after: anchorID, in: listed.tabs) else { return }
+        let moved = try await channel.request("tab.move", params, as: HerdrControl.TabListResult.self)
+        guard creationIsCurrent(generation) else { return }
+        applyTabOrder(moved.tabs, workspaceID: tab.workspace_id)
     }
 
     private func newTabWorkspace(preferred: String?) -> String? {

@@ -87,6 +87,16 @@ nonisolated enum HerdrControl {
         var focus = true
     }
 
+    struct TabListParams: Encodable {
+        let workspace_id: String
+    }
+
+    struct TabMoveParams: Encodable {
+        let tab_id: String
+        /// Zero-based insertion boundary in the list before removing the tab.
+        let insert_index: Int
+    }
+
     struct WorkspaceCreateParams: Encodable {
         var focus = true
     }
@@ -260,6 +270,11 @@ nonisolated enum HerdrControl {
         let workspace: WorkspaceInfo?
         let tab: TabInfo
         let root_pane: PaneInfo
+    }
+
+    struct TabListResult: Decodable {
+        /// Server display order; TabInfo.number is a stable public number.
+        let tabs: [TabInfo]
     }
 
     struct TerminalCursor: Decodable, Sendable {

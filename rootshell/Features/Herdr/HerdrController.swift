@@ -134,6 +134,7 @@ final class HerdrController {
 
     var workspaces: [String: HerdrControl.WorkspaceInfo] = [:]
     var tabInfos: [String: HerdrControl.TabInfo] = [:]
+    var tabOrder = HerdrTabOrder()
     /// herdr tab id → the tab modeling it.
     var tabs: [String: TabModel] = [:]
     /// herdr pane id → last known pane facts.
@@ -722,8 +723,7 @@ final class HerdrController {
         case .tabFocused(let focused):
             remoteTabFocusDidChange(tabId: focused.tab_id)
         case .tabMoved(let moved):
-            for tab in moved.tabs { tabInfos[tab.tab_id] = tab }
-            reorderTabs()
+            applyTabOrder(moved.tabs, workspaceID: moved.workspace_id)
         case .workspaceCreated(let workspace), .workspaceUpdated(let workspace):
             workspaces[workspace.workspace_id] = workspace
             refreshWorkspaceGroups()

@@ -24,6 +24,7 @@ extension HerdrController {
         hasProcessedInitialSnapshot = true
         if !snapshot.tabs.isEmpty { newTabError = nil }
         workspaces = Dictionary(uniqueKeysWithValues: snapshot.workspaces.map { ($0.workspace_id, $0) })
+        tabOrder.reset(to: snapshot.tabs)
         for tab in snapshot.tabs {
             tabInfos[tab.tab_id] = tab
             ensureTab(tab)
@@ -103,6 +104,7 @@ extension HerdrController {
 
     func ensureTab(_ info: HerdrControl.TabInfo) {
         tabInfos[info.tab_id] = info
+        tabOrder.append(info)
         if let existing = tabs[info.tab_id] {
             if tabsModel.tabs.contains(where: { $0 === existing }) {
                 refreshTitle(of: existing)
@@ -159,19 +161,26 @@ extension HerdrController {
         }
     }
 
-    /// Orders this gateway's projected tabs by workspace then tab number,
+    /// Applies the complete ordered list returned by tab.list or tab.move.
+    func applyTabOrder(_ infos: [HerdrControl.TabInfo], workspaceID: String) {
+        for info in infos { tabInfos[info.tab_id] = info }
+        tabOrder.update(workspaceID: workspaceID, tabs: infos)
+        reorderTabs()
+    }
+
+    /// Orders this gateway's projected tabs by workspace then server list order,
     /// permuting only the slots they already occupy.
     func reorderTabs() {
         let mine = Set(tabs.values.map(\.id))
         let slots = tabsModel.tabs.indices.filter { mine.contains(tabsModel.tabs[$0].id) }
         guard slots.count > 1 else { return }
-        func key(_ tab: TabModel) -> (Int, Int) {
-            guard let tabId = tab.herdrTabId, let info = tabInfos[tabId] else { return (Int.max, Int.max) }
-            let workspaceNumber = workspaces[info.workspace_id]?.number ?? Int.max
-            return (workspaceNumber, info.number)
-        }
         let current = slots.map { tabsModel.tabs[$0] }
-        let sorted = current.sorted { key($0) < key($1) }
+        let orderedIDs = tabOrder.orderedIDs(
+            in: current.compactMap { tab in tab.herdrTabId.flatMap { tabInfos[$0] } },
+            workspaceNumbers: workspaces.mapValues(\.number)
+        )
+        let sorted = orderedIDs.compactMap { tabs[$0] }
+        guard sorted.count == current.count else { return }
         if current.elementsEqual(sorted, by: { $0 === $1 }) { return }
         for (slot, tab) in zip(slots, sorted) {
             tabsModel.tabs[slot] = tab
@@ -296,6 +305,7 @@ extension HerdrController {
 
     /// Tears down views and tabs herdr no longer has.
     func prune(tabIds: Set<String>, paneIds: Set<String>, terminalIds: Set<String>) {
+        tabOrder.prune(to: tabIds)
         let staleTabs = tabs.filter { !tabIds.contains($0.key) }
         let removedIDs = Set(staleTabs.values.map(\.id))
         let selectedID = tabsModel.selectedTabID

@@ -58,12 +58,10 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
             uniquingKeysWith: { first, _ in first }
         )
 
-        // Focused workspace only; `number` is herdr's display order.
+        // Focused workspace only, preserving the snapshot's display order.
+        // `number` is a stable public tab number, unchanged by tab.move.
         let infos = snap.mxArray("tabs")
             .filter { focusedWorkspace == nil || $0.mxString("workspace_id") == focusedWorkspace }
-            .enumerated()
-            .sorted { ($0.element.mxInt("number") ?? Int.max, $0.offset) < ($1.element.mxInt("number") ?? Int.max, $1.offset) }
-            .map(\.element)
         var tabs: [MuxTab] = []
         for info in infos {
             guard let tabID = info.mxString("tab_id") else { continue }

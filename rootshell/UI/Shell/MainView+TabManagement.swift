@@ -426,8 +426,9 @@ extension MainView {
             return NewTabRequest(target: .tmux(terminal.uuid, controller), localDirectory: nil)
         }
         if let controller = HerdrController.controller(for: terminal), controller.isActive {
+            let target = controller.newTabTarget(inWorkspaceOf: terminals[selectedTabIndex])
             return NewTabRequest(
-                target: .herdr(controller, workspaceID: terminals[selectedTabIndex].herdrWorkspaceId),
+                target: .herdr(controller, workspaceID: target.workspaceID, afterTabID: target.afterTabID),
                 localDirectory: nil
             )
         }
@@ -496,8 +497,8 @@ extension MainView {
                 if requestNewTmuxWindow(on: pane, ownedBy: controller) { return }
             }
             unavailableNewTabRequest = request
-        case .herdr(let controller, let workspaceID):
-            if controller.requestNewTab(workspaceID: workspaceID) { return }
+        case .herdr(let controller, let workspaceID, let afterTabID):
+            if controller.requestNewTab(workspaceID: workspaceID, afterTabID: afterTabID) { return }
             unavailableNewTabRequest = request
         case .connection(let original, let profileID):
             // Never reuse roam/cloud session IDs. Keep the effective config and
@@ -1219,8 +1220,8 @@ struct NewTabRequest {
         case local
         case connection(ConnectionConfig, UUID?)
         case tmux(UUID, TmuxController)
-        /// New herdr tab in the workspace of the captured pane or gateway.
-        case herdr(HerdrController, workspaceID: String?)
+        /// New herdr tab beside the captured tab, even if the chooser changes focus.
+        case herdr(HerdrController, workspaceID: String?, afterTabID: String?)
         case connections
     }
 

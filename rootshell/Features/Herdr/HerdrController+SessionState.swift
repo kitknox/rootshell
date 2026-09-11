@@ -28,7 +28,12 @@ extension HerdrController {
     /// Empty-session errors live in the gateway view. A failed New Tab from
     /// a populated, selected session needs feedback without navigating away.
     func presentNewTabErrorIfNeeded() {
-        guard !tabs.isEmpty, let message = newTabError,
+        guard let message = newTabError else { return }
+        presentTabErrorIfNeeded(title: String(localized: "Couldn’t Create herdr Tab"), message: message)
+    }
+
+    func presentTabErrorIfNeeded(title: String, message: String) {
+        guard !tabs.isEmpty,
               let selected = tabsModel.selectedTabID,
               selected == gatewayTabID || tabs.values.contains(where: { $0.id == selected }),
               let window = tabsModel.tab(withID: selected)?.focusedTerminal?.window ?? gateway?.window,
@@ -38,7 +43,7 @@ extension HerdrController {
         while let presented = presenter.presentedViewController { presenter = presented }
         guard !(presenter is UIAlertController) else { return }
         let alert = UIAlertController(
-            title: String(localized: "Couldn’t Create herdr Tab"),
+            title: title,
             message: message,
             preferredStyle: .alert
         )
