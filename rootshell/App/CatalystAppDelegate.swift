@@ -344,6 +344,14 @@ extension UIApplication {
         sendAction(#selector(Ghostty.TerminalView.menuShowTmuxSessions(_:)), to: nil, from: sender, for: nil)
     }
 
+    @objc func ghostty_detachSession(_ sender: Any?) {
+        sendAction(#selector(Ghostty.TerminalView.menuDetachSession(_:)), to: nil, from: sender, for: nil)
+    }
+
+    @objc func ghostty_detachAllSessions(_ sender: Any?) {
+        sendAction(#selector(Ghostty.TerminalView.menuDetachAllSessions(_:)), to: nil, from: sender, for: nil)
+    }
+
     @objc func ghostty_detachOtherClients(_ sender: Any?) {
         sendAction(#selector(Ghostty.TerminalView.menuDetachOtherClients(_:)), to: nil, from: sender, for: nil)
     }
@@ -1410,31 +1418,17 @@ class CatalystAppDelegate: AppDelegate {
             modifierFlags: [.command]
         )
 
-        let quickSettings: UICommand
-        if let sequence = KeybindManager.shared.sequence(for: .toggle_quick_settings),
-           !sequence.isSequence, let trigger = sequence.first {
-            quickSettings = UIKeyCommand(
-                title: String(localized: "Quick Settings…"),
-                action: #selector(UIApplication.menuToggleQuickSettings(_:)),
-                input: trigger.uiKeyInput,
-                modifierFlags: trigger.uiModifierFlags
-            )
-        } else {
-            quickSettings = UICommand(title: String(localized: "Quick Settings…"),
-                                      action: #selector(UIApplication.menuToggleQuickSettings(_:)))
-        }
-
         #if !CHINA_BUILD
         let shellMenu = UIMenu(
             title: String(localized: "Shell"),
             identifier: UIMenu.Identifier("com.rootshell.shell"),
-            children: [browseHosts, browseProfiles, aiAgent, voiceAgent, settings, quickSettings]
+            children: [browseHosts, browseProfiles, aiAgent, voiceAgent, settings]
         )
         #else
         let shellMenu = UIMenu(
             title: String(localized: "Shell"),
             identifier: UIMenu.Identifier("com.rootshell.shell"),
-            children: [browseHosts, browseProfiles, settings, quickSettings]
+            children: [browseHosts, browseProfiles, settings]
         )
         #endif
 
@@ -1470,6 +1464,16 @@ class CatalystAppDelegate: AppDelegate {
             modifierFlags: [.command, .shift]
         )
 
+        let detachSession = UICommand(
+            title: String(localized: "Detach Session"),
+            action: #selector(UIApplication.ghostty_detachSession(_:))
+        )
+
+        let detachAllSessions = UICommand(
+            title: String(localized: "Detach All Sessions"),
+            action: #selector(UIApplication.ghostty_detachAllSessions(_:))
+        )
+
         let detachOtherClients = UIKeyCommand(
             title: String(localized: "Detach Other Clients"),
             action: #selector(UIApplication.ghostty_detachOtherClients(_:)),
@@ -1499,7 +1503,8 @@ class CatalystAppDelegate: AppDelegate {
         )
 
         let navGroup = UIMenu(title: "", options: .displayInline, children: [
-            toggleTabSwitcher, toggleTabExpose, previousTab, nextTab, previousGroup, nextGroup, tmuxSessions, detachOtherClients
+            toggleTabSwitcher, toggleTabExpose, previousTab, nextTab, previousGroup, nextGroup,
+            tmuxSessions, detachSession, detachAllSessions, detachOtherClients
         ])
 
         // Tab selection (1-9), each with its own action (see ghostty_selectTabN).

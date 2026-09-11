@@ -314,10 +314,8 @@ extension MainView {
             // tmux -CC window placeholder restored from disk, awaiting reconcile
             tmuxReconnectingOverlay
 
-            if showQuickSettingsOverlay {
-                QuickSettingsHUD(isPresented: $showQuickSettingsOverlay)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+            // Detach banner lives on MainView’s content area (not here) so it
+            // still shows after tmux -CC prune empties every tab.
 
             // Theme picker overlay
             themePickerOverlayView(isPresented: $showThemePickerOverlay)
@@ -394,6 +392,54 @@ extension MainView {
             .padding(.vertical, 8)
             .frame(maxWidth: 400)
             .bannerBackground()
+    }
+
+    /// Post-detach / already-attached / missing-mux banner. Hosted above both
+    /// the terminal stack and the empty state — tmux -CC detach prunes every
+    /// tab immediately, so a terminal-only overlay never paints.
+    ///
+    /// Sized to the card only (no full-bleed VStack). A max-size container in
+    /// `.overlay` steals Catalyst hits from the dismiss control even when the
+    /// spacer disables hit testing.
+    @ViewBuilder
+    var muxDetachBannerOverlay: some View {
+        if let banner = muxDetachBanner {
+            HStack(spacing: 10) {
+                Image(systemName: banner.offer == nil ? "exclamationmark.triangle.fill" : "eject.circle.fill")
+                    .foregroundStyle(.secondary)
+                Text(banner.message)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                if banner.offer != nil {
+                    Button("Reconnect") {
+                        reconnectFromMuxDetachBanner()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+                Button {
+                    dismissMuxDetachBanner()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss")
+            }
+            .padding(.leading, 12)
+            .padding(.trailing, 8)
+            .padding(.vertical, 10)
+            .frame(maxWidth: 480)
+            .bannerBackground()
+            .padding(.top, 12)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .animation(.easeInOut(duration: 0.2), value: muxDetachBanner)
+        }
     }
 
     private var tmuxReconnectStatusRow: some View {

@@ -2334,6 +2334,18 @@ final class TmuxController {
         }
         let uuidPrefix = ownerTerminalUUID.uuidString.prefix(8)
         TmuxDebugLogger.shared.event("DETACH", "requested \(source) gw=\(uuidPrefix)")
+
+        // Context-menu / dashboard / ESC / tab-close all enter here without
+        // going through MuxSessionDetach.detach — post the reconnect banner
+        // from this choke point so tmux -CC matches zmx.
+        let bannerTerminal = ownGatewayView()
+            ?? windowTabs.values.lazy.compactMap { $0.splitTree.terminalLeaves.first }.first
+        MuxSessionDetach.notifyControlModeDetached(
+            sessionName: currentSessionName,
+            windowId: baseWindowId,
+            terminal: bannerTerminal
+        )
+
         // Re-validate at EXECUTION time, not enqueue time. The entry guard above
         // only proves the surface was live when the detach was requested; the
         // detach is dispatched across two async hops (ghosttyAPIQueue → main) and

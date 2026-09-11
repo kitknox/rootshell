@@ -187,20 +187,42 @@ struct TmuxTabMenuItems: View {
     }
 }
 
-/// Destructive "Detach" item for a tmux gateway tab. Separate from
-/// `TmuxTabMenuItems` so each surface can place it in its destructive
-/// section (next to Close), keeping menu ordering idiomatic per surface.
+/// Destructive "Detach" item for a tmux control-mode attachment. Shown on both
+/// gateway and window tabs so Detach stays reachable when the gateway is
+/// auto-hidden — the action always leaves the whole control client (all
+/// windows), matching iTerm2-style detach. Separate from `TmuxTabMenuItems`
+/// so each surface can place it in its destructive section (next to Close).
 struct TmuxGatewayDetachMenuItem: View {
     let tab: TabModel
     let controller: TmuxController?
     let dialogs: TmuxTabDialogCoordinator
 
     var body: some View {
-        if tab.isTmuxGateway, let controller, controller.isActive {
+        if (tab.isTmuxGateway || tab.isTmuxWindow),
+           let controller, controller.isActive {
             Button(role: .destructive) {
                 dialogs.requestDetach(tab)
             } label: {
-                Label("Detach", systemImage: "eject")
+                Label("Detach Session", systemImage: "eject")
+            }
+        }
+    }
+}
+
+/// Destructive Detach for a raw / passthrough multiplexer tab (zellij, herdr,
+/// zmx, plain tmux). Hidden when the tab is already covered by the tmux -CC
+/// detach item above.
+struct MultiplexerDetachMenuItem: View {
+    let tab: TabModel
+    let onDetach: (TabModel) -> Void
+
+    var body: some View {
+        if !tab.isTmuxGateway, !tab.isTmuxWindow,
+           MuxSessionDetach.attachment(for: tab, tmuxController: { _ in nil }) != nil {
+            Button(role: .destructive) {
+                onDetach(tab)
+            } label: {
+                Label("Detach Session", systemImage: "eject")
             }
         }
     }
@@ -290,21 +312,22 @@ private struct TmuxTabDialogsModifier: ViewModifier {
 
     private var detachGatewayDialog: some View {
         Color.clear.confirmationDialog(
-            "Detach Gateway?",
+            "Detach Session?",
             isPresented: Binding(
                 get: { dialogs.detachConfirmGatewayTab != nil },
                 set: { if !$0 { dialogs.detachConfirmGatewayTab = nil } }
             ),
             titleVisibility: .visible
         ) {
-            Button("Detach Gateway", role: .destructive) {
-                guard let tab = dialogs.detachConfirmGatewayTab,
-                      let controller = controller(tab) else { return }
-                controller.detachGatewayClient()
+            Button("Detach Session", role: .destructive) {
+                guard let tab = dialogs.detachConfirmGatewayTab else { return }
+                // Same funnel as Tabs → Detach Session / zmx: graceful detach
+                // posts the reconnect banner from TmuxController.
+                _ = MuxSessionDetach.detach(tab: tab, tmuxController: controller)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Leaves tmux control mode for this tab. The tmux session keeps running on the server.")
+            Text("Leaves tmux control mode for this connection. All window tabs for this attachment close; the tmux sessions keep running on the server.")
         }
     }
 }

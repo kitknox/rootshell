@@ -137,6 +137,11 @@ struct MainView: View {
     /// user's choice in the close action sheet. (id=tmux-tab-close-action)
     @State var pendingTmuxCloseTabID: UUID?
     @State var pendingNewTabRequest: NewTabRequest?
+    /// Confirm before menu “Detach All Sessions”.
+    @State var confirmDetachAllSessions = false
+    /// Transient post-detach / already-attached banner.
+    @State var muxDetachBanner: MuxDetachBannerState?
+    @State var muxDetachBannerDismissTask: Task<Void, Never>?
     @State var unavailableNewTabRequest: NewTabRequest?
     @State var authenticationRetryRequest: SSHAuthenticationRetryRequest?
     @State var reconnectConfig: SSHConfig?
@@ -279,7 +284,6 @@ struct MainView: View {
     
     // Theme picker overlay state
     @State var showThemePickerOverlay = false
-    @State var showQuickSettingsOverlay = false
 
     // Clipboard manager overlay state
     @State var showClipboardManager = false
@@ -503,23 +507,31 @@ struct MainView: View {
                         }
                     }
                     
-                    // Terminal view
-                    if ghosttyApp.readiness == .ready, !terminals.isEmpty {
-                        terminalAndSidebarContent(geometry: geometry)
-                    } else if ghosttyApp.readiness == .ready, terminals.isEmpty, !windowClosingAfterTabTransfer {
-                        // Empty state - shown when all tabs are closed
-                        EmptyStateResponder(
-                            onNewTab: addNewTab,
-                            onNewLocalShell: handleNewTabCommand
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if ghosttyApp.readiness == .ready, terminals.isEmpty {
-                        Color.clear
+                    // Terminal view (detach banner overlays empty state too —
+                    // tmux -CC prune removes every tab in one go).
+                    Group {
+                        if ghosttyApp.readiness == .ready, !terminals.isEmpty {
+                            terminalAndSidebarContent(geometry: geometry)
+                        } else if ghosttyApp.readiness == .ready, terminals.isEmpty, !windowClosingAfterTabTransfer {
+                            // Empty state - shown when all tabs are closed
+                            EmptyStateResponder(
+                                onNewTab: addNewTab,
+                                onNewLocalShell: handleNewTabCommand
+                            )
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if ghosttyApp.readiness == .loading {
-                        loadingView
-                    } else if ghosttyApp.readiness == .error {
-                        errorView
+                        } else if ghosttyApp.readiness == .ready, terminals.isEmpty {
+                            Color.clear
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else if ghosttyApp.readiness == .loading {
+                            loadingView
+                        } else if ghosttyApp.readiness == .error {
+                            errorView
+                        }
+                    }
+                    .overlay(alignment: .top) {
+                        if ghosttyApp.readiness == .ready {
+                            muxDetachBannerOverlay
+                        }
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
@@ -677,7 +689,6 @@ struct MainView: View {
         let overlayContent = applyOverlayChangeHandlers(sheetContent)
         let alertContent = applyAlertModifiers(overlayContent)
         return applyLifecycleHandlers(alertContent)
-            .iPadVisor(ghosttyApp: ghosttyApp, windowID: windowId, modalPresented: isAnySheetPresented)
     }
 
 }

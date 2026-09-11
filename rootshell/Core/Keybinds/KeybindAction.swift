@@ -100,6 +100,10 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
     case next_tab = "next_tab"
     /// Open tmux session dashboard for the current tmux tab
     case show_tmux_sessions = "show_tmux_sessions"
+    /// Detach the current tab from its multiplexer (tmux / zellij / herdr / zmx)
+    case detach_session = "detach_session"
+    /// Detach every multiplexer attachment in this window
+    case detach_all_sessions = "detach_all_sessions"
     /// Detach all OTHER tmux clients from the current gateway (`detach-client -a`)
     case detach_other_clients = "detach_other_clients"
 
@@ -299,7 +303,8 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
             return .navigation
 
         case .new_local_shell, .new_tab, .new_window, .close_tab, .duplicate_ssh_tab,
-             .previous_tab, .next_tab, .show_tmux_sessions, .detach_other_clients, .toggle_tab_switcher,
+             .previous_tab, .next_tab, .show_tmux_sessions, .detach_session, .detach_all_sessions,
+             .detach_other_clients, .toggle_tab_switcher,
              .toggle_tab_expose, .previous_group, .next_group, .select_tab_1, .select_tab_2, .select_tab_3, .select_tab_4, .select_tab_5,
              .select_tab_6, .select_tab_7, .select_tab_8, .select_tab_9:
             return .tabs
@@ -357,6 +362,8 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
         case .previous_tab: return String(localized: "Previous Tab", comment: "Keybind action")
         case .next_tab: return String(localized: "Next Tab", comment: "Keybind action")
         case .show_tmux_sessions: return String(localized: "tmux Sessions", comment: "Keybind action")
+        case .detach_session: return String(localized: "Detach Session", comment: "Keybind action: leave multiplexer, keep session")
+        case .detach_all_sessions: return String(localized: "Detach All Sessions", comment: "Keybind action: leave every multiplexer in this window")
         case .detach_other_clients: return String(localized: "Detach Other Clients", comment: "Keybind action")
 
         case .select_tab_1: return String(localized: "Select Tab 1", comment: "Keybind action")
@@ -456,6 +463,8 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
         case .previous_tab: return .previousTab
         case .next_tab: return .nextTab
         case .show_tmux_sessions: return .showTmuxSessions
+        case .detach_session: return .detachSession
+        case .detach_all_sessions: return .detachAllSessions
         case .detach_other_clients: return .detachOtherClients
         case .select_tab_1, .select_tab_2, .select_tab_3, .select_tab_4, .select_tab_5,
              .select_tab_6, .select_tab_7, .select_tab_8, .select_tab_9:
@@ -612,7 +621,7 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
              .browse_profiles, .toggle_ai_agent, .toggle_voice_agent, .toggle_tab_bar, .toggle_group_mode, .toggle_transparency,
              .toggle_titlebar, .toggle_auto_redact,
              .toggle_background_effect, .toggle_tab_switcher, .toggle_tab_expose, .show_tmux_sessions,
-             .detach_other_clients,
+             .detach_session, .detach_all_sessions, .detach_other_clients,
              .increase_font_size, .decrease_font_size,
              .reset_font_size, .start_search:
             return true

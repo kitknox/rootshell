@@ -1921,6 +1921,9 @@ struct VerticalTabSidebar: View {
         moveToWindowItems(for: tab)
         groupOverrideMenuItem(for: tab)
         Divider()
+        MultiplexerDetachMenuItem(tab: tab) { tab in
+            _ = MuxSessionDetach.detach(tab: tab, tmuxController: tmuxController)
+        }
         Button(role: .destructive) {
             onCloseTab(tab.id)
         } label: {
@@ -1930,7 +1933,7 @@ struct VerticalTabSidebar: View {
 
     /// Context menu for a VISIBLE tmux window row: connection info, the
     /// shared tmux admin section (rename, move to session, new tab,
-    /// sessions, hide), close (configurable tmux tab-close action).
+    /// sessions, hide), detach (whole control client), close.
     @ViewBuilder
     private func windowRowMenu(for tab: TabModel) -> some View {
         connectionAddressCopyItems(for: tab)
@@ -1946,6 +1949,11 @@ struct VerticalTabSidebar: View {
         moveToWindowItems(for: tab)
         groupOverrideMenuItem(for: tab)
         Divider()
+        TmuxGatewayDetachMenuItem(
+            tab: tab,
+            controller: tmuxController(tab),
+            dialogs: tmuxDialogs
+        )
         Button(role: .destructive) {
             onCloseTab(tab.id)
         } label: {

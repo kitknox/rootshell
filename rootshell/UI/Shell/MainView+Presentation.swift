@@ -53,7 +53,6 @@ extension MainView {
             showKeyResolutionSheet ||
             showYubiKeyPINPrompt ||
             showThemePickerOverlay ||
-            showQuickSettingsOverlay ||
             // The iPhone presentation is a sheet that owns the keyboard. On
             // regular width the clipboard manager is a passthrough glass HUD (like
             // the Find HUD, which is intentionally absent here) and must NOT count
@@ -195,6 +194,10 @@ extension MainView {
             } message: {
                 Text("Choose what to do with this tmux control-mode tab.")
             }
+            .modifier(DetachAllSessionsConfirmModifier(
+                isPresented: $confirmDetachAllSessions,
+                onConfirm: { detachAllSessionsInWindow() }
+            ))
             .confirmationDialog(
                 "New Tab",
                 isPresented: Binding(
@@ -428,19 +431,6 @@ extension MainView {
                 handleAIAgentSidebarVisibilityChange(oldValue: oldValue, newValue: newValue)
             }
             #endif
-            .onChange(of: showSettings) { _, presented in
-                if presented { showQuickSettingsOverlay = false }
-            }
-            .onChange(of: showClipboardManager) { _, presented in
-                if presented { showQuickSettingsOverlay = false }
-            }
-            .onChange(of: showConnectionSidebar) { _, presented in
-                if presented { showQuickSettingsOverlay = false }
-            }
-            .onChange(of: showQuickSettingsOverlay) { _, presented in
-                setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented)
-                if !presented { restoreFirstResponderAfterSheetDismissal() }
-            }
             .onChange(of: showThemePickerOverlay) { _, newValue in
                 handleThemePickerOverlayChange(newValue)
             }
@@ -453,4 +443,24 @@ extension MainView {
             }
     }
 
+}
+
+/// Keeps the detach-all confirm dialog out of `applySheetModifiers`'s giant
+/// expression so the type checker stays happy.
+private struct DetachAllSessionsConfirmModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let onConfirm: () -> Void
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(
+            "Detach All Sessions?",
+            isPresented: $isPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Detach All", role: .destructive, action: onConfirm)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Leaves every tmux, zellij, herdr, and zmx attachment in this window. Sessions keep running on their hosts.")
+        }
+    }
 }

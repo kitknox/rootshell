@@ -39,11 +39,35 @@ struct TabTitleLine: View {
                 .foregroundColor(textColor)
                 .lineLimit(1)
 
+            if let sessionName = muxSessionName, !sessionName.isEmpty {
+                Text(sessionName)
+                    .font(shortcutFont)
+                    .foregroundColor(textColor.opacity(0.65))
+                    .lineLimit(1)
+                    .accessibilityLabel("Session \(sessionName)")
+            }
+
             if let keyboardShortcut {
                 Text(keyboardShortcut)
                     .font(shortcutFont)
                     .foregroundColor(textColor.opacity(0.7))
             }
         }
+    }
+
+    /// Prefer the tmux -CC session label; else a raw/passthrough mux name so
+    /// detach/reconnect targets stay visible in exposé and title HUDs.
+    private var muxSessionName: String? {
+        if let name = tab.tmuxSessionName, !name.isEmpty {
+            return name
+        }
+        guard let focused = tab.focusedTerminal else { return nil }
+        if let name = focused.rawMultiplexer?.sessionName, !name.isEmpty {
+            return name
+        }
+        if let name = focused.passthroughMultiplexer?.sessionName, !name.isEmpty {
+            return name
+        }
+        return nil
     }
 }
