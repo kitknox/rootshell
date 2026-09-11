@@ -37,7 +37,7 @@ extension HerdrController {
         guard let binding = view.herdrPaneBinding else { return }
         let direction = horizontal ? "right" : "down"
         if mode == .legacy {
-            legacyCommand("pane split \(binding.paneId) --direction \(direction)")
+            legacyCommand("pane split \(binding.paneId) --direction \(direction) --focus")
             return
         }
         send("pane.split", HerdrControl.PaneSplitParams(
