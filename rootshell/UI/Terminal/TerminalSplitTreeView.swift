@@ -108,6 +108,7 @@ final class SplitTreeHostingView: UIView {
     private let dividerTouchThickness: CGFloat = 24
     private var tree: SplitTree<SplitPaneView>?
     private var focusedPane: SplitPaneView?
+    private var hasCompletedHerdrLayout = false
     private var needsFocusRestoration = false
     private var focusRestorationGeneration: UInt64 = 0
 
@@ -201,6 +202,7 @@ final class SplitTreeHostingView: UIView {
         // tree or focus change may relayout every attached pane.
         let treeChanged = self.tree?.root != tree.root || self.tree?.zoomed != tree.zoomed
         let focusChanged = self.focusedPane !== focusedPane
+        if treeChanged { hasCompletedHerdrLayout = false }
         self.tree = tree
         self.focusedPane = focusedPane
         guard treeChanged || focusChanged else { return }
@@ -228,6 +230,7 @@ final class SplitTreeHostingView: UIView {
     /// dismantle runs before the new host adopts them, and a pane checked out for
     /// full screen lives under the takeover container.
     func detachAllPanes() {
+        hasCompletedHerdrLayout = false
         needsFocusRestoration = false
         focusRestorationGeneration &+= 1
         paneRearrangement.detach()
@@ -262,6 +265,7 @@ final class SplitTreeHostingView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        hasCompletedHerdrLayout = false
         dividerReuseIndex = 0
 
         guard let tree else {
@@ -298,6 +302,7 @@ final class SplitTreeHostingView: UIView {
         layout(node: rootNode, in: layoutRect, isRoot: rootNode == tree.root, usedTerminals: &usedTerminals)
         cleanupTerminalViews(keeping: usedTerminals)
         hideUnusedDividers(from: dividerReuseIndex)
+        hasCompletedHerdrLayout = true
         // Push from full `bounds` (inside this call), unaffected by `layoutRect`,
         // so tmux reclaims our full size when the foreign client detaches.
         pushTmuxClientSizeIfNeeded()
@@ -396,21 +401,42 @@ final class SplitTreeHostingView: UIView {
         tmuxWindowCells()
     }
 
+    /// Keep the tab's cell budget and pixel metrics tied to the same pane.
+    /// Font shortcuts can resize another pane independently; its callbacks
+    /// must still negotiate and check this canonical tab geometry.
+    func herdrWindowGeometry() -> HerdrTabGeometryState.Size? {
+        guard let tree, let pane = multiplexerMetricPane(in: tree), pane.isHerdrPane,
+              hasLaidOutHerdrPane(pane), !pane.suppressPTYSizeUpdates,
+              let size = pane.surfaceSize, size.cell_width_px > 0, size.cell_height_px > 0,
+              let cells = tmuxWindowCells() else { return nil }
+        return .init(cols: Int(cells.cols), rows: Int(cells.rows),
+                     cellWidth: Int(size.cell_width_px), cellHeight: Int(size.cell_height_px))
+    }
+
+    /// Surface creation can call back from insertSubview before the wrapper
+    /// receives its real frame. Only a completed layout may size a herdr tab.
+    func hasLaidOutHerdrPane(_ pane: Ghostty.TerminalView) -> Bool {
+        hasCompletedHerdrLayout && window != nil && pane.window === window
+            && !pane.isDetachedForFullScreen
+            && attachedContainers[ObjectIdentifier(pane)]?.superview === self
+    }
+
     /// herdr tabs size from this container, not from their panes: the panes
     /// are clamped to the server's last layout, so only the container can
-    /// see the window grow. The controller dedupes repeated sizes.
+    /// see the window grow. Background tabs prepare here too, with their
+    /// renderers still occluded. The controller dedupes repeated sizes.
     private func pushHerdrTabSizeIfNeeded() {
         guard !KeyboardTracker.shared.isKeyboardAnimating else { return }
         guard !KeyboardTracker.shared.isPreservingKeyboardForOverlay(in: window) else { return }
-        guard isActiveTab, let tree,
-              let pane = tree.terminalLeaves.first(where: { $0.isHerdrPane }) else { return }
+        guard let tree,
+              let pane = tree.terminalLeaves.first(where: { $0.isHerdrPane && hasLaidOutHerdrPane($0) }) else { return }
         pane.noteHerdrHostLayout()
     }
 
     private func tmuxWindowCells() -> (cols: UInt16, rows: UInt16)? {
         guard let tree,
               let rootNode = tree.zoomed ?? tree.root,
-              let pane = tree.terminalLeaves.first(where: { $0.isMultiplexerPane }),
+              let pane = multiplexerMetricPane(in: tree),
               let size = pane.surfaceSize,
               size.cell_width_px > 0, size.cell_height_px > 0,
               bounds.width > 0, bounds.height > 0
@@ -443,6 +469,15 @@ final class SplitTreeHostingView: UIView {
         return (cols: UInt16(min(cols, Int(UInt16.max))), rows: UInt16(min(rows, Int(UInt16.max))))
     }
 
+    private func multiplexerMetricPane(in tree: SplitTree<SplitPaneView>) -> Ghostty.TerminalView? {
+        // On first attach to a zoomed herdr tab, its other panes have never
+        // been hosted and have no surface metrics. Use the pane being shown.
+        if case .leaf(let view)? = tree.zoomed, let pane = view.asTerminal, pane.isHerdrPane {
+            return pane
+        }
+        return tree.terminalLeaves.first(where: { $0.isMultiplexerPane })
+    }
+
     /// herdr tabs: the split's content rect snapped to whole cells, so the
     /// frame math never hands a pane the fractional leftover that would
     /// grow its grid past what the server laid out. nil when nothing is
@@ -450,7 +485,7 @@ final class SplitTreeHostingView: UIView {
     private func herdrSnapRect() -> CGRect? {
         guard let tree,
               let rootNode = tree.zoomed ?? tree.root,
-              let pane = tree.terminalLeaves.first(where: { $0.isHerdrPane }),
+              let pane = multiplexerMetricPane(in: tree), pane.isHerdrPane,
               let cells = tmuxWindowCells(),
               let size = pane.surfaceSize,
               size.cell_width_px > 0, size.cell_height_px > 0

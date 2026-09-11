@@ -77,7 +77,7 @@ extension HerdrController {
         for tab in tabs.values { refreshTitle(of: tab) }
         // Re-attach every pane whose surface already runs, focused tab first.
         queueAttaches(priorityTab: tabsModel.selectedTabID)
-        pushGeometryForVisibleTabs()
+        pushGeometryForHostedTabs()
         autoHideGatewayIfWanted()
         publishProjectPaths()
         publishSessionState()
@@ -320,8 +320,7 @@ extension HerdrController {
             tabInfos.removeValue(forKey: tabId)
             lastLayouts.removeValue(forKey: tabId)
             controlLayouts.removeValue(forKey: tabId)
-            pushedGeometry.removeValue(forKey: tabId)
-            confirmedGeometry.remove(tabId)
+            tabGeometryStates.removeValue(forKey: tabId)
             geometryTasks.removeValue(forKey: tabId)?.cancel()
         }
         if let focusedPaneId, !paneIds.contains(focusedPaneId) { self.focusedPaneId = nil }
@@ -408,7 +407,12 @@ extension HerdrController {
         for pane in layout.panes {
             guard let terminalId = paneInfos[pane.pane_id]?.terminal_id, let view = paneViews[terminalId] else { continue }
             view.containingTabID = tab.id
-            view.herdrTargetGrid = mode == .raw ? (cols: pane.rect.width, rows: pane.rect.height) : nil
+            // A generic snapshot describes the server TUI's viewport. Let
+            // the initial native host use its full space until our raw layout
+            // arrives; clamping to the TUI first causes a shrink/grow bounce.
+            view.herdrTargetGrid = mode == .raw && tabGeometryStates[layout.tab_id]?.hasRequested == true
+                && controlLayouts[layout.tab_id] != nil
+                ? (cols: pane.rect.width, rows: pane.rect.height) : nil
         }
         var zoomed: SplitTree<SplitPaneView>.Node?
         if layout.zoomed, let terminalId = paneInfos[layout.focused_pane_id]?.terminal_id,

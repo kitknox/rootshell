@@ -2141,6 +2141,7 @@ extension Ghostty {
             }
 
             sizeDidChange(bounds.size)
+            if isHerdrPane { noteHerdrHostLayout() }
             let boundsSize = bounds.size
             let windowHeight = window?.bounds.height ?? -1
             let grid = surfaceController.surfaceSize
@@ -3013,6 +3014,9 @@ extension Ghostty {
             // triggers a real resize.
             surfaceController.invalidateCachedSize()
             sizeDidChange(bounds.size)
+            // The host may have grown while this pane remained clamped to
+            // herdr's old grid, so no PTY grid callback will report it.
+            if isHerdrPane { noteHerdrHostLayout() }
         }
 
         /// Clears stale touch/selection state when entering background.

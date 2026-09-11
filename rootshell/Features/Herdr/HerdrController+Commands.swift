@@ -115,6 +115,16 @@ extension HerdrController {
                 if let workspace = created.workspace { self.workspaces[workspace.workspace_id] = workspace }
                 self.ensureTab(created.tab)
                 self.paneDidAppear(created.root_pane)
+                // Creation already tells us the initial pane. Mount it now
+                // so its host can negotiate geometry while tab placement and
+                // topology refresh round-trip, instead of leaving an empty
+                // selected tab waiting for those unrelated requests.
+                if self.mode == .raw, let tab = self.tabs[created.tab.tab_id],
+                   tab.splitTree.isEmpty,
+                   let view = self.paneViews[created.root_pane.terminal_id],
+                   view.herdrPaneBinding?.tabId == created.tab.tab_id {
+                    tab.splitTree = SplitTree(root: .leaf(view: view), zoomed: nil)
+                }
                 self.reorderTabs()
                 self.refreshWorkspaceGroups()
                 // Empty-session bootstrap can finish behind a restored tmux

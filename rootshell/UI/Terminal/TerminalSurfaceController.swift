@@ -22,6 +22,8 @@ protocol TerminalSurfaceHost: AnyObject {
     var surfaceConnectionConfig: ConnectionConfig { get }
     var surfaceTmuxPaneBinding: Ghostty.TerminalView.TmuxPaneBinding? { get }
     var surfaceIsTmuxPane: Bool { get }
+    var surfaceRequiresHerdrFirstFrameGeometry: Bool { get }
+    var surfaceFirstFrameGeometryIsReady: Bool { get }
     var surfaceTmuxPaneContainerLaidOut: Bool { get }
     var surfaceTmuxPaneRetired: Bool { get }
     var surfaceTmuxDetachInProgress: Bool { get }
@@ -153,11 +155,21 @@ final class TerminalSurfaceController: NSObject {
             suspendFirstFramePolling()
             return
         }
-        if rendererLayer()?.contents != nil {
+        if host.surfaceFirstFrameGeometryIsReady, firstFrameHasCurrentGeometry() {
             markFirstFrameRendered()
         } else if CACurrentMediaTime() - firstFramePollStart > 2.0 {
             markFirstFrameRendered(failOpen: true)
         }
+    }
+
+    private func firstFrameHasCurrentGeometry() -> Bool {
+        guard let contents = rendererLayer()?.contents else { return false }
+        guard host.surfaceRequiresHerdrFirstFrameGeometry else { return true }
+        // A parser acknowledgement can beat the renderer. An IOSurface from
+        // the provisional grid must not reveal the tab stretched to the new
+        // bounds; wait for a frame with the final framebuffer dimensions.
+        guard let expected = lastFramebufferSize else { return false }
+        return HerdrGeometry.frameMatches(contents, width: expected.width, height: expected.height)
     }
 
     private func markFirstFrameRendered(failOpen: Bool = false) {
@@ -821,6 +833,12 @@ extension Ghostty.TerminalView: TerminalSurfaceHost {
     var surfaceConnectionConfig: ConnectionConfig { connectionConfig }
     var surfaceTmuxPaneBinding: TmuxPaneBinding? { tmuxPaneBinding }
     var surfaceIsTmuxPane: Bool { isTmuxPane }
+    var surfaceRequiresHerdrFirstFrameGeometry: Bool { isHerdrPane && !usesHerdrFallbackScrolling }
+    var surfaceFirstFrameGeometryIsReady: Bool {
+        guard surfaceRequiresHerdrFirstFrameGeometry, let binding = herdrPaneBinding else { return true }
+        return HerdrController.controller(forGateway: binding.gatewayUUID)?
+            .paneGeometryIsReady(binding.terminalId) == true
+    }
     var surfaceTmuxPaneContainerLaidOut: Bool { tmuxPaneContainerLaidOut }
     var surfaceTmuxPaneRetired: Bool { tmuxPaneRetired }
     var surfaceTmuxDetachInProgress: Bool { isTmuxDetachInProgress }

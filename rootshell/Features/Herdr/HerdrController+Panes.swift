@@ -97,6 +97,13 @@ extension HerdrController {
         for terminalId in ordered where attachIds[terminalId] == nil && attachesInFlight[terminalId] == nil && !attachQueue.contains(terminalId) {
             attachQueue.append(terminalId)
         }
+        // Selection can change while background work is already queued.
+        attachQueue.sort { lhs, rhs in
+            let lhsVisible = paneViews[lhs]?.containingTabID == priorityTab
+            let rhsVisible = paneViews[rhs]?.containingTabID == priorityTab
+            if lhsVisible != rhsVisible { return lhsVisible }
+            return lhs < rhs
+        }
         pumpAttachQueue()
     }
 
@@ -111,7 +118,7 @@ extension HerdrController {
     }
 
     private func pumpAttachQueue() {
-        guard let channel, isActive else { return }
+        guard let channel, isActive, mode == .raw, !Ghostty.isAppBackgroundedAtomic else { return }
         attachQueue.removeAll { paneSessions[$0] == nil || attachIds[$0] != nil }
         while attachesInFlight.count < Self.maxAttachesInFlight,
               let index = attachQueue.firstIndex(where: { attachesInFlight[$0] == nil && paneGeometryIsReady($0) }) {
@@ -129,9 +136,12 @@ extension HerdrController {
 
     /// Do not replay a snapshot at the placeholder grid or the TUI geometry
     /// from session.snapshot. The raw layout and its native surface must agree.
-    private func paneGeometryIsReady(_ terminalId: String) -> Bool {
+    func paneGeometryIsReady(_ terminalId: String) -> Bool {
         guard let view = paneViews[terminalId], let binding = view.herdrPaneBinding,
-              confirmedGeometry.contains(binding.tabId),
+              let geometry = tabGeometryStates[binding.tabId], geometry.isConfirmed,
+              let measured = tabGeometry(from: view), geometry.desired == measured,
+              let layout = controlLayouts[binding.tabId],
+              layout.area.width == measured.cols, layout.area.height == measured.rows,
               let target = view.herdrTargetGrid, let size = view.surfaceSize,
               let parsed = paneSessions[terminalId]?.parserGrid else { return false }
         return Int(size.columns) == target.cols && Int(size.rows) == target.rows
@@ -146,7 +156,13 @@ extension HerdrController {
     }
 
     private func attach(terminalId: String, on channel: HerdrControlChannel) async {
-        guard let session = paneSessions[terminalId], let view = paneViews[terminalId] else { return }
+        guard self.channel === channel,
+              let session = paneSessions[terminalId], let view = paneViews[terminalId] else { return }
+        // The task may start after another layout or a background transition.
+        guard paneGeometryIsReady(terminalId) else {
+            if !attachQueue.contains(terminalId) { attachQueue.append(terminalId) }
+            return
+        }
         TerminalBellSuppressor.suppressRebuild(view.uuid)
         let params = HerdrControl.AttachParams(
             target: terminalId,
@@ -213,7 +229,11 @@ extension HerdrController {
 
     /// Asks for a fresh snapshot after the server reported dropped output.
     func requestSnapshot(attachId: String) {
-        guard let channel else { return }
+        guard let channel, let terminalId = terminalByAttach[attachId] else { return }
+        guard paneGeometryIsReady(terminalId) else {
+            panesNeedingSnapshot.insert(terminalId)
+            return
+        }
         // A request while one is in flight is not lost: it re-runs when the
         // current snapshot lands (or fails), so a snapshot that arrived
         // already stale still gets its replacement.
@@ -311,24 +331,80 @@ extension HerdrController {
         requestSnapshotsForReadyPanes()
     }
 
-    func pushGeometryForVisibleTabs() {
-        for tab in tabs.values where tabsModel.selectedTabID == tab.id {
-            guard let view = tab.splitTree.terminalLeaves.first else { continue }
+    func pushGeometryForHostedTabs() {
+        for tab in tabs.values {
+            guard let view = geometryView(in: tab) else { continue }
             scheduleGeometryPush(from: view)
         }
     }
 
+    private func geometryView(in tab: TabModel) -> Ghostty.TerminalView? {
+        tab.splitTree.terminalLeaves.first {
+            $0.enclosingSplitHost?.hasLaidOutHerdrPane($0) == true
+        }
+    }
+
     private func scheduleGeometryPush(from view: Ghostty.TerminalView) {
-        guard let tabID = view.containingTabID,
-              let tab = tabs.values.first(where: { $0.id == tabID }), let tabId = tab.herdrTabId,
-              tabsModel.selectedTabID == tab.id, !Ghostty.isAppBackgroundedAtomic else { return }
-        geometryTasks[tabId]?.cancel()
-        geometryTasks[tabId] = Task { @MainActor [weak self, weak view] in
-            try? await Task.sleep(for: .milliseconds(60))
-            guard let self, let view, !Task.isCancelled else { return }
-            self.geometryTasks.removeValue(forKey: tabId)
-            guard let size = self.tabCells(from: view) else { return }
-            self.pushTabGeometry(tabId: tabId, cols: size.cols, rows: size.rows, cell: size.cell)
+        guard let binding = view.herdrPaneBinding, let tab = tabs[binding.tabId],
+              let channel, let size = tabGeometry(from: view) else { return }
+        let tabId = binding.tabId
+        tabGeometryStates[tabId, default: .init()].update(size)
+        guard geometryTasks[tabId] == nil, tabGeometryStates[tabId]?.isConfirmed == false else { return }
+        let generation = streamGeneration
+        geometryTasks[tabId] = Task { @MainActor [weak self, weak tab] in
+            guard let self, let tab else { return }
+            defer {
+                if self.streamGeneration == generation, self.tabs[tabId] === tab {
+                    self.geometryTasks.removeValue(forKey: tabId)
+                }
+            }
+            var failures = 0
+            while !Task.isCancelled, self.streamGeneration == generation,
+                  self.channel === channel, self.tabs[tabId] === tab {
+                // The first real host layout can start immediately. Later
+                // changes debounce only distinct sizes, including while a
+                // request is in flight; repeated layout callbacks cannot
+                // postpone preparation indefinitely.
+                let desired = self.tabGeometryStates[tabId]?.desired
+                if self.tabGeometryStates[tabId]?.hasRequested == true {
+                    do { try await Task.sleep(for: .milliseconds(60)) }
+                    catch { return }
+                    if self.tabGeometryStates[tabId]?.desired != desired { continue }
+                }
+                guard !Task.isCancelled, self.streamGeneration == generation,
+                      self.channel === channel, self.tabs[tabId] === tab,
+                      let view = self.geometryView(in: tab),
+                      let current = self.tabGeometry(from: view) else { return }
+                self.tabGeometryStates[tabId]?.update(current)
+                if current != desired { continue }
+                guard let request = self.tabGeometryStates[tabId]?.beginRequest() else { return }
+                let size = request.size
+                let params = HerdrControl.TabGeometryParams(
+                    tab_id: tabId, cols: size.cols, rows: size.rows,
+                    cell_width_px: size.cellWidth, cell_height_px: size.cellHeight
+                )
+                do {
+                    try await channel.request("tab.set_geometry", params)
+                    guard !Task.isCancelled, self.streamGeneration == generation,
+                          self.channel === channel, self.tabs[tabId] === tab else { return }
+                    self.tabGeometryStates[tabId]?.finish(request, succeeded: true)
+                    failures = 0
+                    self.pumpAttachQueue()
+                    self.requestSnapshotsForReadyPanes()
+                    if self.tabGeometryStates[tabId]?.isConfirmed == true { return }
+                } catch {
+                    guard !Task.isCancelled, self.streamGeneration == generation,
+                          self.channel === channel, self.tabs[tabId] === tab else { return }
+                    self.tabGeometryStates[tabId]?.finish(request, succeeded: false)
+                    Self.logger.warning("herdr tab.set_geometry \(tabId) failed: \(error.localizedDescription)")
+                    // A failed background preparation must not require a tab
+                    // switch to retry, nor endlessly hammer a rejecting server.
+                    failures += 1
+                    guard failures < 3 else { return }
+                    do { try await Task.sleep(for: .milliseconds(500)) }
+                    catch { return }
+                }
+            }
         }
     }
 
@@ -336,29 +412,26 @@ extension HerdrController {
     /// padding and dividers the native layout spends (the same math the host
     /// uses to snap the split). Never from a pane's grid: panes are clamped
     /// to the last server layout, so their grids cannot report growth.
-    private func tabCells(from view: Ghostty.TerminalView) -> (cols: Int, rows: Int, cell: (width: Int, height: Int))? {
-        guard let surface = view.surfaceSize, surface.cell_width_px > 0, surface.cell_height_px > 0 else {
-            return nil
-        }
-        let cell = (width: Int(surface.cell_width_px), height: Int(surface.cell_height_px))
-        let cols: Int
-        let rows: Int
-        if let cells = view.enclosingSplitHost?.multiplexerWindowCells() {
-            cols = Int(cells.cols)
-            rows = Int(cells.rows)
-        } else {
-            // Not hosted yet: the surface's own grid is the only measure.
-            cols = Int(surface.columns)
-            rows = Int(surface.rows)
-        }
-        guard cols >= 4, rows >= 2 else { return nil }
-        return (cols, rows, cell)
+    private func tabGeometry(from view: Ghostty.TerminalView) -> HerdrTabGeometryState.Size? {
+        guard mode == .raw, isActive, !didEnd,
+              !view.suppressPTYSizeUpdates,
+              !KeyboardTracker.shared.isKeyboardAnimating,
+              !KeyboardTracker.shared.isPreservingKeyboardForOverlay(in: view.window),
+              let binding = view.herdrPaneBinding, binding.gatewayUUID == gatewayUUID,
+              let tab = tabs[binding.tabId], tab.id == view.containingTabID,
+              !tab.isHiddenTmuxWindow,
+              let host = view.enclosingSplitHost, host.hasLaidOutHerdrPane(view),
+              let geometry = host.herdrWindowGeometry(), geometry.cols >= 4, geometry.rows >= 2 else { return nil }
+        #if STANDALONE && targetEnvironment(macCatalyst)
+        if view.windowId == "visor", VisorController.shared.suppressesTerminalResizeForAnimation { return nil }
+        #endif
+        return geometry
     }
 
     // MARK: - Layout release
 
     /// Holds these panes' output until their surfaces report the layout's
-    /// grid, or a short deadline passes (a hidden tab never resizes). Called
+    /// grid, or a short deadline passes (an unmounted pane cannot resize). Called
     /// after the split tree took the layout.
     func armLayoutRelease(for layout: HerdrControl.LayoutSnapshot, barrier: UInt64) {
         // An earlier layout for this tab still waiting was drawn for a grid
@@ -371,7 +444,7 @@ extension HerdrController {
             snapshotOnComplete.formUnion(previous.snapshotOnComplete)
             snapshotOnComplete.formUnion(router.discardSegment(barrier: id))
         }
-        guard mode == .raw, let tab = tabs[layout.tab_id], tabsModel.selectedTabID == tab.id else {
+        guard mode == .raw, tabs[layout.tab_id] != nil else {
             for pane in layout.panes {
                 guard let terminalId = paneInfos[pane.pane_id]?.terminal_id,
                       let attachId = attachIds[terminalId] else { continue }
@@ -387,10 +460,21 @@ extension HerdrController {
         }
         var expected: [String: (cols: Int, rows: Int)] = [:]
         for pane in layout.panes {
-            guard let terminalId = paneInfos[pane.pane_id]?.terminal_id else { continue }
+            guard let terminalId = paneInfos[pane.pane_id]?.terminal_id,
+                  let attachId = attachIds[terminalId] else { continue }
             let wanted = (cols: pane.rect.width, rows: pane.rect.height)
             if let size = paneSessions[terminalId]?.parserGrid,
                size.cols == wanted.cols, size.rows == wanted.rows {
+                continue
+            }
+            // A zoomed-away or detached pane cannot acknowledge a native
+            // resize. Recover it when hosted again without holding up the
+            // other panes' redraw for the entire deadline.
+            guard let view = paneViews[terminalId], view.window != nil,
+                  !view.suppressPTYSizeUpdates,
+                  !layout.zoomed || pane.pane_id == layout.focused_pane_id else {
+                router.invalidate(attachId: attachId)
+                panesNeedingSnapshot.insert(terminalId)
                 continue
             }
             expected[terminalId] = wanted
@@ -417,7 +501,7 @@ extension HerdrController {
         guard let release = layoutReleases.removeValue(forKey: barrier) else { return }
         release.deadline?.cancel()
         // A deadline is recovery, not permission to feed a redraw to the
-        // wrong grid. Hidden or delayed surfaces re-snapshot when ready.
+        // wrong grid. Unmounted or delayed surfaces re-snapshot when ready.
         for terminalId in release.expected.keys {
             if let attachId = attachIds[terminalId] {
                 router.invalidate(attachId: attachId)
@@ -444,40 +528,9 @@ extension HerdrController {
         }
     }
 
-    private func pushTabGeometry(tabId: String, cols: Int, rows: Int, cell: (width: Int, height: Int)) {
-        guard let channel else { return }
-        if let last = pushedGeometry[tabId], last.cols == cols, last.rows == rows { return }
-        pushedGeometry[tabId] = (cols, rows)
-        confirmedGeometry.remove(tabId)
-        let params = HerdrControl.TabGeometryParams(
-            tab_id: tabId,
-            cols: cols,
-            rows: rows,
-            cell_width_px: cell.width,
-            cell_height_px: cell.height
-        )
-        Task { [weak self] in
-            do {
-                try await channel.request("tab.set_geometry", params)
-                guard let self, self.channel === channel,
-                      self.pushedGeometry[tabId]?.cols == cols,
-                      self.pushedGeometry[tabId]?.rows == rows else { return }
-                self.confirmedGeometry.insert(tabId)
-                self.pumpAttachQueue()
-                self.requestSnapshotsForReadyPanes()
-            } catch {
-                guard let self, self.channel === channel else { return }
-                if self.pushedGeometry[tabId]?.cols == cols, self.pushedGeometry[tabId]?.rows == rows {
-                    self.pushedGeometry.removeValue(forKey: tabId)
-                }
-                Self.logger.warning("herdr tab.set_geometry \(tabId) failed: \(error.localizedDescription)")
-            }
-        }
-    }
-
     private func requestSnapshotsForReadyPanes() {
         for terminalId in panesNeedingSnapshot where paneGeometryIsReady(terminalId) {
-            guard let attachId = attachIds[terminalId], isVisible(terminalId: terminalId),
+            guard let attachId = attachIds[terminalId],
                   !snapshotRequestsInFlight.contains(attachId) else { continue }
             panesNeedingSnapshot.remove(terminalId)
             requestSnapshot(attachId: attachId)
@@ -489,7 +542,7 @@ extension HerdrController {
         if let tab = tabs.values.first(where: { $0.id == tabsModel.selectedTabID }) {
             showPanesIfSelected(in: tab)
         }
-        pushGeometryForVisibleTabs()
+        pushGeometryForHostedTabs()
         queueAttaches(priorityTab: tabsModel.selectedTabID)
         requestSnapshotsForReadyPanes()
     }

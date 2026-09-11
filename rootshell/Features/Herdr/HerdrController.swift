@@ -155,8 +155,7 @@ final class HerdrController {
     /// Inner pane rectangles from the raw stream, rather than the generic
     /// snapshot's layout in the server TUI's viewport.
     var controlLayouts: [String: HerdrControl.LayoutSnapshot] = [:]
-    var pushedGeometry: [String: (cols: Int, rows: Int)] = [:]
-    var confirmedGeometry: Set<String> = []
+    var tabGeometryStates: [String: HerdrTabGeometryState] = [:]
     var panesNeedingSnapshot: Set<String> = []
     var geometryTasks: [String: Task<Void, Never>] = [:]
     var focusedPaneId: String?
@@ -673,8 +672,7 @@ final class HerdrController {
         attachesInFlight.removeAll()
         snapshotRequestsInFlight.removeAll()
         snapshotRetryWanted.removeAll()
-        pushedGeometry.removeAll()
-        confirmedGeometry.removeAll()
+        tabGeometryStates.removeAll()
         controlLayouts.removeAll()
         panesNeedingSnapshot.removeAll()
         for session in paneSessions.values {
