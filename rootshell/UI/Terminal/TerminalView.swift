@@ -2870,6 +2870,7 @@ extension Ghostty {
                isLogicallyFocused,
                !isFirstResponder,
                !overlayOwnsKeyboard,
+               !isHUDFieldFocused(),
                !isModalPresented() {
                 // A `windowActiveOverride` stuck `false` (a terminal that missed a
                 // `setWindowActive(true)` propagation) blocks first responder even
@@ -3046,6 +3047,11 @@ extension Ghostty {
             return rootVC.presentedViewController != nil
         }
 
+        private func isHUDFieldFocused() -> Bool {
+            guard let window else { return false }
+            return DraggableHUDHostView.ownsFirstResponder(in: window)
+        }
+
         private func syncFocusForWindowStateChange(sceneIsDeactivating: Bool = false) {
             let windowActive = windowIsActiveForFocus()
             #if !targetEnvironment(macCatalyst)
@@ -3085,11 +3091,10 @@ extension Ghostty {
                     Ghostty.logger.info("syncFocusForWindowStateChange: skipping focus - modal presented")
                     return
                 }
-                // Same for an in-hierarchy keyboard-owning overlay (the tab
-                // sidebar isn't a presented VC, so isModalPresented() misses
-                // it). becomeFirstResponder() would refuse anyway; bail early
-                // to skip the +0.05s retry churn while the overlay is up.
-                if overlayOwnsKeyboard {
+                // In-hierarchy overlays and focused passthrough HUD fields
+                // are not presented VCs. Yield to their keyboard ownership;
+                // Find intentionally leaves the terminal logically focused.
+                if overlayOwnsKeyboard || isHUDFieldFocused() {
                     return
                 }
                 if window != nil && !isFirstResponder {
@@ -3102,9 +3107,9 @@ extension Ghostty {
                             guard self.windowIsActiveForFocus(),
                                   self.isLogicallyFocused,
                                   !self.isFirstResponder else { return }
-                            // Also check for modal in retry path
-                            if self.isModalPresented() {
-                                Ghostty.logger.info("syncFocusForWindowStateChange retry: skipping focus - modal presented")
+                            // A modal or HUD field may take focus after scheduling.
+                            if self.isModalPresented() || self.isHUDFieldFocused() {
+                                Ghostty.logger.info("syncFocusForWindowStateChange retry: skipping focus - modal or HUD owns keyboard")
                                 return
                             }
                             let retryResult = self.becomeFirstResponder()
@@ -3156,6 +3161,9 @@ extension Ghostty {
         /// focus watchdog after a tmux reconcile, whose split-tree rebuild can
         /// transiently defeat the one-shot retries in
         /// `syncFocusForWindowStateChange` / `didMoveToWindow`.
+        /// A focused passthrough HUD field is intentional keyboard ownership,
+        /// not lost terminal focus. Direct taps and HUD dismissal still use
+        /// becomeFirstResponder() to hand the keyboard back explicitly.
         /// ROOTSHELL-TMUX (id=tmux-focus-reassert)
         @discardableResult
         func reassertFirstResponderIfFocused() -> Bool {
@@ -3164,6 +3172,7 @@ extension Ghostty {
                   window != nil,
                   windowIsActiveForFocus(),
                   !overlayOwnsKeyboard,
+                  !isHUDFieldFocused(),
                   !isModalPresented() else { return false }
             if becomeFirstResponder() {
                 // Consume the one-shot hint here too: every other successful
@@ -3447,7 +3456,7 @@ extension Ghostty {
                           !self.isFirstResponder,
                           self.window != nil else { return }
                     guard self.windowIsActiveForFocus() else { return }
-                    if self.isModalPresented() { return }
+                    if self.isModalPresented() || self.isHUDFieldFocused() { return }
                     let result = self.becomeFirstResponder()
                     if result {
                         self.reloadInputViews()

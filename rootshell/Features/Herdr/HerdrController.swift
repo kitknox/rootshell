@@ -550,9 +550,35 @@ final class HerdrController {
         }
     }
 
-    /// Whether the gateway tab was hidden by the auto-hide setting.
+    /// Whether the gateway tab is hidden, manually or by the auto-hide setting.
     var isGatewayTabHidden: Bool {
         gatewayTabID.flatMap { tabsModel.tab(withID: $0) }?.isHiddenTmuxWindow == true
+    }
+
+    private var firstVisibleWindowTab: TabModel? {
+        let mine = Set(tabs.values.map(\.id))
+        return tabsModel.tabs.first { mine.contains($0.id) && !$0.isHiddenTmuxWindow }
+    }
+
+    /// Keep a visible projected tab so a hidden gateway's session stays reachable.
+    var canHideGatewayTab: Bool {
+        isActive && !didEnd && firstVisibleWindowTab != nil
+            && gatewayTabID.flatMap { tabsModel.tab(withID: $0) }?.isHiddenTmuxWindow == false
+    }
+
+    /// Client-local visibility only; the control stream and its panes keep running.
+    func hideGatewayTab() {
+        guard isActive, !didEnd,
+              let gatewayTabID, let gatewayTab = tabsModel.tab(withID: gatewayTabID),
+              !gatewayTab.isHiddenTmuxWindow,
+              let first = firstVisibleWindowTab else { return }
+        didAutoHideGateway = true
+        rehideGatewayAfterEmpty = false
+        gatewayTab.isHiddenTmuxWindow = true
+        if tabsModel.selectedTabID == gatewayTab.id {
+            tabsModel.selectedTabID = first.id
+            tabsModel.pendingScrollToTabID = first.id
+        }
     }
 
     func showGatewayTab() {
@@ -569,18 +595,8 @@ final class HerdrController {
     /// sticks.
     func autoHideGatewayIfWanted() {
         guard !didAutoHideGateway || rehideGatewayAfterEmpty,
-              SettingsStore.shared.value(Settings.Multiplexer.herdrAutoHideGatewayOnAttach),
-              let gatewayTabID, let gatewayTab = tabsModel.tab(withID: gatewayTabID),
-              !gatewayTab.isHiddenTmuxWindow else { return }
-        let mine = Set(tabs.values.map(\.id))
-        guard let first = tabsModel.tabs.first(where: { mine.contains($0.id) }) else { return }
-        didAutoHideGateway = true
-        rehideGatewayAfterEmpty = false
-        gatewayTab.isHiddenTmuxWindow = true
-        if tabsModel.selectedTabID == gatewayTab.id {
-            tabsModel.selectedTabID = first.id
-            tabsModel.pendingScrollToTabID = first.id
-        }
+              SettingsStore.shared.value(Settings.Multiplexer.herdrAutoHideGatewayOnAttach) else { return }
+        hideGatewayTab()
     }
 
     /// Ends control mode for this gateway: closes the stream and removes the

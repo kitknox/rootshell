@@ -71,7 +71,11 @@ extension HerdrController {
     /// Empty-session creation is shared by attach and every New Tab entry
     /// point; repeated clicks cannot bootstrap extra workspaces.
     @discardableResult
-    func requestNewTab(workspaceID preferredWorkspaceID: String?, afterTabID: String? = nil) -> Bool {
+    func requestNewTab(
+        workspaceID preferredWorkspaceID: String?,
+        afterTabID: String? = nil,
+        isAutomatic: Bool = false
+    ) -> Bool {
         guard !didEnd, isActive, hasProcessedInitialSnapshot else { return false }
         guard emptySessionCreationID == nil else { return true }
         let channel = self.channel
@@ -113,7 +117,12 @@ extension HerdrController {
                 self.paneDidAppear(created.root_pane)
                 self.reorderTabs()
                 self.refreshWorkspaceGroups()
-                self.selectTab(containingPane: created.root_pane.pane_id, focusPane: true)
+                // Empty-session bootstrap can finish behind a restored tmux
+                // tab (or after the user switches away). Only explicit New Tab
+                // requests may override that selection.
+                if !isAutomatic || self.tabsModel.maySelectInitialMultiplexerTab(gatewayTabID: self.gatewayTabID) {
+                    self.selectTab(containingPane: created.root_pane.pane_id, focusPane: true)
+                }
                 self.autoHideGatewayIfWanted()
                 if let channel, let anchorID {
                     do {

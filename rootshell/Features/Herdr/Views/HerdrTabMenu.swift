@@ -3,7 +3,7 @@
 //  rootshell
 //
 //  Context menu items and dialogs for herdr control-mode tabs: rename, new
-//  tab, show the hidden gateway, and the destructive Detach that ends
+//  tab, hide/show the gateway, and the destructive Detach that ends
 //  control mode while the herdr session keeps running on the host.
 //
 //  Copyright (c) 2026 Kit Knox / Rootshell LLC
@@ -60,11 +60,17 @@ struct HerdrTabMenuItems: View {
                 Label("New herdr Tab", systemImage: "plus.rectangle.on.rectangle")
             }
             .disabled(controller.emptySessionCreationID != nil)
-            if tab.isHerdrWindow, controller.isGatewayTabHidden {
+            if controller.isGatewayTabHidden {
                 Button {
                     controller.showGatewayTab()
                 } label: {
                     Label("Show Gateway Tab", systemImage: "eye")
+                }
+            } else if tab.isHerdrGateway, controller.canHideGatewayTab {
+                Button {
+                    controller.hideGatewayTab()
+                } label: {
+                    Label("Hide Gateway Tab", systemImage: "eye.slash")
                 }
             }
         }

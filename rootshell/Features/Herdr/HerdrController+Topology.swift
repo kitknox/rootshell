@@ -21,6 +21,7 @@ extension HerdrController {
     func applySnapshot(_ snapshot: HerdrControl.SessionSnapshot) {
         guard !didEnd else { return }
         let isInitialSnapshot = !hasProcessedInitialSnapshot
+        let maySelectInitialTab = tabsModel.maySelectInitialMultiplexerTab(gatewayTabID: gatewayTabID)
         hasProcessedInitialSnapshot = true
         if !snapshot.tabs.isEmpty { newTabError = nil }
         workspaces = Dictionary(uniqueKeysWithValues: snapshot.workspaces.map { ($0.workspace_id, $0) })
@@ -72,12 +73,7 @@ extension HerdrController {
         reorderTabs()
         refreshWorkspaceGroups()
         focusedPaneId = snapshot.focused_pane_id
-        if !hasProcessedInitialFocus {
-            hasProcessedInitialFocus = true
-            if let focusedPane = snapshot.focused_pane_id {
-                selectTab(containingPane: focusedPane, focusPane: true)
-            }
-        }
+        applyInitialSelection(serverFocusedPaneID: snapshot.focused_pane_id, maySelectTab: maySelectInitialTab)
         for tab in tabs.values { refreshTitle(of: tab) }
         // Re-attach every pane whose surface already runs, focused tab first.
         queueAttaches(priorityTab: tabsModel.selectedTabID)
@@ -86,7 +82,7 @@ extension HerdrController {
         publishProjectPaths()
         publishSessionState()
         if isInitialSnapshot, snapshot.tabs.isEmpty {
-            requestNewTab(workspaceID: nil)
+            requestNewTab(workspaceID: nil, isAutomatic: true)
         }
     }
 
@@ -382,12 +378,15 @@ extension HerdrController {
                 tab.splitTree = tab.splitTree.remove(leaf)
                 if hadFocus {
                     tab.focusedPane = next
-                    if let terminal = next?.asTerminal, tabsModel.selectedTabID == tab.id {
-                        focusPane(terminal, in: tab)
-                    }
+                }
+                // Removing any leaf rebuilds the hosting view, including
+                // when the focused pane itself survives unchanged.
+                if let terminal = tab.focusedTerminal, tabsModel.selectedTabID == tab.id {
+                    focusPane(terminal, in: tab)
                 }
             }
         }
+        if view.isFirstResponder { view.resignFirstResponder() }
         view.cleanup(reason: .userClose)
     }
 
@@ -416,18 +415,22 @@ extension HerdrController {
            let view = paneViews[terminalId] {
             zoomed = .leaf(view: view)
         }
-        tab.splitTree = SplitTree(root: root, zoomed: zoomed)
+        let tree = SplitTree<SplitPaneView>(root: root, zoomed: zoomed)
+        let structureChanged = tab.splitTree.structuralIdentity != tree.structuralIdentity
+        tab.splitTree = tree
         showPanesIfSelected(in: tab)
         if let barrier {
             armLayoutRelease(for: layout, barrier: barrier)
         }
-        if tab.focusedPane == nil, let firstId = node.firstPaneId,
-           let terminalId = paneInfos[firstId]?.terminal_id, let first = paneViews[terminalId] {
-            focusPane(first, in: tab)
-        }
-        if let terminalId = paneInfos[layout.focused_pane_id]?.terminal_id,
-           let view = paneViews[terminalId], tab.focusedPane !== view {
-            focusPane(view, in: tab)
+        let layoutFocus = paneInfos[layout.focused_pane_id].flatMap { paneViews[$0.terminal_id] }
+        let survivingFocus = tab.focusedTerminal.flatMap { root.node(view: $0) != nil ? $0 : nil }
+        if let view = layoutFocus ?? survivingFocus ?? tree.first?.asTerminal {
+            // A matching focused-pane reference does not imply UIKit focus:
+            // selection can precede this tree, or a rebuild can reparent it.
+            if tab.focusedPane !== view || (tabsModel.selectedTabID == tab.id &&
+                (structureChanged || !view.isLogicallyFocused || !view.isFirstResponder)) {
+                focusPane(view, in: tab)
+            }
         }
         refreshTitle(of: tab)
         tabsModel.syncDisplayedTab()
@@ -516,6 +519,30 @@ extension HerdrController {
 
     // MARK: - Focus
 
+    /// Restore this window's saved herdr tab before considering the server's
+    /// current tab, which another client may have changed while we were away.
+    func applyInitialSelection(serverFocusedPaneID: String?, maySelectTab: Bool) {
+        guard !hasProcessedInitialFocus else { return }
+        hasProcessedInitialFocus = true
+        let restored = tabsModel.pendingHerdrSelection.flatMap {
+            $0.gatewayTerminalUUID == gatewayUUID ? $0 : nil
+        }
+        if restored != nil { tabsModel.pendingHerdrSelection = nil }
+        guard maySelectTab else { return }
+        if let restored, let tab = tabs[restored.tabID] {
+            tabsModel.selectedTabID = tab.id
+            tabsModel.pendingScrollToTabID = tab.id
+            showPanesIfSelected(in: tab)
+            if let view = tab.focusedTerminal ?? tab.splitTree.first?.asTerminal {
+                focusPane(view, in: tab)
+            }
+        } else if let serverFocusedPaneID {
+            // The saved tab may have closed on the host. Fall back to the
+            // session's current pane; an empty session keeps its gateway UI.
+            selectTab(containingPane: serverFocusedPaneID, focusPane: true)
+        }
+    }
+
     /// A selected tab can still be empty when MainView handles selection.
     /// Panes created before that selection carry explicit hidden visibility
     /// into surface creation. Reconcile when their tree actually arrives;
@@ -530,31 +557,61 @@ extension HerdrController {
     /// Makes `view` the focused pane of `tab` (logical focus plus first
     /// responder when the tab is visible). Mirrors TmuxController.focusPane.
     func focusPane(_ view: Ghostty.TerminalView, in tab: TabModel) {
+        let previous = tab.focusedTerminal
+        tab.focusedTerminal = view
+        // Background layouts and remote focus events only change the pane
+        // remembered by that tab. They must not disarm the selected pane's
+        // focus or give a hidden view a pending first-responder request.
+        guard tabsModel.selectedTabID == tab.id else {
+            // A moved pane can remain in the old tab's focusedPane until its
+            // next layout. Only disarm panes that still belong to this tab.
+            for pane in [previous, view].compactMap({ $0 }) where pane.containingTabID == tab.id {
+                pane.isLogicallyFocused = false
+                pane.shouldBecomeFirstResponderWhenReady = false
+                pane.clearStaleGhosttyFocus()
+            }
+            return
+        }
         for other in paneViews.values where other !== view {
             other.isLogicallyFocused = false
             other.shouldBecomeFirstResponderWhenReady = false
             other.clearStaleGhosttyFocus()
         }
+        view.setOverlayOwnsKeyboard(tabsModel.overlayOwnsKeyboard)
         view.isLogicallyFocused = true
         view.shouldBecomeFirstResponderWhenReady = true
-        tab.focusedTerminal = view
-        guard tabsModel.selectedTabID == tab.id else { return }
-        if view.window != nil, !view.isFirstResponder {
-            _ = view.becomeFirstResponder()
+        let acquired = view.reassertFirstResponderIfFocused()
+        if acquired { view.shouldBecomeFirstResponderWhenReady = false }
+        if let previous, previous !== view {
+            previous.focusDidChange(false, skipResign: acquired)
         }
-        armFocusWatchdog(for: view)
+        armFocusWatchdog(for: view, tab: tab)
     }
 
-    private func armFocusWatchdog(for view: Ghostty.TerminalView) {
+    private func armFocusWatchdog(for view: Ghostty.TerminalView, tab: TabModel) {
         focusWatchdog?.cancel()
-        focusWatchdog = Task { @MainActor [weak self, weak view] in
+        guard let terminalId = view.herdrPaneBinding?.terminalId else { return }
+        let model = tabsModel
+        let tabID = tab.id
+        let selectionRevision = model.selectionRevision
+        let paneFocusRevision = tab.paneFocusRevision
+        let generation = streamGeneration
+        let backgroundEpoch = LifecycleEpoch.shared.background
+        focusWatchdog = Task { @MainActor [weak self, weak view, weak tab, weak model] in
             for _ in 0..<10 {
                 try? await Task.sleep(for: .milliseconds(100))
-                guard let self, let view, !Task.isCancelled else { return }
-                guard view.isLogicallyFocused, view.window != nil else { return }
-                guard let tabID = view.containingTabID, self.tabsModel.selectedTabID == tabID else { return }
-                if view.isFirstResponder { return }
-                _ = view.becomeFirstResponder()
+                guard !Task.isCancelled, let self, let view, let tab, let model,
+                      !self.didEnd, self.streamGeneration == generation,
+                      LifecycleEpoch.shared.background == backgroundEpoch,
+                      model.selectedTabID == tabID, model.selectionRevision == selectionRevision,
+                      model.tab(withID: tabID) === tab,
+                      tab.focusedTerminal === view, tab.paneFocusRevision == paneFocusRevision,
+                      self.paneViews[terminalId] === view, view.containingTabID == tabID,
+                      view.isLogicallyFocused else { return }
+                // window == nil is temporary during a hosting-view rebuild;
+                // keep the bounded retry alive. The shared helper also honors
+                // modal, overlay, and inactive-window keyboard ownership.
+                if view.reassertFirstResponderIfFocused() { return }
             }
         }
     }
@@ -572,7 +629,8 @@ extension HerdrController {
                 state_labels: pane.state_labels
             )
         }
-        if tab.focusedPane !== view {
+        if tab.focusedPane !== view || (tabsModel.selectedTabID == tab.id &&
+            (!view.isLogicallyFocused || !view.isFirstResponder)) {
             focusPane(view, in: tab)
         }
         refreshTitle(of: tab)

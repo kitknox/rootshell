@@ -1043,9 +1043,7 @@ extension MainView {
         // bar "pulse" and a dull roam/tmux badge over the transitioning glass
         // (the same single-tab appearance storm fixed in
         // createLocalShellTabInternal). Suppress animation for that crossing;
-        // multi-tab closes keep the slide. `withAnimation`/`withTransaction`
-        // also force the selection re-evaluation even when the index is
-        // unchanged.
+        // multi-tab closes keep the slide.
         let collapsingToSingleTab = tabsModel.navigationTabs.filter { $0.id != tabId }.count <= 1
         if collapsingToSingleTab {
             var closeTxn = Transaction()
@@ -1088,8 +1086,8 @@ extension MainView {
             clampedIndex = fallbackIndex
         }
 
-        // Always update selectedTabIndex to trigger onChange and UI refresh
-        // Even if the numerical value is the same, the transaction should cause a refresh.
+        // The selectedTabID observer restores focus even when the replacement
+        // tab occupies the same index. Closing another tab preserves focus.
         // When collapsing to a single tab, suppress animation here too — animating
         // the selection drives the lone tab's Liquid Glass appearance (the pulse /
         // dull badge). Multi-tab closes keep the slide.
@@ -1102,40 +1100,6 @@ extension MainView {
         } else {
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedTabIndex = clampedIndex
-            }
-        }
-
-        // Restore focus to the selected tab
-        // When a tab closes and another slides into the same index position, onChange(of: selectedTabIndex)
-        // doesn't fire because the value hasn't changed. We must manually activate the new tab's terminal.
-        if closingLeftOfActive || closingActiveTab {
-            if clampedIndex < terminals.count {
-                // Mark all surfaces in the new active tab as visible (mirrors handleSelectedTabChange)
-                for terminal in terminals[clampedIndex].splitTree {
-                    terminal.setOcclusion(true)
-                }
-
-                if let pane = terminals[clampedIndex].focusedPane ?? terminals[clampedIndex].splitTree.first {
-                    terminals[clampedIndex].focusedPane = pane
-                    pane.isLogicallyFocused = true
-                    // Set flag so window observers will focus this terminal when window becomes ready
-                    pane.asTerminal?.shouldBecomeFirstResponderWhenReady = true
-                    // Try immediate focus - succeeds if window is already ready
-                    _ = pane.becomeFirstResponder()
-
-                    // USER closed a tab and landed on a tmux pane: sync tmux's
-                    // active window/pane explicitly. The core no longer echoes
-                    // select-pane on focus gain, so bare becomeFirstResponder
-                    // paths must send it themselves.
-                    // ROOTSHELL-TMUX (id=tmux-select-pane-user-only)
-                    if let terminal = pane.asTerminal, terminal.isTmuxPane {
-                        terminal.requestTmuxSelectPane()
-                    } else if let terminal = pane.asTerminal, terminal.isHerdrPane {
-                        terminal.requestHerdrSelectPane()
-                    }
-
-                    ghosttyApp.appTick()
-                }
             }
         }
     }

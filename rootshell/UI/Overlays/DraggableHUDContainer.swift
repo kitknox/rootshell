@@ -136,6 +136,20 @@ struct DraggableHUDContainer<Content: View>: UIViewRepresentable {
 /// Non-generic so its `@objc` handlers and `keyCommands` are valid (a generic UIView
 /// can't expose `@objc` members to the Obj-C runtime).
 final class DraggableHUDHostView: UIView, UIGestureRecognizerDelegate {
+    /// Passthrough HUDs such as Find do not raise overlayOwnsKeyboard: the
+    /// terminal remains usable beside them. Passive terminal focus recovery
+    /// must still yield while a HUD control actually holds first responder.
+    /// Inspect only this window, and use live UIKit state rather than a flag
+    /// that can lag SwiftUI field focus or HUD removal.
+    static func ownsFirstResponder(in window: UIWindow) -> Bool {
+        func containsFocusedHUD(_ view: UIView, insideHUD: Bool) -> Bool {
+            let insideHUD = insideHUD || view is DraggableHUDHostView
+            if insideHUD && view.isFirstResponder { return true }
+            return view.subviews.contains { containsFocusedHUD($0, insideHUD: insideHUD) }
+        }
+        return containsFocusedHUD(window, insideHUD: false)
+    }
+
     weak var hostController: UIViewController?
     weak var hostedView: UIView?
     var inset: CGFloat = 12

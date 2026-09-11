@@ -916,6 +916,9 @@ final class TabModel: Identifiable {
 @Observable
 final class TabsModel {
     @ObservationIgnored private(set) var selectionRevision: UInt64 = 0
+    /// Kept through reconnect/autosave until the owning herdr gateway receives
+    /// its first snapshot. Choosing another tab cancels the pending selection.
+    @ObservationIgnored var pendingHerdrSelection: SerializableHerdrSelection?
     /// All tabs in the window, in display order.
     var tabs: [TabModel] = [] {
         didSet {
@@ -937,6 +940,10 @@ final class TabsModel {
         didSet {
             guard oldValue != selectedTabID else { return }
             selectionRevision &+= 1
+            if let pending = pendingHerdrSelection,
+               selectedTab?.splitTree.terminalLeaves.contains(where: { $0.uuid == pending.gatewayTerminalUUID }) != true {
+                pendingHerdrSelection = nil
+            }
             beginTabSwitchAnimationGate()
             if let tab = selectedTab { rememberSelectionScope(of: tab) }
             if isGroupedModeEnabled, !isProjectGroupingActive,
@@ -1515,6 +1522,22 @@ final class TabsModel {
     func maySelectInitialMultiplexerTab(gatewayTabID: UUID?) -> Bool {
         guard let selectedTab else { return true }
         return selectedTab.id == gatewayTabID
+    }
+
+    /// Preserve the server identity while its native tab is live, or while
+    /// its selected gateway is still reconnecting after a previous restore.
+    var herdrSelectionForPersistence: SerializableHerdrSelection? {
+        guard let selectedTab else { return nil }
+        if selectedTab.isHerdrWindow,
+           let owner = selectedTab.owningGatewayTerminalUUID,
+           let tabID = selectedTab.herdrTabId {
+            return SerializableHerdrSelection(gatewayTerminalUUID: owner, tabID: tabID)
+        }
+        if let pending = pendingHerdrSelection,
+           selectedTab.splitTree.terminalLeaves.contains(where: { $0.uuid == pending.gatewayTerminalUUID }) {
+            return pending
+        }
+        return nil
     }
 
     /// Tabs the user can see and navigate to: everything except hidden tmux

@@ -407,8 +407,8 @@ extension MainView {
         reconcileSurfaceOcclusion(reason: "terminalCount")
     }
 
-    func handleSelectedTabChange(oldValue: Int, newValue: Int) {
-        Ghostty.logger.info("onChange(selectedTabIndex): \(oldValue) -> \(newValue)")
+    func handleSelectedTabChange(oldValue: UUID?, newValue: UUID?) {
+        Ghostty.logger.info("onChange(selectedTabID): \(oldValue?.uuidString ?? "nil") -> \(newValue?.uuidString ?? "nil")")
 
         // Clear any stale drag state when tabs are selected
         if draggingTab != nil {
@@ -425,17 +425,19 @@ extension MainView {
             forceClearAppTabSwipe(reason: "tabSwitchDuringSwipe")
         }
 
-        guard terminals.indices.contains(newValue) else { return }
+        guard let newValue, tabsModel.selectedTabID == newValue,
+              let newTab = tabsModel.tab(withID: newValue) else { return }
+        let oldTab = oldValue.flatMap { tabsModel.tab(withID: $0) }
 
         // Mark all surfaces in old tab as occluded to stop their IOSDisplayLink
-        if terminals.indices.contains(oldValue) {
-            for terminal in terminals[oldValue].splitTree {
+        if let oldTab {
+            for terminal in oldTab.splitTree {
                 terminal.setOcclusion(false)
             }
         }
 
         // Mark all surfaces in new tab as visible before focusing
-        for terminal in terminals[newValue].splitTree {
+        for terminal in newTab.splitTree {
             terminal.setOcclusion(true)
         }
 
@@ -446,12 +448,12 @@ extension MainView {
         reconcileSurfaceOcclusion(reason: "tabSelection")
 
         // Set up the focused pane reference
-        var paneToFocus = terminals[newValue].focusedPane
+        var paneToFocus = newTab.focusedPane
 
         // If no pane is focused yet, focus the first one in the split tree
-        if paneToFocus == nil, let firstPane = terminals[newValue].splitTree.first {
+        if paneToFocus == nil, let firstPane = newTab.splitTree.first {
             paneToFocus = firstPane
-            terminals[newValue].focusedPane = firstPane
+            newTab.focusedPane = firstPane
         }
 
         // FOCUS NEW TERMINAL FIRST — keyboard stays visible because
@@ -461,8 +463,9 @@ extension MainView {
         // synchronously, meaning UIKit already auto-resigned the old terminal.
         var newFocusAcquired = false
         if let focus = paneToFocus {
-            Ghostty.logger.info("Focusing terminal at tab \(newValue)")
+            Ghostty.logger.info("Focusing terminal at tab \(newValue.uuidString)")
             focus.isLogicallyFocused = true
+            focus.asTerminal?.shouldBecomeFirstResponderWhenReady = true
             // Initialize the gate before focusing, in case this tab's terminal
             // was created while an overlay is open (the connection sidebar's
             // tab-bar guard below only covers the tab sidebar). Without it the
@@ -504,12 +507,12 @@ extension MainView {
 
         // Unfocus old — only skip resignFirstResponder when the new terminal
         // actually became first responder (UIKit already auto-resigned the old one)
-        if terminals.indices.contains(oldValue) {
-            if let oldFocus = terminals[oldValue].focusedPane {
-                Ghostty.logger.info("Unfocusing old terminal at tab \(oldValue)")
-                oldFocus.focusDidChange(false, skipResign: newFocusAcquired)
-                oldFocus.isLogicallyFocused = false
-            }
+        // The old index may now belong to a different tab after a close or
+        // reorder. Only retire focus on the old identity if it still exists.
+        if let oldFocus = oldTab?.focusedPane, oldFocus !== paneToFocus {
+            oldFocus.isLogicallyFocused = false
+            oldFocus.asTerminal?.shouldBecomeFirstResponderWhenReady = false
+            oldFocus.focusDidChange(false, skipResign: newFocusAcquired)
         }
 
         // Show tab indicator overlay when tab bar is hidden, unless the user
@@ -530,12 +533,13 @@ extension MainView {
         // for the destination tab a couple of ticks later. Epoch-guarded (skip after
         // a background) and scoped to this switch (skip if a later switch already
         // won). Idempotent: a cheap core no-op when the tab is already alive.
-        let destTabID = terminals[newValue].id
+        let destTabID = newTab.id
+        let selectionRevision = tabsModel.selectionRevision
         LifecycleDebugLogger.shared.checkpoint("FG.tabSwitch", ms: nil, [
-            ("from", oldValue),
-            ("to", newValue),
+            ("from", oldValue?.uuidString ?? "nil"),
+            ("to", newValue.uuidString),
             ("dest", String(destTabID.uuidString.prefix(8))),
-            ("surfaces", terminals[newValue].splitTree.count),
+            ("surfaces", newTab.splitTree.count),
             ("newFocusAcquired", newFocusAcquired),
             ("focusedIsFR", paneToFocus?.isFirstResponder ?? false),
         ])
@@ -543,7 +547,8 @@ extension MainView {
         for delay in [0.12, 0.4] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [self] in
                 guard LifecycleEpoch.shared.background == backstopBgEpoch else { return }
-                guard tabsModel.selectedTabID == destTabID else { return }
+                guard tabsModel.selectedTabID == destTabID,
+                      tabsModel.selectionRevision == selectionRevision else { return }
                 reassertSelectedTabVisibility(reason: "tabSwitchBackstop+\(delay)")
             }
         }
