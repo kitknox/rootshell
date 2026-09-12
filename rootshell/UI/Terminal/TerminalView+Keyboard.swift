@@ -312,6 +312,9 @@ extension Ghostty.TerminalView {
     // Register key commands for dynamic keybindings
     // Uses cached array to avoid 26+ allocations per keystroke
     override var keyCommands: [UIKeyCommand]? {
+        // The gateway host advertises app shortcuts. If UIKit includes this
+        // ancestor in its responder chain, never add shell-input commands.
+        guard herdrController?.showsGatewayStatus != true else { return nil }
         guard !shouldYieldHardwareInputToEmojiUI else { return nil }
         #if targetEnvironment(macCatalyst)
         let shouldSuppressControlShortcuts = false
@@ -336,6 +339,10 @@ extension Ghostty.TerminalView {
 extension Ghostty.TerminalView {
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if herdrController?.showsGatewayStatus == true {
+            super.pressesBegan(presses, with: event)
+            return
+        }
         lastHardwareTextInputTime = ProcessInfo.processInfo.systemUptime
         lastDictationActivityAt = nil
         invalidateWritingAssistance()
@@ -1061,6 +1068,10 @@ extension Ghostty.TerminalView {
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if herdrController?.showsGatewayStatus == true {
+            super.pressesEnded(presses, with: event)
+            return
+        }
         if shouldYieldHardwareInputToEmojiUI {
             resetKeyboardInteractionState(sendSyntheticKeyReleases: true)
             super.pressesEnded(presses, with: event)

@@ -17,6 +17,7 @@ extension Ghostty.TerminalView {
     func updateHerdrGatewayOverlay() {
         guard let controller = herdrController, controller.showsGatewayStatus else {
             let hadOverlay = herdrGatewayHost != nil
+            herdrGatewayHost?.relinquishFocus()
             herdrGatewayHost?.willMove(toParent: nil)
             herdrGatewayHost?.view.removeFromSuperview()
             herdrGatewayHost?.removeFromParent()
@@ -39,19 +40,21 @@ extension Ghostty.TerminalView {
             isCreating: controller.emptySessionCreationID != nil,
             errorMessage: controller.newTabError ?? controller.connectionError,
             fallback: controller.mode == .legacy ? .init(
-                reason: controller.legacyFallbackReason,
-                latestNotice: controller.legacyLatestNotice,
                 isForced: controller.legacyFallbackForced
             ) : nil,
             workspaces: { [weak controller] in controller?.showWorkspaceOverview() },
             newTab: { [weak controller] in controller?.requestNewTab(workspaceID: nil) },
             retryConnection: { [weak controller] in controller?.applicationDidBecomeActive() },
-            detach: { [weak controller] in controller?.detach(closeGateway: false) }
+            detach: { [weak controller] in controller?.detach(closeGateway: false) },
+            installPresentationChanged: { [weak self] presented in
+                self?.herdrGatewayHost?.presentsInstallInstructions = presented
+                self?.herdrGatewayHost?.reconcileFocus()
+            }
         )
         if let host = herdrGatewayHost {
             host.rootView = content
         } else {
-            let host = UIHostingController(rootView: content)
+            let host = HerdrGatewayHostingController(gateway: self, rootView: content)
             host.view.backgroundColor = .clear
             host.view.translatesAutoresizingMaskIntoConstraints = false
             var responder: UIResponder? = next
@@ -69,6 +72,7 @@ extension Ghostty.TerminalView {
             herdrGatewayHost = host
         }
         if isFirstResponder { _ = resignFirstResponder() }
+        herdrGatewayHost?.reconcileFocus()
     }
 
     /// Fixed space outside the grid. TerminalScrollView pins the terminal to

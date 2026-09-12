@@ -250,6 +250,7 @@ extension HerdrController {
                 self.refreshTopology()
             } catch {
                 guard self.creationIsCurrent(generation) else { return }
+                if self.refuseUnsupportedVersion(error) { return }
                 Self.logger.warning("herdr tab creation failed: \(error.localizedDescription)")
                 self.newTabError = error.localizedDescription
                 self.presentNewTabErrorIfNeeded()

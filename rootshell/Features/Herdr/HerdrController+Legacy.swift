@@ -3,8 +3,8 @@
 //  rootshell
 //
 //  Fallback control mode uses the vanilla endpoint for frames and input,
-//  with `herdr api snapshot` supplying native tab identities. Older servers
-//  retain the PTY `herdr terminal attach` compatibility path below.
+//  with `herdr api snapshot` supplying native tab identities. Compatible
+//  servers without the endpoint retain the PTY compatibility path below.
 //
 //  Copyright (c) 2026 Kit Knox / Rootshell LLC
 //
@@ -22,13 +22,12 @@ extension HerdrController {
     func startLegacyMode(reason: String, forced: Bool = false) {
         guard mode == .raw, !didEnd else { return }
         mode = .legacy
-        legacyFallbackReason = reason
         legacyFallbackForced = forced
         isActive = false
         connectionError = nil
         reconnectAttempt = 0
         Self.logger.info("herdr control: degraded mode (\(reason))")
-        let upgradeHint = " Vanilla herdr 0.9.0 supports native scrolling and selection."
+        let upgradeHint = " Regular herdr supports native text selection with autoscroll; scrollback is less smooth and global scrollback search is unavailable."
         gateway?.writeToGhostty(string:
             "\r\n\u{1b}[33mherdr control mode: \(reason). Running with server-rendered panes.\(upgradeHint)\u{1b}[0m\r\n")
         publishSessionState()
@@ -257,22 +256,23 @@ extension HerdrController {
             if let error = try HerdrControl.decoder.decode(HerdrControl.LineHead.self, from: Data(line)).error {
                 throw HerdrChannelError.remote(code: error.code, message: error.message)
             }
+            let snapshot = try HerdrControl.decoder.decode(
+                HerdrControl.Response<HerdrControl.SessionSnapshotResult>.self,
+                from: Data(line)
+            ).result.snapshot
             isActive = true
             connectionError = nil
             guard fingerprint != legacySnapshotFingerprint else {
                 publishSessionState()
                 return
             }
-            let snapshot = try HerdrControl.decoder.decode(
-                HerdrControl.Response<HerdrControl.SessionSnapshotResult>.self,
-                from: Data(line)
-            ).result.snapshot
             legacySnapshotFingerprint = fingerprint
             applySnapshot(snapshot)
         } catch {
             guard !didEnd, !Task.isCancelled, streamGeneration == generation,
                   tabReorderRevision == orderRevision,
                   capturedManagementRevision == managementRevision, !management.isBusy else { return }
+            if refuseUnsupportedVersion(error) { return }
             isActive = false
             connectionError = error.localizedDescription
             publishSessionState()
@@ -281,15 +281,11 @@ extension HerdrController {
         }
     }
 
-    /// Show the latest compatibility notice in the overlay, while writing
-    /// each distinct message to the gateway shell only once.
+    /// Keep diagnostic notices in the log and gateway shell, once per message.
     func legacyNotice(_ message: String) {
         guard !didEnd else { return }
-        if legacyLatestNotice != message {
-            legacyLatestNotice = message
-            publishSessionState()
-        }
         guard legacyNoticesShown.insert(message).inserted else { return }
+        Self.logger.notice("herdr fallback: \(message)")
         gateway?.writeToGhostty(string: "\r\n\u{1b}[33mherdr control mode: \(message)\u{1b}[0m\r\n")
     }
 

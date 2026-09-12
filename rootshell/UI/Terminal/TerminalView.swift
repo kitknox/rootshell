@@ -546,7 +546,7 @@ extension Ghostty {
         /// Set on the gateway view while it drives a herdr session in
         /// control mode. nil for pane views and non-herdr sessions.
         var herdrController: HerdrController?
-        var herdrGatewayHost: UIHostingController<HerdrGatewayView>?
+        var herdrGatewayHost: HerdrGatewayHostingController?
 
         /// A takeover leaves this gateway at its shell until an explicit attach.
         /// Retained across transport reconnects for the lifetime of this view.
@@ -2376,6 +2376,7 @@ extension Ghostty {
         override func setOverlayOwnsKeyboard(_ owns: Bool) {
             guard overlayOwnsKeyboard != owns else { return }
             overlayOwnsKeyboard = owns
+            herdrGatewayHost?.reconcileFocus()
             Ghostty.logger.info("setOverlayOwnsKeyboard(\(owns)) terminal=\(self.uuid.uuidString.prefix(8)) isFR=\(self.isFirstResponder) logical=\(self.isLogicallyFocused)")
             if owns {
                 if isFirstResponder {
@@ -3083,6 +3084,11 @@ extension Ghostty {
 
         private func syncFocusForWindowStateChange(sceneIsDeactivating: Bool = false) {
             let windowActive = windowIsActiveForFocus()
+            if let herdrGatewayHost {
+                applyGhosttyFocus(false)
+                herdrGatewayHost.reconcileFocus()
+                return
+            }
             #if !targetEnvironment(macCatalyst)
             if (!windowActive || sceneIsDeactivating),
                shouldPreserveFirstResponderForSoftwareKeyboardAppTransition(sceneIsDeactivating: sceneIsDeactivating) {
@@ -3605,6 +3611,15 @@ extension Ghostty {
             #endif
         }
         
+        var herdrGatewayCanOwnKeyboard: Bool {
+            #if os(iOS) && !targetEnvironment(macCatalyst)
+            guard iPadVisorController.permitsFocus(self) else { return false }
+            #endif
+            return herdrController?.showsGatewayStatus == true && isLogicallyFocused
+                && windowIsActiveForFocus() && !overlayOwnsKeyboard
+                && !isModalPresented() && !isHUDFieldFocused()
+        }
+
         override var canBecomeFirstResponder: Bool {
             return herdrController?.showsGatewayStatus != true
         }
@@ -3621,7 +3636,9 @@ extension Ghostty {
 
         @discardableResult
         override func becomeFirstResponder() -> Bool {
-            guard herdrController?.showsGatewayStatus != true else { return false }
+            if herdrController?.showsGatewayStatus == true {
+                return herdrGatewayHost?.reconcileFocus() ?? false
+            }
             #if os(iOS) && !targetEnvironment(macCatalyst)
             guard iPadVisorController.permitsFocus(self) else { return false }
             #endif
@@ -3713,6 +3730,9 @@ extension Ghostty {
 
         @discardableResult
         override func resignFirstResponder() -> Bool {
+            if let herdrGatewayHost, herdrGatewayHost.isFirstResponder {
+                return herdrGatewayHost.resignFirstResponder()
+            }
             invalidateWritingAssistance(resetDocument: true)
             #if !targetEnvironment(macCatalyst)
             if shouldPreserveFirstResponderForSoftwareKeyboardAppTransition() {
@@ -4548,6 +4568,7 @@ extension Ghostty {
         /// `skipResign` is safe when unfocusing the old terminal.
         @discardableResult
         override func focusDidChange(_ focused: Bool, skipResign: Bool = false) -> Bool {
+            if !focused { herdrGatewayHost?.relinquishFocus() }
             if !focused { herdrEndpointPane?.cancelInteraction() }
             #if os(iOS) && !targetEnvironment(macCatalyst)
             if focused && !iPadVisorController.permitsFocus(self) { return false }

@@ -1450,6 +1450,10 @@ extension Ghostty.TerminalView {
     }
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if herdrController?.showsGatewayStatus == true,
+           [#selector(copy(_:)), #selector(paste(_:)), #selector(selectAll(_:))].contains(action) {
+            return false
+        }
         if action == #selector(copy(_:)) {
             return hasTerminalTextSelection
         }

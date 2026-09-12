@@ -195,6 +195,8 @@ actor HerdrControlChannel {
         let response = try await request(method, params, timeout: timeout)
         do {
             return try HerdrControl.decoder.decode(HerdrControl.Response<R>.self, from: response).result
+        } catch let error as HerdrVersionError {
+            throw error
         } catch {
             throw HerdrChannelError.malformed("\(method) result: \(error)")
         }

@@ -154,6 +154,19 @@ nonisolated enum HerdrControl {
         let version: String
         let `protocol`: Int
         let capabilities: Capabilities?
+
+        private enum CodingKeys: String, CodingKey {
+            case connection_id, boot_id, version, `protocol`, capabilities
+        }
+
+        init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            version = try HerdrVersionRequirement.validate(try? values.decode(String.self, forKey: .version))
+            connection_id = try values.decode(UInt64.self, forKey: .connection_id)
+            boot_id = try values.decode(String.self, forKey: .boot_id)
+            self.protocol = try values.decode(Int.self, forKey: .protocol)
+            capabilities = try values.decodeIfPresent(Capabilities.self, forKey: .capabilities)
+        }
     }
 
     struct TerminalAttached: Decodable, Sendable {
@@ -265,6 +278,27 @@ nonisolated enum HerdrControl {
         let panes: [PaneInfo]
         let layouts: [LayoutSnapshot]
         let agents: [AgentInfo]
+
+        private enum CodingKeys: String, CodingKey {
+            case version, `protocol`, focused_workspace_id, focused_tab_id, focused_pane_id
+            case workspaces, tabs, panes, layouts, agents
+        }
+
+        init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            // Validate before decoding topology, including empty sessions and
+            // servers whose older snapshot schema is otherwise unreadable.
+            version = try HerdrVersionRequirement.validate(try? values.decode(String.self, forKey: .version))
+            self.protocol = try values.decode(Int.self, forKey: .protocol)
+            focused_workspace_id = try values.decodeIfPresent(String.self, forKey: .focused_workspace_id)
+            focused_tab_id = try values.decodeIfPresent(String.self, forKey: .focused_tab_id)
+            focused_pane_id = try values.decodeIfPresent(String.self, forKey: .focused_pane_id)
+            workspaces = try values.decode([WorkspaceInfo].self, forKey: .workspaces)
+            tabs = try values.decode([TabInfo].self, forKey: .tabs)
+            panes = try values.decode([PaneInfo].self, forKey: .panes)
+            layouts = try values.decode([LayoutSnapshot].self, forKey: .layouts)
+            agents = try values.decode([AgentInfo].self, forKey: .agents)
+        }
     }
 
     struct SessionSnapshotResult: Decodable {

@@ -67,6 +67,7 @@ extension HerdrController {
             }
         } catch {
             guard !Task.isCancelled, !didEnd, generation == streamGeneration else { throw CancellationError() }
+            if refuseUnsupportedVersion(error) { throw CancellationError() }
             throw error
         }
         guard !Task.isCancelled, !didEnd, generation == streamGeneration else { throw CancellationError() }

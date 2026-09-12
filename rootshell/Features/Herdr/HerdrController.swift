@@ -111,10 +111,7 @@ final class HerdrController {
     var legacyGrids: [String: (rows: Int, cols: Int)] = [:]
     var legacyPollTask: Task<Void, Never>?
     var legacySnapshotFingerprint: Int?
-    /// Keep fallback details available while the overlay covers the shell.
-    var legacyFallbackReason: String?
     var legacyFallbackForced = false
-    var legacyLatestNotice: String?
     /// Degraded-mode failures already written to the gateway; each distinct
     /// message shows once so a repeating poll does not flood the shell.
     var legacyNoticesShown: Set<String> = []
@@ -428,6 +425,7 @@ final class HerdrController {
         } catch {
             await openingChannel?.abort()
             guard !didEnd else { return }
+            if refuseUnsupportedVersion(error) { return }
             Self.logger.error("herdr control connect failed: \(error.localizedDescription)")
             connectionError = error.localizedDescription
             isActive = false
@@ -446,6 +444,20 @@ final class HerdrController {
                 scheduleReconnect()
             }
         }
+    }
+
+    /// Version failures end this attach attempt; neither fallback nor retries
+    /// can make an older running server compatible.
+    @discardableResult
+    func refuseUnsupportedVersion(_ error: Error) -> Bool {
+        guard let error = error as? HerdrVersionError else { return false }
+        guard !didEnd else { return true }
+        let gateway = self.gateway
+        gateway?.herdrAutoAttachSuppressed = true
+        Self.logger.error("herdr attachment refused: \(error.localizedDescription)")
+        stop()
+        gateway?.writeToGhostty(string: "\r\n\(error.localizedDescription)\r\n")
+        return true
     }
 
     private func subscribeAgentStatus() {
@@ -879,6 +891,8 @@ final class HerdrController {
                     guard managementRevision == self.managementRevision, !self.management.isBusy else { continue }
                     self.applySnapshot(snapshot)
                 } catch {
+                    guard self.channel === channel, !Task.isCancelled else { return }
+                    if self.refuseUnsupportedVersion(error) { return }
                     Self.logger.warning("herdr topology refresh failed: \(error.localizedDescription)")
                 }
             }
