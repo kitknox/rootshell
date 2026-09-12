@@ -86,6 +86,15 @@ final class HerdrGatewayHostingController: UIHostingController<HerdrGatewayView>
                 commands.append(command)
             }
         }
+        if seen.insert(Self.detachTrigger).inserted {
+            let detach = UIKeyCommand(input: Self.detachTrigger.uiKeyInput, modifierFlags: [],
+                                      action: #selector(handleShortcut(_:)))
+            detach.wantsPriorityOverSystemBehavior = true
+            #if !os(visionOS)
+            detach.discoverabilityTitle = String(localized: "Detach from herdr")
+            #endif
+            commands.append(detach)
+        }
         return commands
     }
 
@@ -111,12 +120,22 @@ final class HerdrGatewayHostingController: UIHostingController<HerdrGatewayView>
         if let lastDelivery, lastDelivery.trigger == trigger, now - lastDelivery.time < 0.05 { return true }
         let result = sequences.consume(owner: self, trigger: trigger)
         let binding = result.keybind ?? (result.handled ? nil : KeybindManager.shared.keybind(for: trigger))
-        guard result.handled || binding.map({ Self.supports($0.action) }) == true else { return false }
+        let supported = binding.map { Self.supports($0.action) } == true
+        let detaches = !result.handled && !supported && trigger == Self.detachTrigger
+        guard result.handled || supported || detaches else { return false }
         lastDelivery = (trigger, now)
         noteAlwaysOnDisplayInteraction()
-        if let binding { execute(binding) }
+        if detaches {
+            rootView.detach()
+        } else if let binding {
+            execute(binding)
+        }
         return true
     }
+
+    /// ESC leaves control mode the way the tmux gateway's ESC does. A keybind
+    /// that claims bare Escape still wins.
+    private static let detachTrigger = KeyTrigger(key: .escape, modifiers: [])
 
     private static func supports(_ action: KeybindAction) -> Bool {
         !action.isTerminalAction && action.isAvailableForVisorDispatch && action != .unbind
