@@ -499,14 +499,14 @@ final class TabModel: Identifiable {
     /// observed property consumed by the window, top tabs, and sidebar. A
     /// tmux agent spinner can otherwise invalidate that entire graph about ten
     /// times per second. Preserve a responsive leading update and the newest
-    /// trailing value while limiting observed publication to 5 Hz. Codex and
+    /// trailing value while limiting publication (75 ms for herdr, 200 ms otherwise). Codex and
     /// Claude commonly animate their title spinners at about 10 Hz; publishing
     /// every other frame keeps that motion legible without making SwiftUI
     /// process every source update.
     @ObservationIgnored private var pendingPublishedTitle: String?
     @ObservationIgnored private var titlePublicationTimer: Timer?
     @ObservationIgnored private var lastTitlePublicationUptime: TimeInterval = 0
-    private static let minimumTitlePublicationInterval: TimeInterval = 0.2
+    private var minimumTitlePublicationInterval: TimeInterval { isHerdrWindow ? 0.075 : 0.2 }
 
     private func markGroupingChanged<T: Equatable>(_ oldValue: T, _ newValue: T) {
         if oldValue != newValue {
@@ -790,14 +790,14 @@ final class TabModel: Identifiable {
 
         let now = ProcessInfo.processInfo.systemUptime
         let elapsed = now - lastTitlePublicationUptime
-        if lastTitlePublicationUptime == 0 || elapsed >= Self.minimumTitlePublicationInterval {
+        if lastTitlePublicationUptime == 0 || elapsed >= minimumTitlePublicationInterval {
             publishPendingTitle()
             return
         }
 
         guard titlePublicationTimer == nil else { return }
         let timer = Timer(
-            timeInterval: Self.minimumTitlePublicationInterval - elapsed,
+            timeInterval: minimumTitlePublicationInterval - elapsed,
             repeats: false
         ) { [weak self] _ in
             MainActor.assumeIsolated {

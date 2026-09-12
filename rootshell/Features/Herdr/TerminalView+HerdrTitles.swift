@@ -4,12 +4,14 @@ extension Ghostty.TerminalView {
     func beginHerdrTitleAttachment() {
         titleChangeTimer?.invalidate()
         titleChangeTimer = nil
+        herdrTitlePublicationUptime = nil
         herdrTitleState.beginAttachment()
     }
 
     func endHerdrTitleAttachment() {
         titleChangeTimer?.invalidate()
         titleChangeTimer = nil
+        herdrTitlePublicationUptime = nil
         herdrTitleState.endAttachment()
     }
 
@@ -23,15 +25,31 @@ extension Ghostty.TerminalView {
         // Claim live authority immediately, before the publication timer. A
         // metadata event in this interval must not restore an older title.
         herdrTitleState.receive(title, from: attachmentID)
-        titleChangeTimer?.invalidate()
-        titleChangeTimer = Timer.scheduledTimer(withTimeInterval: 0.075, repeats: false) { [weak self] _ in
+        let now = ProcessInfo.processInfo.systemUptime
+        let elapsed = herdrTitlePublicationUptime.map { now - $0 } ?? 0.075
+        if elapsed >= 0.075 {
+            publishPendingHerdrTitle()
+            return
+        }
+        guard titleChangeTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.075 - elapsed, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, self.herdrTitleState.attachmentID == attachmentID else { return }
-                self.titleChangeTimer = nil
-                AgentAttentionCenter.shared.noteTitleChanged(terminal: self, title: title)
-                self.publishHerdrTitle()
+                self.publishPendingHerdrTitle()
             }
         }
+        titleChangeTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func publishPendingHerdrTitle() {
+        titleChangeTimer?.invalidate()
+        titleChangeTimer = nil
+        herdrTitlePublicationUptime = ProcessInfo.processInfo.systemUptime
+        if let title = herdrTitleState.reportedTitle {
+            AgentAttentionCenter.shared.noteTitleChanged(terminal: self, title: title)
+        }
+        publishHerdrTitle()
     }
 
     /// Pane chrome, foreground replay, and the controller all use the same

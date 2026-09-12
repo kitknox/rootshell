@@ -201,9 +201,10 @@ extension HerdrController {
                         workspaceID: self.newTabWorkspace(preferred: preferredWorkspaceID), channel: channel
                     )
                 } catch HerdrChannelError.remote(let code, _) where code == "workspace_not_found" {
+                    let statusRevision = self.agentStatusRevision
                     let snapshot = try await self.creationSnapshot(channel: channel)
                     guard self.creationIsCurrent(generation) else { return }
-                    self.applySnapshot(snapshot)
+                    self.applySnapshot(snapshot, preservingAgentUpdatesAfter: statusRevision)
                     created = try await self.createTab(
                         workspaceID: self.newTabWorkspace(preferred: preferredWorkspaceID), channel: channel
                     )

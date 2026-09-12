@@ -1785,7 +1785,7 @@ final class AgentAttentionCenter {
     /// mutex for long stretches, and a parked main thread is what turned
     /// into the 0x8BADF00D watchdog kills on build 131.
     private func scan(_ monitor: AgentPaneMonitor, now: Date) -> Bool {
-        if monitor.externalAuthority {
+        if monitor.externalAuthority, monitor.agent != nil {
             monitor.lastScanAt = now
             refreshProject(for: monitor, now: now)
             return true
@@ -1841,7 +1841,7 @@ final class AgentAttentionCenter {
         monitor.noteMultiplexerChrome(input.hadMultiplexerChrome)
 
         if monitor.agent == nil {
-            if AgentAttentionSettings.detectionEnabled,
+            if AgentAttentionSettings.detectionEnabled, !monitor.externalAuthority,
                let found = manifest.identifyAgent(from: input) {
                 monitor.adoptAgent(found, source: .screen, now: now)
                 resetProjectForNewAgent(monitor)
@@ -2278,6 +2278,11 @@ final class AgentAttentionCenter {
                 var agentPaneIDs: [UUID] = []
                 for terminal in tab.splitTree.terminalLeaves {
                     let monitor = monitors[terminal.uuid]
+                    let usesHerdrStatus = monitor?.externalAuthority == true && monitor?.agent != nil
+                    if terminal.presentation.usesHerdrStatus != usesHerdrStatus {
+                        terminal.presentation.usesHerdrStatus = usesHerdrStatus
+                        changed = true
+                    }
                     // The card and badge track the live screen, rebuild or
                     // not. Only NOTIFICATIONS are held back through a
                     // replay; holding the UI too meant a stale snapshot

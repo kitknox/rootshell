@@ -18,7 +18,7 @@ extension HerdrController {
 
     // MARK: - Snapshot
 
-    func applySnapshot(_ snapshot: HerdrControl.SessionSnapshot) {
+    func applySnapshot(_ snapshot: HerdrControl.SessionSnapshot, preservingAgentUpdatesAfter revision: UInt64? = nil) {
         guard !didEnd else { return }
         let isInitialSnapshot = !hasProcessedInitialSnapshot
         let isLocalRecovery = gateway?.restoredLocalMultiplexerAttachment?.isHerdrControl == true
@@ -35,7 +35,8 @@ extension HerdrController {
         let livePaneIds = Set(snapshot.panes.map(\.pane_id))
         let liveTerminalIds = Set(snapshot.panes.map(\.terminal_id))
         for pane in snapshot.panes {
-            ensurePane(pane)
+            let current = mode == .legacy ? endpointMetadata?.panes.first(where: { $0.matches(pane) }) : nil
+            ensurePane(current?.updatingDirectories(in: pane) ?? pane)
         }
         prune(tabIds: Set(snapshot.tabs.map(\.tab_id)), paneIds: livePaneIds, terminalIds: liveTerminalIds)
         for layout in snapshot.layouts {
@@ -56,10 +57,14 @@ extension HerdrController {
         }
         // The snapshot is the whole truth about agents: a pane missing from
         // it lost its agent, so it gets a clearing report.
-        let vanished = agentStatuses.keys.filter { paneId in !snapshot.agents.contains { $0.pane_id == paneId } }
-        agentStatuses.removeAll()
+        var reports: [String: HerdrControl.AgentStatusChangedData] = [:]
+        for pane in snapshot.panes {
+            reports[pane.pane_id] = .init(pane_id: pane.pane_id, workspace_id: pane.workspace_id,
+                agent_status: pane.agent_status, agent: pane.agent, title: pane.title,
+                display_agent: pane.display_agent, state_labels: pane.state_labels)
+        }
         for agent in snapshot.agents {
-            agentStatuses[agent.pane_id] = HerdrControl.AgentStatusChangedData(
+            reports[agent.pane_id] = HerdrControl.AgentStatusChangedData(
                 pane_id: agent.pane_id,
                 workspace_id: paneInfos[agent.pane_id]?.workspace_id ?? "",
                 agent_status: agent.agent_status,
@@ -69,6 +74,22 @@ extension HerdrController {
                 state_labels: nil
             )
         }
+        for pane in snapshot.panes {
+            if let revision, (agentStatusRevisions[pane.pane_id] ?? 0) > revision {
+                // An event received while the request awaited is newer than
+                // its snapshot, including an agent-removal event.
+                reports[pane.pane_id] = agentStatuses[pane.pane_id]
+            }
+        }
+        if mode == .legacy, let metadata = endpointMetadata {
+            for pane in snapshot.panes {
+                if let report = metadata.report(for: pane) { reports[pane.pane_id] = report }
+            }
+        }
+        agentStatusRevisions = agentStatusRevisions.filter { livePaneIds.contains($0.key) }
+        subscribedAgentPanes.formIntersection(livePaneIds)
+        let vanished = agentStatuses.keys.filter { reports[$0] == nil }
+        agentStatuses = reports
         for paneId in vanished {
             guard let info = paneInfos[paneId], let view = paneViews[info.terminal_id] else { continue }
             AgentAttentionCenter.shared.applyHerdrStatus(
@@ -76,6 +97,8 @@ extension HerdrController {
             )
         }
         publishAgentStatuses()
+        applyEndpointAgentMetadata()
+        if mode == .raw { subscribeAgentStatus() }
         reorderTabs()
         refreshWorkspaceGroups()
         focusedPaneId = snapshot.focused_pane_id
@@ -255,8 +278,11 @@ extension HerdrController {
 
     func paneDidUpdate(_ pane: HerdrControl.PaneInfo) {
         paneInfos[pane.pane_id] = pane
+        agentStatusDidChange(.init(pane_id: pane.pane_id, workspace_id: pane.workspace_id,
+            agent_status: pane.agent_status, agent: pane.agent, title: pane.title,
+            display_agent: pane.display_agent, state_labels: pane.state_labels))
         if let view = paneViews[pane.terminal_id] {
-            view.seedHerdrTitle(pane.title ?? pane.terminal_title)
+            view.seedHerdrTitle(pane.terminal_title ?? pane.title)
             publishProject(for: pane, view: view)
         } else if let tab = tabs[pane.tab_id] {
             refreshTitle(of: tab)
@@ -321,7 +347,7 @@ extension HerdrController {
             if let tab = tabs[pane.tab_id], existing.containingTabID != tab.id {
                 existing.containingTabID = tab.id
             }
-            existing.seedHerdrTitle(pane.title ?? pane.terminal_title)
+            existing.seedHerdrTitle(pane.terminal_title ?? pane.title)
             publishProject(for: pane, view: existing)
             return
         }
@@ -340,7 +366,7 @@ extension HerdrController {
             view.setOcclusion(false)
         }
         paneViews[pane.terminal_id] = view
-        view.seedHerdrTitle(pane.title ?? pane.terminal_title)
+        view.seedHerdrTitle(pane.terminal_title ?? pane.title)
         publishProject(for: pane, view: view)
         NotificationCenter.default.post(name: .herdrPaneBindingsChanged, object: nil)
     }
@@ -720,13 +746,13 @@ extension HerdrController {
     // MARK: - Agent state
 
     func agentStatusDidChange(_ change: HerdrControl.AgentStatusChangedData) {
-        // No agent left on the pane: drop it so a later snapshot does not
-        // resurrect a stale entry, and hand the pane back to detection.
-        if change.agent == nil, AgentAttentionStatus(rawValue: change.agent_status) ?? .unknown == .unknown {
-            agentStatuses.removeValue(forKey: change.pane_id)
-        } else {
-            agentStatuses[change.pane_id] = change
-        }
+        // Even a repeated event proves that this value is newer than any
+        // snapshot request already in flight.
+        agentStatusRevision &+= 1
+        agentStatusRevisions[change.pane_id] = agentStatusRevision
+        guard agentStatuses[change.pane_id] != change else { return }
+        // Retain clearing reports so a delayed snapshot cannot revive an agent.
+        agentStatuses[change.pane_id] = change
         guard let info = paneInfos[change.pane_id], let view = paneViews[info.terminal_id] else { return }
         AgentAttentionCenter.shared.applyHerdrStatus(
             terminal: view,

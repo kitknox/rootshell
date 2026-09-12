@@ -7,8 +7,21 @@ nonisolated struct HerdrPaneTitleState {
     private(set) var attachmentID: UUID?
     private var seedTitle: String?
     private var liveTitle: String?
+    private var fallbackTitle: String?
 
-    var reportedTitle: String? { liveTitle ?? seedTitle }
+    var reportedTitle: String? { fallbackTitle ?? liveTitle ?? seedTitle }
+
+    mutating func receiveFallback(_ title: String?) {
+        // An empty sample is authoritative too; attach-client window titles
+        // and delayed topology snapshots must not revive its predecessor.
+        fallbackTitle = title ?? ""
+    }
+
+    mutating func endFallback() {
+        seedTitle = reportedTitle
+        fallbackTitle = nil
+        liveTitle = nil
+    }
 
     mutating func beginAttachment() {
         endAttachment()

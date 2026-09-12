@@ -27,6 +27,8 @@ final class PanePresentationState {
     /// replacing it, so clearing progress restores the exact prior card.
     var detectedAttentionStatus: AgentAttentionStatus?
     var detectedAgentRow: AgentRowState?
+    /// Herdr owns a reported agent's status; ordinary commands retain OSC activity.
+    var usesHerdrStatus = false
 
     /// Free multiplexer metadata is useful even for an ordinary shell, or
     /// when coding-agent detection is disabled. It does not create an agent row.
@@ -44,6 +46,7 @@ final class PanePresentationState {
     /// generic OSC progress. Live OSC state is authoritative until cleared,
     /// except over a detected blocker.
     var attentionStatus: AgentAttentionStatus? {
+        if usesHerdrStatus { return detectedAgentRow?.status ?? detectedAttentionStatus }
         if isDetectedBlocked { return .blocked }
         if let oscProgressActivity {
             return oscProgressActivity.phase.status
@@ -72,6 +75,7 @@ final class PanePresentationState {
     /// Full sidebar card state. OSC progress enriches detected rows, or
     /// supplies a generic Activity row when no detector owns the pane.
     var agentRow: AgentRowState? {
+        if usesHerdrStatus { return detectedAgentRow }
         if var row = detectedAgentRow {
             if let activity = oscProgressActivity, row.status != .blocked {
                 row.status = activity.phase.status

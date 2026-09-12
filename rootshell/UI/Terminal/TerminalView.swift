@@ -440,6 +440,7 @@ extension Ghostty {
                     || herdrPaneBinding?.gatewayUUID != oldValue?.gatewayUUID {
                     endHerdrTitleAttachment()
                     herdrTitleState = HerdrPaneTitleState()
+                    herdrTitlePublicationUptime = nil
                 }
                 if (herdrPaneBinding == nil) != (oldValue == nil) {
                     invalidateWritingAssistance(resetDocument: true)
@@ -449,6 +450,7 @@ extension Ghostty {
         }
         var isHerdrPane: Bool { herdrPaneBinding != nil }
         var herdrTitleState = HerdrPaneTitleState()
+        var herdrTitlePublicationUptime: TimeInterval?
 
         /// The grid herdr laid this pane out with. The split host trims the
         /// pane's slot to it so the surface never exceeds the server PTY.

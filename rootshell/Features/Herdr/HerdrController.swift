@@ -111,6 +111,9 @@ final class HerdrController {
     var legacyGrids: [String: (rows: Int, cols: Int)] = [:]
     var legacyPollTask: Task<Void, Never>?
     var legacySnapshotFingerprint: Int?
+    var endpointMetadata: HerdrEndpointMetadata?
+    var legacyTopologyDirty = true
+    var legacyPollInFlight = false
     var legacyFallbackForced = false
     /// Degraded-mode failures already written to the gateway; each distinct
     /// message shows once so a repeating poll does not flood the shell.
@@ -186,6 +189,10 @@ final class HerdrController {
     var geometryTasks: [String: Task<Void, Never>] = [:]
     var focusedPaneId: String?
     var agentStatuses: [String: HerdrControl.AgentStatusChangedData] = [:]
+    var agentStatusRevision: UInt64 = 0
+    var agentStatusRevisions: [String: UInt64] = [:]
+    var agentSubscriptionTask: Task<Void, Never>?
+    var subscribedAgentPanes = Set<String>()
     var focusWatchdog: Task<Void, Never>?
     var gatewayTabID: UUID?
 
@@ -398,6 +405,7 @@ final class HerdrController {
                 "events.subscribe",
                 HerdrControl.SubscribeParams(subscriptions: HerdrControl.topologySubscriptions)
             )
+            let statusRevision = agentStatusRevision
             let snapshot = try await channel.request(
                 "session.snapshot",
                 HerdrControl.EmptyParams(),
@@ -410,7 +418,7 @@ final class HerdrController {
             }
             isActive = true
             connectionError = nil
-            applySnapshot(snapshot)
+            applySnapshot(snapshot, preservingAgentUpdatesAfter: statusRevision)
             subscribeAgentStatus()
             // Optional additions must not make an older control server fail
             // its otherwise compatible topology subscription handshake.
@@ -460,28 +468,40 @@ final class HerdrController {
         return true
     }
 
-    private func subscribeAgentStatus() {
-        guard let channel else { return }
-        let subscriptions = paneInfos.keys.sorted().map {
-            HerdrControl.Subscription(type: "pane.agent_status_changed", pane_id: $0)
-        }
-        guard !subscriptions.isEmpty else { return }
-        Task {
-            try? await channel.request("events.subscribe", HerdrControl.SubscribeParams(subscriptions: subscriptions))
+    /// One retrying subscription task per connection. A vanished pane may
+    /// reject a batch, so rebuild it from the live topology on every attempt.
+    func subscribeAgentStatus() {
+        guard mode == .raw, let channel, isActive, agentSubscriptionTask == nil else { return }
+        agentSubscriptionTask = Task { [weak self] in
+            guard let self else { return }
+            defer { if self.channel === channel { self.agentSubscriptionTask = nil } }
+            var retryDelay = 0.5
+            while self.channel === channel, !Task.isCancelled {
+                let pending = Set(self.paneInfos.keys).subtracting(self.subscribedAgentPanes)
+                guard !pending.isEmpty else { return }
+                do {
+                    try await channel.request("events.subscribe", HerdrControl.SubscribeParams(subscriptions:
+                        pending.sorted().map { .init(type: "pane.agent_status_changed", pane_id: $0) }))
+                    guard self.channel === channel, !Task.isCancelled else { return }
+                    self.subscribedAgentPanes.formUnion(pending)
+                    // Close the interval between the initial snapshot and the
+                    // subscription ACK without overwriting newer pushed events.
+                    self.refreshTopology()
+                    retryDelay = 0.5
+                } catch {
+                    guard self.channel === channel, !Task.isCancelled else { return }
+                    Self.logger.warning("herdr agent-status subscription failed; retrying: \(error.localizedDescription)")
+                    self.refreshTopology()
+                    do { try await Task.sleep(for: .seconds(retryDelay)) } catch { return }
+                    retryDelay = min(5, retryDelay * 2)
+                }
+            }
         }
     }
 
-    /// Adds an agent-status subscription for one newly seen pane.
     func subscribeAgentStatus(paneId: String) {
-        guard let channel else { return }
-        Task {
-            try? await channel.request(
-                "events.subscribe",
-                HerdrControl.SubscribeParams(subscriptions: [
-                    HerdrControl.Subscription(type: "pane.agent_status_changed", pane_id: paneId)
-                ])
-            )
-        }
+        subscribedAgentPanes.remove(paneId)
+        subscribeAgentStatus()
     }
 
     private func startHealthPing(on channel: HerdrControlChannel) {
@@ -750,6 +770,10 @@ final class HerdrController {
     }
 
     private func detachAllLocally() {
+        agentSubscriptionTask?.cancel()
+        agentSubscriptionTask = nil
+        subscribedAgentPanes.removeAll()
+        agentStatusRevisions.removeAll()
         streamGeneration = UUID()
         for view in paneViews.values { view.endHerdrTitleAttachment() }
         cancelNewTabRequests()
@@ -882,6 +906,7 @@ final class HerdrController {
             while self.topologyRefreshWanted, !Task.isCancelled, self.channel === channel {
                 self.topologyRefreshWanted = false
                 let managementRevision = self.managementRevision
+                let statusRevision = self.agentStatusRevision
                 do {
                     let snapshot = try await channel.request(
                         "session.snapshot", HerdrControl.EmptyParams(),
@@ -889,7 +914,7 @@ final class HerdrController {
                     ).snapshot
                     guard self.channel === channel, !Task.isCancelled else { return }
                     guard managementRevision == self.managementRevision, !self.management.isBusy else { continue }
-                    self.applySnapshot(snapshot)
+                    self.applySnapshot(snapshot, preservingAgentUpdatesAfter: statusRevision)
                 } catch {
                     guard self.channel === channel, !Task.isCancelled else { return }
                     if self.refuseUnsupportedVersion(error) { return }

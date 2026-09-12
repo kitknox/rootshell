@@ -33,13 +33,19 @@ extension HerdrController {
         publishSessionState()
         legacyPollTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.legacyPollOnce()
+                if let self, !self.isActive || self.endpoint == nil || self.legacyTopologyDirty
+                    || self.endpointMetadata?.needsShellTitleRefresh == true {
+                    await self.legacyPollOnce()
+                }
                 try? await Task.sleep(for: Self.legacyPollInterval)
             }
         }
     }
 
     func stopLegacyMode() {
+        endpointMetadata = nil
+        legacyTopologyDirty = true
+        for view in paneViews.values { view.herdrTitleState.endFallback() }
         endpointOpening?.cancel()
         endpointOpening = nil
         let previousEndpoint = endpoint
@@ -234,9 +240,14 @@ extension HerdrController {
 
     func legacyPollOnce() async {
         guard mode == .legacy, !didEnd, !legacySuspended,
+              !Ghostty.isAppBackgroundedAtomic,
               let gateway, HerdrChannelFactory.canOpen(for: gateway) else { return }
-        // Reattach dropped streams even if the topology fingerprint is unchanged.
-        defer { legacyReconcileAttaches() }
+        guard !legacyPollInFlight else { return }
+        legacyPollInFlight = true
+        legacyTopologyDirty = true
+        defer { legacyPollInFlight = false; legacyReconcileAttaches() }
+        let metadataAtStart = endpointMetadata
+        let statusRevision = agentStatusRevision
         let generation = streamGeneration
         let orderRevision = tabReorderRevision
         let capturedManagementRevision = managementRevision
@@ -262,12 +273,15 @@ extension HerdrController {
             ).result.snapshot
             isActive = true
             connectionError = nil
+            legacyTopologyDirty = endpointMetadata.map { latest in
+                metadataAtStart.map { !latest.hasSameTopology(as: $0) } ?? true
+            } ?? false
             guard fingerprint != legacySnapshotFingerprint else {
                 publishSessionState()
                 return
             }
             legacySnapshotFingerprint = fingerprint
-            applySnapshot(snapshot)
+            applySnapshot(snapshot, preservingAgentUpdatesAfter: statusRevision)
         } catch {
             guard !didEnd, !Task.isCancelled, streamGeneration == generation,
                   tabReorderRevision == orderRevision,

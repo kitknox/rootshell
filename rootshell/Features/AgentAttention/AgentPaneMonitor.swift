@@ -48,6 +48,7 @@ final class AgentPaneMonitor {
     /// title identity, and settle-based completion stand down while set.
     /// (id=herdr-agent-authority)
     private(set) var externalAuthority = false
+    private var externalStatus: AgentAttentionStatus?
 
     /// This pane is showing a multiplexer the app does not drive, so its
     /// screen is ONE window of several and the visible window can change
@@ -319,6 +320,13 @@ final class AgentPaneMonitor {
     /// transition happened in one step.
     func reconcileAfterRebuild(previousStatus: AgentAttentionStatus?, now: Date) {
         guard agent != nil else { return }
+        // Server reports describe the live agent, not the replayed surface.
+        guard !externalAuthority else {
+            pendingDoneSince = nil
+            preRebuildStateChangeSeq = nil
+            refreshScreenEvent(now: now)
+            return
+        }
 
         switch stableState {
         case .working, .blocked:
@@ -507,6 +515,7 @@ final class AgentPaneMonitor {
     private func isLiveWorking(now: Date) -> Bool {
         if stableState == .blocked { return false }
         if stableState == .working { return true }
+        if externalAuthority { return false }
         // A background agent's own timer advancing on screen is screen
         // evidence, the same class as a spinner — not the byte activity
         // ROUND 9 removed. A replayed or restored frame holds a frozen
@@ -516,6 +525,12 @@ final class AgentPaneMonitor {
     }
 
     private func screenDisplayStatus(now: Date) -> AgentAttentionStatus {
+        if externalAuthority, let externalStatus {
+            switch externalStatus {
+            case .done, .failed: return .idle // Unread completion is tracked separately.
+            default: return externalStatus
+            }
+        }
         if stableState == .blocked { return .blocked }
         if isLiveWorking(now: now) { return .working }
         return .idle
@@ -737,8 +752,8 @@ final class AgentPaneMonitor {
         return true
     }
 
-    /// Applies a herdr agent report. A report with no agent hands the pane
-    /// back to the screen detector. Returns true when display state changed.
+    /// Applies a herdr agent report. An empty report is authoritative too;
+    /// stale screen content must not recreate an agent herdr removed.
     /// (id=herdr-agent-authority)
     @discardableResult
     func applyExternalReport(
@@ -750,15 +765,24 @@ final class AgentPaneMonitor {
     ) -> Bool {
         guard let agentID, status != .unknown else {
             let had = externalAuthority
-            externalAuthority = false
-            if had, agent != nil {
+            externalAuthority = true
+            externalStatus = status
+            pendingDoneSince = nil
+            if agent != nil {
+                doneUnseen = false
+                failedUnseen = false
+                eventState.clearCompletion()
                 clearAgent()
                 return true
             }
-            return had
+            return !had
         }
+        let previousEvent = displayEvent(now: now)
+        let newReport = !externalAuthority || externalStatus != status || agent?.id != agentID
         var changed = !externalAuthority
+        if !externalAuthority { resetFleet() }
         externalAuthority = true
+        externalStatus = status
         if agent?.id != agentID {
             let known = AgentDetectionManifest.bundled.agent(withID: agentID)
                 ?? AgentDetectionManifest.Agent(
@@ -784,26 +808,27 @@ final class AgentPaneMonitor {
         }
         // herdr's word is final: no settle window promotes idle to done.
         pendingDoneSince = nil
+        if newState == .idle { workingSince = nil }
         switch status {
         case .done, .failed:
             if finishedAt == nil { finishedAt = now }
             workingSince = nil
-            if !isViewedNow() {
-                if status == .done, !doneUnseen {
-                    doneUnseen = true
-                    eventState.recordCompletion(.done)
-                    changed = true
-                } else if status == .failed, !failedUnseen {
-                    failedUnseen = true
-                    eventState.recordCompletion(.failed)
-                    changed = true
-                }
+            if newReport {
+                doneUnseen = status == .done && !isViewedNow()
+                failedUnseen = status == .failed && !isViewedNow()
+                eventState.clearCompletion()
+                if doneUnseen || failedUnseen { eventState.recordCompletion(status) }
+                changed = true
             }
-            refreshScreenEvent(now: now)
         default:
-            break
+            doneUnseen = false
+            failedUnseen = false
+            eventState.clearCompletion()
         }
-        return changed
+        // commit() may have cached Working before completion bookkeeping
+        // finished. Refresh even for repeated Idle reports so it cannot stick.
+        refreshScreenEvent(now: now)
+        return changed || previousEvent != displayEvent(now: now)
     }
 
     func clearAgent() {
@@ -1060,7 +1085,7 @@ final class AgentPaneMonitor {
             // window; updateLivenessEdges promotes it to Done only if no
             // work resumes (claude's spinner line vanishes transiently
             // between tool steps).
-            if oldState == .working || oldState == .blocked, !isInsideRawMultiplexer {
+            if oldState == .working || oldState == .blocked, !isInsideRawMultiplexer, !externalAuthority {
                 if pendingDoneSince == nil { pendingDoneSince = now }
             }
         case .unknown:

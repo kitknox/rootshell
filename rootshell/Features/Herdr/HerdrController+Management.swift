@@ -128,10 +128,11 @@ extension HerdrController {
     func refreshManagementSnapshot() async throws {
         let orderRevision = tabReorderRevision
         let revision = managementRevision
+        let statusRevision = agentStatusRevision
         let snapshot = try await managementRequest("session.snapshot", HerdrControl.EmptyParams(),
             as: HerdrControl.SessionSnapshotResult.self, legacyArgs: "api snapshot").snapshot
         guard orderRevision == tabReorderRevision, revision == managementRevision else { refreshTopology(); return }
-        applySnapshot(snapshot)
+        applySnapshot(snapshot, preservingAgentUpdatesAfter: statusRevision)
     }
 
     /// Once the mutation is acknowledged, a failed readback must not leave its

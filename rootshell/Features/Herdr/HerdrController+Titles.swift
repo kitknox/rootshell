@@ -24,7 +24,7 @@ extension HerdrController {
             title = view.herdrTitleState.resolvedTitle(override: pane.label ?? view.userOverrideTitle, fallback: info.label)
         } else {
             var seed = HerdrPaneTitleState()
-            seed.seed(pane?.title ?? pane?.terminal_title)
+            seed.seed(pane?.terminal_title ?? pane?.title)
             title = seed.resolvedTitle(override: pane?.label, fallback: info.label)
         }
         // Always pass through the coalescer: even an unchanged current title
@@ -32,7 +32,23 @@ extension HerdrController {
         tab.applyResolvedTitle(title)
     }
 
-    func applyEndpointNames(_ value: [String: Any]) {
+    func applyEndpointSnapshot(_ value: [String: Any]) {
+        do {
+            let data = try JSONSerialization.data(withJSONObject: value)
+            let metadata = try HerdrControl.decoder.decode(HerdrEndpointMetadata.self, from: data)
+            if let previous = endpointMetadata, previous.boot_id == metadata.boot_id,
+               metadata.revision <= previous.revision { return }
+            let topologyChanged = endpointMetadata.map { !metadata.hasSameTopology(as: $0) } ?? true
+            endpointMetadata = metadata
+            applyEndpointAgentMetadata()
+            if topologyChanged {
+                legacyTopologyDirty = true
+                refreshTopology()
+            }
+        } catch {
+            legacyTopologyDirty = true
+            legacyNotice("endpoint metadata: \(error.localizedDescription)")
+        }
         guard let boot = value["boot_id"] as? String,
               let records = value["tabs"] as? [[String: Any]] else { return }
         if let previous = nameMetadataBoot, previous != boot { tabNames = HerdrTabNames() }
@@ -58,5 +74,30 @@ extension HerdrController {
         }
         for tab in tabs.values { refreshTitle(of: tab) }
         publishManagementState()
+    }
+
+    func applyEndpointAgentMetadata() {
+        guard mode == .legacy, let metadata = endpointMetadata else { return }
+        var agents: [String: HerdrEndpointMetadata.Agent] = [:]
+        for agent in metadata.agents { agents[agent.pane_id] = agent }
+        for pane in metadata.panes {
+            guard let previous = paneInfos[pane.pane_id], pane.matches(previous) else { continue }
+            let info = pane.updatingDirectories(in: previous)
+            paneInfos[pane.pane_id] = info
+            if let view = paneViews[info.terminal_id] { publishProject(for: info, view: view) }
+            if let agent = agents[pane.pane_id], agent.workspace_id == pane.workspace_id,
+               agent.tab_id == pane.tab_id {
+                if let view = paneViews[info.terminal_id] {
+                    view.herdrTitleState.receiveFallback(agent.reportedTitle)
+                    view.publishHerdrTitle()
+                }
+                agentStatusDidChange(agent.report)
+            } else {
+                paneViews[info.terminal_id]?.herdrTitleState.endFallback()
+                paneViews[info.terminal_id]?.seedHerdrTitle(info.terminal_title ?? info.title)
+                agentStatusDidChange(.init(pane_id: pane.pane_id, workspace_id: pane.workspace_id,
+                    agent_status: "unknown", agent: nil, title: nil, display_agent: nil, state_labels: nil))
+            }
+        }
     }
 }

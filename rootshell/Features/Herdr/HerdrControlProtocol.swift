@@ -239,8 +239,8 @@ nonisolated enum HerdrControl {
         let display_agent: String?
         let title: String?
         let terminal_title: String?
-        let cwd: String?
-        let foreground_cwd: String?
+        var cwd: String?
+        var foreground_cwd: String?
         let state_labels: [String: String]?
         var label: String?
 
@@ -453,7 +453,7 @@ nonisolated enum HerdrControl {
         let layout: LayoutSnapshot
     }
 
-    struct AgentStatusChangedData: Decodable, Sendable {
+    struct AgentStatusChangedData: Decodable, Sendable, Equatable {
         let pane_id: String
         let workspace_id: String
         let agent_status: String

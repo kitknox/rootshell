@@ -50,13 +50,14 @@ extension HerdrController {
                     ), on: gateway)
                     if Task.isCancelled || self.didEnd { await pipe.close(); return }
                     let candidate = HerdrEndpointChannel(pipe: pipe)
+                    self.endpointMetadata = nil
                     self.endpoint = candidate
                     self.endpointTabID = nil
                     self.endpointSize = nil
                     self.endpointActive = true
                     candidate.onSnapshot = { [weak self, weak candidate] value in
                         guard let self, self.endpoint === candidate else { return }
-                        self.applyEndpointNames(value)
+                        self.applyEndpointSnapshot(value)
                     }
                     candidate.onFrame = { [weak self, weak candidate] frame in
                         guard let self, self.endpoint === candidate else { return }
@@ -71,6 +72,9 @@ extension HerdrController {
                     }
                     candidate.onClosed = { [weak self, weak candidate] error in
                         guard let self, self.endpoint === candidate else { return }
+                        self.endpointMetadata = nil
+                        self.legacyTopologyDirty = true
+                        for view in self.paneViews.values { view.herdrTitleState.endFallback() }
                         self.endpoint = nil
                         self.endpointTabID = nil
                         self.endpointSize = nil
