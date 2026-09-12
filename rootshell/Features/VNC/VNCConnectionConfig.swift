@@ -412,7 +412,22 @@ extension VNCConnectionConfig {
         configuration.enableRemoteAudio = enableRemoteAudio
         configuration.promptForLoginPasswordAtLoginWindow =
             promptForLoginPasswordAtLoginWindow
+        configuration.cursorRendering = Self.resolvedCursorRendering()
         return configuration
+    }
+
+    /// A device preference rather than a per-connection one, resolved here
+    /// because this is the single place every package configuration is built.
+    /// The session launcher rebuilds one from scratch at connect time and
+    /// assigns it over the session's, so anything applied only at pane
+    /// construction is silently discarded before the handshake.
+    private static func resolvedCursorRendering() -> VNCCursorRendering {
+        switch ScreenSharingCursorRenderingDefault.current {
+        case .local:
+            return .client
+        case .remote:
+            return .server
+        }
     }
 
     private var packageSecurityPolicy: VNCConfiguration.SecurityPolicy {

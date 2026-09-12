@@ -17,6 +17,9 @@ extension MoshConfig.PredictionMode: SettingValue {}
 extension TrzszConfig.TransportMode: SettingValue {}
 extension ScreenSharingClipboardSyncDefault: SettingValue {}
 extension ScreenSharingPanningDefault: SettingValue {}
+extension ScreenSharingPointerModeDefault: SettingValue {}
+extension ScreenSharingCursorRenderingDefault: SettingValue {}
+extension ScreenSharingCursorSizeDefault: SettingValue {}
 
 nonisolated extension Settings {
     enum Connections {
@@ -268,9 +271,27 @@ nonisolated extension Settings {
             "screenSharingPanningDefault", default: ScreenSharingPanningDefault.edge, group: .screenSharing,
             configKey: "screen-sharing-panning-default",
             title: String(localized: "Default Panning Mode", comment: "Setting title"))
+        static let pointerModeDefault = SettingKey(
+            "screenSharingPointerModeDefault", default: ScreenSharingPointerModeDefault.direct, group: .screenSharing,
+            configKey: "screen-sharing-pointer-mode-default",
+            title: String(localized: "Default Pointer Mode", comment: "Setting title"))
+        static let pointerSpeed = SettingKey(
+            "screenSharingPointerSpeed", default: 1.0, group: .screenSharing,
+            configKey: "screen-sharing-pointer-speed",
+            title: String(localized: "Pointer Speed", comment: "Setting title"))
+        static let cursorRenderingDefault = SettingKey(
+            "screenSharingCursorRenderingDefault", default: ScreenSharingCursorRenderingDefault.local, group: .screenSharing,
+            configKey: "screen-sharing-cursor-rendering-default",
+            title: String(localized: "Cursor Rendering", comment: "Setting title"))
+        static let cursorSizeDefault = SettingKey(
+            "screenSharingCursorSizeDefault", default: ScreenSharingCursorSizeDefault.medium, group: .screenSharing,
+            configKey: "screen-sharing-cursor-size-default",
+            title: String(localized: "Cursor Size", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
             clipboardSyncDefault.erased, panningDefault.erased,
+            pointerModeDefault.erased, pointerSpeed.erased,
+            cursorRenderingDefault.erased, cursorSizeDefault.erased,
             controlOptionAsCommandDefault.erased, routeReservedShortcutsToVNCDefault.erased,
         ]
     }

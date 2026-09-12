@@ -868,6 +868,17 @@ struct SettingsSearchEntry: Identifiable, Hashable {
             row("screen-sharing-panning", String(localized: "Screen Panning"), in: .screenSharing, icon: "cursorarrow.motionlines",
                 keywords: ["pointer", "edge", "continuous", "pan", "viewport",
                            "default mode", "when pointer reaches edge", "continuously with pointer"]),
+            row("screen-sharing-pointer-mode", String(localized: "Default Pointer Mode"), in: .screenSharing, icon: "cursorarrow.rays",
+                keywords: ["pointer", "trackpad", "touch", "cursor", "relative", "absolute",
+                           "default mode", "mouse"]),
+            row("screen-sharing-pointer-speed", String(localized: "Pointer Speed"), in: .screenSharing, icon: "speedometer",
+                keywords: ["pointer", "trackpad", "speed", "sensitivity", "acceleration", "cursor"]),
+            row("screen-sharing-cursor-rendering", String(localized: "Cursor Rendering"), in: .screenSharing, icon: "cursorarrow",
+                keywords: ["cursor", "pointer", "remote", "local",
+                           "server rendered", "draw", "mouse"]),
+            row("screen-sharing-cursor-size", String(localized: "Cursor Size"), in: .screenSharing, icon: "arrow.up.left.and.arrow.down.right",
+                keywords: ["cursor", "pointer", "size", "small", "medium", "large",
+                           "bigger", "trackpad"]),
 
             // MARK: Connections (inline)
             row("clear-connection-history", String(localized: "Clear Connection History"), in: .connections, icon: "trash",

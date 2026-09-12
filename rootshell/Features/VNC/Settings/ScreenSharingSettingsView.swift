@@ -10,6 +10,10 @@ import SwiftUI
 struct ScreenSharingSettingsView: View {
     @Setting(Settings.ScreenSharing.clipboardSyncDefault) private var clipboardSyncDefault
     @Setting(Settings.ScreenSharing.panningDefault) private var panningDefault
+    @Setting(Settings.ScreenSharing.pointerModeDefault) private var pointerModeDefault
+    @Setting(Settings.ScreenSharing.pointerSpeed) private var pointerSpeed
+    @Setting(Settings.ScreenSharing.cursorRenderingDefault) private var cursorRenderingDefault
+    @Setting(Settings.ScreenSharing.cursorSizeDefault) private var cursorSizeDefault
     @Setting(Settings.ScreenSharing.controlOptionAsCommandDefault) private var controlOptionAsCommandDefault
     @Setting(Settings.ScreenSharing.routeReservedShortcutsToVNCDefault) private var routeReservedShortcutsToVNCDefault
 
@@ -86,10 +90,91 @@ struct ScreenSharingSettingsView: View {
             } footer: {
                 Text("Sets the initial panning mode for new Screen Sharing sessions. You can change it for the current session from the Screen Sharing menu.")
             }
+
+            Section {
+                Picker(selection: $pointerModeDefault) {
+                    ForEach(ScreenSharingPointerModeDefault.allCases, id: \.rawValue) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "cursorarrow.rays")
+                        Text("Default Mode")
+                    }
+                    .settingRow(Settings.ScreenSharing.pointerModeDefault)
+                }
+                .themedRow()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        HStack(spacing: 12) {
+                            SettingsIcon(systemName: "speedometer")
+                            Text("Speed")
+                        }
+                        .settingRow(Settings.ScreenSharing.pointerSpeed)
+                        Spacer()
+                        Text(pointerSpeedLabel)
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
+                            .frame(width: 56, alignment: .trailing)
+                    }
+                    Slider(value: $pointerSpeed, in: 0.5...3.0, step: 0.25)
+                }
+                .padding(.vertical, 4)
+                .themedRow()
+            } header: {
+                SettingGroupHeader("Pointer", group: .screenSharing)
+            } footer: {
+                Text("Touch: tap to click, double-tap to double-click, two-finger tap to right-click. Drag to scroll, hold then drag to move things. Two fingers pan the screen, pinch zooms.\nTrackpad: one finger moves the pointer, tap to click, two-finger tap to right-click. Hold then drag to move things, two-finger swipe to scroll, pinch zooms. Speed applies to Trackpad only.\nThe default for new sessions. The Screen Sharing menu switches the current one.")
+            }
+
+            Section {
+                Picker(selection: $cursorRenderingDefault) {
+                    ForEach(ScreenSharingCursorRenderingDefault.allCases, id: \.rawValue) { rendering in
+                        Text(rendering.displayName).tag(rendering)
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "cursorarrow")
+                        Text("Rendering")
+                    }
+                    .settingRow(Settings.ScreenSharing.cursorRenderingDefault)
+                }
+                .themedRow()
+
+                if cursorRenderingDefault == .local {
+                    Picker(selection: $cursorSizeDefault) {
+                        ForEach(ScreenSharingCursorSizeDefault.allCases, id: \.rawValue) { size in
+                            Text(size.displayName).tag(size)
+                        }
+                    } label: {
+                        HStack(spacing: 12) {
+                            SettingsIcon(systemName: "arrow.up.left.and.arrow.down.right")
+                            Text("Size")
+                        }
+                        .settingRow(Settings.ScreenSharing.cursorSizeDefault)
+                    }
+                    .themedRow()
+                }
+            } header: {
+                SettingGroupHeader("Cursor", group: .screenSharing)
+            } footer: {
+                Text(cursorRenderingDefault == .local
+                    ? "Local draws the Trackpad pointer on this device, sharp at any zoom. Size applies to that pointer; Medium is the Mac's own. Rendering applies to new connections."
+                    : "Remote lets the Mac draw the pointer into the picture: every shape, moving with the picture rather than your finger. Rendering applies to new connections.")
+            }
         }
         .themedList()
         .navigationTitle("Screen Sharing")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// The slider steps by 0.25, so half steps need only one decimal. Printing
+    /// both would render the common values as "1.50×" beside a coarse control.
+    private var pointerSpeedLabel: String {
+        let halfSteps = pointerSpeed * 2
+        let isHalfStep = halfSteps.rounded() == halfSteps
+        return String(format: isHalfStep ? "%.1f×" : "%.2f×", pointerSpeed)
     }
 
     private var clipboardFooterText: String {
