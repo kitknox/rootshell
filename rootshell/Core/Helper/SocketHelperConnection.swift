@@ -56,8 +56,9 @@ class SocketHelperConnection {
         return createResponse
     }
 
-    func inspectLocalMultiplexers() async throws -> [String: LocalMultiplexerAttachment?] {
-        let response = try await sendCommand(.inspectLocalMultiplexers)
+    func inspectLocalMultiplexers(herdrTargets: [String: LocalHerdrControlTarget] = [:]) async throws -> [String: LocalMultiplexerAttachment?] {
+        let payload = herdrTargets.isEmpty ? nil : try JSONEncoder().encode(herdrTargets)
+        let response = try await sendCommand(.inspectLocalMultiplexers, payload: payload)
         guard let payload = response.payload else { throw SocketHelperError.missingResponseData }
         return try JSONDecoder().decode([String: LocalMultiplexerAttachment?].self, from: payload)
     }

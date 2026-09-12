@@ -152,8 +152,8 @@ public class HelperConnection {
         }
     }
 
-    func inspectLocalMultiplexers() async throws -> [String: LocalMultiplexerAttachment?] {
-        try await socketConnection.inspectLocalMultiplexers()
+    func inspectLocalMultiplexers(herdrTargets: [String: LocalHerdrControlTarget] = [:]) async throws -> [String: LocalMultiplexerAttachment?] {
+        try await socketConnection.inspectLocalMultiplexers(herdrTargets: herdrTargets)
     }
 
     /// Spawns a long-lived non-PTY command and returns its pid plus the

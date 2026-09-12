@@ -65,6 +65,9 @@ final class HerdrController {
     private(set) weak var ghosttyApp: Ghostty.App?
     /// herdr session name; nil attaches to herdr's default session.
     let sessionName: String?
+    /// Verified local namespace shared by every auxiliary herdr connection.
+    /// Remote gateways continue to resolve their configured session normally.
+    var localControlAttachment: LocalMultiplexerAttachment?
     private(set) var hostWindowId: String
 
     // MARK: - Channel state
@@ -199,7 +202,11 @@ final class HerdrController {
         self.app = app
         self.ghosttyApp = gateway.ghosttyApp
         self.sessionName = sessionName
+        self.localControlAttachment = gateway.restoredLocalMultiplexerAttachment.flatMap { $0.isHerdrControl ? $0 : nil }
         self.hostWindowId = gateway.windowId
+        // A restored visible gateway reflects a saved user choice. A saved
+        // hidden gateway is handled once projected tabs exist below.
+        if localControlAttachment != nil { didAutoHideGateway = true }
     }
 
     /// Creates the controller for a gateway and opens its control stream.
@@ -218,6 +225,11 @@ final class HerdrController {
         }
         controllers[gateway.uuid] = controller
         gateway.herdrController = controller
+        #if targetEnvironment(macCatalyst)
+        gateway.localMultiplexerTrackingRevision &+= 1
+        gateway.localMultiplexerAttachment = nil
+        LocalMultiplexerTracker.shared.watch(gateway)
+        #endif
         installForegroundObserver()
         controller.markGatewayTab()
         controller.publishSessionState()
@@ -284,7 +296,7 @@ final class HerdrController {
 
     /// Command the exec channel runs on the host.
     private var controlCommand: String {
-        SSHConfig.herdrControlCommandLine(sessionName: sessionName)
+        SSHConfig.herdrControlCommandLine(sessionName: sessionName, localAttachment: localControlAttachment)
     }
 
     func connect() {
@@ -302,11 +314,16 @@ final class HerdrController {
             scheduleReconnect()
             return
         }
-        if SettingsStore.shared.value(Settings.System.herdrForceFallback) {
-            startLegacyMode(reason: "fallback forced in Debug settings", forced: true)
-            return
-        }
+        var openingChannel: HerdrControlChannel?
         do {
+            #if targetEnvironment(macCatalyst)
+            guard try await prepareLocalControlAttachment() else { return }
+            #endif
+            guard !didEnd, !Task.isCancelled else { return }
+            if SettingsStore.shared.value(Settings.System.herdrForceFallback) {
+                startLegacyMode(reason: "fallback forced in Debug settings", forced: true)
+                return
+            }
             let pipe = try await HerdrChannelFactory.open(command: controlCommand, on: gateway)
             // A late callback from an old stream must never reach a newly
             // attached pane, even if the server reuses an attach id.
@@ -361,12 +378,18 @@ final class HerdrController {
                     }
                 }
             )
-            let opened = try await channel.open()
-            guard !didEnd else {
+            openingChannel = channel
+            let opened = try await withTaskCancellationHandler {
+                try await channel.open()
+            } onCancel: {
+                Task { await channel.abort() }
+            }
+            guard !didEnd, !Task.isCancelled else {
                 await channel.close()
                 return
             }
             self.channel = channel
+            openingChannel = nil
             let previousBoot = bootId
             bootId = opened.boot_id
             serverVersion = opened.version
@@ -403,6 +426,7 @@ final class HerdrController {
             startHealthPing(on: channel)
             NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gatewayUUID)
         } catch {
+            await openingChannel?.abort()
             guard !didEnd else { return }
             Self.logger.error("herdr control connect failed: \(error.localizedDescription)")
             connectionError = error.localizedDescription
@@ -644,6 +668,12 @@ final class HerdrController {
     /// on the first projected tab. One-shot so a later "Show Gateway Tab"
     /// sticks.
     func autoHideGatewayIfWanted() {
+        if let gatewayTabID, let tab = tabsModel.tab(withID: gatewayTabID),
+           tab.pendingHiddenTmuxGatewayRestore, !tabs.isEmpty {
+            tab.pendingHiddenTmuxGatewayRestore = false
+            hideGatewayTab()
+            return
+        }
         guard !didAutoHideGateway || rehideGatewayAfterEmpty,
               SettingsStore.shared.value(Settings.Multiplexer.herdrAutoHideGatewayOnAttach) else { return }
         hideGatewayTab()
@@ -671,6 +701,10 @@ final class HerdrController {
         if let gateway {
             gateway.herdrController = nil
             gateway.updateHerdrGatewayOverlay()
+            #if targetEnvironment(macCatalyst)
+            gateway.localMultiplexerTrackingRevision &+= 1
+            gateway.localMultiplexerAttachment = nil
+            #endif
         }
         if let gatewayTabID, let tab = tabsModel.tab(withID: gatewayTabID) {
             tab.isHerdrGateway = false

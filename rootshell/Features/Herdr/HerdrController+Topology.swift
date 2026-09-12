@@ -21,6 +21,7 @@ extension HerdrController {
     func applySnapshot(_ snapshot: HerdrControl.SessionSnapshot) {
         guard !didEnd else { return }
         let isInitialSnapshot = !hasProcessedInitialSnapshot
+        let isLocalRecovery = gateway?.restoredLocalMultiplexerAttachment?.isHerdrControl == true
         let maySelectInitialTab = tabsModel.maySelectInitialMultiplexerTab(gatewayTabID: gatewayTabID)
         hasProcessedInitialSnapshot = true
         if !snapshot.tabs.isEmpty { newTabError = nil }
@@ -85,7 +86,10 @@ extension HerdrController {
         pushGeometryForHostedTabs()
         autoHideGatewayIfWanted()
         publishSessionState()
-        if isInitialSnapshot, snapshot.tabs.isEmpty {
+        #if targetEnvironment(macCatalyst)
+        if let attachment = localControlAttachment { recordLocalControlAttachment(attachment) }
+        #endif
+        if isInitialSnapshot, snapshot.tabs.isEmpty, !isLocalRecovery {
             requestNewTab(workspaceID: nil, isAutomatic: true)
         }
     }

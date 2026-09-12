@@ -109,6 +109,8 @@
 		47AEC0010000000000000003 /* rootshell-helper/Sources/LocalMultiplexerRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AEC0010000000000000011 /* rootshell-helper/Sources/LocalMultiplexerRecovery.swift */; };
 		47AEC0010000000000000004 /* rootshell-helper/Sources/EnvironmentBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AEC0010000000000000014 /* rootshell-helper/Sources/EnvironmentBuilder.swift */; };
 		47AEC0010000000000000005 /* rootshell-helper/Sources/LocaleHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AEC0010000000000000015 /* rootshell-helper/Sources/LocaleHelper.swift */; };
+		47AEC0020000000000000001 /* rootshell/Core/Shell/LoginShellCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AEC0020000000000000010 /* rootshell/Core/Shell/LoginShellCommand.swift */; };
+		47AEC0020000000000000002 /* rootshell/Core/Shell/LoginShellCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AEC0020000000000000010 /* rootshell/Core/Shell/LoginShellCommand.swift */; };
 		47B9B9322F996A6D003FFF58 /* AppIconUnderscore.icon in Resources */ = {isa = PBXBuildFile; fileRef = 47B9B9312F996A6D003FFF58 /* AppIconUnderscore.icon */; };
 		47CD00000E00000000000000 /* SwiftkubeClient in Frameworks */ = {isa = PBXBuildFile; productRef = 477408A42ED5F6B60035CE92 /* SwiftkubeClient */; };
 		47CD00000F00000000000000 /* jq_ios in Frameworks */ = {isa = PBXBuildFile; platformFilters = (ios, xros, ); productRef = 47JQPKG12FB00000AABB0001 /* jq_ios */; };
@@ -537,6 +539,7 @@
 		47AEC0010000000000000011 /* rootshell-helper/Sources/LocalMultiplexerRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "rootshell-helper/Sources/LocalMultiplexerRecovery.swift"; sourceTree = SOURCE_ROOT; };
 		47AEC0010000000000000014 /* rootshell-helper/Sources/EnvironmentBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "rootshell-helper/Sources/EnvironmentBuilder.swift"; sourceTree = SOURCE_ROOT; };
 		47AEC0010000000000000015 /* rootshell-helper/Sources/LocaleHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "rootshell-helper/Sources/LocaleHelper.swift"; sourceTree = SOURCE_ROOT; };
+		47AEC0020000000000000010 /* rootshell/Core/Shell/LoginShellCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Shell/LoginShellCommand.swift; sourceTree = SOURCE_ROOT; };
 		47B9B9312F996A6D003FFF58 /* AppIconUnderscore.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIconUnderscore.icon; sourceTree = "<group>"; };
 		47C100012F990000BBCC0001 /* Debug-China.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Debug-China.xcconfig"; sourceTree = "<group>"; };
 		47C100022F990000BBCC0002 /* Release-China.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Release-China.xcconfig"; sourceTree = "<group>"; };
@@ -1110,6 +1113,7 @@
 			children = (
 				47ABC10D2FF50000AABB000D /* rootshell-helper/Sources/PTYManagerImpl.m */,
 				47ABC10E2FF50000AABB000E /* rootshell-helper/Sources/ProcessSpawner.m */,
+				47AEC0020000000000000010 /* rootshell/Core/Shell/LoginShellCommand.swift */,
 				47AEC0010000000000000010 /* rootshell/Core/Persistence/LocalMultiplexerAttachment.swift */,
 				47AEC0010000000000000011 /* rootshell-helper/Sources/LocalMultiplexerRecovery.swift */,
 				47AEC0010000000000000015 /* rootshell-helper/Sources/LocaleHelper.swift */,
@@ -2009,6 +2013,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				47AEC0010000000000000001 /* rootshell/Core/Persistence/LocalMultiplexerAttachment.swift in Sources */,
+				47AEC0020000000000000001 /* rootshell/Core/Shell/LoginShellCommand.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2019,6 +2024,7 @@
 				47AEC0010000000000000005 /* rootshell-helper/Sources/LocaleHelper.swift in Sources */,
 				47AEC0010000000000000004 /* rootshell-helper/Sources/EnvironmentBuilder.swift in Sources */,
 				47AEC0010000000000000002 /* rootshell/Core/Persistence/LocalMultiplexerAttachment.swift in Sources */,
+				47AEC0020000000000000002 /* rootshell/Core/Shell/LoginShellCommand.swift in Sources */,
 				47AEC0010000000000000003 /* rootshell-helper/Sources/LocalMultiplexerRecovery.swift in Sources */,
 				47ABC10F2FF50000AABB000F /* rootshell-helper/Sources/PTYManagerImpl.m in Sources */,
 				47ABC1102FF50000AABB0010 /* rootshell-helper/Sources/ProcessSpawner.m in Sources */,

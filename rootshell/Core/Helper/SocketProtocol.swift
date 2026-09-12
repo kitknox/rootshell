@@ -13,6 +13,8 @@ enum SocketCommand: String, Codable, Sendable {
     case killShell
     case ping
     case executeCommand
+    /// Optional payload: [gateway shell UUID: LocalHerdrControlTarget].
+    /// Omitted targets retain foreground-PTY discovery for older callers.
     case inspectLocalMultiplexers
     case spawnPipedProcess
     case killPipedProcess

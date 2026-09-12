@@ -781,20 +781,22 @@ struct SSHConfig: Codable, Hashable {
     /// `herdr control` stdio bridge for a session. A missing herdr answers
     /// with a control error line instead of a bare non-zero exit so the
     /// client can tell "not installed" from "connection dropped".
-    static func herdrControlCommandLine(sessionName: String?) -> String {
-        let arg = herdrSessionArgument(sessionName)
-        let notFound = "echo \"{\\\"type\\\":\\\"control.error\\\",\\\"code\\\":\\\"not_found\\\",\\\"message\\\":\\\"herdr not found on host\\\"}\"; exit 127"
+    static func herdrControlCommandLine(sessionName: String?, localAttachment: LocalMultiplexerAttachment? = nil) -> String {
+        let executable = localAttachment.map { LoginShellCommand.singleQuoted($0.executable) } ?? "herdr"
+        let command = localAttachment?.command(arguments: ["control"]) ?? "herdr\(herdrSessionArgument(sessionName)) control"
+        let notFound = "printf '%s\\n' '{\"type\":\"control.error\",\"code\":\"not_found\",\"message\":\"herdr not found on host\"}'; exit 127"
         // A herdr without the subcommand exits 2 ("unknown command"); say
         // so on stdout so the client falls back instead of retrying.
-        let unsupported = "echo \"{\\\"type\\\":\\\"control.error\\\",\\\"code\\\":\\\"unsupported\\\",\\\"message\\\":\\\"herdr on the host has no control stream\\\"}\""
-        return "sh -c '\(remoteExecPathPrefix)command -v herdr >/dev/null || { \(notFound); }; herdr\(arg) control; _rc=$?; [ \"$_rc\" = 2 ] && { \(unsupported); }; exit $_rc'"
+        let unsupported = "printf '%s\\n' '{\"type\":\"control.error\",\"code\":\"unsupported\",\"message\":\"herdr on the host has no control stream\"}'"
+        return LoginShellCommand.runInPOSIXShell("\(remoteExecPathPrefix)command -v \(executable) >/dev/null || { \(notFound); }; \(command); _rc=$?; [ \"$_rc\" = 2 ] && { \(unsupported); }; exit $_rc")
     }
 
     /// One-shot herdr CLI invocation for the degraded control mode
     /// (`api snapshot`, `pane split`, ...). `args` are shell words.
-    static func herdrCommandLine(sessionName: String?, args: String) -> String {
-        LoginShellCommand.runInPOSIXShell(
-            "\(remoteExecPathPrefix)exec herdr\(herdrSessionArgument(sessionName)) \(args)"
+    static func herdrCommandLine(sessionName: String?, args: String, localAttachment: LocalMultiplexerAttachment? = nil) -> String {
+        let command = localAttachment?.command(arguments: []) ?? "herdr\(herdrSessionArgument(sessionName))"
+        return LoginShellCommand.runInPOSIXShell(
+            "\(remoteExecPathPrefix)exec \(command) \(args)"
         )
     }
 

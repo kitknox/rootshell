@@ -17,6 +17,17 @@ public nonisolated struct LocalMultiplexerAttachment: Codable, Equatable, Sendab
     public var sessionCreatedAt: UInt64?
     public var environment: [String: String]
 
+    public var isTmuxControl: Bool { kind == "tmux" && controlMode }
+    public var isHerdrControl: Bool { kind == "herdr" && controlMode }
+
+    public func matchesIdentity(of other: Self) -> Bool {
+        kind == other.kind && controlMode == other.controlMode
+            && socketPath == other.socketPath && socketDevice == other.socketDevice && socketInode == other.socketInode
+            && serverPID == other.serverPID && serverStartedAt == other.serverStartedAt
+            && sessionID == other.sessionID && sessionCreatedAt == other.sessionCreatedAt
+            && (kind == "tmux" || sessionName == other.sessionName)
+    }
+
     public static let environmentKeys: Set<String> = [
         "ZELLIJ_SOCKET_DIR", "ZELLIJ_CONFIG_DIR", "ZELLIJ_CONFIG_FILE",
         "HERDR_CONFIG_PATH", "HERDR_SOCKET_PATH", "HERDR_SESSION",
@@ -25,7 +36,7 @@ public nonisolated struct LocalMultiplexerAttachment: Codable, Equatable, Sendab
 
     public var isValid: Bool {
         version == 1 && ["tmux", "zellij", "herdr", "zmx"].contains(kind)
-            && (!controlMode || kind == "tmux")
+            && (!controlMode || kind == "tmux" || kind == "herdr")
             && executable.hasPrefix("/") && socketPath.hasPrefix("/")
             && (executable as NSString).lastPathComponent == kind
             && socketInode > 0 && serverPID > 0 && serverStartedAt > 0
@@ -49,7 +60,7 @@ public nonisolated struct LocalMultiplexerAttachment: Codable, Equatable, Sendab
                 + ["attach-session", "-t", "$\(sessionID ?? -1)"]
         // herdr's session subcommand rejects `--` and overrides custom socket
         // selection. Its normal entry point honors the verified API socket.
-        case "herdr": return []
+        case "herdr": return isHerdrControl ? ["control"] : []
         case "zmx": return ["attach", sessionName]
         default: return ["attach", "--", sessionName]
         }
@@ -62,7 +73,9 @@ public nonisolated struct LocalMultiplexerAttachment: Codable, Equatable, Sendab
             result["ZMX_DIR"] = (socketPath as NSString).deletingLastPathComponent
         case "herdr":
             result["HERDR_SESSION"] = sessionName
-            if result["HERDR_SOCKET_PATH"] == nil {
+            if isHerdrControl {
+                result["HERDR_SOCKET_PATH"] = socketPath
+            } else if result["HERDR_SOCKET_PATH"] == nil {
                 result["HERDR_SOCKET_PATH"] = ((socketPath as NSString).deletingLastPathComponent as NSString)
                     .appendingPathComponent("herdr.sock")
             }
@@ -74,10 +87,39 @@ public nonisolated struct LocalMultiplexerAttachment: Codable, Equatable, Sendab
     /// One trusted startup command, run by the helper before the login shell.
     /// All variable data are single-quoted arguments, not executable syntax.
     public var attachCommand: String {
+        command(arguments: attachArguments)
+    }
+
+    /// Native herdr owns an auxiliary connection; its gateway PTY stays a shell.
+    public var ptyRecoveryCommand: String? { isHerdrControl ? nil : attachCommand }
+
+    public func command(arguments: [String]) -> String {
         let cleared = ["TMUX", "TMUX_PANE", "ZELLIJ", "ZELLIJ_SESSION_NAME", "HERDR_ENV", "ZMX_SESSION", "ZMX_SESSION_PREFIX"]
         return (["/usr/bin/env"] + cleared.flatMap { ["-u", $0] }
             + launchEnvironment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
-            + [executable] + attachArguments).map(Self.quote).joined(separator: " ")
+            + [executable] + arguments).map(Self.quote).joined(separator: " ")
+    }
+}
+
+/// Explicit controller intent, keyed by an owned gateway shell session in the
+/// census request. A pinned attachment selects its namespace, never a command
+/// recovered from saved shell history.
+nonisolated struct LocalHerdrControlTarget: Codable, Sendable {
+    var sessionName: String?
+    var attachment: LocalMultiplexerAttachment? = nil
+
+    var isValid: Bool {
+        if let attachment { return attachment.isValid && attachment.isHerdrControl }
+        return sessionName.map {
+            !$0.isEmpty && $0.utf8.count <= 1024
+                && !$0.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+        } ?? true
+    }
+
+    var statusCommand: String {
+        if let attachment { return attachment.command(arguments: ["status", "--json"]) }
+        let session = sessionName.map { " --session " + LoginShellCommand.singleQuoted($0) } ?? ""
+        return LoginShellCommand.runInPOSIXShell(LoginShellCommand.pathPrefix + "exec herdr\(session) status --json")
     }
 }
 

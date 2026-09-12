@@ -46,7 +46,7 @@ extension HerdrController {
                         }
                     }
                     let pipe = try await HerdrChannelFactory.open(command: SSHConfig.herdrCommandLine(
-                        sessionName: self.sessionName, args: "remote-client-bridge"
+                        sessionName: self.sessionName, args: "remote-client-bridge", localAttachment: self.localControlAttachment
                     ), on: gateway)
                     if Task.isCancelled || self.didEnd { await pipe.close(); return }
                     let candidate = HerdrEndpointChannel(pipe: pipe)

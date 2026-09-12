@@ -258,16 +258,34 @@ class SocketCommandServer {
         case .killShell:
             return handleKillShell(request)
         case .inspectLocalMultiplexers:
+            let herdrTargets: [String: LocalHerdrControlTarget]
+            do {
+                herdrTargets = try request.payload.map { try JSONDecoder().decode([String: LocalHerdrControlTarget].self, from: $0) } ?? [:]
+            } catch {
+                return SocketResponse(success: false, error: "Invalid herdr inspection targets")
+            }
             let records = LocalMultiplexerRecovery.processes()
             let cache = LocalMultiplexerRecovery.ProbeCache()
             let deadline = Date().addingTimeInterval(6)
             var attachments: [String: LocalMultiplexerAttachment?] = [:]
             // A single process census serves all this app's local PTYs.
-            for id in SessionManager.shared.listSessions() {
+            // Recovery handshakes must not sit behind a large collection of
+            // legacy pane PTYs and exhaust the shared census deadline.
+            let sessions = SessionManager.shared.listSessions().sorted {
+                let lhs = herdrTargets[$0.uuidString] != nil
+                let rhs = herdrTargets[$1.uuidString] != nil
+                return lhs != rhs ? lhs : $0.uuidString < $1.uuidString
+            }
+            for id in sessions {
                 guard let session = SessionManager.shared.getSession(id), session.clientPID == clientPID else { continue }
                 guard Date() < deadline, !records.isEmpty else { continue }
-                let attachment = LocalMultiplexerRecovery.inspect(
-                    shellPID: session.pid, pty: session.pty, records: records, deadline: deadline, cache: cache)
+                let attachment: LocalMultiplexerAttachment?
+                if let target = herdrTargets[id.uuidString] {
+                    attachment = LocalMultiplexerRecovery.inspectHerdrControl(target, records: records, deadline: deadline, cache: cache)
+                } else {
+                    attachment = LocalMultiplexerRecovery.inspect(
+                        shellPID: session.pid, pty: session.pty, records: records, deadline: deadline, cache: cache)
+                }
                 // Missing key means unobserved (deadline/failed census); an
                 // explicit null means this PTY has no verified attachment.
                 if Date() < deadline { attachments.updateValue(attachment, forKey: id.uuidString) }
@@ -335,8 +353,9 @@ class SocketCommandServer {
             )
 
             let recoveryAccepted = createRequest.recoveryAttachment.map(LocalMultiplexerRecovery.isAvailable) ?? false
-            if let attachment = createRequest.recoveryAttachment, recoveryAccepted {
-                spawnConfig.recoveryCommand = attachment.attachCommand
+            if let attachment = createRequest.recoveryAttachment, recoveryAccepted,
+               let command = attachment.ptyRecoveryCommand {
+                spawnConfig.recoveryCommand = command
                     + " || /usr/bin/printf '%s\\n' 'Could not restore the multiplexer session; returned to shell.'"
             }
             if createRequest.recoveryAttachment != nil {

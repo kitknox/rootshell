@@ -131,6 +131,12 @@ extension Ghostty.TerminalView: TerminalSessionControllerHost {
         // agent detection never adopts an identity from a multi-window surface.
         self.applyConfiguredMultiplexerBinding()
 
+        #if targetEnvironment(macCatalyst)
+        if let attachment = restoredLocalMultiplexerAttachment, attachment.isHerdrControl {
+            startHerdrControlMode(sessionName: attachment.sessionName)
+            return
+        }
+        #endif
         // The helper is already attaching this restored local PTY. Do not
         // present connect-time discovery over it or inject a startup command.
         guard restoredLocalMultiplexerAttachment == nil else { return }

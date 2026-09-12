@@ -59,7 +59,7 @@ extension HerdrController {
     /// Runs one herdr CLI invocation on the gateway's connection and
     /// returns its stdout.
     func legacyRun(args: String) async throws -> Data {
-        try await legacyRun(command: SSHConfig.herdrCommandLine(sessionName: sessionName, args: args), method: args)
+        try await legacyRun(command: SSHConfig.herdrCommandLine(sessionName: sessionName, args: args, localAttachment: localControlAttachment), method: args)
     }
 
     /// Socket requests stop at the first complete JSON response; nc may keep
@@ -301,7 +301,8 @@ extension HerdrController {
                 } else {
                     let command = HerdrAttachCommand.make(
                         sessionName: self.sessionName,
-                        terminalId: terminalId
+                        terminalId: terminalId,
+                        localAttachment: self.localControlAttachment
                     )
                     do {
                         pipe = try await HerdrChannelFactory.openPTY(
@@ -359,7 +360,8 @@ extension HerdrController {
     private func legacyOpenJSON(paneId: String, grid: (rows: Int, cols: Int), gateway: Ghostty.TerminalView) async throws -> AsyncBytePipe {
         let command = SSHConfig.herdrCommandLine(
             sessionName: sessionName,
-            args: "terminal session control \(LoginShellCommand.singleQuoted(paneId)) --takeover --cols \(grid.cols) --rows \(grid.rows)"
+            args: "terminal session control \(LoginShellCommand.singleQuoted(paneId)) --takeover --cols \(grid.cols) --rows \(grid.rows)",
+            localAttachment: localControlAttachment
         )
         return try await HerdrChannelFactory.open(command: command, on: gateway)
     }

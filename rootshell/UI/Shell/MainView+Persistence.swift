@@ -107,9 +107,9 @@ extension MainView {
                     // autosave must not drop the preference — the same
                     // live-OR-restored treatment wasTmuxGateway gets.
                     // (id=tmux-hidden-gateway)
-                    isHiddenTmuxWindow: (((tab.isTmuxGateway && tab.isHiddenTmuxWindow)
+                    isHiddenTmuxWindow: ((((tab.isTmuxGateway || tab.isHerdrGateway) && tab.isHiddenTmuxWindow)
                         || tab.pendingHiddenTmuxGatewayRestore)
-                        && tab.splitTree.contains { resumableGatewayUUIDs.contains($0.uuid) })
+                        && tab.splitTree.contains { resumableGatewayUUIDs.contains($0.uuid) || $0.asTerminal?.hasPersistableHerdrGateway == true })
                         ? true : nil
                 )))
             }
