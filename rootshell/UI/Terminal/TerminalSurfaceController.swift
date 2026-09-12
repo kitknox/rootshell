@@ -332,17 +332,16 @@ final class TerminalSurfaceController: NSObject {
             Ghostty.logger.info("Surface registered to tab \(tabId)")
         }
 
+        if let delegate = host.surfaceUserdata as? GhosttyActionDelegate {
+            host.surfaceGhosttyApp?.registerSurfaceDelegate(surface, delegate: delegate)
+            Ghostty.logger.info("Surface delegate registered")
+        }
         host.surfaceSetupThemeOverrideSubscription()
         host.surfaceGhosttyApp?.refreshSurfaceTheme(
             surface,
             tabId: host.surfaceContainingTabID,
             windowId: host.surfaceWindowID
         )
-
-        if let delegate = host.surfaceUserdata as? GhosttyActionDelegate {
-            host.surfaceGhosttyApp?.registerSurfaceDelegate(surface, delegate: delegate)
-            Ghostty.logger.info("Surface delegate registered")
-        }
     }
 
     private func logSurfaceConfiguration() {

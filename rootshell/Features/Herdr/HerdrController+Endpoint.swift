@@ -89,9 +89,13 @@ extension HerdrController {
             return
         }
         guard endpoint.boot != nil else { return }
-        if endpointActive != active {
-            endpointActive = active
-            endpoint.command("client_shell.surface.set", ["active": active], coalescingKey: "surface")
+        synchronizeEndpointTheme()
+        endpointActive = active
+        endpoint.setSurfaceActive(active) { [weak self, weak endpoint] result in
+            guard let self, self.endpoint === endpoint else { return }
+            if case .failure(let error) = result, !(error is CancellationError) {
+                self.legacyNotice(error.localizedDescription)
+            }
         }
         guard active, let selected else { return }
         if endpointTabID != selected {

@@ -329,6 +329,9 @@ extension Ghostty {
         /// not capture the pointer. Keep scroll routing separate from selection.
         @Published var usesHerdrFallbackScrolling = false
         var herdrEndpointPane: HerdrEndpointPane?
+        var herdrHostTheme: HerdrHostTheme?
+        var herdrThemeDeliveryID = UUID()
+        var herdrHostWindowFocused: Bool { windowIsActiveForFocus() }
 
         var hasTerminalTextSelection: Bool {
             if let herdrEndpointPane { return herdrEndpointPane.hasSelection }
@@ -2705,6 +2708,7 @@ extension Ghostty {
         }
 
         private func applyGhosttyFocus(_ focused: Bool) {
+            HerdrController.controller(for: self)?.synchronizeEndpointTheme()
             guard let surface = surface else { return }
 
             // Dispatch focus change to background queue to prevent main thread deadlock.

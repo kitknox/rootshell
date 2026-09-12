@@ -13,7 +13,25 @@ final class HerdrEndpointChannel {
     private var writer: Task<Void, Never>?
     private var heartbeat: Task<Void, Never>?
     private var presentation: Task<Void, Never>?
-    private var writes: [Data] = []
+    private enum Write {
+        case bytes(Data)
+        case hostTheme
+        case hostFocus
+    }
+    private var writes: [Write] = []
+    private var hostTheme: HerdrHostTheme?
+    private var sentHostTheme: HerdrHostTheme?
+    private var hostThemeQueued = false
+    private var hostFocus: Bool?
+    private var sentHostFocus: Bool?
+    private var hostFocusQueued = false
+    private var desiredHostFocus = false
+    // Hello establishes an active surface. Later changes are effective only
+    // after their command response, not when they enter the command queue.
+    private var desiredSurfaceActive = true
+    private var acknowledgedSurfaceActive = true
+    private var surfaceRequestPending = false
+    private var surfaceRequestRevision: UInt64 = 0
     private var queuedBytes = 0
     private var welcomeReceived = false
     private var ready: CheckedContinuation<Void, Error>?
@@ -115,15 +133,80 @@ final class HerdrEndpointChannel {
         guard queuedBytes + bytes.count <= 8 * 1024 * 1024 else {
             close(error: Wire.Failure.invalid("input queue overflow")); return
         }
-        writes.append(bytes); queuedBytes += bytes.count
+        writes.append(.bytes(bytes)); queuedBytes += bytes.count
+        startWriter()
+    }
+
+    func setHostTheme(_ theme: HerdrHostTheme) {
+        guard !closed, hostTheme != theme else { return }
+        hostTheme = theme
+        // One marker and one 256-color value, even while the transport is
+        // blocked. Never replay intermediate theme-picker previews later.
+        if !hostThemeQueued { writes.append(.hostTheme); hostThemeQueued = true }
+        startWriter()
+    }
+
+    func setHostFocus(_ focused: Bool) {
+        desiredHostFocus = focused
+        queueHostFocus()
+    }
+
+    func setSurfaceActive(_ active: Bool, completion: @escaping (Result<Data, Error>) -> Void = { _ in }) {
+        guard !closed, active != desiredSurfaceActive
+            || (!surfaceRequestPending && active != acknowledgedSurfaceActive) else { return }
+        desiredSurfaceActive = active
+        surfaceRequestRevision &+= 1
+        let revision = surfaceRequestRevision
+        surfaceRequestPending = true
+        // Send focus loss while the old surface is still active. Focus gain
+        // waits for the latest activation ACK, including behind other commands.
+        queueHostFocus()
+        command("client_shell.surface.set", ["active": active], coalescingKey: "surface") { [weak self] result in
+            guard let self else { return }
+            // An older in-flight request can still change server state while
+            // its replacement waits. Record that ACK, but do not release the
+            // focus gate until the latest request completes.
+            if case .success = result { self.acknowledgedSurfaceActive = active }
+            guard self.surfaceRequestRevision == revision else { return }
+            self.surfaceRequestPending = false
+            self.queueHostFocus()
+            completion(result)
+        }
+    }
+
+    private func queueHostFocus() {
+        let focused = desiredHostFocus && desiredSurfaceActive
+            && acknowledgedSurfaceActive && !surfaceRequestPending
+        guard !closed, hostFocus != focused else { return }
+        hostFocus = focused
+        if !hostFocusQueued { writes.append(.hostFocus); hostFocusQueued = true }
+        startWriter()
+    }
+
+    private func startWriter() {
         guard writer == nil else { return }
         writer = Task { [weak self] in
             guard let self else { return }
             defer { self.writer = nil }
             do {
                 while !self.closed, !Task.isCancelled, !self.writes.isEmpty {
-                    let bytes = self.writes.removeFirst()
-                    self.queuedBytes -= bytes.count
+                    let bytes: Data
+                    switch self.writes.removeFirst() {
+                    case .bytes(let value):
+                        bytes = value
+                        self.queuedBytes -= bytes.count
+                    case .hostTheme:
+                        self.hostThemeQueued = false
+                        guard let theme = self.hostTheme else { continue }
+                        bytes = Wire.hostTheme(theme, previous: self.sentHostTheme)
+                        self.sentHostTheme = theme
+                    case .hostFocus:
+                        self.hostFocusQueued = false
+                        guard let focus = self.hostFocus, focus != self.sentHostFocus else { continue }
+                        bytes = Wire.hostFocus(focus)
+                        self.sentHostFocus = focus
+                    }
+                    if bytes.isEmpty { continue }
                     try await self.pipe.write(bytes)
                 }
             } catch { self.close(error: error) }

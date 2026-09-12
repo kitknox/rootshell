@@ -97,6 +97,14 @@ final class HerdrEndpointPane {
         controller?.paneSessions[terminal]?.outputSink.emit(bytes)
     }
 
+    /// Selection colors are local settings, so they can change without a
+    /// remote content revision. Repaint the retained frame without retiring
+    /// selection, scrolling, or retained graphics.
+    func refreshAppearance() {
+        guard channel != nil else { return }
+        paint()
+    }
+
     private var selectionColors: (foreground: UInt32, background: UInt32)? {
         let manager = SelectionManager.shared
         switch manager.selectionMode {
