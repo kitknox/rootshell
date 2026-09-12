@@ -155,6 +155,9 @@ extension Ghostty {
     /// Cancellable for observing mouse capture state changes
     private var mouseCapturedCancellable: AnyCancellable?
 
+    /// Coalesces capture-state refreshes requested during hit testing.
+    private var mouseCaptureRefreshPending = false
+
     /// Cancellable for observing multiplexer scroll-active state changes
     private var multiplexerScrollActiveCancellable: AnyCancellable?
 
@@ -252,10 +255,15 @@ extension Ghostty {
         if let surface = terminalView.surface {
             isCaptured = ghostty_surface_mouse_captured(surface)
 
-            // Update cached state if changed - this triggers the Combine observer
-            // which handles scroll view settings and context menu interaction
-            if terminalView.isMouseCaptured != isCaptured {
-                terminalView.isMouseCaptured = isCaptured
+            // Hit testing can run during SwiftUI view updates. Defer publication
+            // and re-read the current capture state when the callback executes.
+            if terminalView.isMouseCaptured != isCaptured && !mouseCaptureRefreshPending {
+                mouseCaptureRefreshPending = true
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.mouseCaptureRefreshPending = false
+                    self.terminalView.updateMouseCaptureState()
+                }
             }
         } else {
             isCaptured = false
