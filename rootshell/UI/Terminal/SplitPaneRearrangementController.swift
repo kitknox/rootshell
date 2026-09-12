@@ -12,7 +12,7 @@ final class SplitPaneRearrangementController: NSObject, UIGestureRecognizerDeleg
     private var touchHandlesVisible = false
     private var hoveredPaneID: UUID?
     private var source: SplitPaneView?
-    private var target: (pane: SplitPaneView, zone: PaneDropZone)?
+    private var target: (pane: SplitPaneView, zone: PaneDropZone, kind: PaneMoveKind)?
     private let preview = UIView()
     private var hideTask: Task<Void, Never>?
     private var backgroundObserver: NSObjectProtocol?
@@ -165,10 +165,11 @@ final class SplitPaneRearrangementController: NSObject, UIGestureRecognizerDeleg
         guard let host else { return }
         for (id, handle) in handles {
             let pane = tree.first(where: { $0.uuid == id })
-            let hasDestination = pane.map { source in
-                tree.contains(where: { PaneMoveEligibility.allows(source, $0) })
-            } ?? false
-            let visible = enabled && hasDestination &&
+            let kind = pane.flatMap { candidate in
+                tree.compactMap { PaneMoveEligibility.kind(candidate, $0) }.first
+            }
+            handle.moveKind = kind
+            let visible = enabled && kind != nil &&
                 (touchHandlesVisible || hoveredPaneID == id || source?.uuid == id)
             handle.isHidden = !visible
             guard let frame = frames[id] else { continue }
@@ -227,11 +228,13 @@ final class SplitPaneRearrangementController: NSObject, UIGestureRecognizerDeleg
         preview.isHidden = true
         guard let source, let host, host.bounds.contains(point) else { return }
         for pane in tree {
-            guard PaneMoveEligibility.allows(source, pane),
+            guard let kind = PaneMoveEligibility.kind(source, pane),
                   let frame = frames[pane.uuid],
                   let zone = PaneDropZone.calculate(at: point, in: frame) else { continue }
-            target = (pane, zone)
-            preview.frame = zone.previewFrame(in: frame)
+            target = (pane, zone, kind)
+            // A swap ignores the zone, so previewing a half-rect would promise
+            // an insert herdr cannot perform.
+            preview.frame = kind == .swap ? frame : zone.previewFrame(in: frame)
             preview.backgroundColor = host.highlightColor.withAlphaComponent(0.3)
             preview.isHidden = false
             host.bringSubviewToFront(preview)
@@ -243,6 +246,15 @@ final class SplitPaneRearrangementController: NSObject, UIGestureRecognizerDeleg
 private final class PaneGrabHandleView: UIView {
     let paneID: UUID
     var onPressChanged: ((Bool) -> Void)?
+    /// nil while the pane has no reachable destination.
+    var moveKind: PaneMoveKind? {
+        didSet {
+            guard moveKind != oldValue else { return }
+            accessibilityHint = moveKind == .swap
+                ? String(localized: "Drag onto another pane in this tab to swap the two panes.")
+                : String(localized: "Drag to an edge of another pane in this tab.")
+        }
+    }
     private let symbol = UIImageView(image: UIImage(systemName: "ellipsis"))
 
     init(paneID: UUID) {

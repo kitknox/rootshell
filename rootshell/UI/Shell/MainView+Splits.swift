@@ -57,6 +57,49 @@ extension MainView {
             return
         }
 
+        // herdr control mode: `pane.move` into the pane's own tab answers
+        // `same_tab` and `layout.apply` respawns the tab, so `pane.swap` is the
+        // only in-tab primitive. The drop exchanges the panes; the zone is only
+        // a hit test, and the following `tab.layout` record repositions them.
+        if let binding = source.asTerminal?.herdrPaneBinding {
+            guard let targetBinding = destination.asTerminal?.herdrPaneBinding,
+                  let controller = HerdrController.controller(forGateway: binding.gatewayUUID),
+                  let requestID = tab.paneMove.begin() else { return }
+            let focusRevision = tab.paneFocusRevision
+            let selectionRevision = tabsModel.selectionRevision
+            Task { @MainActor in
+                do {
+                    // performManagement marks the controller busy and bumps
+                    // managementRevision, so a legacy poll in flight since
+                    // before the swap cannot restore the old arrangement over
+                    // it, and its defer clears legacySnapshotFingerprint.
+                    try await controller.performManagement {
+                        try await controller.swapPanes(binding.paneId, targetBinding.paneId)
+                    }
+                    tab.paneMove.finish(requestID)
+                    // herdr owns the tree. This is the user's one-shot focus
+                    // request, re-asserted after the swap's snapshot readback.
+                    guard tabsModel.selectionRevision == selectionRevision,
+                          tab.paneFocusRevision == focusRevision,
+                          let currentIndex = terminals.firstIndex(where: { $0 === tab }),
+                          currentIndex == selectedTabIndex,
+                          !isAnySheetPresented, isWindowFocused,
+                          tab.splitTree.contains(source),
+                          source.asTerminal?.herdrPaneBinding?.gatewayUUID == binding.gatewayUUID,
+                          source.asTerminal?.herdrPaneBinding?.tabId == binding.tabId else { return }
+                    setFocusedPane(source, inTab: currentIndex)
+                } catch is CancellationError {
+                    // The controller moved on (detach, reconnect): nothing to report.
+                    tab.paneMove.finish(requestID)
+                } catch {
+                    let reason = controller.managementFailureDescription(error)
+                    tab.paneMove.finish(requestID, error: String(localized: "Couldn’t move pane: \(reason)"))
+                    Ghostty.logger.error("herdr pane swap failed: \(error.localizedDescription)")
+                }
+            }
+            return
+        }
+
         // A native tree may include terminals and nonterminal panes, but never
         // edit a server-owned window or a mixed tree with bound tmux leaves.
         guard !tab.isTmuxWindow, !tab.isHerdrWindow,
