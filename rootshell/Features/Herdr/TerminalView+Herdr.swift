@@ -115,6 +115,7 @@ extension Ghostty.TerminalView {
     func startHerdrControlMode(sessionName: String?) {
         guard allowsHerdrControlDiscoveryAttach,
               let tabsModel = TmuxWindowRegistry.tabsModel(for: windowId) else { return }
+        herdrAutoAttachSuppressed = false
         HerdrController.start(on: self, tabsModel: tabsModel, sessionName: sessionName)
     }
 
@@ -123,7 +124,7 @@ extension Ghostty.TerminalView {
     /// shell; the control channel is separate, so a resumed tssh session
     /// starts it too.
     func startHerdrControlModeIfConfigured() {
-        guard herdrController == nil,
+        guard herdrController == nil, !herdrAutoAttachSuppressed,
               let sshConfig = connectionConfig.sshConfigForHistory,
               sshConfig.herdrControlModeEnabled else { return }
         if let remoteCommand = sshConfig.remoteCommand, !remoteCommand.isEmpty { return }

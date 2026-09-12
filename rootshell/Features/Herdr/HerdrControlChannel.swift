@@ -226,6 +226,7 @@ actor HerdrControlChannel {
         let write = Task {
             if let previous { try await previous.value }
             try Task.checkCancellation()
+            guard !closed else { throw HerdrChannelError.closed }
             try await pipe.write(line)
         }
         writeQueue = write
@@ -281,6 +282,17 @@ actor HerdrControlChannel {
             return
         }
         if let inbound = HerdrControl.decodeInbound(line) {
+            if case .detached(let record) = inbound, record.reason == "takeover" {
+                // Stop queued attach/input writes before hopping to the main
+                // actor: a delayed attach must not take ownership back. Let the
+                // owner tear down before pending requests resume with errors.
+                closed = true
+                readerTask?.cancel()
+                await onInbound(inbound)
+                failPending(HerdrChannelError.closed)
+                await pipe.close()
+                return
+            }
             await onInbound(inbound)
         }
     }

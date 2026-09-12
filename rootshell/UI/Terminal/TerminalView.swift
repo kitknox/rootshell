@@ -548,6 +548,10 @@ extension Ghostty {
         var herdrController: HerdrController?
         var herdrGatewayHost: UIHostingController<HerdrGatewayView>?
 
+        /// A takeover leaves this gateway at its shell until an explicit attach.
+        /// Retained across transport reconnects for the lifetime of this view.
+        var herdrAutoAttachSuppressed = false
+
         /// Gateway session object the transport rebinding in
         /// `applyTmuxReconcile` last ran for. A title-only batch on the same
         /// live object skips that rebinding. Weak, so a replaced session can

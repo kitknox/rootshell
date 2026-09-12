@@ -29,6 +29,7 @@ extension HerdrController {
     }
 
     func paneSessionDidStart(_ session: HerdrPaneSession) {
+        guard !didEnd else { return }
         paneSessions[session.terminalId] = session
         if mode == .legacy {
             legacyReconcileAttaches()
@@ -263,6 +264,13 @@ extension HerdrController {
     }
 
     func attachDidDetach(_ detached: HerdrControl.DetachedRecord) {
+        guard !didEnd else { return }
+        // The response continuation may not have registered this attach yet.
+        // Ownership loss ends this whole raw stream, regardless of pane lookup.
+        if mode == .raw, detached.reason == "takeover" {
+            detachAfterTakeover()
+            return
+        }
         guard let terminalId = terminalByAttach.removeValue(forKey: detached.attach_id) else { return }
         attachIds.removeValue(forKey: terminalId)
         router.unregister(attachId: detached.attach_id)
@@ -271,8 +279,6 @@ extension HerdrController {
         snapshotRequestsInFlight.remove(detached.attach_id)
         snapshotRetryWanted.remove(detached.attach_id)
         switch detached.reason {
-        case "takeover":
-            Self.logger.info("herdr pane \(terminalId) taken over by another client")
         case "closed":
             if let paneId = paneInfos.values.first(where: { $0.terminal_id == terminalId })?.pane_id {
                 paneDidClose(paneId: paneId)

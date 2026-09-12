@@ -588,6 +588,18 @@ final class HerdrController {
         }
     }
 
+    /// A raw pane takeover ends this gateway's whole projection. Keep the
+    /// shell available, but don't let its next transport resume take control back.
+    func detachAfterTakeover() {
+        guard mode == .raw, !didEnd else { return }
+        let gatewayView = gateway
+        gatewayView?.herdrAutoAttachSuppressed = true
+        Self.logger.info("herdr control mode detached after another client took control")
+        detach(closeGateway: false)
+        let message = String(localized: "Detached from herdr because another client took control. The session is still running.")
+        gatewayView?.writeToGhostty(string: "\r\n\(message)\r\n")
+    }
+
     /// Whether the gateway tab is hidden, manually or by the auto-hide setting.
     var isGatewayTabHidden: Bool {
         gatewayTabID.flatMap { tabsModel.tab(withID: $0) }?.isHiddenTmuxWindow == true
