@@ -2702,6 +2702,18 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
         ])
         menuItems.append(splitMenu)
 
+        // Re-run multiplexer discovery. High in the menu because this is the only
+        // route to it for touch users, and hidden on surfaces that can't scan.
+        if supportsSessionDiscovery {
+            let discoverSessions = UIAction(
+                title: String(localized: "Discover Sessions"),
+                image: UIImage(systemName: "sparkle.magnifyingglass")
+            ) { [weak self] _ in
+                self?.menuDiscoverSessions(nil)
+            }
+            menuItems.append(UIMenu(title: "", options: .displayInline, children: [discoverSessions]))
+        }
+
         // tmux pane actions: only when this view renders a live pane of an
         // active control-mode gateway. Submenu data (sibling panes, other
         // windows) is read synchronously from the controller on the main

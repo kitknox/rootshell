@@ -302,6 +302,11 @@ extension MainView {
             self.showTmuxSessionsForSelectedTab()
         }
 
+        observerBag.observeOnMainActor(.discoverSessions) { [self] notification in
+            guard self.shouldHandleNotification(notification) else { return }
+            self.discoverSessionsForSelectedTab(origin: notification.object as? Ghostty.TerminalView)
+        }
+
         observerBag.observeOnMainActor(.detachOtherClients) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
             self.detachOtherClientsForSelectedTab()

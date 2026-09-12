@@ -1369,6 +1369,7 @@ extension Notification.Name {
     static let ghosttyComposeStateChanged = Notification.Name("com.rootshell.composeStateChanged")
     static let toggleFullScreen = Notification.Name("com.rootshell.toggleFullScreen")
     static let showTmuxSessions = Notification.Name("com.rootshell.showTmuxSessions")
+    static let discoverSessions = Notification.Name("com.rootshell.discoverSessions")
     static let detachOtherClients = Notification.Name("com.rootshell.detachOtherClients")
     static let showToolbarSettings = Notification.Name("com.rootshell.showToolbarSettings")
     static let forceASCIIKeyboardChanged = Notification.Name("com.rootshell.forceASCIIKeyboardChanged")

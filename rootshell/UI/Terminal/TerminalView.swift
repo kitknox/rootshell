@@ -821,6 +821,12 @@ extension Ghostty {
         /// UIKeyCommand handlers (arrows/Return/Tab/Escape). Return true to consume.
         var presentedOverlayKeyHandler: ((OverlayKeyEvent) -> Bool)?
         var discoveredSessionTypes: Set<MultiplexerType> = []
+        /// True while the picker was raised by the user (menu/keybind) rather than
+        /// by connect-time discovery. Manual runs present the card up front and
+        /// keep it to report why there are no rows.
+        var sessionDiscoveryIsManual: Bool = false
+        /// Why a manual card has no rows. Nil once rows arrive.
+        var sessionDiscoveryPlaceholder: SessionDiscoveryPlaceholder?
         var discoveredMultiplexerSwipeBindings = MultiplexerSwipeBindings()
         var hasUserTyped: Bool = false
         var sessionSelectionIndex: Int = 0

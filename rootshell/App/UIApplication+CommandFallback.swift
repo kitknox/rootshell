@@ -246,6 +246,10 @@ extension UIApplication {
         ghostty_postNotification(.showTmuxSessions)
     }
 
+    @objc func menuDiscoverSessions(_ sender: Any?) {
+        ghostty_postNotification(.discoverSessions)
+    }
+
     @objc func menuDetachOtherClients(_ sender: Any?) {
         ghostty_postNotification(.detachOtherClients)
     }

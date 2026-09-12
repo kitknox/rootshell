@@ -7,11 +7,31 @@
 
 import SwiftUI
 
+/// Why the picker is showing no rows. Only a user-invoked run presents a card
+/// without results, so each case names something the user can act on.
+enum SessionDiscoveryPlaceholder: Equatable {
+    /// Scan in flight.
+    case searching
+    /// Scan finished and the host reported no sessions.
+    case empty
+    /// Scan could not complete: timeout, auth failure, helper unavailable.
+    case failed
+    /// Every multiplexer's discovery setting is off, so nothing was scanned.
+    case disabled
+    /// The local shell is scannable but "Discover Local Sessions" is off. Distinct
+    /// from `disabled`: the per-multiplexer toggles may all be on.
+    case localDisabled
+    /// This surface cannot be scanned at all (not SSH-backed, no local shell).
+    case unsupported
+}
+
 struct SessionPickerOverlay: View {
     let sessions: [MultiplexerSession]
     let sessionTypes: Set<MultiplexerType>
     let selectedIndex: Int
     let hasUserTyped: Bool
+    /// Set when the card is up with no rows, saying why. Nil once rows exist.
+    let placeholder: SessionDiscoveryPlaceholder?
     @Binding var tmuxAttachMode: TmuxAutoMode
     let allowsTmuxControlAttach: Bool
     @Binding var herdrAttachMode: HerdrAutoMode
@@ -29,6 +49,11 @@ struct SessionPickerOverlay: View {
         }
         return "Terminal Sessions"
     }
+
+    /// No rows to show.
+    private var isPlaceholder: Bool { sessions.isEmpty }
+
+    private var isSearching: Bool { placeholder == .searching }
 
     private var headerIcon: String {
         // Single-type pickers show that multiplexer's own icon; mixed pickers
@@ -87,12 +112,17 @@ struct SessionPickerOverlay: View {
 
                         Spacer()
 
-                        Text("\(sessions.count)")
-                            .font(.system(size: isCompact ? 12 : 14, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.fill.tertiary, in: Capsule())
+                        if isSearching {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Text("\(sessions.count)")
+                                .font(.system(size: isCompact ? 12 : 14, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.tertiary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.fill.tertiary, in: Capsule())
+                        }
                     }
                     .padding(.horizontal, isCompact ? 16 : 20)
                     .padding(.top, isCompact ? 14 : 18)
@@ -102,22 +132,26 @@ struct SessionPickerOverlay: View {
                         .padding(.horizontal, 12)
 
                     // Session list
-                    ScrollViewReader { proxy in
-                        ScrollView(.vertical, showsIndicators: false) {
-                            VStack(spacing: 2) {
-                                ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
-                                    sessionRow(session: session, index: index, isSelected: index == selectedIndex, compact: isCompact)
-                                        .id(index)
-                                        .onTapGesture { handleRowTap(session: session, index: index) }
+                    if isPlaceholder {
+                        placeholderBody(compact: isCompact)
+                    } else {
+                        ScrollViewReader { proxy in
+                            ScrollView(.vertical, showsIndicators: false) {
+                                VStack(spacing: 2) {
+                                    ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
+                                        sessionRow(session: session, index: index, isSelected: index == selectedIndex, compact: isCompact)
+                                            .id(index)
+                                            .onTapGesture { handleRowTap(session: session, index: index) }
+                                    }
                                 }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
-                        }
-                        .frame(maxHeight: isCompact ? 300 : 500)
-                        .onChange(of: selectedIndex) { _, newIndex in
-                            withAnimation(.easeOut(duration: 0.15)) {
-                                proxy.scrollTo(newIndex, anchor: .center)
+                            .frame(maxHeight: isCompact ? 300 : 500)
+                            .onChange(of: selectedIndex) { _, newIndex in
+                                withAnimation(.easeOut(duration: 0.15)) {
+                                    proxy.scrollTo(newIndex, anchor: .center)
+                                }
                             }
                         }
                     }
@@ -125,14 +159,14 @@ struct SessionPickerOverlay: View {
                     Divider()
                         .padding(.horizontal, 12)
 
-                    if showsTmuxAttachModeToggle {
+                    if showsTmuxAttachModeToggle, !isPlaceholder {
                         tmuxAttachModeToggle(compact: isCompact)
 
                         Divider()
                             .padding(.horizontal, 12)
                     }
 
-                    if showsHerdrAttachModeToggle {
+                    if showsHerdrAttachModeToggle, !isPlaceholder {
                         herdrAttachModeToggle(compact: isCompact)
 
                         Divider()
@@ -141,13 +175,16 @@ struct SessionPickerOverlay: View {
 
                     // Footer
                     if KeyboardTracker.shared.isHardwareKeyboard {
-                        // Hardware keyboard hints
+                        // Hardware keyboard hints. With no rows there is nothing
+                        // to navigate or attach to, so only dismiss applies.
                         HStack(spacing: isCompact ? 8 : 16) {
                             hintBadge("Esc", label: "dismiss", compact: isCompact)
-                            hintBadge("\u{2191}\u{2193}", label: "navigate", compact: isCompact)
-                            hintBadge("\u{21A9}", label: "attach", compact: isCompact)
-                            if let jumpKeys = digitJumpKeys {
-                                hintBadge(jumpKeys, label: "jump", compact: isCompact)
+                            if !isPlaceholder {
+                                hintBadge("\u{2191}\u{2193}", label: "navigate", compact: isCompact)
+                                hintBadge("\u{21A9}", label: "attach", compact: isCompact)
+                                if let jumpKeys = digitJumpKeys {
+                                    hintBadge(jumpKeys, label: "jump", compact: isCompact)
+                                }
                             }
                         }
                         .padding(.horizontal, isCompact ? 16 : 20)
@@ -155,7 +192,9 @@ struct SessionPickerOverlay: View {
                     } else {
                         // Touch-only hint
                         HStack {
-                            Text("Tap a session to select, tap Attach to connect")
+                            Text(isPlaceholder
+                                 ? "Tap outside to dismiss"
+                                 : "Tap a session to select, tap Attach to connect")
                                 .font(.system(size: isCompact ? 10 : 12))
                                 .foregroundStyle(.tertiary)
                         }
@@ -183,6 +222,77 @@ struct SessionPickerOverlay: View {
             if let session = pendingSession {
                 Text("You've already started typing. Attach to \"\(session.name)\" anyway? This will send a \(attachDescription(for: session)) command to the terminal.")
             }
+        }
+    }
+
+    /// Stands in for the session list on a user-invoked run with no rows.
+    @ViewBuilder
+    private func placeholderBody(compact: Bool) -> some View {
+        VStack(spacing: compact ? 6 : 8) {
+            if isSearching {
+                ProgressView()
+                    .controlSize(.regular)
+                Text("Searching for sessions…")
+                    .font(.system(size: compact ? 12 : 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+            } else {
+                Image(systemName: placeholderIcon)
+                    .font(.system(size: compact ? 18 : 24, weight: .light))
+                    .foregroundStyle(.tertiary)
+                Text(placeholderTitle)
+                    .font(.system(size: compact ? 12 : 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Text(placeholderDetail)
+                    .font(.system(size: compact ? 10 : 12))
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, compact ? 16 : 20)
+        .padding(.vertical, compact ? 24 : 32)
+    }
+
+    private var placeholderIcon: String {
+        switch placeholder {
+        case .failed: return "exclamationmark.triangle"
+        case .disabled, .localDisabled: return "slider.horizontal.3"
+        case .unsupported: return "minus.circle"
+        default: return "magnifyingglass"
+        }
+    }
+
+    private var placeholderTitle: String {
+        switch placeholder {
+        case .failed: return String(localized: "Could not check for sessions")
+        case .disabled, .localDisabled: return String(localized: "Session discovery is off")
+        case .unsupported: return String(localized: "This tab cannot be checked")
+        default: return String(localized: "No sessions found")
+        }
+    }
+
+    private var placeholderDetail: String {
+        switch placeholder {
+        case .failed:
+            return String(localized: "The host did not answer in time, or the connection could not be reused.")
+        case .disabled:
+            return String(localized: "Turn on discovery for tmux, zellij, herdr or zmx in Settings.")
+        case .localDisabled:
+            // Names the setting that actually gates this, which is not one of the
+            // per-multiplexer toggles. Interpolated so it tracks the Settings row.
+            return String(localized: "Turn on \(Settings.Multiplexer.localSessionDiscovery.title) in Settings.")
+        case .unsupported:
+            // The local shell is only a discovery surface on unsandboxed Catalyst,
+            // where the helper can run the scan.
+            #if STANDALONE && targetEnvironment(macCatalyst)
+            return String(localized: "Discovery needs an SSH connection or the local shell.")
+            #else
+            return String(localized: "Discovery needs an SSH connection.")
+            #endif
+        default:
+            // Deliberately names no multiplexer: only the types still enabled in
+            // Settings were scanned, so a fixed list would over-claim.
+            return String(localized: "This host has no multiplexer sessions to attach to.")
         }
     }
 

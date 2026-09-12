@@ -664,13 +664,20 @@ extension Ghostty.TerminalView {
 
     private func startSessionDiscoveryTask(
         allowSessionPickerOverlay: Bool,
+        manual: Bool = false,
         operation: @escaping @MainActor () async throws -> SessionDiscoveryResult
     ) {
         sessionDiscoveryTask?.cancel()
 
+        // A manual run shows the card before the scan finishes, so a request the
+        // user made deliberately is never silent for the scan's several seconds.
+        if manual { presentManualSessionDiscovery(.searching) }
+
         sessionDiscoveryTask = Task { @MainActor [weak self] in
-            // Brief delay to let shell prompt render
-            try? await Task.sleep(for: .milliseconds(300))
+            if !manual {
+                // Brief delay to let shell prompt render
+                try? await Task.sleep(for: .milliseconds(300))
+            }
 
             guard let self = self else { return }
             guard !Task.isCancelled else { return }
@@ -681,9 +688,15 @@ extension Ghostty.TerminalView {
 
                 guard !Task.isCancelled else { return }
                 guard allowSessionPickerOverlay else { return }
-                guard !self.hasUserTyped else { return }
-                guard !result.sessions.isEmpty else { return }
+                // A manual run owns the card already: it overrides the typing
+                // guard the user just tripped by invoking the command, and keeps
+                // the card to report an empty result.
+                if !manual {
+                    guard !self.hasUserTyped else { return }
+                    guard !result.sessions.isEmpty else { return }
+                }
 
+                self.sessionDiscoveryPlaceholder = result.sessions.isEmpty ? .empty : nil
                 self.discoveredSessions = result.sessions
                 self.discoveredSessionTypes = result.types
                 self.sessionSelectionIndex = 0
@@ -692,13 +705,59 @@ extension Ghostty.TerminalView {
                 NotificationCenter.default.post(name: .ghosttySessionDiscoveryChanged, object: self)
             } catch {
                 Ghostty.logger.debug("Session discovery skipped: \(error.localizedDescription)")
+                guard manual, !Task.isCancelled else { return }
+                // Report the failure rather than passing it off as an empty host:
+                // a timeout or auth failure is the user's to act on.
+                self.sessionDiscoveryPlaceholder = .failed
+                NotificationCenter.default.post(name: .ghosttySessionDiscoveryChanged, object: self)
             }
         }
     }
 
+    /// Raises the picker on a manual run with no rows: spinning while the scan
+    /// runs, or settled on the reason there is nothing to show.
+    private func presentManualSessionDiscovery(_ placeholder: SessionDiscoveryPlaceholder) {
+        // An early-return state must not be overwritten by a connect-time scan
+        // that is still in flight, e.g. when a setting changed mid-scan.
+        sessionDiscoveryTask?.cancel()
+        sessionDiscoveryTask = nil
+        sessionDiscoveryIsManual = true
+        sessionDiscoveryPlaceholder = placeholder
+        discoveredSessions = []
+        discoveredSessionTypes = []
+        sessionSelectionIndex = 0
+        tmuxDiscoveryAttachMode = preferredTmuxDiscoveryAttachMode
+        herdrDiscoveryAttachMode = preferredHerdrDiscoveryAttachMode
+        NotificationCenter.default.post(name: .ghosttySessionDiscoveryChanged, object: self)
+    }
+
+    /// Whether the discovery picker has rows to navigate. A manual run presents the
+    /// card with an empty list while searching or to report nothing found, and that
+    /// card must not swallow Return/arrows from the key-command handlers.
+    var hasDiscoveredSessionRows: Bool {
+        guard let discoveredSessions else { return false }
+        return !discoveredSessions.isEmpty
+    }
+
+    /// Whether this surface can run multiplexer discovery at all: the Catalyst
+    /// local shell, or an SSH-backed session reachable by an exec channel.
+    /// Mirrors the early returns in `discoverSessionsIfConfigured`.
+    var supportsSessionDiscovery: Bool {
+        #if STANDALONE && targetEnvironment(macCatalyst)
+        if session is CatalystLocalShellSession, case .local = connectionConfig { return true }
+        #endif
+        guard connectionConfig.sshConfigForHistory != nil else { return false }
+        return session is CitadelSSHSession || session is TrzszSession || session is MoshSession
+    }
+
     /// Discovers multiplexer sessions (tmux, zellij, herdr, zmx) on the active host or local shell.
     /// Called after the session reports it is ready for input.
-    func discoverSessionsIfConfigured() {
+    ///
+    /// `manual` marks a run the user asked for from the Tabs menu, a keybind, or
+    /// the terminal context menu. It still honours the per-multiplexer discovery
+    /// settings, but bypasses every condition that suppresses the picker, and
+    /// always reports back rather than failing silently.
+    func discoverSessionsIfConfigured(manual: Bool = false) {
         // Check which discoveries are enabled (default to true for all)
         let store = SettingsStore.shared
         let tmuxEnabled = store.value(Settings.Multiplexer.tmuxSessionDiscovery)
@@ -706,12 +765,23 @@ extension Ghostty.TerminalView {
         let herdrEnabled = store.value(Settings.Multiplexer.herdrSessionDiscovery)
         let zmxEnabled = store.value(Settings.Multiplexer.zmxSessionDiscovery)
 
-        guard tmuxEnabled || zellijEnabled || herdrEnabled || zmxEnabled else { return }
+        guard tmuxEnabled || zellijEnabled || herdrEnabled || zmxEnabled else {
+            if manual { presentManualSessionDiscovery(.disabled) }
+            return
+        }
+
+        if manual, !supportsSessionDiscovery {
+            presentManualSessionDiscovery(.unsupported)
+            return
+        }
 
         #if STANDALONE && targetEnvironment(macCatalyst)
         if session is CatalystLocalShellSession, case .local = connectionConfig {
             let localEnabled = store.value(Settings.Multiplexer.localSessionDiscovery)
-            guard localEnabled else { return }
+            guard localEnabled else {
+                if manual { presentManualSessionDiscovery(.localDisabled) }
+                return
+            }
 
             let allowSessionPickerOverlay = true
             let skipTmuxSessions = !tmuxEnabled
@@ -722,7 +792,7 @@ extension Ghostty.TerminalView {
             let discoverZellijBindings = zellijEnabled
             let workingDirectory = connectionConfig.workingDirectory
 
-            startSessionDiscoveryTask(allowSessionPickerOverlay: allowSessionPickerOverlay) {
+            startSessionDiscoveryTask(allowSessionPickerOverlay: allowSessionPickerOverlay, manual: manual) {
                 try await SessionDiscoveryRunner.discoverLocally(
                     workingDirectory: workingDirectory,
                     skipTmuxSessions: skipTmuxSessions,
@@ -737,7 +807,10 @@ extension Ghostty.TerminalView {
         }
         #endif
 
-        guard let sshConfig = connectionConfig.sshConfigForHistory else { return }
+        guard let sshConfig = connectionConfig.sshConfigForHistory else {
+            if manual { presentManualSessionDiscovery(.unsupported) }
+            return
+        }
         let hasLaunchCommand = !(sshConfig.launchCommand?.isEmpty ?? true)
         let hasRemoteCommand = !(sshConfig.remoteCommand?.isEmpty ?? true)
         let wasResumed = (session as? TrzszSession)?.wasResumed == true || (session as? MoshSession)?.wasResumed == true
@@ -748,9 +821,12 @@ extension Ghostty.TerminalView {
         // multiplexer types: the connection is already committed to a
         // multiplexer, so sessions of another type must not pop the picker
         // over its freshly started UI.
+        //
+        // A manual run overrides all of it: the user asked for the picker, so an
+        // already-started multiplexer or launch command must not swallow it.
         let multiplexerAutoStart = sshConfig.tmuxAutoEnable || sshConfig.herdrAutoEnable || sshConfig.zmxAutoEnable
-        let allowSessionPickerOverlay = !hasLaunchCommand && !hasRemoteCommand && !wasResumed
-            && !multiplexerAutoStart
+        let allowSessionPickerOverlay = manual
+            || (!hasLaunchCommand && !hasRemoteCommand && !wasResumed && !multiplexerAutoStart)
         let skipTmuxSessions = !tmuxEnabled || !allowSessionPickerOverlay
         let skipZellijSessions = !zellijEnabled || !allowSessionPickerOverlay
         let skipHerdrSessions = !herdrEnabled || !allowSessionPickerOverlay
@@ -784,7 +860,7 @@ extension Ghostty.TerminalView {
             return nil
         }
 
-        startSessionDiscoveryTask(allowSessionPickerOverlay: allowSessionPickerOverlay) {
+        startSessionDiscoveryTask(allowSessionPickerOverlay: allowSessionPickerOverlay, manual: manual) {
             if let citadelSession, !needsTemporaryConnection {
                 return try await SessionDiscoveryRunner.discover(
                     using: citadelSession,
@@ -816,6 +892,8 @@ extension Ghostty.TerminalView {
     func dismissSessionDiscovery() {
         discoveredSessions = nil
         discoveredSessionTypes = []
+        sessionDiscoveryIsManual = false
+        sessionDiscoveryPlaceholder = nil
         tmuxDiscoveryAttachMode = .regular
         herdrDiscoveryAttachMode = .regular
         sessionDiscoveryTask?.cancel()
