@@ -36,6 +36,36 @@ nonisolated enum HerdrGeometry {
         // exact cell boundary. Discard only floating-point roundoff.
         return max(1, Int(floor((extent - chrome) / cell + 1e-9)))
     }
+
+    /// Keep the fractional-cell remainder inside the drawable. Only a full
+    /// additional cell needs clamping; trimming to the minimum extent exposes
+    /// the host behind the terminal, outside Ghostty's effects.
+    static func clampedExtent(_ extent: CGFloat, cells: Int, cellPixels: UInt32,
+                              chrome: CGFloat, scale: CGFloat) -> CGFloat {
+        guard cells > 0, cellPixels > 0, scale > 0 else { return extent }
+        let minimumPixels = CGFloat(cells) * CGFloat(cellPixels) + (chrome * scale).rounded()
+        var minimum = minimumPixels / scale
+        // Division by a 3x scale must not lose a pixel when set_size truncates.
+        if floor(minimum * scale) < minimumPixels { minimum = minimum.nextUp }
+        // Recover the existing split math's sub-point shortfall into the divider.
+        // A larger shortfall is a real resize and must reach the server.
+        let fitted = minimum <= extent + 1 ? max(extent, minimum) : extent
+        let maximum = (minimumPixels + CGFloat(cellPixels) - 1) / scale
+        return min(fitted, maximum)
+    }
+
+    /// The split ratios use a whole-cell rectangle. Its outer panes still own
+    /// the remaining pixels out to the viewport edge; internal dividers stay put.
+    static func extendingTrailingEdges(_ frame: CGRect, layout: CGRect, viewport: CGRect) -> CGRect {
+        var result = frame
+        if frame.maxX >= layout.maxX {
+            result.size.width = max(0, viewport.maxX - frame.minX)
+        }
+        if frame.maxY >= layout.maxY {
+            result.size.height = max(0, viewport.maxY - frame.minY)
+        }
+        return result
+    }
 }
 
 /// One tab's geometry negotiation. Visibility is deliberately absent: a

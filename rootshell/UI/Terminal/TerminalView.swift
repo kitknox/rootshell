@@ -452,8 +452,8 @@ extension Ghostty {
         var herdrTitleState = HerdrPaneTitleState()
         var herdrTitlePublicationUptime: TimeInterval?
 
-        /// The grid herdr laid this pane out with. The split host trims the
-        /// pane's slot to it so the surface never exceeds the server PTY.
+        /// The grid herdr laid this pane out with. The split host keeps its
+        /// partial-cell drawable remainder but never adds a server row/column.
         var herdrTargetGrid: (cols: Int, rows: Int)? {
             didSet {
                 if herdrTargetGrid?.cols != oldValue?.cols || herdrTargetGrid?.rows != oldValue?.rows {

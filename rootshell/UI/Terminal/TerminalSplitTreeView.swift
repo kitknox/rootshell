@@ -294,12 +294,13 @@ final class SplitTreeHostingView: UIView {
             if case .split = rootNode { return tree.zoomed == nil }
             return false
         }()
-        // A herdr split snaps to whole cells the same way, minus the frosted
-        // margin: what is left over is under a cell on each axis.
+        // Keep herdr's divider positions on the negotiated grid. Outer pane
+        // drawables extend through the remainder to our full bounds below.
         let layoutRect = (renderingSplit ? (contentRect ?? herdrSnapRect()) : nil) ?? bounds
 
         var usedTerminals = Set<ObjectIdentifier>()
-        layout(node: rootNode, in: layoutRect, isRoot: rootNode == tree.root, usedTerminals: &usedTerminals)
+        layout(node: rootNode, in: layoutRect, layoutBounds: layoutRect,
+               isRoot: rootNode == tree.root, usedTerminals: &usedTerminals)
         cleanupTerminalViews(keeping: usedTerminals)
         hideUnusedDividers(from: dividerReuseIndex)
         hasCompletedHerdrLayout = true
@@ -478,10 +479,8 @@ final class SplitTreeHostingView: UIView {
         return tree.terminalLeaves.first(where: { $0.isMultiplexerPane })
     }
 
-    /// herdr tabs: the split's content rect snapped to whole cells, so the
-    /// frame math never hands a pane the fractional leftover that would
-    /// grow its grid past what the server laid out. nil when nothing is
-    /// left over or this is not a herdr split.
+    /// Whole-cell bounds for herdr's split ratios and dividers. This is not
+    /// the drawable boundary: outer panes retain the viewport's remainder.
     private func herdrSnapRect() -> CGRect? {
         guard let tree,
               let rootNode = tree.zoomed ?? tree.root,
@@ -726,6 +725,7 @@ final class SplitTreeHostingView: UIView {
     private func layout(
         node: SplitTree<SplitPaneView>.Node,
         in bounds: CGRect,
+        layoutBounds: CGRect,
         isRoot: Bool,
         usedTerminals: inout Set<ObjectIdentifier>
     ) {
@@ -740,7 +740,7 @@ final class SplitTreeHostingView: UIView {
             // touch its frame or attachment.
             guard !pane.isDetachedForFullScreen else { return }
 
-            attach(pane, frame: herdrClampedFrame(bounds.integral, for: pane))
+            attach(pane, frame: herdrPaneFrame(bounds.integral, layoutBounds: layoutBounds, for: pane))
             applyFocusAppearance(to: pane, showBorder: !isRoot)
 
         case .split(let split):
@@ -751,38 +751,42 @@ final class SplitTreeHostingView: UIView {
                 direction: split.direction
             )
 
-            layout(node: split.left, in: leftBounds, isRoot: false, usedTerminals: &usedTerminals)
-            layout(node: split.right, in: rightBounds, isRoot: false, usedTerminals: &usedTerminals)
-            addDivider(for: node, direction: split.direction, visibleFrame: dividerFrame, parentBounds: bounds)
+            layout(node: split.left, in: leftBounds, layoutBounds: layoutBounds,
+                   isRoot: false, usedTerminals: &usedTerminals)
+            layout(node: split.right, in: rightBounds, layoutBounds: layoutBounds,
+                   isRoot: false, usedTerminals: &usedTerminals)
+            var dividerBounds = bounds
+            if split.left.leftmostLeaf().asTerminal?.isHerdrPane == true {
+                let expanded = HerdrGeometry.extendingTrailingEdges(bounds, layout: layoutBounds, viewport: self.bounds)
+                // Extend the divider's length with its adjacent drawables, but
+                // keep its resize axis tied to the negotiated split geometry.
+                switch split.direction {
+                case .horizontal: dividerBounds.size.height = expanded.height
+                case .vertical: dividerBounds.size.width = expanded.width
+                }
+            }
+            addDivider(for: node, direction: split.direction, visibleFrame: dividerFrame, parentBounds: dividerBounds)
         }
     }
 
-    /// A herdr pane never renders more cells than the server laid out for
-    /// it: its slot is trimmed (top-left anchored) to the advertised grid
-    /// plus padding. Ratios only distribute the slots; in an uneven tree a
-    /// slot can be wider than its pane's grid, and the surface would
-    /// otherwise grow into that slack and wrap differently from the PTY.
-    private func herdrClampedFrame(_ frame: CGRect, for pane: SplitPaneView) -> CGRect {
-        guard let terminal = pane.asTerminal, let grid = terminal.herdrTargetGrid,
+    /// Preserve partial cells inside Ghostty's drawable without growing the
+    /// server's grid. Use only the framebuffer resize: changing an inset as
+    /// well would queue a separate resize at the old framebuffer dimensions
+    /// and could transiently shrink the parser even when the final grid agrees.
+    private func herdrPaneFrame(_ slot: CGRect, layoutBounds: CGRect, for pane: SplitPaneView) -> CGRect {
+        guard let terminal = pane.asTerminal, terminal.isHerdrPane else { return slot }
+        let frame = HerdrGeometry.extendingTrailingEdges(slot, layout: layoutBounds, viewport: bounds)
+        guard let grid = terminal.herdrTargetGrid,
               let size = terminal.surfaceSize, size.cell_width_px > 0, size.cell_height_px > 0
         else { return frame }
         let scale = terminal.contentScaleFactor > 0 ? terminal.contentScaleFactor : terminal.traitCollection.displayScale
         guard scale > 0 else { return frame }
-        let cellW = CGFloat(size.cell_width_px) / scale
-        let cellH = CGFloat(size.cell_height_px) / scale
         let chrome = terminal.herdrLayoutChrome
-        // Round up so a fractional cell width never floors the grid short.
-        let maxW = ceil(CGFloat(grid.cols) * cellW + chrome.width)
-        let maxH = ceil(CGFloat(grid.rows) * cellH + chrome.height)
-        // The slot math rounds to whole points and can come up a fraction
-        // short of the grid; take the sub-point overlap into the divider
-        // rather than a missing column. A larger shortfall is real.
-        func fit(_ slot: CGFloat, to needed: CGFloat) -> CGFloat {
-            needed <= slot + 1 ? needed : slot
-        }
         var clamped = frame
-        clamped.size.width = fit(frame.width, to: maxW)
-        clamped.size.height = fit(frame.height, to: maxH)
+        clamped.size.width = HerdrGeometry.clampedExtent(
+            frame.width, cells: grid.cols, cellPixels: size.cell_width_px, chrome: chrome.width, scale: scale)
+        clamped.size.height = HerdrGeometry.clampedExtent(
+            frame.height, cells: grid.rows, cellPixels: size.cell_height_px, chrome: chrome.height, scale: scale)
         return clamped
     }
 
@@ -798,21 +802,21 @@ final class SplitTreeHostingView: UIView {
             if case .split = rootNode { return tree.zoomed == nil }
             return false
         }()
-        // A herdr split snaps to whole cells the same way, minus the frosted
-        // margin: what is left over is under a cell on each axis.
+        // Match the drawable expansion used by layout(node:in:...).
         let layoutRect = (renderingSplit ? (contentRect ?? herdrSnapRect()) : nil) ?? bounds
-        return slotFrame(for: pane, node: rootNode, in: layoutRect)
+        return slotFrame(for: pane, node: rootNode, in: layoutRect, layoutBounds: layoutRect)
     }
 
-    private func slotFrame(for pane: SplitPaneView, node: SplitTree<SplitPaneView>.Node, in bounds: CGRect) -> CGRect? {
+    private func slotFrame(for pane: SplitPaneView, node: SplitTree<SplitPaneView>.Node,
+                           in bounds: CGRect, layoutBounds: CGRect) -> CGRect? {
         switch node {
         case .leaf(let leaf):
-            return leaf === pane ? bounds.integral : nil
+            return leaf === pane ? herdrPaneFrame(bounds.integral, layoutBounds: layoutBounds, for: leaf) : nil
         case .split(let split):
             let ratio = CGFloat(split.ratio).clamped(to: 0...1)
             let (leftBounds, rightBounds, _) = frames(for: bounds, ratio: ratio, direction: split.direction)
-            return slotFrame(for: pane, node: split.left, in: leftBounds)
-                ?? slotFrame(for: pane, node: split.right, in: rightBounds)
+            return slotFrame(for: pane, node: split.left, in: leftBounds, layoutBounds: layoutBounds)
+                ?? slotFrame(for: pane, node: split.right, in: rightBounds, layoutBounds: layoutBounds)
         }
     }
 
