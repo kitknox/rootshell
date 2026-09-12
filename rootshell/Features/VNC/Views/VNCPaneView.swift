@@ -94,6 +94,7 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
     let clipboardSynchronizer: VNCClipboardSynchronizer
     let keyboardCapture: VNCKeyboardCapture
     fileprivate let initialViewportPanningMode: RemoteViewportPanningMode
+    fileprivate let initialPointerMode: RemotePointerMode
 
     private let clipboardSyncDefault: ScreenSharingClipboardSyncDefault
     private var clipboardSyncUsesGlobalPolicy = true
@@ -273,6 +274,12 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
             self.initialViewportPanningMode = .edge
         case .continuous:
             self.initialViewportPanningMode = .continuous
+        }
+        switch ScreenSharingPointerModeDefault.current {
+        case .direct:
+            self.initialPointerMode = .direct
+        case .trackpad:
+            self.initialPointerMode = .trackpad
         }
         let session = VNCSession(configuration: config.toPackageConfiguration())
         self.session = session
@@ -1255,6 +1262,10 @@ extension VNCPaneView {
 struct VNCPaneRootView: View {
     @ObservedObject var pane: VNCPaneView
     @Bindable private var brightnessManager = BrightnessManager.shared
+    // Read here rather than snapshotted on the pane: the package treats speed
+    // as a live value, so a change in Settings reaches an open session.
+    @Setting(Settings.ScreenSharing.pointerSpeed) private var pointerSpeed
+    @Setting(Settings.ScreenSharing.cursorSizeDefault) private var cursorSizeDefault
 
     var body: some View {
         // The themed surface wraps the package view too: its residual chrome
@@ -1272,6 +1283,9 @@ struct VNCPaneRootView: View {
                     keyboardAvoidanceMode: pane.isDetachedForFullScreen ? .automatic : .hostManaged,
                     clipboardSynchronizer: pane.clipboardSynchronizer,
                     initialViewportPanningMode: pane.initialViewportPanningMode,
+                    initialPointerMode: pane.initialPointerMode,
+                    pointerSpeed: pointerSpeed,
+                    cursorHeight: cursorSizeDefault.points,
                     onSharedClipboardUserChange: { _ in
                         pane.sharedClipboardDidChangeByUser()
                     },
