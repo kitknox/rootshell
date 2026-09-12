@@ -232,7 +232,7 @@ extension HerdrController {
                     self.selectTab(containingPane: created.root_pane.pane_id, focusPane: true)
                 }
                 self.autoHideGatewayIfWanted()
-                if let channel, let anchorID {
+                if let anchorID {
                     do {
                         try await self.positionNewTab(created.tab, after: anchorID, channel: channel, generation: generation)
                     } catch {
@@ -269,19 +269,41 @@ extension HerdrController {
     private func positionNewTab(
         _ tab: HerdrControl.TabInfo,
         after anchorID: String,
-        channel: HerdrControlChannel,
+        channel: HerdrControlChannel?,
         generation: UUID
     ) async throws {
+        defer {
+            if creationIsCurrent(generation), mode == .legacy {
+                // A poll already in flight must not restore the pre-move
+                // order, even when a timed-out move succeeded on the host.
+                tabReorderRevision &+= 1
+                legacySnapshotFingerprint = nil
+                legacyTopologyDirty = true
+            }
+        }
         // Read after creation: another client may have closed or moved the
         // anchor, and stable public tab numbers are not insertion positions.
-        let listed = try await channel.request(
-            "tab.list", HerdrControl.TabListParams(workspace_id: tab.workspace_id),
-            as: HerdrControl.TabListResult.self
-        )
+        let listed: HerdrControl.TabListResult
+        if let channel {
+            listed = try await channel.request(
+                "tab.list", HerdrControl.TabListParams(workspace_id: tab.workspace_id),
+                as: HerdrControl.TabListResult.self
+            )
+        } else {
+            listed = try await legacyRequest(
+                args: "tab list --workspace \(LoginShellCommand.singleQuoted(tab.workspace_id))",
+                as: HerdrControl.TabListResult.self
+            )
+        }
         guard creationIsCurrent(generation) else { return }
         applyTabOrder(listed.tabs, workspaceID: tab.workspace_id)
         guard let params = HerdrTabOrder.moveParams(for: tab.tab_id, after: anchorID, in: listed.tabs) else { return }
-        let moved = try await channel.request("tab.move", params, as: HerdrControl.TabListResult.self)
+        let moved: HerdrControl.TabListResult
+        if let channel {
+            moved = try await channel.request("tab.move", params, as: HerdrControl.TabListResult.self)
+        } else {
+            moved = try await legacyMoveTab(params)
+        }
         guard creationIsCurrent(generation) else { return }
         applyTabOrder(moved.tabs, workspaceID: tab.workspace_id)
     }
