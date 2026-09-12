@@ -11,6 +11,7 @@
 import ActivityKit
 import Foundation
 import Observation
+import RootshellPushKit
 import os.log
 import UIKit
 
@@ -177,6 +178,16 @@ class LiveActivityManager {
     private var lastAgentAttentionCount: Int = 0
     @ObservationIgnored
     private var lastAgentIdleCount: Int = 0
+    /// Per-pane census with push-route keys, written to the app group on the
+    /// background edge for the notification service extension.
+    @ObservationIgnored
+    private var lastAgentEntries: [CodingAgentEntry] = []
+    @ObservationIgnored
+    private let agentLedgerStore = AgentActivityLedgerStore()
+    /// Serial, so a background-edge save and a foreground clear land in the
+    /// order they were issued even across a quick app switch.
+    @ObservationIgnored
+    private let agentLedgerQueue = DispatchQueue(label: "com.rootshell.liveActivity.agentLedger", qos: .utility)
 
     /// Coalesces bursts of census changes into one publish.
     @ObservationIgnored
@@ -430,6 +441,9 @@ class LiveActivityManager {
     func reconcileAfterActivation() {
         let start = CFAbsoluteTimeGetCurrent()
         LifecycleDebugLogger.shared.checkpoint("LiveActivity.reconcile.enter")
+        // Live detection owns the counts again; anything the extension
+        // applied from pushes is superseded by the publish below.
+        clearAgentLedger()
         if isAgentInfoEnabled {
             refreshAgentCountsCache()
         }
@@ -857,7 +871,11 @@ class LiveActivityManager {
     /// Snapshot the census into the cache. Returns true when a bucket changed.
     @discardableResult
     private func refreshAgentCountsCache() -> Bool {
-        let counts = AgentAttentionCenter.shared.codingAgentCounts()
+        let census = AgentAttentionCenter.shared.codingAgentCensus()
+        // Entries refresh even when no bucket moved: a tmux server identity
+        // can resolve later without changing any count.
+        lastAgentEntries = census.entries
+        let counts = census.counts
         guard counts.working != lastAgentWorkingCount
             || counts.attention != lastAgentAttentionCount
             || counts.idle != lastAgentIdleCount
@@ -872,6 +890,35 @@ class LiveActivityManager {
         lastAgentWorkingCount = 0
         lastAgentAttentionCount = 0
         lastAgentIdleCount = 0
+        lastAgentEntries = []
+    }
+
+    // MARK: - Agent ledger (notification service extension hand-off)
+
+    /// Leaves the per-pane census in the app group when detection stops. An
+    /// agent hook push (blocked / done / failed) arriving while the app is
+    /// backgrounded lets the notification service extension move that pane
+    /// to "needs attention" and republish the counts; see
+    /// `AgentActivityLedger`. Cached entries only, no registry walk, and the
+    /// write happens off the main thread so the scene transaction is not
+    /// held. With nothing to hand off the file is removed so a stale
+    /// snapshot can never match a later push.
+    private func writeAgentLedgerForBackground() {
+        let store = agentLedgerStore
+        guard isEnabled, isAgentInfoEnabled, let activity = currentActivity, !lastAgentEntries.isEmpty else {
+            agentLedgerQueue.async { store.clear() }
+            return
+        }
+        let ledger = AgentActivityLedger(activityID: activity.id, entries: lastAgentEntries.map(\.ledgerEntry))
+        agentLedgerQueue.async { store.save(ledger) }
+    }
+
+    /// Every path that stops treating `currentActivity` as live must clear:
+    /// the extension only ever updates the activity id in the file, but a
+    /// stale file still costs a load and a lock per push.
+    private func clearAgentLedger() {
+        let store = agentLedgerStore
+        agentLedgerQueue.async { store.clear() }
     }
 
     private func scheduleAgentPublish() {
@@ -920,6 +967,7 @@ class LiveActivityManager {
             reconcileActivityLifecycle(reason: "agent info enabled")
         } else {
             clearAgentCountsCache()
+            clearAgentLedger()
             // Ends an agent-only activity; a mixed one republishes without
             // the agent fields.
             reconcileActivityLifecycle(reason: "agent info disabled")
@@ -1142,6 +1190,7 @@ class LiveActivityManager {
         activityStartDate = nil
         isActivityActive = false
         lastPublishedState = nil
+        clearAgentLedger()
     }
 
     // MARK: - Activity Lifecycle
@@ -1246,6 +1295,7 @@ class LiveActivityManager {
         // re-drive the request instead of creating an unfrozen activity after
         // the one background-edge callback has already passed.
         cancelStartRetry(resetAttempts: true)
+        writeAgentLedgerForBackground()
         guard let activity = currentActivity,
               var state = lastPublishedState,
               state.agentTotalCount > 0,
@@ -1257,6 +1307,7 @@ class LiveActivityManager {
 
     private func endActivity() {
         cancelStartRetry(resetAttempts: true)
+        clearAgentLedger()
 
         guard let activity = currentActivity else { return }
 
@@ -1338,6 +1389,7 @@ class LiveActivityManager {
                         self.userDismissed = true
                         self.cancelAgentPublish()
                         self.lastPublishedState = nil
+                        self.clearAgentLedger()
 
                         // Tear down WiFi/network machinery started alongside the activity
                         self.stopWiFiPolling()
@@ -1412,6 +1464,28 @@ class LiveActivityManager {
         startRetryTask = nil
         if resetAttempts {
             startRetryAttempt = 0
+        }
+    }
+}
+
+private extension CodingAgentEntry {
+    var ledgerEntry: AgentActivityLedgerEntry {
+        AgentActivityLedgerEntry(
+            paneID: paneID.uuidString,
+            bucket: bucket.ledgerBucket,
+            routePane: routePane?.uuidString,
+            gatewayPane: gatewayPane?.uuidString,
+            tmuxServer: tmuxServer,
+            tmuxPaneID: tmuxPaneID)
+    }
+}
+
+private extension CodingAgentBucket {
+    var ledgerBucket: AgentActivityLedgerEntry.Bucket {
+        switch self {
+        case .working: return .working
+        case .attention: return .attention
+        case .idle: return .idle
         }
     }
 }

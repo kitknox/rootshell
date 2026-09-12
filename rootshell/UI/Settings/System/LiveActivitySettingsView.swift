@@ -141,7 +141,7 @@ struct LiveActivitySettingsView: View {
                                 .foregroundColor(.orange)
                         }
                         if liveActivityManager.isAgentInfoEnabled {
-                            Text("Agent counts come from on-device detection and update only while rootshell is in the foreground. The Lock Screen marks them as paused while rootshell is in the background.")
+                            Text("Agent counts come from on-device detection and update while rootshell is in the foreground. In the background the Lock Screen marks them as paused, except that an agent notification from a paired computer moves that agent to needs attention.")
                         }
                     }
                 }
