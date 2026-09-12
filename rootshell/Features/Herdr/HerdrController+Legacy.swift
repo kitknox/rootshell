@@ -127,20 +127,25 @@ extension HerdrController {
     /// subcommand. Ask herdr for its resolved socket (including session/env
     /// overrides), then use a one-shot bridge on the gateway's existing host.
     func legacyMoveTab(_ params: HerdrControl.TabMoveParams) async throws -> HerdrControl.TabListResult {
-        struct Status: Decodable {
-            struct Server: Decodable {
-                let socket: String
-                let running: Bool
-                let compatible: Bool?
-            }
-            let server: Server
+        try await legacyAPIRequest("tab.move", params, as: HerdrControl.TabListResult.self)
+    }
+
+    private struct LegacySocketStatus: Decodable {
+        struct Server: Decodable {
+            let socket: String
+            let running: Bool
+            let compatible: Bool?
         }
+        let server: Server
+    }
+
+    func legacyAPIRequest<P: Encodable, R: Decodable>(_ method: String, _ params: P, as: R.Type) async throws -> R {
         let statusOutput = try await legacyRun(args: "status --json")
         guard let start = statusOutput.firstIndex(of: UInt8(ascii: "{")),
               let end = statusOutput.lastIndex(of: UInt8(ascii: "}")), start <= end else {
             throw HerdrChannelError.malformed("herdr status returned no JSON")
         }
-        let status = try HerdrControl.decoder.decode(Status.self, from: Data(statusOutput[start...end])).server
+        let status = try HerdrControl.decoder.decode(LegacySocketStatus.self, from: Data(statusOutput[start...end])).server
         guard status.running, !status.socket.isEmpty else { throw HerdrChannelError.closed }
         guard status.compatible != false else {
             throw HerdrChannelError.unsupportedServer("herdr client and server protocols do not match")
@@ -163,17 +168,17 @@ extension HerdrController {
         elif command -v nc >/dev/null 2>&1; then
             exec nc -U \(socket)
         else
-            printf '%s\\n' '{"error":{"code":"socket_bridge_unavailable","message":"Tab reordering in fallback mode needs python3 or nc with Unix socket support on the host"}}'
+            printf '%s\\n' '{"error":{"code":"socket_bridge_unavailable","message":"This herdr action needs python3 or nc with Unix socket support on the host"}}'
         fi
         """
         var request = try JSONEncoder().encode(HerdrControl.Request(
-            id: "rootshell:tab.move:\(UUID().uuidString)", method: "tab.move", params: params
+            id: "rootshell:api:\(UUID().uuidString)", method: method, params: params
         ))
         request.append(0x0A)
         let output = try await legacyRun(
-            command: LoginShellCommand.runInPOSIXShell(script), method: "tab.move", input: request
+            command: LoginShellCommand.runInPOSIXShell(script), method: method, input: request
         )
-        return try decodeLegacyResponse(output, method: "tab.move", as: HerdrControl.TabListResult.self)
+        return try decodeLegacyResponse(output, method: method, as: R.self)
     }
 
     func legacyPollOnce() async {
@@ -183,12 +188,13 @@ extension HerdrController {
         defer { legacyReconcileAttaches() }
         let generation = streamGeneration
         let orderRevision = tabReorderRevision
+        let capturedManagementRevision = managementRevision
         do {
             let output = try await legacyRun(args: "api snapshot")
             guard mode == .legacy, !didEnd, streamGeneration == generation else { return }
             // A poll started before a completed move cannot put its old order
             // back over the response. The next poll reads the saved order.
-            guard orderRevision == tabReorderRevision else { return }
+            guard orderRevision == tabReorderRevision, capturedManagementRevision == managementRevision, !management.isBusy else { return }
             // The reply is one JSON line; tolerate chatter around it.
             guard let line = output.split(separator: 0x0A).last(where: { $0.first == UInt8(ascii: "{") }) else {
                 let text = String(decoding: output.prefix(200), as: UTF8.self)
@@ -213,7 +219,8 @@ extension HerdrController {
             applySnapshot(snapshot)
         } catch {
             guard !didEnd, !Task.isCancelled, streamGeneration == generation,
-                  tabReorderRevision == orderRevision else { return }
+                  tabReorderRevision == orderRevision,
+                  capturedManagementRevision == managementRevision, !management.isBusy else { return }
             isActive = false
             connectionError = error.localizedDescription
             publishSessionState()

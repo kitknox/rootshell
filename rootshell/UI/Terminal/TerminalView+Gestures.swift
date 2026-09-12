@@ -1487,6 +1487,10 @@ extension Ghostty.TerminalView {
 
     /// Prompt user to change the terminal title
     @objc func promptChangeTitle(_ sender: Any?) {
+        if let binding = herdrPaneBinding, let controller = HerdrController.controller(forGateway: binding.gatewayUUID) {
+            controller.showWorkspaceOverview(action: .init(kind: .renamePane, targetID: binding.paneId))
+            return
+        }
         let alert = UIAlertController(
             title: "Change Terminal Title",
             message: "Leave blank to restore the default.",
@@ -2702,6 +2706,11 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
            let tmuxMenuController = TmuxController.controller(forOwnerSurface: binding.parentSurface),
            tmuxMenuController.isActive {
             menuItems.append(buildTmuxPaneMenu(binding: binding, controller: tmuxMenuController))
+        }
+
+        if let binding = herdrPaneBinding,
+           let controller = HerdrController.controller(forGateway: binding.gatewayUUID), controller.isActive {
+            menuItems.append(buildHerdrPaneMenu(controller: controller, paneID: binding.paneId))
         }
 
         // Terminal actions menu

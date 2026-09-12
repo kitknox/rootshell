@@ -66,6 +66,22 @@ nonisolated struct AgentProjectIdentity: Equatable, Sendable {
         repositoryRoot ?? path
     }
 
+    /// A current provider directory wins over stale detector state. Retain a
+    /// probe's more specific Git root (including submodules) only when it
+    /// still describes this directory on the same host.
+    static func forGrouping(reported: Self?, detected: Self?) -> Self? {
+        guard var reported else { return detected }
+        if let detected, detected.hostKey == reported.hostKey,
+           let root = detected.repositoryRoot,
+           AgentProjectPath.isInsideRepository(reported.path, root: root),
+           reported.repositoryRoot.map({ AgentProjectPath.isInsideRepository(root, root: $0) }) ?? true {
+            reported.repositoryRoot = root
+            reported.label = AgentProjectPath.label(forPath: reported.path, repoRoot: root) ?? reported.label
+            reported.branch = detected.branch
+        }
+        return reported
+    }
+
     init(
         hostKey: String?,
         path: String,

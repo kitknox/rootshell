@@ -403,22 +403,12 @@ struct VerticalTabSidebar: View {
     /// headers, because an inbox grouped by project has no use for them.
     /// (id=agent-project)
     private var projectGroupingActive: Bool {
-        agentSortRaw == "project" && attentionBadgesEnabled && hasAnyProject
+        agentSortRaw == "project" && hasAnyProject
     }
 
-    /// Any tab with a resolved project, i.e. is there anything to group BY.
-    ///
-    /// Without this the mode could be active with nothing to show while the
-    /// summary bar that hosts its toggle was hidden (the bar only appears when
-    /// an agent is detected), leaving the preference stuck on with no control
-    /// to turn it off. Degrading keeps the stored choice, so grouping resumes
-    /// by itself once a project resolves. (id=agent-project)
+    /// Includes ordinary herdr shells and named workspaces without a directory.
     private var hasAnyProject: Bool {
-        tabsModel.tabs.contains { tab in
-            tab.splitTree.contains {
-                $0.presentation.agentRow?.project?.label.isEmpty == false
-            }
-        }
+        tabsModel.hasAnyProject
     }
 
     /// Collapsed project sections, keyed by project label.
@@ -616,8 +606,8 @@ struct VerticalTabSidebar: View {
             // area won't supply this clearance. See `dockedBottomClearance`.
             .padding(.bottom, dockedBottomClearance)
             // Synced on EVERY render, not just on mode change or appear:
-            // `projectGroupingActive` also depends on badges being enabled and
-            // on a project having resolved asynchronously, so an event-only
+            // `projectGroupingActive` also depends on a project having resolved
+            // asynchronously, so an event-only
             // sync let the sidebar group by project while the tab bar stayed
             // unscoped, or kept it scoped after grouping stopped.
             // The setter is equality-guarded, so this is free at steady state.
@@ -957,15 +947,17 @@ struct VerticalTabSidebar: View {
 
     // MARK: Agent Summary
 
-    /// Rollup line under the search bar ("2 blocked · 1 working") plus the
-    /// attention-sort toggle. Hidden when no agents are detected anywhere.
+    /// Agent rollup and the shared sort control. Keep the control available
+    /// for ordinary project shells even when agent badges are disabled.
     /// (id=agent-attention)
     @ViewBuilder
     private var agentSummaryBar: some View {
-        if attentionBadgesEnabled {
+        if attentionBadgesEnabled || hasAnyProject {
             SidebarAgentSummaryBar(
                 metrics: metrics,
                 accentTint: accentTint,
+                hasProjects: hasAnyProject,
+                showsAttention: attentionBadgesEnabled,
                 sortIconName: agentInboxSortIcon,
                 sortHelp: agentInboxSortHelp,
                 sortIsActive: attentionSortActive || projectGroupingActive,
@@ -977,7 +969,7 @@ struct VerticalTabSidebar: View {
                     case "project":
                         agentSortRaw = "static"
                     default:
-                        agentSortRaw = "priority"
+                        agentSortRaw = attentionBadgesEnabled ? "priority" : "project"
                     }
                 }
             )
@@ -1423,7 +1415,7 @@ struct VerticalTabSidebar: View {
                     }
                 }
                 .equatable()
-            case .herdrWorkspaceHeader(_, _, let title, let count, let collapsed):
+            case .herdrWorkspaceHeader(let ownerID, let workspaceID, let title, let count, let collapsed):
                 SidebarContextMenuRow(
                     identity: menuRowIdentity(for: row, presentation: SidebarHeaderMenuPresentation(
                         indentLevel: row.visualIndentLevel,
@@ -1440,7 +1432,9 @@ struct VerticalTabSidebar: View {
                         isHighlighted: isHighlighted
                     )
                 } menu: {
-                    HerdrTabMenuItems(tab: row.tab, dialogs: herdrDialogs)
+                    if let controller = HerdrController.controller(forGateway: ownerID) {
+                        HerdrWorkspaceMenuItems(controller: controller, workspaceID: workspaceID, onAction: { herdrDialogs.showWorkspaces(controller, action: $0) })
+                    }
                 }
                 .equatable()
             case .hiddenHeader(let ownerID, let count, let expanded):
@@ -2602,7 +2596,7 @@ struct VerticalTabSidebar: View {
         let projectSearchActive = projectGroupingActive && !normalizedSearchFilter.isEmpty
         let rows = projectGroupingActive && !projectSearchActive
             ? baseRows
-            : addingAgentPaneChildren(
+            : addingPaneChildren(
                 to: baseRows,
                 omitNonmatchingParents: projectSearchActive)
         // Rows carry .contextMenu / .onDrag, so a duplicate id in `ForEach(rows)`
@@ -2621,7 +2615,7 @@ struct VerticalTabSidebar: View {
     }
 
     /// Rebuilds the list from the same stable project projection used by the
-    /// top bar. A tab has one primary project row; additional agent panes may
+    /// top bar. A tab has one primary project row; additional panes may
     /// appear under their own projects without duplicating the tab itself.
     private func applyProjectGrouping(_ rows: [SidebarRow]) -> [SidebarRow] {
         guard searchText.isEmpty else { return rows }
@@ -2637,7 +2631,11 @@ struct VerticalTabSidebar: View {
                       !tab.isHiddenTmuxWindow else { continue }
                 let flatIndex = tabsModel.index(of: tab.id) ?? 0
                 let kind: RowKind = tab.isTmuxWindow ? .windowRow : .flat
-                let parent = SidebarRow(tab: tab, kind: kind, flatIndex: flatIndex, indentLevel: 1)
+                // Window rows already add one visual level for their gateway.
+                // Here that level belongs to the project header, so both
+                // providers' tabs sit at the same depth with panes below them.
+                let parent = SidebarRow(tab: tab, kind: kind, flatIndex: flatIndex,
+                                        indentLevel: tab.isTmuxWindow ? 0 : 1)
                 if seenRows.insert(parent.id).inserted {
                     sectionRows.append(parent)
                 }
@@ -2648,7 +2646,7 @@ struct VerticalTabSidebar: View {
             // project so top/sidebar tab order stays duplicate-free.
             for tab in tabsModel.visibleTabs where tab.splitTree.count > 1 {
                 let flatIndex = tabsModel.index(of: tab.id) ?? 0
-                for paneID in tab.agentPaneIDs where
+                for paneID in paneIDsForRows(in: tab) where
                     tabsModel.projectGroupID(forPane: paneID, in: tab) == project.id {
                     let paneRow = SidebarRow(
                         tab: tab,
@@ -2803,14 +2801,22 @@ struct VerticalTabSidebar: View {
         return (status?.attentionPriority ?? 0, sequence)
     }
 
-    private func addingAgentPaneChildren(
+    /// Project mode reads the split tree independently of agent detection.
+    /// Filtering and row generation must use this same source so searching
+    /// cannot discard a visible secondary pane.
+    private func paneIDsForRows(in tab: TabModel) -> [UUID] {
+        guard projectGroupingActive else { return tab.agentPaneIDs }
+        return tab.splitTree.map(\.uuid)
+    }
+
+    private func addingPaneChildren(
         to rows: [SidebarRow],
         omitNonmatchingParents: Bool = false
     ) -> [SidebarRow] {
-        guard attentionBadgesEnabled else { return rows }
+        guard attentionBadgesEnabled || projectGroupingActive else { return rows }
 
         var result: [SidebarRow] = []
-        result.reserveCapacity(rows.count + tabsModel.tabs.reduce(0) { $0 + $1.agentPaneIDs.count })
+        result.reserveCapacity(rows.count + tabsModel.tabs.reduce(0) { $0 + $1.splitTree.count })
 
         for row in rows {
             switch row.kind {
@@ -2820,7 +2826,7 @@ struct VerticalTabSidebar: View {
                     continue
                 }
                 let parentMatches = searchFilterMatchesTabTitle(row.tab)
-                let paneIDs = row.tab.agentPaneIDs.filter { paneID in
+                let paneIDs = paneIDsForRows(in: row.tab).filter { paneID in
                     normalizedSearchFilter.isEmpty
                         || parentMatches
                         || searchFilterMatchesPane(row.tab, paneID: paneID)
@@ -2914,19 +2920,21 @@ struct VerticalTabSidebar: View {
         else { return filter.isEmpty }
         let presentation = pane.presentation
         let row = presentation.agentRow
+        let project = presentation.projectForGrouping ?? tab.herdrWorkspaceProject
         let values = [
             presentation.title,
             row?.agentDisplayName,
             row?.agentID,
-            row?.project?.label,
-            row?.project?.branch,
+            project?.label,
+            project?.branch,
+            project == nil ? tab.herdrWorkspaceLabel : nil,
         ]
         return values.compactMap { $0 }.contains { $0.lowercased().contains(filter) }
     }
 
     private func searchFilterMatches(_ tab: TabModel) -> Bool {
         searchFilterMatchesTabTitle(tab)
-            || tab.agentPaneIDs.contains { searchFilterMatchesPane(tab, paneID: $0) }
+            || paneIDsForRows(in: tab).contains { searchFilterMatchesPane(tab, paneID: $0) }
     }
 
     private func buildTmuxGatewayGroupRows(from tabs: [TabModel], ownerID: UUID) -> [SidebarRow] {
@@ -3048,9 +3056,20 @@ struct VerticalTabSidebar: View {
             }
         }
 
+        let controller = HerdrController.controller(forGateway: ownerID)
+        let groups = HerdrWorkspaceRules.groups(controller?.management.workspaces ?? [])
+        let groupedOrder = groups.flatMap { $0.map(\.workspace_id) }.filter { byWorkspace[$0] != nil }
+        workspaceOrder = groupedOrder + workspaceOrder.filter { !groupedOrder.contains($0) }
         let showsWorkspaces = workspaceOrder.count > 1
         for workspaceId in workspaceOrder {
             let members = byWorkspace[workspaceId] ?? []
+            let parent = groups.first { $0.contains { $0.workspace_id == workspaceId } }?.first
+            let isLinkedChild = parent.map { $0.workspace_id != workspaceId && byWorkspace[$0.workspace_id] != nil } ?? false
+            if isLinkedChild, let parent, !isFiltering,
+               collapsedGroups.contains(Self.herdrWorkspaceCollapseKey(ownerID: ownerID, workspaceId: parent.workspace_id)) {
+                continue
+            }
+            let workspaceIndent = isLinkedChild ? 2 : 1
             var indent = 1
             if showsWorkspaces, let first = members.first {
                 let key = Self.herdrWorkspaceCollapseKey(ownerID: ownerID, workspaceId: workspaceId)
@@ -3066,10 +3085,10 @@ struct VerticalTabSidebar: View {
                         collapsed: workspaceCollapsed
                     ),
                     flatIndex: tabsModel.index(of: first.id) ?? gatewayFlatIndex,
-                    indentLevel: 1
+                    indentLevel: workspaceIndent
                 ))
                 if workspaceCollapsed { continue }
-                indent = 2
+                indent = workspaceIndent + 1
             }
             for member in members {
                 guard let flatIndex = tabsModel.index(of: member.id) else { continue }
@@ -3480,8 +3499,7 @@ private struct SidebarPaneRowItem: View, Equatable {
 
 // MARK: - Agent Summary Bar
 
-/// Rollup line under the search bar ("2 blocked · 1 working") plus the
-/// attention-sort toggle. Hidden when no agents are detected anywhere.
+/// Rollup line and sort control shared by agent cards and ordinary projects.
 ///
 /// A separate view purely so the `AgentAttentionCenter.revision` read that
 /// drives its visibility is scoped here instead of to `VerticalTabSidebar.body`.
@@ -3491,6 +3509,8 @@ private struct SidebarPaneRowItem: View, Equatable {
 private struct SidebarAgentSummaryBar: View {
     let metrics: SidebarMetrics
     let accentTint: Color
+    let hasProjects: Bool
+    let showsAttention: Bool
     let sortIconName: String
     let sortHelp: String
     let sortIsActive: Bool
@@ -3499,9 +3519,16 @@ private struct SidebarAgentSummaryBar: View {
     var body: some View {
         // Registers the Observation dependency; the value itself is meaningless.
         let _ = AgentAttentionCenter.shared.revision
-        if !AgentAttentionCenter.shared.globalAgentCounts().isEmpty {
+        let hasAgents = showsAttention && !AgentAttentionCenter.shared.globalAgentCounts().isEmpty
+        if hasAgents || hasProjects {
             HStack(spacing: 6) {
-                AttentionRollupSummary(fontSize: metrics.subtitleSize + 1)
+                if hasAgents {
+                    AttentionRollupSummary(fontSize: metrics.subtitleSize + 1)
+                } else {
+                    Text("Projects")
+                        .font(.system(size: metrics.subtitleSize + 1))
+                        .foregroundColor(.secondary)
+                }
                 Spacer(minLength: 8)
                 Button(action: onCycleSort) {
                     Image(systemName: sortIconName)

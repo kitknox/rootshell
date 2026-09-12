@@ -292,6 +292,11 @@ extension MainView {
             self.selectTab(at: tabIndex)
         }
 
+        observerBag.observeOnMainActor(.showHerdrWorkspaces) { [self] notification in
+            guard let controller = notification.object as? HerdrController, controller.hostWindowId == windowId else { return }
+            herdrDashboardRequest = HerdrWorkspaceDashboardRequest(controller: controller, action: notification.userInfo?["action"] as? HerdrManagementAction)
+        }
+
         observerBag.observeOnMainActor(.showTmuxSessions) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
             self.showTmuxSessionsForSelectedTab()

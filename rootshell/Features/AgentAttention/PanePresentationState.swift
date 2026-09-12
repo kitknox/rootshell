@@ -28,6 +28,14 @@ final class PanePresentationState {
     var detectedAttentionStatus: AgentAttentionStatus?
     var detectedAgentRow: AgentRowState?
 
+    /// Free multiplexer metadata is useful even for an ordinary shell, or
+    /// when coding-agent detection is disabled. It does not create an agent row.
+    var reportedProject: AgentProjectIdentity?
+
+    var projectForGrouping: AgentProjectIdentity? {
+        AgentProjectIdentity.forGrouping(reported: reportedProject, detected: detectedAgentRow?.project)
+    }
+
     /// Latest live OSC 9;4 activity. Percentage-only mutations stay scoped to
     /// this pane's row; semantic edges are separately rolled up by the center.
     private(set) var oscProgressActivity: OSCProgressActivity?

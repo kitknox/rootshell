@@ -54,6 +54,10 @@ extension HerdrController {
                     self.endpointTabID = nil
                     self.endpointSize = nil
                     self.endpointActive = true
+                    candidate.onSnapshot = { [weak self, weak candidate] value in
+                        guard let self, self.endpoint === candidate else { return }
+                        self.applyEndpointNames(value)
+                    }
                     candidate.onFrame = { [weak self, weak candidate] frame in
                         guard let self, self.endpoint === candidate else { return }
                         self.applyEndpointFrame(frame)

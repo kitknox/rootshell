@@ -17,6 +17,11 @@ final class HerdrTabDialogCoordinator {
     var renameTab: TabModel?
     var renameText = ""
     var detachConfirmTab: TabModel?
+    var workspaceRequest: HerdrWorkspaceDashboardRequest?
+
+    func showWorkspaces(_ controller: HerdrController, action: HerdrManagementAction? = nil) {
+        workspaceRequest = .init(controller: controller, action: action)
+    }
 
     func requestRename(_ tab: TabModel) {
         renameText = tab.title
@@ -47,6 +52,15 @@ struct HerdrTabMenuItems: View {
 
     var body: some View {
         if let controller, controller.isActive {
+            Button("herdr Workspaces…", systemImage: "square.grid.2x2") { dialogs.showWorkspaces(controller) }
+            Button("New Workspace", systemImage: "plus.square.on.square") {
+                dialogs.showWorkspaces(controller, action: .init(kind: .createWorkspace, targetID: tab.herdrWorkspaceId ?? controller.selectedWorkspaceID))
+            }
+            if let workspaceID = tab.herdrWorkspaceId {
+                Menu("Workspace") {
+                    HerdrWorkspaceMenuItems(controller: controller, workspaceID: workspaceID, onAction: { dialogs.showWorkspaces(controller, action: $0) })
+                }
+            }
             if tab.isHerdrWindow {
                 Button {
                     dialogs.requestRename(tab)
@@ -97,7 +111,9 @@ private struct HerdrTabDialogsModifier: ViewModifier {
     @Bindable var dialogs: HerdrTabDialogCoordinator
 
     func body(content: Content) -> some View {
-        content.background {
+        content.sheet(item: $dialogs.workspaceRequest) { request in
+            HerdrWorkspaceSheet(request: request)
+        }.background {
             ZStack {
                 renameDialog
                 detachDialog

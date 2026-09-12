@@ -8,6 +8,7 @@ extension HerdrController {
     var showsGatewayStatus: Bool { !didEnd }
 
     func publishSessionState() {
+        publishManagementState()
         gateway?.updateHerdrGatewayOverlay()
         NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gatewayUUID)
     }

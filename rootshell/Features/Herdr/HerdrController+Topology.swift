@@ -26,6 +26,7 @@ extension HerdrController {
         if !snapshot.tabs.isEmpty { newTabError = nil }
         workspaces = Dictionary(uniqueKeysWithValues: snapshot.workspaces.map { ($0.workspace_id, $0) })
         tabOrder.reset(to: snapshot.tabs)
+        tabNames.reconcile(snapshot.tabs)
         for tab in snapshot.tabs {
             tabInfos[tab.tab_id] = tab
             ensureTab(tab)
@@ -83,19 +84,27 @@ extension HerdrController {
         queueAttaches(priorityTab: tabsModel.selectedTabID)
         pushGeometryForHostedTabs()
         autoHideGatewayIfWanted()
-        publishProjectPaths()
         publishSessionState()
         if isInitialSnapshot, snapshot.tabs.isEmpty {
             requestNewTab(workspaceID: nil, isAutomatic: true)
         }
     }
 
-    /// herdr knows each pane's directory; hand it to agent attention so the
-    /// sidebar shows the project without probing the host.
+    /// Publish free directory/checkout metadata independently of agent
+    /// detection, which may be disabled or have no monitor for this pane yet.
     func publishProjectPaths() {
         for pane in paneInfos.values {
-            guard let view = paneViews[pane.terminal_id],
-                  let path = pane.projectPath else { continue }
+            guard let view = paneViews[pane.terminal_id] else { continue }
+            publishProject(for: pane, view: view)
+        }
+    }
+
+    func publishProject(for pane: HerdrControl.PaneInfo, view: Ghostty.TerminalView) {
+        let project = HerdrProjectIdentity.project(path: pane.projectPath,
+            workspace: workspaces[pane.workspace_id], hostKey: gateway.map(AgentAttentionCenter.hostKey(for:)))
+        let pathChanged = view.presentation.reportedProject?.path != project?.path
+        if view.presentation.reportedProject != project { view.presentation.reportedProject = project }
+        if pathChanged, let path = pane.projectPath {
             AgentAttentionCenter.shared.applyHerdrProjectPath(terminal: view, path: path)
         }
     }
@@ -146,6 +155,7 @@ extension HerdrController {
     }
 
     func tabDidRename(tabId: String, label: String) {
+        tabNames.renamed(tabId, label: label)
         guard let info = tabInfos[tabId] else { return }
         tabInfos[tabId] = HerdrControl.TabInfo(
             tab_id: info.tab_id,
@@ -159,6 +169,7 @@ extension HerdrController {
         if let tab = tabs[tabId] {
             refreshTitle(of: tab)
         }
+        publishManagementState()
     }
 
     /// Applies the complete ordered list returned by tab.list or tab.move.
@@ -183,6 +194,7 @@ extension HerdrController {
     /// Orders this gateway's projected tabs by workspace then server list order,
     /// permuting only the slots they already occupy.
     func reorderTabs() {
+        defer { publishManagementState() }
         tabOrderDeferredForDrag = false
         let mine = Set(tabs.values.map(\.id))
         let slots = tabsModel.tabs.indices.filter { mine.contains(tabsModel.tabs[$0].id) }
@@ -211,13 +223,19 @@ extension HerdrController {
     /// Workspace labels feed the tab group titles; bump grouping so the
     /// sidebar re-derives them.
     func refreshWorkspaceGroups() {
+        let hostKey = gateway.map(AgentAttentionCenter.hostKey(for:))
         for tab in tabs.values {
             guard let workspaceId = tab.herdrWorkspaceId else { continue }
             let label = workspaces[workspaceId]?.label ?? workspaceId
             if tab.herdrWorkspaceLabel != label {
                 tab.herdrWorkspaceLabel = label
             }
+            tab.herdrHostKey = hostKey
+            tab.herdrWorkspaceProject = HerdrProjectIdentity.project(
+                path: nil, workspace: workspaces[workspaceId], hostKey: hostKey)
         }
+        publishProjectPaths()
+        publishManagementState()
     }
 
     // MARK: - Panes
@@ -232,18 +250,14 @@ extension HerdrController {
     }
 
     func paneDidUpdate(_ pane: HerdrControl.PaneInfo) {
-        let previous = paneInfos[pane.pane_id]
         paneInfos[pane.pane_id] = pane
         if let view = paneViews[pane.terminal_id] {
             view.seedHerdrTitle(pane.title ?? pane.terminal_title)
+            publishProject(for: pane, view: view)
         } else if let tab = tabs[pane.tab_id] {
             refreshTitle(of: tab)
         }
-        let path = pane.projectPath
-        if let path, path != previous?.projectPath,
-           let view = paneViews[pane.terminal_id] {
-            AgentAttentionCenter.shared.applyHerdrProjectPath(terminal: view, path: path)
-        }
+        publishManagementState()
     }
 
     func paneDidClose(paneId: String) {
@@ -279,6 +293,7 @@ extension HerdrController {
             tab.splitTree = tab.splitTree.remove(leaf)
         }
         // The destination tab's `tab.layout` record places the pane.
+        refreshTopology()
     }
 
     /// Creates or rebinds the surface view for a pane. New views are created
@@ -303,6 +318,7 @@ extension HerdrController {
                 existing.containingTabID = tab.id
             }
             existing.seedHerdrTitle(pane.title ?? pane.terminal_title)
+            publishProject(for: pane, view: existing)
             return
         }
         guard let ghosttyApp else {
@@ -321,6 +337,7 @@ extension HerdrController {
         }
         paneViews[pane.terminal_id] = view
         view.seedHerdrTitle(pane.title ?? pane.terminal_title)
+        publishProject(for: pane, view: view)
         NotificationCenter.default.post(name: .herdrPaneBindingsChanged, object: nil)
     }
 
@@ -330,12 +347,14 @@ extension HerdrController {
         let staleTabs = tabs.filter { !tabIds.contains($0.key) }
         let removedIDs = Set(staleTabs.values.map(\.id))
         let selectedID = tabsModel.selectedTabID
+        let followsPaneMove = paneMoveSelectionRevision == tabsModel.selectionRevision
         let removesSelection = selectedID.map { removedIDs.contains($0) } ?? false
         let neighbor = removesSelection ? selectedID.flatMap { tabsModel.groupedCloseNeighbor(for: $0) } : nil
         for (paneId, _) in paneInfos where !paneIds.contains(paneId) {
             paneInfos.removeValue(forKey: paneId)
         }
-        let staleViews = paneViews.filter { !terminalIds.contains($0.key) }
+        let movingTerminals = Set(pendingPaneMoveTerminals.values)
+        let staleViews = paneViews.filter { !terminalIds.contains($0.key) && !movingTerminals.contains($0.key) }
         for (terminalId, view) in staleViews {
             retirePane(view: view, terminalId: terminalId)
         }
@@ -362,6 +381,10 @@ extension HerdrController {
                 ?? visible.first(where: { $0.owningGatewayTerminalUUID == gatewayUUID })?.id
                 ?? visible.first?.id
             tabsModel.pendingScrollToTabID = tabsModel.selectedTabID
+            // Closing the emptied source tab is part of the move. Its
+            // automatic neighbor selection must not cancel following the
+            // moved pane; an intervening user selection still does.
+            if followsPaneMove { paneMoveSelectionRevision = tabsModel.selectionRevision }
         }
         publishSessionState()
         if !staleViews.isEmpty {
@@ -370,6 +393,7 @@ extension HerdrController {
     }
 
     func pruneAll() {
+        pendingPaneMoveTerminals.removeAll()
         prune(tabIds: [], paneIds: [], terminalIds: [])
         if let gatewayTabID, tabsModel.selectedTabID == nil || !tabsModel.tabs.contains(where: { $0.id == tabsModel.selectedTabID }) {
             tabsModel.selectedTabID = gatewayTabID
@@ -656,14 +680,12 @@ extension HerdrController {
         focusedPaneId = paneId
         guard let info = paneInfos[paneId], let tab = tabs[info.tab_id],
               let view = paneViews[info.terminal_id] else { return }
+        for id in Array(workspaces.keys) { workspaces[id]?.focused = id == info.workspace_id }
+        workspaces[info.workspace_id]?.active_tab_id = info.tab_id
         for pane in paneInfos.values where pane.tab_id == info.tab_id {
-            paneInfos[pane.pane_id] = HerdrControl.PaneInfo(
-                pane_id: pane.pane_id, terminal_id: pane.terminal_id, workspace_id: pane.workspace_id,
-                tab_id: pane.tab_id, focused: pane.pane_id == paneId, agent_status: pane.agent_status,
-                agent: pane.agent, display_agent: pane.display_agent, title: pane.title,
-                terminal_title: pane.terminal_title, cwd: pane.cwd, foreground_cwd: pane.foreground_cwd,
-                state_labels: pane.state_labels
-            )
+            var updated = pane
+            updated.focused = pane.pane_id == paneId
+            paneInfos[pane.pane_id] = updated
         }
         if tab.focusedPane !== view || (tabsModel.selectedTabID == tab.id &&
             (!view.isLogicallyFocused || !view.isFirstResponder)) {
@@ -675,7 +697,10 @@ extension HerdrController {
     func remoteTabFocusDidChange(tabId: String) {
         // Another client changed herdr's focused tab; do not yank the user's
         // selection here. Selection follows local intent, as with tmux.
-        _ = tabId
+        if let info = tabInfos[tabId] {
+            workspaces[info.workspace_id]?.active_tab_id = tabId
+        }
+        publishSessionState()
     }
 
     func selectTab(containingPane paneId: String, focusPane focus: Bool) {

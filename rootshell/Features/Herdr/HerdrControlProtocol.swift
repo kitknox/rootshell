@@ -99,6 +99,8 @@ nonisolated enum HerdrControl {
 
     struct WorkspaceCreateParams: Encodable {
         var focus = true
+        var label: String?
+        var cwd: String?
     }
 
     struct TabRenameParams: Encodable {
@@ -191,13 +193,16 @@ nonisolated enum HerdrControl {
         let splits: [LayoutSplit]
     }
 
-    struct WorkspaceInfo: Decodable, Sendable {
+    struct WorkspaceInfo: Decodable, Sendable, Equatable {
         let workspace_id: String
-        let label: String
+        var label: String
         let number: Int
-        let focused: Bool
-        let active_tab_id: String
+        var focused: Bool
+        var active_tab_id: String
         let agent_status: String
+        var tab_count: Int?
+        var pane_count: Int?
+        var worktree: WorkspaceWorktreeInfo?
     }
 
     struct TabInfo: Decodable, Sendable {
@@ -215,7 +220,7 @@ nonisolated enum HerdrControl {
         let terminal_id: String
         let workspace_id: String
         let tab_id: String
-        let focused: Bool
+        var focused: Bool
         let agent_status: String
         let agent: String?
         let display_agent: String?
@@ -224,6 +229,7 @@ nonisolated enum HerdrControl {
         let cwd: String?
         let foreground_cwd: String?
         let state_labels: [String: String]?
+        var label: String?
 
         /// Prefer the foreground process, falling back to the shell when
         /// the server cannot resolve a usable foreground directory.
@@ -448,6 +454,7 @@ nonisolated enum HerdrControl {
         case workspaceRenamed(WorkspaceRenamedData)
         case workspaceFocused(WorkspaceIdData)
         case workspaceReordered
+        case worktreesChanged
         case layoutUpdated(LayoutSnapshot)
         case agentStatusChanged(AgentStatusChangedData)
         case unknown(String)
@@ -526,6 +533,7 @@ nonisolated enum HerdrControl {
         case "workspace_renamed": return data(WorkspaceRenamedData.self).map(Inbound.workspaceRenamed) ?? .unknown(event)
         case "workspace_focused": return data(WorkspaceIdData.self).map(Inbound.workspaceFocused) ?? .unknown(event)
         case "workspace_moved", "workspace_reordered": return .workspaceReordered
+        case "worktree_created", "worktree_opened", "worktree_removed": return .worktreesChanged
         case "layout_updated": return data(LayoutUpdatedData.self).map { .layoutUpdated($0.layout) } ?? .unknown(event)
         case "pane.agent_status_changed", "pane_agent_status_changed":
             return data(AgentStatusChangedData.self).map(Inbound.agentStatusChanged) ?? .unknown(event)

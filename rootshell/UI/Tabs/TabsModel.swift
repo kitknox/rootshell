@@ -190,24 +190,28 @@ struct TabGroup: Identifiable, Hashable {
     let tabIDs: [UUID]
 }
 
-/// Stable identity for a Coding Agent project section. The display label is
-/// deliberately not part of the identity: two repositories named "api" on
+/// Stable identity for a project section shared by all terminal providers.
+/// The display label is not part of the identity: two repositories named "api" on
 /// different hosts/paths must remain separate, while a better probe may refine
 /// how the same section is presented without merging it with a namesake.
 nonisolated struct ProjectGroupID: Hashable, Codable, Sendable, Identifiable {
     let hostKey: String
     let path: String
+    /// A named workspace with no known directory still gets a section. Its
+    /// identity survives renames and cannot collide with a filesystem project.
+    let workspaceKey: String?
 
     var id: String { rawValue }
-    var rawValue: String { "\(hostKey)\u{1f}\(path)" }
+    var rawValue: String { "\(hostKey)\u{1f}\(path)" + (workspaceKey.map { "\u{1f}\($0)" } ?? "") }
 
     static let other = ProjectGroupID(hostKey: "", path: "")
 
     var isOther: Bool { self == .other }
 
-    init(hostKey: String?, path: String) {
+    init(hostKey: String?, path: String, workspaceKey: String? = nil) {
         self.hostKey = hostKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         self.path = AgentProjectPath.normalize(path)
+        self.workspaceKey = workspaceKey
     }
 }
 
@@ -310,6 +314,12 @@ final class TabModel: Identifiable {
     }
     var herdrWorkspaceLabel: String? {
         didSet { markGroupingChanged(oldValue, herdrWorkspaceLabel) }
+    }
+    var herdrHostKey: String? {
+        didSet { markGroupingChanged(oldValue, herdrHostKey) }
+    }
+    var herdrWorkspaceProject: AgentProjectIdentity? {
+        didSet { markGroupingChanged(oldValue, herdrWorkspaceProject) }
     }
 
     /// The tmux window id this tab models, once known (set by
@@ -1255,10 +1265,8 @@ final class TabsModel {
         let projectMembership: [String] = projectScopedInboxEnabled
             ? grouping.visibleTabs.map(Self.projectMembershipRevision(for:))
             : []
-        let anyProject = projectScopedInboxEnabled && grouping.visibleTabs.contains { tab in
-            tab.splitTree.contains {
-                $0.presentation.agentRow?.project?.label.isEmpty == false
-            }
+        let anyProject = projectScopedInboxEnabled && grouping.visibleTabs.contains {
+            !projectCandidates(for: $0).isEmpty
         }
         let projectGrouping = projectScopedInboxEnabled && isGroupedModeEnabled && anyProject
         let revision = NavigationRevision(
@@ -1332,33 +1340,53 @@ final class TabsModel {
         return snapshot
     }
 
+    var hasAnyProject: Bool {
+        visibleTabs.contains { !projectCandidates(for: $0).isEmpty }
+    }
+
     /// Cache identity for every project-bearing pane in a tab. Pane UUIDs are
-    /// included so replacing one agent pane with another invalidates even when
+    /// included so replacing one pane with another invalidates even when
     /// their labels happen to match.
     private static func projectMembershipRevision(for tab: TabModel) -> String {
         let values = tab.splitTree.map { pane in
-            let project = pane.presentation.agentRow?.project
+            let project = pane.presentation.projectForGrouping
             let projectKey = project.map {
                 "\($0.hostKey ?? ""):\($0.identityPath):\($0.label)"
             } ?? ""
             let isAgent = pane.presentation.agentRow != nil ? "agent" : "other"
             return "\(pane.uuid.uuidString)=\(isAgent):\(projectKey)"
         }
-        return values.joined(separator: "|")
+        let fallback = workspaceProjectCandidate(for: tab).map { "\($0.id.rawValue):\($0.label)" } ?? ""
+        return ([fallback] + values).joined(separator: "|")
     }
 
     private static func projectGroupID(for project: AgentProjectIdentity) -> ProjectGroupID {
         ProjectGroupID(hostKey: project.hostKey, path: project.identityPath)
     }
 
+    private static func workspaceProjectCandidate(for tab: TabModel) -> (id: ProjectGroupID, label: String)? {
+        guard tab.isHerdrWindow else { return nil }
+        if let project = tab.herdrWorkspaceProject {
+            return (projectGroupID(for: project), project.label)
+        }
+        guard let workspaceID = tab.herdrWorkspaceId,
+              let ownerID = tab.owningGatewayTerminalUUID else { return nil }
+        return (ProjectGroupID(hostKey: tab.herdrHostKey, path: "",
+                               workspaceKey: "\(ownerID.uuidString):\(workspaceID)"),
+                tab.herdrWorkspaceLabel ?? workspaceID)
+    }
+
     private func projectCandidates(for tab: TabModel) -> [(id: ProjectGroupID, label: String)] {
         var seen = Set<ProjectGroupID>()
-        return tab.splitTree.compactMap { pane in
-            guard let project = pane.presentation.agentRow?.project else { return nil }
-            let id = Self.projectGroupID(for: project)
-            guard seen.insert(id).inserted else { return nil }
-            return (id, project.label)
+        let fallback = Self.workspaceProjectCandidate(for: tab)
+        let candidates = tab.splitTree.compactMap { pane -> (id: ProjectGroupID, label: String)? in
+            let candidate = pane.presentation.projectForGrouping.map {
+                (id: Self.projectGroupID(for: $0), label: $0.label)
+            } ?? fallback
+            guard let candidate, seen.insert(candidate.0).inserted else { return nil }
+            return candidate
         }
+        return candidates.isEmpty ? fallback.map { [$0] } ?? [] : candidates
     }
 
     func primaryProjectGroupID(for tab: TabModel) -> ProjectGroupID {
@@ -1373,9 +1401,9 @@ final class TabsModel {
     }
 
     func projectGroupID(forPane paneID: UUID, in tab: TabModel) -> ProjectGroupID? {
-        guard let project = tab.splitTree.first(where: { $0.uuid == paneID })?
-            .presentation.agentRow?.project else { return nil }
-        return Self.projectGroupID(for: project)
+        guard let pane = tab.splitTree.first(where: { $0.uuid == paneID }) else { return nil }
+        return pane.presentation.projectForGrouping.map(Self.projectGroupID(for:))
+            ?? Self.workspaceProjectCandidate(for: tab)?.id
     }
 
     private func buildProjectSections(visibleTabs: [TabModel]) -> [ProjectTabSection] {
@@ -1425,6 +1453,10 @@ final class TabsModel {
                 let disambiguator: String
                 if id.hostKey.isEmpty {
                     disambiguator = pathSuffix
+                } else if id.workspaceKey != nil, sameHostIDs.count > 1 {
+                    // Unknown-directory workspaces need readable names, not
+                    // the opaque owner/workspace IDs used for identity.
+                    disambiguator = "\(id.hostKey) · \((sameHostIDs.firstIndex(of: id) ?? 0) + 1)"
                 } else if sameHostIDs.count > 1 {
                     disambiguator = "\(id.hostKey) · \(pathSuffix)"
                 } else {

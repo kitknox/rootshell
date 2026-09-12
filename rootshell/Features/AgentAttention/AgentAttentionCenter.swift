@@ -51,7 +51,7 @@ nonisolated enum AgentAttentionSettings {
     /// so the tab bar can scope to the selected tab's project even before the
     /// sidebar has ever been opened this launch. (id=agent-project)
     nonisolated static var projectGroupingSelected: Bool {
-        SettingsStore.shared.value(Settings.CodingAgents.inboxSort) == "project" && badgesEnabled
+        SettingsStore.shared.value(Settings.CodingAgents.inboxSort) == "project"
     }
 
     nonisolated static var projectProbesEnabled: Bool {

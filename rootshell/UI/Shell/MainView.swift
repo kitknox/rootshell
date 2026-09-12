@@ -350,6 +350,7 @@ struct MainView: View {
     /// tmux session dashboard sheet (opened from a gateway/window tab's
     /// context menu). Carries the gateway's controller.
     @State var tmuxDashboardRequest: TmuxDashboardRequest?
+    @State var herdrDashboardRequest: HerdrWorkspaceDashboardRequest?
 
     // Trzsz transfer (Continuity Handoff) state
     @State var trzszTransferOriginRequest: TrzszTransferOriginRequest?

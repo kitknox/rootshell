@@ -19,6 +19,7 @@ import UIKit
 extension Notification.Name {
     /// Posted (object: gateway terminal UUID) when a herdr control stream ends.
     static let herdrControlModeDidEnd = Notification.Name("herdrControlModeDidEnd")
+    static let showHerdrWorkspaces = Notification.Name("showHerdrWorkspaces")
     static let herdrControlStateDidChange = Notification.Name("herdrControlStateDidChange")
 }
 
@@ -152,6 +153,14 @@ final class HerdrController {
     var workspaces: [String: HerdrControl.WorkspaceInfo] = [:]
     var tabInfos: [String: HerdrControl.TabInfo] = [:]
     var tabOrder = HerdrTabOrder()
+    var tabNames = HerdrTabNames()
+    var nameMetadataBoot: String?
+    let management = HerdrManagementState()
+    var managementRevision: UInt64 = 0
+    var paneMoveSelectionRevision: UInt64?
+    /// An emptied source tab can close before pane.moved identifies the new
+    /// pane ID. Keep the terminal surface/session alive across that gap.
+    var pendingPaneMoveTerminals: [UUID: String] = [:]
     /// herdr tab id → the tab modeling it.
     var tabs: [String: TabModel] = [:]
     /// herdr pane id → last known pane facts.
@@ -376,12 +385,21 @@ final class HerdrController {
             ).snapshot
             guard self.channel === channel else { return }
             if let previousBoot, previousBoot != opened.boot_id {
+                tabNames = HerdrTabNames()
                 Self.logger.info("herdr server restarted (boot \(previousBoot) -> \(opened.boot_id)); rebuilding")
             }
             isActive = true
             connectionError = nil
             applySnapshot(snapshot)
             subscribeAgentStatus()
+            // Optional additions must not make an older control server fail
+            // its otherwise compatible topology subscription handshake.
+            Task {
+                try? await channel.request("events.subscribe", HerdrControl.SubscribeParams(subscriptions:
+                    ["worktree.created", "worktree.opened", "worktree.removed", "workspace.metadata_updated"].map {
+                        HerdrControl.Subscription(type: $0)
+                    }))
+            }
             startHealthPing(on: channel)
             NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gatewayUUID)
         } catch {
@@ -680,6 +698,8 @@ final class HerdrController {
         tabReorderTask?.cancel()
         tabReorderTask = nil
         pendingTabReorders.removeAll()
+        management.pending.removeAll()
+        managementRevision &+= 1
         tabOrderDeferredForDrag = false
         topologyRefreshTask?.cancel()
         topologyRefreshTask = nil
@@ -766,25 +786,20 @@ final class HerdrController {
         case .workspaceCreated(let workspace), .workspaceUpdated(let workspace):
             workspaces[workspace.workspace_id] = workspace
             refreshWorkspaceGroups()
+            publishSessionState()
         case .workspaceClosed(let closed):
             workspaces.removeValue(forKey: closed.workspace_id)
             refreshTopology()
         case .workspaceRenamed(let renamed):
             if var workspace = workspaces[renamed.workspace_id] {
-                workspace = HerdrControl.WorkspaceInfo(
-                    workspace_id: workspace.workspace_id,
-                    label: renamed.label,
-                    number: workspace.number,
-                    focused: workspace.focused,
-                    active_tab_id: workspace.active_tab_id,
-                    agent_status: workspace.agent_status
-                )
+                workspace.label = renamed.label
                 workspaces[renamed.workspace_id] = workspace
                 refreshWorkspaceGroups()
             }
-        case .workspaceFocused:
-            break
-        case .workspaceReordered:
+        case .workspaceFocused(let focused):
+            for id in Array(workspaces.keys) { workspaces[id]?.focused = id == focused.workspace_id }
+            publishSessionState()
+        case .workspaceReordered, .worktreesChanged:
             refreshTopology()
         case .agentStatusChanged(let change):
             agentStatusDidChange(change)
@@ -808,12 +823,14 @@ final class HerdrController {
             defer { if self.channel === channel { self.topologyRefreshTask = nil } }
             while self.topologyRefreshWanted, !Task.isCancelled, self.channel === channel {
                 self.topologyRefreshWanted = false
+                let managementRevision = self.managementRevision
                 do {
                     let snapshot = try await channel.request(
                         "session.snapshot", HerdrControl.EmptyParams(),
                         as: HerdrControl.SessionSnapshotResult.self
                     ).snapshot
                     guard self.channel === channel, !Task.isCancelled else { return }
+                    guard managementRevision == self.managementRevision, !self.management.isBusy else { continue }
                     self.applySnapshot(snapshot)
                 } catch {
                     Self.logger.warning("herdr topology refresh failed: \(error.localizedDescription)")

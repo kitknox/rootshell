@@ -154,6 +154,10 @@ extension MainView {
     func showTmuxSessionsForSelectedTab() {
         guard terminals.indices.contains(selectedTabIndex) else { return }
         let tab = terminals[selectedTabIndex]
+        if let controller = HerdrController.controller(forAnyTab: tab) {
+            herdrDashboardRequest = HerdrWorkspaceDashboardRequest(controller: controller)
+            return
+        }
         guard tab.isTmuxWindow || tab.isTmuxGateway else { return }
         guard let controller = tmuxControllerForTab(tab) else { return }
         tmuxDashboardRequest = TmuxDashboardRequest(controller: controller)

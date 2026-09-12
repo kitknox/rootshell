@@ -39,7 +39,10 @@ extension Ghostty.TerminalView {
     func publishHerdrTitle() {
         sessionProvidedTitle = herdrTitleState.reportedTitle
         guard !Ghostty.isAppBackgroundedAtomic else { return }
-        let resolved = herdrTitleState.resolvedTitle(override: userOverrideTitle, fallback: "")
+        let manualName = herdrPaneBinding.flatMap { binding in
+            HerdrController.controller(forGateway: binding.gatewayUUID)?.paneInfos[binding.paneId]?.label
+        }
+        let resolved = herdrTitleState.resolvedTitle(override: manualName ?? userOverrideTitle, fallback: "")
         if title != resolved { title = resolved }
         guard let binding = herdrPaneBinding,
               let controller = HerdrController.controller(forGateway: binding.gatewayUUID),

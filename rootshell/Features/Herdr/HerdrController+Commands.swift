@@ -79,6 +79,8 @@ extension HerdrController {
                     guard self.reorderIsCurrent(generation) else { return }
                     self.finishTabReorder()
                     Self.logger.warning("herdr tab reorder failed: \(error.localizedDescription)")
+                    self.management.error = error.localizedDescription
+                    self.presentTabErrorIfNeeded(title: String(localized: "Couldn’t Reorder herdr Tabs"), message: error.localizedDescription)
                     if self.mode == .legacy { self.legacyNotice("tab reorder failed: \(error.localizedDescription)") }
                     self.reorderTabs()
                     // A timeout may already have moved the tab. Read back
@@ -114,8 +116,17 @@ extension HerdrController {
     /// follows and watchdog re-asserts never call this. Vanilla endpoint
     /// focus belongs to our client, independently of the CLI's focus.
     func requestSelectPane(_ view: Ghostty.TerminalView) {
-        if let state = view.herdrEndpointPane { state.focus(); return }
-        guard let binding = view.herdrPaneBinding, isActive, mode == .raw else { return }
+        guard let binding = view.herdrPaneBinding, isActive else { return }
+        if mode == .legacy {
+            if let endpoint, endpointActive, endpoint.boot != nil, endpoint.methods.contains("pane.focus") {
+                // The binding is updated by pane.moved before the next frame.
+                // A retained endpoint pane can still carry its old pane ID.
+                endpoint.command("pane.focus", ["pane_id": binding.paneId], coalescingKey: "focus-pane")
+            } else {
+                legacyCommand("pane focus \(LoginShellCommand.singleQuoted(binding.paneId))")
+            }
+            return
+        }
         send("pane.focus", HerdrControl.PaneTarget(pane_id: binding.paneId))
     }
 
@@ -316,11 +327,7 @@ extension HerdrController {
 
     func requestRenameTab(_ tab: TabModel, label: String) {
         guard let tabId = tab.herdrTabId else { return }
-        if mode == .legacy {
-            legacyCommand("tab rename \(tabId) \(LoginShellCommand.singleQuoted(label))")
-            return
-        }
-        send("tab.rename", HerdrControl.TabRenameParams(tab_id: tabId, label: label))
+        runManagement { [self] in try await renameManagedTab(tabId, label: label) }
     }
 
     func requestToggleZoom(_ view: Ghostty.TerminalView) {

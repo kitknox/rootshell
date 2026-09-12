@@ -65,6 +65,7 @@ extension MainView {
                 (UIDevice.current.userInterfaceIdiom == .phone || clipboardManagerKeyboardMode)) ||
             connectionInfoToShow != nil ||
             tmuxDashboardRequest != nil ||
+            herdrDashboardRequest != nil ||
             pendingNewTabRequest != nil ||
             unavailableNewTabRequest != nil ||
             trzszTransferOriginRequest != nil ||
@@ -115,9 +116,16 @@ extension MainView {
     // (Views/TabBar.swift) so per-tab title and roam-protocol mutations
     // do not invalidate `MainView.body`.
 
+    private func applyHerdrDashboard<V: View>(_ view: V) -> some View {
+        view.sheet(item: $herdrDashboardRequest) { request in
+            HerdrWorkspaceSheet(request: request)
+        }
+    }
+
     @ViewBuilder
     func applySheetModifiers<V: View>(_ view: V, sheetTheme: ResolvedSheetTheme) -> some View {
-        view
+        let dashboardHost = applyHerdrDashboard(view)
+        dashboardHost
             .modifier(SettingsSheetModifier(
                 showSettings: $showSettings,
                 settingsDestination: settingsDestination,

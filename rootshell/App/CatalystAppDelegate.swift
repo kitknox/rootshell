@@ -1464,7 +1464,7 @@ class CatalystAppDelegate: AppDelegate {
         )
 
         let tmuxSessions = UIKeyCommand(
-            title: String(localized: "tmux Sessions"),
+            title: String(localized: "Sessions & Workspaces"),
             action: #selector(UIApplication.ghostty_showTmuxSessions(_:)),
             input: "s",
             modifierFlags: [.command, .shift]

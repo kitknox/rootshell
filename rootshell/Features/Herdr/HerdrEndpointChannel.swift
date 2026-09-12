@@ -329,7 +329,7 @@ final class HerdrEndpointChannel {
                 if final {
                     if let value = try JSONSerialization.jsonObject(with: response) as? [String: Any],
                        let error = value["error"] as? [String: Any] {
-                        finish(.failure(Wire.Failure.invalid(error["message"] as? String ?? "command failed")))
+                        finish(.failure(HerdrChannelError.remote(code: error["code"] as? String ?? "command_failed", message: error["message"] as? String ?? "command failed")))
                     } else { finish(.success(response)) }
                 }
             case .clipboard(let encoded):

@@ -43,6 +43,7 @@ extension Ghostty.TerminalView {
                 latestNotice: controller.legacyLatestNotice,
                 isForced: controller.legacyFallbackForced
             ) : nil,
+            workspaces: { [weak controller] in controller?.showWorkspaceOverview() },
             newTab: { [weak controller] in controller?.requestNewTab(workspaceID: nil) },
             retryConnection: { [weak controller] in controller?.applicationDidBecomeActive() },
             detach: { [weak controller] in controller?.detach(closeGateway: false) }

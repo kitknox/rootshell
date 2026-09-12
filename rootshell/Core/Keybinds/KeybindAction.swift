@@ -356,7 +356,7 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
         case .duplicate_ssh_tab: return String(localized: "Duplicate Focused Tab", comment: "Keybind action")
         case .previous_tab: return String(localized: "Previous Tab", comment: "Keybind action")
         case .next_tab: return String(localized: "Next Tab", comment: "Keybind action")
-        case .show_tmux_sessions: return String(localized: "tmux Sessions", comment: "Keybind action")
+        case .show_tmux_sessions: return String(localized: "Sessions & Workspaces", comment: "Keybind action")
         case .detach_other_clients: return String(localized: "Detach Other Clients", comment: "Keybind action")
 
         case .select_tab_1: return String(localized: "Select Tab 1", comment: "Keybind action")
