@@ -138,7 +138,8 @@ nonisolated struct LossyLocalMultiplexerAttachment: Codable, Equatable, Sendable
     }
 }
 
-extension KeyedDecodingContainer {
+// Synthesized `init(from:)` of the types holding this wrapper is nonisolated.
+nonisolated extension KeyedDecodingContainer {
     func decode(_ type: LossyLocalMultiplexerAttachment.Type, forKey key: Key) throws -> LossyLocalMultiplexerAttachment {
         try decodeIfPresent(type, forKey: key) ?? .init()
     }

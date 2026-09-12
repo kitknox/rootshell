@@ -1,7 +1,10 @@
 // Copyright (c) 2026 Kit Knox / Rootshell LLC
 import Foundation
 
-extension HerdrControl {
+// `nonisolated enum HerdrControl` does not reach a separate extension; without
+// this the wire models pick up MainActor and their synthesized conformances
+// cannot be used off the main actor.
+nonisolated extension HerdrControl {
     struct WorkspaceWorktreeInfo: Decodable, Sendable, Equatable {
         let repo_key: String
         let repo_name: String

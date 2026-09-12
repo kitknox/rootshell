@@ -352,7 +352,7 @@ class SocketCommandServer {
                 resourcesDir: createRequest.resourcesDir
             )
 
-            let recoveryAccepted = createRequest.recoveryAttachment.map(LocalMultiplexerRecovery.isAvailable) ?? false
+            let recoveryAccepted = createRequest.recoveryAttachment.map { LocalMultiplexerRecovery.isAvailable($0) } ?? false
             if let attachment = createRequest.recoveryAttachment, recoveryAccepted,
                let command = attachment.ptyRecoveryCommand {
                 spawnConfig.recoveryCommand = command

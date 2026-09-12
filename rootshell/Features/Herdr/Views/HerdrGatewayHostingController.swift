@@ -53,7 +53,7 @@ final class HerdrGatewayHostingController: UIHostingController<HerdrGatewayView>
     func relinquishFocus() {
         sequences.reset()
         lastDelivery = nil
-        if isFirstResponder { resignFirstResponder() }
+        if isFirstResponder { _ = resignFirstResponder() }
     }
 
     override func resignFirstResponder() -> Bool {

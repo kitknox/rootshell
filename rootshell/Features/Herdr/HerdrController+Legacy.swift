@@ -15,7 +15,8 @@ import os
 extension HerdrController {
 
     private static let legacyPollInterval: Duration = .seconds(2)
-    private static let legacyMaxResponseBytes = 8 * 1024 * 1024
+    // Default arguments are evaluated nonisolated, so this cap must be too.
+    private nonisolated static let legacyMaxResponseBytes = 8 * 1024 * 1024
 
     /// Uses the stock client when control streams are unavailable or fallback
     /// mode was explicitly requested in Debug settings.

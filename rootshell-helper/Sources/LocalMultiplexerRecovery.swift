@@ -36,7 +36,7 @@ enum LocalMultiplexerRecovery {
     }
 
     static func paths(_ record: Record, _ key: String) -> Set<String> {
-        Set((record[key] as? [String] ?? []).map(canonical))
+        Set((record[key] as? [String] ?? []).map { canonical($0) })
     }
 
     static func socketIdentity(_ path: String) -> (device: UInt64, inode: UInt64)? {
@@ -230,7 +230,7 @@ enum LocalMultiplexerRecovery {
             guard let apiSocket = attachment.launchEnvironment["HERDR_SOCKET_PATH"] else { return false }
             return rows.contains {
                 ($0["name"] as? String) == attachment.sessionName && ($0["running"] as? Bool) == true
-                    && ($0["socket_path"] as? String).map(canonical) == canonical(apiSocket)
+                    && ($0["socket_path"] as? String).map({ path in canonical(path) }) == canonical(apiSocket)
             }
         default: return false
         }
