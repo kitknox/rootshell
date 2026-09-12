@@ -24,6 +24,8 @@ extension Ghostty {
         private weak var ghosttyApp: Ghostty.App?
         private var surface: ghostty_surface_t?
         private var slaveFd: Int32 = -1
+        private var responseFd: Int32 = -1
+        private var parserGrid = TerminalPreviewGrid()
         private var hasSized = false
         private var renderingSuspended = false
         private var needsRendererResume = false
@@ -84,6 +86,7 @@ extension Ghostty {
             ghostty_surface_set_content_scale(surface, scale, scale)
             ghostty_surface_set_size(surface, fbWidth, fbHeight)
             hasSized = true
+            if let grid = gridSize { parserGrid.resize(cols: grid.columns, rows: grid.rows) }
             flushPendingWrites()
         }
 
@@ -110,6 +113,11 @@ extension Ghostty {
 
             self.surface = newSurface
             self.slaveFd = ghostty_surface_get_slave_fd(newSurface)
+            self.responseFd = ghostty_surface_response_read_fd(newSurface)
+            if responseFd >= 0 {
+                let flags = fcntl(responseFd, F_GETFL)
+                if flags < 0 || fcntl(responseFd, F_SETFL, flags | O_NONBLOCK) < 0 { responseFd = -1 }
+            }
             ghosttyApp?.registerSurface(newSurface)
         }
 
@@ -154,15 +162,34 @@ extension Ghostty {
             return CGSize(width: CGFloat(size.cell_width_px) / scale, height: CGFloat(size.cell_height_px) / scale)
         }
 
-        /// The grid this surface actually renders into. Content wider than
-        /// `columns` wraps, so callers sizing a surface to hold a captured
-        /// screen must check this rather than trusting their own arithmetic
-        /// (padding and rounding both eat columns).
+        /// The latest grid requested by the UI, including padding/rounding.
+        /// The parser can lag behind it; confirmParserGrid acknowledges that
+        /// the IO thread has actually applied the requested dimensions.
         var gridSize: (columns: Int, rows: Int)? {
             guard let surface, hasSized else { return nil }
             let size = ghostty_surface_size(surface)
             guard size.columns > 0, size.rows > 0 else { return nil }
             return (Int(size.columns), Int(size.rows))
+        }
+
+        /// `gridSize` reflects the UI resize immediately. A CSI reply proves
+        /// that the IO thread has applied it before a captured frame is parsed.
+        func confirmParserGrid() -> Bool {
+            guard canRender, hasSized, responseFd >= 0, let grid = gridSize else { return false }
+            parserGrid.resize(cols: grid.columns, rows: grid.rows)
+            var buffer = [UInt8](repeating: 0, count: 1024)
+            for _ in 0..<8 {
+                let count = read(responseFd, &buffer, buffer.count)
+                guard count > 0 else { break }
+                parserGrid.consume(Data(buffer.prefix(count)))
+            }
+            if parserGrid.isReady { return true }
+            // Never replace an unfinished frame with a query. The probe and
+            // reply stay entirely inside this preview's private Ghostty pipes.
+            if flushPendingWrites(), let query = parserGrid.probe(at: CACurrentMediaTime()) {
+                writeToSurface(query)
+            }
+            return false
         }
 
         /// Write ANSI text content to the surface for rendering.
@@ -285,6 +312,8 @@ extension Ghostty {
             ghosttyApp?.unregisterSurface(surface)
             self.surface = nil
             self.slaveFd = -1
+            self.responseFd = -1
+            self.parserGrid = TerminalPreviewGrid()
 
             TerminalView.ghosttyAPIQueue.async {
                 ghostty_surface_free(surface)

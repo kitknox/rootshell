@@ -11,9 +11,21 @@ import Foundation
 
 nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
     let type = MultiplexerType.herdr
+    var localAttachment: LocalMultiplexerAttachment? = nil
+    /// Native control previews use the very same invocation as their endpoint.
+    /// Raw sessions retain their inherited socket/session environment.
+    var commandPrefix: String? = nil
+    var includesAllWorkspaces = false
+    var validatesCaptures = false
+
+    private func captureSuccess(_ nonce: String) -> String { "::MX_CAPTURE_OK_\(nonce)::" }
 
     /// `hx` runs herdr against the bound session; nil means the default one.
     private func prelude(session: String?) -> String {
+        if let commandPrefix = commandPrefix ?? localAttachment?.command(arguments: []) {
+            let executable = localAttachment?.executable ?? "herdr"
+            return "hx() { \(commandPrefix) \"$@\" 2>/dev/null; }; command -v \(MuxScript.dq(executable)) >/dev/null 2>&1 || echo \(MuxScript.dq(MuxScript.unsupportedMarker))"
+        }
         let env = session.map { "HERDR_SESSION=\(MuxScript.dq($0)) " } ?? ""
         return "hx() { \(env)herdr \"$@\" 2>/dev/null; }; command -v herdr >/dev/null 2>&1 || echo \(MuxScript.dq(MuxScript.unsupportedMarker))"
     }
@@ -28,7 +40,11 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
         body += "; echo \(MuxScript.dq(MuxScript.topology(nonce))); hx api snapshot; echo"
         for paneID in request.fetch {
             body += "; \(MuxScript.paneMarker(nonce: nonce, id: paneID))"
-            body += "; hx pane read \(MuxScript.dq(paneID)) --source visible --raw; echo"
+            body += "; hx pane read \(MuxScript.dq(paneID)) --source visible --raw"
+            if validatesCaptures {
+                body += "; _rs_preview_status=$?; echo; if [ \"$_rs_preview_status\" = 0 ]; then echo \(MuxScript.dq(captureSuccess(nonce))); fi"
+            }
+            body += "; echo"
         }
         return MuxScript.wrap(body, nonce: nonce)
     }
@@ -58,10 +74,11 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
             uniquingKeysWith: { first, _ in first }
         )
 
-        // Focused workspace only, preserving the snapshot's display order.
+        // Raw sessions use the focused workspace. Native fallback previews
+        // may span several workspaces; both preserve snapshot display order.
         // `number` is a stable public tab number, unchanged by tab.move.
         let infos = snap.mxArray("tabs")
-            .filter { focusedWorkspace == nil || $0.mxString("workspace_id") == focusedWorkspace }
+            .filter { includesAllWorkspaces || focusedWorkspace == nil || $0.mxString("workspace_id") == focusedWorkspace }
         var tabs: [MuxTab] = []
         for info in infos {
             guard let tabID = info.mxString("tab_id") else { continue }
@@ -75,6 +92,7 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
             for entry in layout?.mxArray("panes") ?? [] {
                 guard let paneID = entry.mxString("pane_id"), let rect = entry.mxDict("rect") else { continue }
                 let pane = panesByID[paneID]
+                if validatesCaptures, pane?.mxString("tab_id") != tabID { continue }
                 panes.append(MuxPane(
                     id: paneID,
                     rect: MuxCellRect(
@@ -103,10 +121,17 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
         }
         var frames: [String: MuxPaneFrame] = [:]
         for section in sections.panes {
+            var ansi = section.body
+            if validatesCaptures {
+                let suffix = "\n" + captureSuccess(nonce)
+                guard let marker = ansi.range(of: suffix, options: .backwards),
+                      ansi[marker.upperBound...].allSatisfy({ $0 == "\n" || $0 == "\r" }) else { continue }
+                ansi = String(ansi[..<marker.lowerBound])
+            }
             frames[section.id] = MuxPaneFrame(
-                ansi: section.body,
+                ansi: ansi,
                 cursor: nil,
-                revision: MuxExposeIdentity.contentRevision(section.body)
+                revision: MuxExposeIdentity.contentRevision(ansi)
             )
         }
         let activeTab = focusedTab ?? tabs.first(where: \.isActive)?.id
@@ -114,7 +139,8 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
             snapshot: MuxExposeSnapshot(tabs: tabs, activeTabID: activeTab),
             frames: frames,
             unchanged: [],
-            truncated: sections.truncated
+            truncated: sections.truncated,
+            paneIdentities: panesByID.compactMapValues { $0.mxString("terminal_id") }
         )
     }
 

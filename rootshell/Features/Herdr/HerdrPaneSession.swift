@@ -13,56 +13,6 @@
 
 import Foundation
 
-/// Replies to our CSI 18 t probes come from the terminal parser, unlike
-/// ghostty_surface_size, which reports a resize before the IO thread applies it.
-nonisolated struct HerdrGridReports {
-    struct Grid: Equatable, Sendable {
-        let cols: Int
-        let rows: Int
-    }
-
-    var pending = 0
-    private var carry = Data()
-
-    mutating func consume(_ data: Data) -> (forward: Data, grids: [Grid]) {
-        guard pending > 0 || !carry.isEmpty else { return (data, []) }
-        let bytes = Array(carry + data)
-        carry.removeAll(keepingCapacity: true)
-        var forward = Data()
-        var grids: [Grid] = []
-        var index = 0
-        while index < bytes.count {
-            let start = index
-            guard pending > 0, bytes[index] == 0x1b else {
-                forward.append(bytes[index]); index += 1
-                continue
-            }
-            index += 1
-            if index == bytes.count { carry.append(contentsOf: bytes[start...]); break }
-            guard bytes[index] == 0x5b else { forward.append(0x1b); continue }
-            index += 1
-            while index < bytes.count, index - start < 64,
-                  (0x30...0x3f).contains(bytes[index]) { index += 1 }
-            if index == bytes.count, index - start < 64 {
-                carry.append(contentsOf: bytes[start...]); break
-            }
-            if index < bytes.count, bytes[index] == 0x74 {
-                let params = String(decoding: bytes[(start + 2)..<index], as: UTF8.self)
-                    .split(separator: ";", omittingEmptySubsequences: false)
-                if params.count == 3, params[0] == "8",
-                   let rows = Int(params[1]), let cols = Int(params[2]), rows > 0, cols > 0 {
-                    grids.append(Grid(cols: cols, rows: rows))
-                    pending -= 1
-                    index += 1
-                    continue
-                }
-            }
-            forward.append(contentsOf: bytes[start..<index])
-        }
-        return (forward, grids)
-    }
-}
-
 /// Off-main fan-out of raw terminal records to pane sinks, keyed by attach id.
 /// The channel actor calls into this directly so output never waits for the
 /// main actor.
@@ -413,9 +363,9 @@ final class HerdrPaneSession: TerminalSession {
     var attachId: String?
     private(set) weak var controller: HerdrController?
 
-    private(set) var parserGrid: HerdrGridReports.Grid?
-    private var wantedParserGrid: HerdrGridReports.Grid?
-    private var gridReports = HerdrGridReports()
+    private(set) var parserGrid: TerminalGridReports.Grid?
+    private var wantedParserGrid: TerminalGridReports.Grid?
+    private var gridReports = TerminalGridReports()
     private var gridProbeTask: Task<Void, Never>?
 
     /// Delivered off-main by the router; mirrors the callback properties.
@@ -472,7 +422,7 @@ final class HerdrPaneSession: TerminalSession {
     /// Polling schedules another query; only an exact parser reply permits
     /// replay. A delay or timeout never counts as a resize acknowledgement.
     func confirmParserGrid(cols: Int, rows: Int) {
-        let wanted = HerdrGridReports.Grid(cols: cols, rows: rows)
+        let wanted = TerminalGridReports.Grid(cols: cols, rows: rows)
         wantedParserGrid = wanted
         guard parserGrid != wanted, gridProbeTask == nil, isRunning else { return }
         gridProbeTask = Task { [weak self] in

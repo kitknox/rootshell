@@ -62,44 +62,96 @@ extension HerdrController {
         try await legacyRun(command: SSHConfig.herdrCommandLine(sessionName: sessionName, args: args, localAttachment: localControlAttachment), method: args)
     }
 
+    /// Preview commands share the gateway's verified namespace, without
+    /// attaching a client or changing focus, selection, or terminal geometry.
+    func captureFallbackPreview(_ request: MuxTickRequest) async throws -> MuxTickResult {
+        let adapter = HerdrExposeAdapter(localAttachment: localControlAttachment,
+                                         commandPrefix: SSHConfig.herdrCommandPrefix(sessionName: sessionName, localAttachment: localControlAttachment),
+                                         includesAllWorkspaces: true, validatesCaptures: true)
+        let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        let output = try await legacyRun(
+            command: adapter.tickScript(session: sessionName, request: request, nonce: nonce),
+            method: "expose capture", timeout: .seconds(5), maxResponseBytes: 512 * 1024,
+            allowsTruncation: true
+        )
+        guard let result = adapter.parseTick(output: String(decoding: output, as: UTF8.self), session: sessionName, nonce: nonce) else {
+            throw HerdrChannelError.malformed("herdr preview returned no snapshot")
+        }
+        return result
+    }
+
+    func fallbackPreviewContext(tabIDs: Set<String>) -> HerdrFallbackPreviewFeed.Context? {
+        guard mode == .legacy, !didEnd, !legacySuspended,
+              !Ghostty.isAppBackgroundedAtomic, !Ghostty.isSecureDrawProhibitedAtomic,
+              let gateway, HerdrChannelFactory.canOpen(for: gateway) else { return nil }
+        var previews: [MuxTab] = []
+        var identities: [String: String] = [:]
+        for id in tabIDs.sorted() {
+            guard let tab = tabs[id], tab.id != tabsModel.selectedTabID,
+                  let layout = lastLayouts[id] else { continue }
+            let panes = layout.panes.compactMap { pane -> MuxPane? in
+                guard let info = paneInfos[pane.pane_id], info.tab_id == id else { return nil }
+                identities[pane.pane_id] = info.terminal_id
+                return MuxPane(id: pane.pane_id, rect: MuxCellRect(
+                    x: pane.rect.x - layout.area.x, y: pane.rect.y - layout.area.y,
+                    width: pane.rect.width, height: pane.rect.height
+                ), isActive: false, isPreviewable: true, title: nil)
+            }
+            previews.append(MuxTab(id: id, index: 0, title: "", isActive: false,
+                cols: layout.area.width, rows: layout.area.height, panes: panes, badge: nil))
+        }
+        return .init(generation: streamGeneration, endpointID: endpoint.map(ObjectIdentifier.init),
+                     selectedTabID: tabsModel.selectedTabID, tabs: previews, paneIdentities: identities,
+                     attachment: localControlAttachment)
+    }
+
     /// Socket requests stop at the first complete JSON response; nc may keep
     /// its stdin open after herdr replies, so waiting for process exit can hang.
-    private func legacyRun(command: String, method: String, input: Data? = nil) async throws -> Data {
+    private func legacyRun(command: String, method: String, input: Data? = nil,
+                           timeout: Duration = .seconds(15), maxResponseBytes: Int = legacyMaxResponseBytes,
+                           allowsTruncation: Bool = false) async throws -> Data {
         try Task.checkCancellation()
         guard let gateway else { throw HerdrChannelError.closed }
         let pipe = try await HerdrChannelFactory.open(command: command, on: gateway)
-        defer { Task { await pipe.close() } }
-        try Task.checkCancellation()
-        let limit = Self.legacyMaxResponseBytes
-        return try await withThrowingTaskGroup(of: Data.self) { group in
-            group.addTask {
-                try await withTaskCancellationHandler {
-                    var output = Data()
-                    if let input { try await pipe.write(input) }
-                    while let chunk = try await pipe.read(maxBytes: 64 * 1024) {
+        let limit = maxResponseBytes
+        do {
+            try Task.checkCancellation()
+            let output = try await withThrowingTaskGroup(of: Data.self) { group in
+                group.addTask {
+                    try await withTaskCancellationHandler {
+                        var output = Data()
+                        if let input { try await pipe.write(input) }
+                        while let chunk = try await pipe.read(maxBytes: 64 * 1024) {
+                            try Task.checkCancellation()
+                            output.append(chunk)
+                            if output.count > limit {
+                                if allowsTruncation { return Data(output.prefix(limit)) }
+                                throw HerdrChannelError.malformed("herdr output exceeds \(limit) bytes")
+                            }
+                            if input != nil,
+                               let line = output.split(separator: 0x0A, omittingEmptySubsequences: false)
+                                .dropLast().first(where: { $0.first == UInt8(ascii: "{") }) {
+                                return Data(line)
+                            }
+                        }
                         try Task.checkCancellation()
-                        output.append(chunk)
-                        if output.count > limit {
-                            throw HerdrChannelError.malformed("herdr output exceeds \(limit) bytes")
-                        }
-                        if input != nil,
-                           let line = output.split(separator: 0x0A, omittingEmptySubsequences: false)
-                            .dropLast().first(where: { $0.first == UInt8(ascii: "{") }) {
-                            return Data(line)
-                        }
+                        return output
+                    } onCancel: {
+                        Task { await pipe.close() }
                     }
-                    try Task.checkCancellation()
-                    return output
-                } onCancel: {
-                    Task { await pipe.close() }
                 }
+                group.addTask {
+                    try await Task.sleep(for: timeout)
+                    throw HerdrChannelError.timedOut(method: method)
+                }
+                defer { group.cancelAll() }
+                return try await group.next()!
             }
-            group.addTask {
-                try await Task.sleep(for: .seconds(15))
-                throw HerdrChannelError.timedOut(method: method)
-            }
-            defer { group.cancelAll() }
-            return try await group.next()!
+            await pipe.close()
+            return output
+        } catch {
+            await pipe.close()
+            throw error
         }
     }
 

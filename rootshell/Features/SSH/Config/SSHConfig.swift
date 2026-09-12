@@ -794,10 +794,16 @@ struct SSHConfig: Codable, Hashable {
     /// One-shot herdr CLI invocation for the degraded control mode
     /// (`api snapshot`, `pane split`, ...). `args` are shell words.
     static func herdrCommandLine(sessionName: String?, args: String, localAttachment: LocalMultiplexerAttachment? = nil) -> String {
-        let command = localAttachment?.command(arguments: []) ?? "herdr\(herdrSessionArgument(sessionName))"
+        let command = herdrCommandPrefix(sessionName: sessionName, localAttachment: localAttachment)
         return LoginShellCommand.runInPOSIXShell(
             "\(remoteExecPathPrefix)exec \(command) \(args)"
         )
+    }
+
+    /// Shared by endpoint commands and read-only preview batches. An explicit
+    /// session argument takes precedence over an inherited HERDR_SOCKET_PATH.
+    static func herdrCommandPrefix(sessionName: String?, localAttachment: LocalMultiplexerAttachment? = nil) -> String {
+        localAttachment?.command(arguments: []) ?? "herdr\(herdrSessionArgument(sessionName))"
     }
 
     private static func herdrSessionArgument(_ sessionName: String?) -> String {

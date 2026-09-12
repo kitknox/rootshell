@@ -302,7 +302,7 @@ extension HerdrController {
             legacyGridDidChange(session, rows: rows, cols: cols)
             return
         }
-        if session.parserGrid != HerdrGridReports.Grid(cols: cols, rows: rows) {
+        if session.parserGrid != TerminalGridReports.Grid(cols: cols, rows: rows) {
             if let attachId = attachIds[session.terminalId] {
                 router.invalidate(attachId: attachId)
                 panesNeedingSnapshot.insert(session.terminalId)

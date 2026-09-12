@@ -14,7 +14,11 @@ import UIKit
 
 @MainActor
 final class MuxTabPreviewView: UIView {
-    weak var feed: MultiplexerExposeFeed?
+    weak var feed: (any MuxPreviewFrameSource)? {
+        didSet {
+            if feed !== oldValue { removeAll() }
+        }
+    }
     var tab: MuxTab? {
         didSet {
             guard tab != oldValue else { return }
@@ -97,10 +101,16 @@ final class MuxTabPreviewView: UIView {
             )
             preview.container.frame = frame
             bringSubviewToFront(preview.container)
-            guard pane.isPreviewable, rect.width > 0, rect.height > 0 else {
+            guard pane.isPreviewable, rect.width > 0, rect.height > 0,
+                  let latest = feed?.frame(for: pane.id) else {
+                // A reused public pane ID may now name a different terminal.
+                // Once the feed invalidates that frame, its old pixels must
+                // disappear even while sibling panes still have valid frames.
                 preview.surface?.cleanup()
                 preview.surface?.removeFromSuperview()
                 preview.surface = nil
+                preview.writtenRevision = nil
+                preview.writtenGrid = nil
                 ensurePlaceholder(preview)
                 continue
             }
@@ -175,7 +185,8 @@ final class MuxTabPreviewView: UIView {
             if isZmx, !resized, preview.settledGrid != gridKey {
                 preview.settledGrid = gridKey
             }
-            if gridIsSettled, fits, let latest = feed?.frame(for: pane.id),
+            let parserIsReady = feed?.confirmsPreviewParserGrid != true || surface.confirmParserGrid()
+            if gridIsSettled, parserIsReady, fits,
                latest.revision != preview.writtenRevision || gridKey != preview.writtenGrid {
                 surface.writeFrame(latest.ansi, cursor: latest.cursor.map { ($0.x, $0.y, $0.visible) })
                 preview.writtenRevision = latest.revision
@@ -215,7 +226,12 @@ final class MuxTabPreviewView: UIView {
         preview.container.addSubview(surface)
         preview.surface = surface
         preview.writtenRevision = nil
+        preview.writtenGrid = nil
         preview.surfaceSize = .zero
+        preview.slackColumns = 2
+        preview.slackRows = 2
+        preview.settledGrid = nil
+        preview.readyAfter = 0
         return surface
     }
 

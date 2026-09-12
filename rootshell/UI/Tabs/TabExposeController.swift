@@ -388,7 +388,9 @@ final class TabExposeController {
         // Starting the feed notifies synchronously; the attach path is
         // already inside a refresh that will pick the new state up.
         guard !isAttachingMultiplexer else { return }
-        guard let muxFeed, let host = multiplexerHostTabID else { return }
+        guard let muxFeed, let host = multiplexerHostTabID,
+              let terminal = multiplexerTerminal?(), MultiplexerExposeFeed.canDetect(terminal),
+              muxFeed.terminal === terminal else { return }
         if !multiplexerAttached {
             // Detection finished: adopt the page if we're still on the host tab.
             guard isActive, muxFeed.isServing, tabsModel?.selectedTabID == host else { return }
