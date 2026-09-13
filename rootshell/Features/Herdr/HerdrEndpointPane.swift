@@ -14,6 +14,7 @@ final class HerdrEndpointPane {
     private(set) var selection: HerdrEndpointSelection?
     private var frame: Surface.Frame?
     private var pending: (Surface.Frame, Surface.Pane)?
+    private var surfaceGrid: (cols: Int, rows: Int)?
     private var painter = HerdrEndpointPainter()
     private var dragPoint: CGPoint?
     private var autoScroll: Task<Void, Never>?
@@ -81,11 +82,23 @@ final class HerdrEndpointPane {
         syncSelectionUI()
     }
 
+    /// The surface took a new grid under the retained frame. Repaint the
+    /// current frame fully once the parser and surface agree again, even
+    /// when no new revision arrives (shrink then grow back).
+    func surfaceGridDidChange(cols: Int, rows: Int) {
+        guard surfaceGrid.map({ $0 != (cols, rows) }) ?? true else { return }
+        surfaceGrid = (cols, rows)
+        painter.noteSurfaceGridChanged()
+        if pending == nil, let frame, let pane { pending = (frame, pane) }
+        commitPendingFrame()
+    }
+
     func disconnect() {
         cancelInteraction()
         clearSelection()
         epoch = UUID()
         frame = nil; pane = nil; pending = nil
+        surfaceGrid = nil
         painter.reset()
         pointer = .init()
         view?.applyHerdrEndpointScroll(nil)

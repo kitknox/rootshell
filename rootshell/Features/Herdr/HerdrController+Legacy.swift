@@ -452,7 +452,7 @@ extension HerdrController {
         guard rows >= 2, cols >= 4 else { return }
         if !endpointUnsupported {
             session.confirmParserGrid(cols: cols, rows: rows)
-            paneViews[session.terminalId]?.herdrEndpointPane?.commitPendingFrame()
+            paneViews[session.terminalId]?.herdrEndpointPane?.surfaceGridDidChange(cols: cols, rows: rows)
             reconcileEndpoint()
             return
         }

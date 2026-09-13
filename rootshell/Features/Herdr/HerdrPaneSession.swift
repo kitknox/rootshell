@@ -19,16 +19,20 @@ import Foundation
 nonisolated final class HerdrOutputRouter: @unchecked Sendable {
     /// Bytes queued across all attaches while waiting for a sink or a layout.
     private static let maxQueuedBytes = 8 * 1024 * 1024
+    /// Longest unfinished sequence held back; a longer one goes out as is.
+    private static let maxCarryBytes = 256 * 1024
 
     private enum QueueItem {
         case data(Data)
         case snapshot(Data, cols: Int, rows: Int)
+        /// Emitted verbatim ahead of the held carry: a parser probe.
+        case control(Data)
         /// A layout boundary: everything after it waits until released.
         case barrier(UInt64)
 
         var byteCount: Int {
             switch self {
-            case .data(let data), .snapshot(let data, _, _): return data.count
+            case .data(let data), .snapshot(let data, _, _), .control(let data): return data.count
             case .barrier: return 0
             }
         }
@@ -37,6 +41,10 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
     private let lock = UnfairLock()
     private var sinks: [String: OutputSink] = [:]
     private var grids: [String: (cols: Int, rows: Int)] = [:]
+    /// Per attach, the escape or UTF-8 sequence the last emitted chunk ended
+    /// inside. herdr forwards raw PTY reads, so a sequence can straddle two
+    /// records; Ghostty only ever receives whole ones.
+    private var carries: [String: Data] = [:]
     /// Per attach, records not yet delivered, in arrival order. Non-empty
     /// while the sink is missing (the snapshot follows the attach response
     /// on the stream and can beat the main-actor hop that registers it),
@@ -69,6 +77,7 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
         lock.withLock {
             _ = sinks.removeValue(forKey: attachId)
             grids.removeValue(forKey: attachId)
+            carries.removeValue(forKey: attachId)
             if let dropped = queues.removeValue(forKey: attachId) {
                 queuedBytes -= dropped.reduce(0) { $0 + $1.byteCount }
             }
@@ -78,28 +87,20 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
         }
     }
 
-    /// Discards the output queued behind `id` up to the next barrier, on
-    /// every attach carrying it: a layout that was superseded before its
-    /// panes resized, whose redraw would parse on a grid it was not drawn
-    /// for. Returns the attaches touched so the caller can re-snapshot them.
+    /// A layout superseded before its panes resized: the redraw queued
+    /// behind `id` was drawn for a grid the panes never reach, and the
+    /// caller re-snapshots every attach touched, so drop everything those
+    /// attaches hold and let only that snapshot resume them. Splicing the
+    /// segment out instead could leave the next chunk starting mid-sequence.
     func discardSegment(barrier id: UInt64) -> [String] {
         lock.withLock {
             barriers.remove(id)
             var touched: [String] = []
             for (attachId, queue) in queues {
-                guard let start = queue.firstIndex(where: { if case .barrier(let b) = $0 { return b == id } else { return false } })
+                guard queue.contains(where: { if case .barrier(let b) = $0 { return b == id } else { return false } })
                 else { continue }
-                var kept = Array(queue[..<start])
-                var index = start + 1
-                var dropped = 0
-                while index < queue.count {
-                    if case .barrier = queue[index] { break }
-                    dropped += queue[index].byteCount
-                    index += 1
-                }
-                kept.append(contentsOf: queue[index...])
-                queues[attachId] = kept
-                queuedBytes -= dropped
+                overflowed.insert(attachId)
+                dropQueue(attachId)
                 touched.append(attachId)
             }
             return touched
@@ -110,6 +111,7 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
         lock.withLock {
             sinks.removeAll()
             grids.removeAll()
+            carries.removeAll()
             queues.removeAll()
             queuedBytes = 0
             barriers.removeAll()
@@ -180,6 +182,8 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
     /// Drops an attach's queued bytes but keeps its layout barriers, so a
     /// recovery snapshot still waits for a resize that is in flight.
     private func dropQueue(_ attachId: String) {
+        // A held partial sequence belongs to the dropped stream.
+        carries.removeValue(forKey: attachId)
         guard let queue = queues[attachId] else { return }
         queuedBytes -= queue.reduce(0) { $0 + $1.byteCount }
         let barriersOnly = queue.filter { if case .barrier = $0 { return true } else { return false } }
@@ -232,7 +236,7 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
         }
         guard started else { return }
         while true {
-            let next: (OutputSink, Data)? = lock.withLock {
+            let next: (OutputSink, Data?)? = lock.withLock {
                 guard let sink = sinks[attachId], var queue = queues[attachId] else {
                     draining.remove(attachId)
                     return nil
@@ -242,9 +246,11 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
                     if barriers.contains(id) { break }
                     queue.removeFirst()
                 }
-                let data: Data
+                let data: Data?
                 switch queue.first {
                 case .data(let bytes):
+                    data = splitCarry(attachId: attachId, appending: bytes)
+                case .control(let bytes):
                     data = bytes
                 case .snapshot(let bytes, let cols, let rows)
                     where grids[attachId]?.cols == cols && grids[attachId]?.rows == rows:
@@ -254,14 +260,45 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
                     draining.remove(attachId)
                     return nil
                 }
-                queue.removeFirst()
+                let item = queue.removeFirst()
                 queues[attachId] = queue
-                queuedBytes -= data.count
+                queuedBytes -= item.byteCount
                 return (sink, data)
             }
             guard let next else { return }
-            next.0.emit(next.1)
+            if let data = next.1, !data.isEmpty {
+                next.0.emit(data)
+            }
         }
+    }
+
+    /// Joins the held tail with `bytes` and holds the new unfinished tail
+    /// back, unless it is implausibly long. Caller holds `lock`. The carry
+    /// was dequeued ahead of any barrier that arrives later, so a sequence
+    /// straddling a layout goes out whole once that barrier releases.
+    private func splitCarry(attachId: String, appending bytes: Data) -> Data? {
+        var joined = carries.removeValue(forKey: attachId) ?? Data()
+        if joined.isEmpty { joined = bytes } else { joined.append(bytes) }
+        let cut = joined.withUnsafeBytes { TerminalSequenceBoundary.incompleteTailStart($0) }
+        guard let cut, joined.count - cut <= Self.maxCarryBytes else { return joined }
+        let split = joined.startIndex + cut
+        carries[attachId] = joined.subdata(in: split..<joined.endIndex)
+        return cut > 0 ? joined.subdata(in: joined.startIndex..<split) : nil
+    }
+
+    /// Emits `bytes` ahead of everything this attach has queued: live
+    /// barriers, a waiting snapshot, and the held partial sequence. False
+    /// when the attach has no sink, so the caller can write directly.
+    @discardableResult
+    func inject(attachId: String, _ bytes: Data) -> Bool {
+        let queued: Bool = lock.withLock {
+            guard sinks[attachId] != nil else { return false }
+            queues[attachId, default: []].insert(.control(bytes), at: 0)
+            queuedBytes += bytes.count
+            return true
+        }
+        if queued { flush(attachId) }
+        return queued
     }
 
     func write(attachId: String, _ data: Data) {
@@ -281,6 +318,9 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
     /// Wrapped in synchronized output so the rebuild never flickers.
     static func replayBytes(for snapshot: HerdrControl.TerminalSnapshot) -> Data {
         var out = Data()
+        // CAN first: only an oversized string the carry gave up on can leave
+        // the parser mid-sequence, and the replay must start from ground.
+        out.append(0x18)
         // Normalize everything the replay depends on: margins and origin
         // mode off (so lines rebuild the whole screen instead of scrolling
         // a region), autowrap on (the primary text is unwrapped and must
@@ -432,9 +472,16 @@ final class HerdrPaneSession: TerminalSession {
                   self.parserGrid != self.wantedParserGrid {
                 if self.gridReports.pending == 0 || lastProbe.duration(to: .now) >= .seconds(1) {
                     self.gridReports.pending += 1
-                    // A resize can split a VT sequence. Cancel that partial
-                    // sequence; the controller replaces the screen afterwards.
-                    self.outputSink.emit(Data("\u{18}\u{1b}[18t".utf8))
+                    // Through the router, so the probe lands between whole
+                    // sequences of live output. Before the attach exists,
+                    // and in fallback mode, nothing else is flowing.
+                    let probe = Data("\u{1b}[18t".utf8)
+                    let injected = self.attachId.map {
+                        self.controller?.router.inject(attachId: $0, probe) == true
+                    } ?? false
+                    if !injected {
+                        self.outputSink.emit(probe)
+                    }
                     lastProbe = .now
                 }
                 do { try await Task.sleep(for: .milliseconds(20)) }

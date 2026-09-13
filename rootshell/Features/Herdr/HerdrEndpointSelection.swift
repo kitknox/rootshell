@@ -53,14 +53,20 @@ nonisolated struct HerdrEndpointPainter {
     private var previous: [Surface.Cell] = []
     private var links: [String] = []
     private var width = 0
+    private var height = 0
     private var cursor: Surface.Cursor?
     private var mouse = false
     private var initialized = false
+    /// Ghostty redrew its own screen for a new surface size, so the retained
+    /// cells no longer describe what is on screen.
+    private var stale = false
     private var placements: [Surface.Placement] = []
     private var imageIDs: [Surface.AssetKey: UInt32] = [:]
     private var nextImageID: UInt32 = 1
 
     mutating func reset() { self = Self() }
+
+    mutating func noteSurfaceGridChanged() { stale = true }
 
     mutating func render(frame: Surface.Frame, pane: Surface.Pane, selection: HerdrEndpointSelection?,
                          selectionColors: (foreground: UInt32, background: UInt32)?) -> Data? {
@@ -110,7 +116,8 @@ nonisolated struct HerdrEndpointPainter {
                 && translated.y >= rect.y && translated.y < rect.y + rect.height ? translated : nil
         }
         let capturesMouse = frame.popup?.mouseReporting ?? pane.mouseReporting
-        let full = !initialized || width != rect.width || cells.count != previous.count || links != hyperlinks
+        let full = !initialized || stale || width != rect.width || height != rect.height
+            || cells.count != previous.count || links != hyperlinks
         let changed = full || previous != cells || cursor != nextCursor || mouse != capturesMouse || placements != nextPlacements
         guard changed else { return nil }
         var out = (initialized ? "" : "\u{18}") + "\u{1b}[?2026h\u{1b}[?25l"
@@ -187,7 +194,7 @@ nonisolated struct HerdrEndpointPainter {
             out += "\u{1b}[\(nextCursor.y + 1);\(nextCursor.x + 1)H\u{1b}[\(min(nextCursor.shape, 6)) q\u{1b}[?25h"
         }
         out += "\u{1b}[?2026l"
-        previous = cells; width = rect.width; links = hyperlinks
+        previous = cells; width = rect.width; height = rect.height; links = hyperlinks; stale = false
         cursor = nextCursor; mouse = capturesMouse; placements = nextPlacements; initialized = true
         return Data(out.utf8)
     }

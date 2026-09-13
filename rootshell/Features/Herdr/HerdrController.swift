@@ -187,6 +187,11 @@ final class HerdrController {
     var controlLayouts: [String: HerdrControl.LayoutSnapshot] = [:]
     var tabGeometryStates: [String: HerdrTabGeometryState] = [:]
     var panesNeedingSnapshot: Set<String> = []
+    /// Panes whose surface left the server's grid without a layout, keyed
+    /// by terminal id, with the smallest grid they passed through. Rows the
+    /// surface discarded below the grid the server settles on were never
+    /// lost server-side, so no redraw is guaranteed to restore them.
+    var clientDetourMinimums: [String: (cols: Int, rows: Int)] = [:]
     var geometryTasks: [String: Task<Void, Never>] = [:]
     var focusedPaneId: String?
     var agentStatuses: [String: HerdrControl.AgentStatusChangedData] = [:]
@@ -366,6 +371,10 @@ final class HerdrController {
                             controller.handleTabLayout(layout, barrier: barrier)
                         }
                         return
+                    case .gap(let gap):
+                        // Bytes after a server-side drop must not parse; only
+                        // the snapshot requested below rebuilds the screen.
+                        router.invalidate(attachId: gap.attach_id)
                     default:
                         break
                     }
@@ -803,6 +812,7 @@ final class HerdrController {
         tabGeometryStates.removeAll()
         controlLayouts.removeAll()
         panesNeedingSnapshot.removeAll()
+        clientDetourMinimums.removeAll()
         for session in paneSessions.values {
             session.attachId = nil
         }

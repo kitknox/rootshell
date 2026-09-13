@@ -51,6 +51,86 @@ nonisolated struct TerminalGridReports {
     }
 }
 
+/// Byte-stream boundaries for VT output split across reads.
+nonisolated enum TerminalSequenceBoundary {
+    /// Offset where a sequence left unfinished at the end starts: ESC
+    /// without its final byte, an unterminated string, or truncated UTF-8.
+    static func incompleteTailStart(_ bytes: UnsafeRawBufferPointer) -> Int? {
+        let count = bytes.count
+        var i = 0
+        while i < count {
+            guard bytes[i] == 0x1b else { i += 1; continue }
+            // Executable C0 controls and DEL pass through escape state.
+            var k = i + 1
+            while k < count, isTransparentControl(bytes[k]) { k += 1 }
+            guard k < count else { return i }
+            // CAN and SUB abort any sequence; a second ESC restarts one.
+            // These mirror the parser's "anywhere" transitions.
+            switch bytes[k] {
+            case 0x1b:
+                i = k
+            case 0x18, 0x1a:
+                i = k + 1
+            case 0x5b, 0x20...0x2f: // CSI, or ESC with intermediates, up to a final byte
+                let csi = bytes[k] == 0x5b
+                var j = k + 1
+                var ended = false
+                while j < count {
+                    let byte = bytes[j]
+                    if byte == 0x1b { i = j; ended = true; break }
+                    if byte == 0x18 || byte == 0x1a { i = j + 1; ended = true; break }
+                    let final = csi ? (0x40...0x7e).contains(byte) : (0x30...0x7e).contains(byte)
+                    if final { i = j + 1; ended = true; break }
+                    j += 1
+                }
+                guard ended else { return i }
+            case 0x5d, 0x50, 0x5f, 0x5e, 0x58: // OSC DCS APC PM SOS: until ST (OSC also BEL)
+                let bel = bytes[k] == 0x5d
+                var j = k + 1
+                while true {
+                    guard j < count else { return i }
+                    let byte = bytes[j]
+                    if bel, byte == 0x07 { i = j + 1; break }
+                    if byte == 0x18 || byte == 0x1a { i = j + 1; break }
+                    if byte == 0x1b {
+                        guard j + 1 < count else { return i }
+                        // ST ends the string; any other ESC starts a new sequence.
+                        i = bytes[j + 1] == 0x5c ? j + 2 : j
+                        break
+                    }
+                    j += 1
+                }
+            default:
+                i = k + 1
+            }
+        }
+        return incompleteUTF8Start(bytes)
+    }
+
+    private static func isTransparentControl(_ byte: UInt8) -> Bool {
+        byte < 0x18 || byte == 0x19 || (0x1c...0x1f).contains(byte) || byte == 0x7f
+    }
+
+    static func incompleteUTF8Start(_ bytes: UnsafeRawBufferPointer) -> Int? {
+        let count = bytes.count
+        guard count > 0 else { return nil }
+        for back in 1...min(3, count) {
+            let index = count - back
+            let byte = bytes[index]
+            if byte & 0xc0 == 0x80 { continue }
+            let needed: Int
+            switch byte {
+            case 0xc0...0xdf: needed = 2
+            case 0xe0...0xef: needed = 3
+            case 0xf0...0xf7: needed = 4
+            default: return nil
+            }
+            return back < needed ? index : nil
+        }
+        return nil
+    }
+}
+
 /// A preview may paint only after the parser acknowledges the latest resize.
 /// Replies to probes sent before that resize cannot satisfy the new request,
 /// including when a quick open/close returns to an earlier grid size.

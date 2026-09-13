@@ -55,6 +55,7 @@ extension HerdrController {
         attachRetries.removeValue(forKey: session.terminalId)?.cancel()
         attachesInFlight.removeValue(forKey: session.terminalId)
         panesNeedingSnapshot.remove(session.terminalId)
+        clientDetourMinimums.removeValue(forKey: session.terminalId)
         legacyPaneDidStop(session)
         attachQueue.removeAll { $0 == session.terminalId }
         if let attachId = attachIds.removeValue(forKey: session.terminalId) {
@@ -302,11 +303,14 @@ extension HerdrController {
             legacyGridDidChange(session, rows: rows, cols: cols)
             return
         }
+        if let target = paneViews[session.terminalId]?.herdrTargetGrid,
+           cols != target.cols || rows != target.rows {
+            let low = clientDetourMinimums[session.terminalId] ?? target
+            clientDetourMinimums[session.terminalId] = (min(low.cols, cols), min(low.rows, rows))
+        }
+        // Live output keeps flowing onto the reflowed grid, as it would in a
+        // native terminal; the program's SIGWINCH redraw settles the screen.
         if session.parserGrid != TerminalGridReports.Grid(cols: cols, rows: rows) {
-            if let attachId = attachIds[session.terminalId] {
-                router.invalidate(attachId: attachId)
-                panesNeedingSnapshot.insert(session.terminalId)
-            }
             session.confirmParserGrid(cols: cols, rows: rows)
         }
         updateRouterGrid(terminalId: session.terminalId)
@@ -326,10 +330,22 @@ extension HerdrController {
         guard mode == .raw, paneSessions[session.terminalId] === session,
               let size = paneViews[session.terminalId]?.surfaceSize,
               Int(size.columns) == cols, Int(size.rows) == rows else { return }
+        if let target = paneViews[session.terminalId]?.herdrTargetGrid, target.cols == cols, target.rows == rows {
+            settleClientDetour(terminalId: session.terminalId, cols: cols, rows: rows)
+        }
         updateRouterGrid(terminalId: session.terminalId)
         noteGridForLayoutRelease(terminalId: session.terminalId, cols: cols, rows: rows)
         pumpAttachQueue()
         requestSnapshotsForReadyPanes()
+    }
+
+    /// The surface settled on the server's grid. Rows it discarded below
+    /// that grid on the way were never lost server-side, and a program
+    /// showing static content will not redraw them: rebuild from herdr.
+    private func settleClientDetour(terminalId: String, cols: Int, rows: Int) {
+        guard let low = clientDetourMinimums.removeValue(forKey: terminalId) else { return }
+        guard low.cols < cols || low.rows < rows else { return }
+        panesNeedingSnapshot.insert(terminalId)
     }
 
     /// The split host laid out (window resize, sidebar, font change): the
@@ -372,24 +388,33 @@ extension HerdrController {
                 }
             }
             var failures = 0
+            var movingSince: ContinuousClock.Instant?
             while !Task.isCancelled, self.streamGeneration == generation,
                   self.channel === channel, self.tabs[tabId] === tab {
                 // The first real host layout can start immediately. Later
-                // changes debounce only distinct sizes, including while a
-                // request is in flight; repeated layout callbacks cannot
-                // postpone preparation indefinitely.
+                // changes wait for the size to hold still for one tick, but
+                // a live drag still sends every 200 ms so the pane never lags
+                // far behind the window; each round trip resizes the server
+                // model under every pane's lock.
                 let desired = self.tabGeometryStates[tabId]?.desired
+                var overdue = false
                 if self.tabGeometryStates[tabId]?.hasRequested == true {
-                    do { try await Task.sleep(for: .milliseconds(60)) }
+                    do { try await Task.sleep(for: .milliseconds(100)) }
                     catch { return }
-                    if self.tabGeometryStates[tabId]?.desired != desired { continue }
+                    if self.tabGeometryStates[tabId]?.desired != desired {
+                        let since = movingSince ?? .now
+                        movingSince = since
+                        overdue = since.duration(to: .now) >= .milliseconds(200)
+                        if !overdue { continue }
+                    }
                 }
+                movingSince = nil
                 guard !Task.isCancelled, self.streamGeneration == generation,
                       self.channel === channel, self.tabs[tabId] === tab,
                       let view = self.geometryView(in: tab),
                       let current = self.tabGeometry(from: view) else { return }
                 self.tabGeometryStates[tabId]?.update(current)
-                if current != desired { continue }
+                if current != desired, !overdue { continue }
                 guard let request = self.tabGeometryStates[tabId]?.beginRequest() else { return }
                 let size = request.size
                 let params = HerdrControl.TabGeometryParams(
@@ -478,6 +503,8 @@ extension HerdrController {
             let wanted = (cols: pane.rect.width, rows: pane.rect.height)
             if let size = paneSessions[terminalId]?.parserGrid,
                size.cols == wanted.cols, size.rows == wanted.rows {
+                // Already there, so no parser confirmation will follow.
+                settleClientDetour(terminalId: terminalId, cols: wanted.cols, rows: wanted.rows)
                 continue
             }
             // A zoomed-away or detached pane cannot acknowledge a native
@@ -486,6 +513,7 @@ extension HerdrController {
             guard let view = paneViews[terminalId], view.window != nil,
                   !view.suppressPTYSizeUpdates,
                   !layout.zoomed || pane.pane_id == layout.focused_pane_id else {
+                clientDetourMinimums.removeValue(forKey: terminalId)
                 router.invalidate(attachId: attachId)
                 panesNeedingSnapshot.insert(terminalId)
                 continue
