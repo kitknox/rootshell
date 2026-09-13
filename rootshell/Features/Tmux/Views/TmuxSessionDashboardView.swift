@@ -280,17 +280,17 @@ struct TmuxSessionDashboardView: View {
 
     private var detachGatewayDialog: some View {
         Color.clear.confirmationDialog(
-            "Detach Gateway?",
+            "Detach Session?",
             isPresented: $showingDetachConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Detach Gateway", role: .destructive) {
+            Button("Detach Session", role: .destructive) {
                 detachGateway()
             }
             .keyboardShortcut(.defaultAction)
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Leaves tmux control mode for this tab. The tmux session keeps running on the server.")
+            Text("Leaves tmux control mode for this connection. Window tabs close; sessions keep running on the server.")
         }
     }
 
@@ -440,7 +440,7 @@ struct TmuxSessionDashboardView: View {
             }
             .buttonStyle(.borderless)
             .disabled(controller.didEnd)
-            .accessibilityLabel("Detach Gateway")
+            .accessibilityLabel("Detach Session")
 
             // Evict every OTHER client (e.g. a small-screen device left
             // attached, clamping the shared window). Shown only while other

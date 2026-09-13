@@ -139,6 +139,9 @@ struct MainView: View {
     /// "Ask Each Time" close of a herdr control-mode tab.
     @State var pendingHerdrCloseTabID: UUID?
     @State var pendingNewTabRequest: NewTabRequest?
+    /// Transient post-detach / already-attached banner.
+    @State var muxDetachBanner: MuxDetachBannerState?
+    @State var muxDetachBannerDismissTask: Task<Void, Never>?
     @State var unavailableNewTabRequest: NewTabRequest?
     @State var authenticationRetryRequest: SSHAuthenticationRetryRequest?
     @State var reconnectConfig: SSHConfig?
@@ -506,23 +509,31 @@ struct MainView: View {
                         }
                     }
                     
-                    // Terminal view
-                    if ghosttyApp.readiness == .ready, !terminals.isEmpty {
-                        terminalAndSidebarContent(geometry: geometry)
-                    } else if ghosttyApp.readiness == .ready, terminals.isEmpty, !windowClosingAfterTabTransfer {
-                        // Empty state - shown when all tabs are closed
-                        EmptyStateResponder(
-                            onNewTab: addNewTab,
-                            onNewLocalShell: handleNewTabCommand
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if ghosttyApp.readiness == .ready, terminals.isEmpty {
-                        Color.clear
+                    // Terminal view (detach banner overlays empty state too —
+                    // tmux -CC prune removes every tab in one go).
+                    Group {
+                        if ghosttyApp.readiness == .ready, !terminals.isEmpty {
+                            terminalAndSidebarContent(geometry: geometry)
+                        } else if ghosttyApp.readiness == .ready, terminals.isEmpty, !windowClosingAfterTabTransfer {
+                            // Empty state - shown when all tabs are closed
+                            EmptyStateResponder(
+                                onNewTab: addNewTab,
+                                onNewLocalShell: handleNewTabCommand
+                            )
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if ghosttyApp.readiness == .loading {
-                        loadingView
-                    } else if ghosttyApp.readiness == .error {
-                        errorView
+                        } else if ghosttyApp.readiness == .ready, terminals.isEmpty {
+                            Color.clear
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else if ghosttyApp.readiness == .loading {
+                            loadingView
+                        } else if ghosttyApp.readiness == .error {
+                            errorView
+                        }
+                    }
+                    .overlay(alignment: .top) {
+                        if ghosttyApp.readiness == .ready {
+                            muxDetachBannerOverlay
+                        }
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
