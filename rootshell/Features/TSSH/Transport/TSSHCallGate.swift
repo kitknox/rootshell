@@ -497,11 +497,15 @@ actor TSSHCallGate {
         nonisolated(unsafe) let t = transport
         let clamped = Int32(min(maxBytes, Int(Int32.max)))
         return try await runOnWorker {
-            let data = try t.streamLocalRead(channelRef, maxBytes: clamped)
-            // The Go side signals clean EOF as nil-data + nil-error;
-            // gomobile maps that to an empty Data. Surface as nil so
-            // the AsyncBytePipe contract reads cleanly.
-            return data.isEmpty ? nil : data
+            do {
+                let data = try t.streamLocalRead(channelRef, maxBytes: clamped)
+                // The Go side signals clean EOF as nil-data + nil-error;
+                // surface it as nil so the AsyncBytePipe contract reads cleanly.
+                return data.isEmpty ? nil : data
+            } catch let error where Self.isBridgedNilReturn(error) {
+                // Same EOF seen through the ObjC bridge as a nil return.
+                return nil
+            }
         }
     }
 
@@ -552,6 +556,130 @@ actor TSSHCallGate {
         guard let transport else { return }
         nonisolated(unsafe) let t = transport
         try await runOnWorker { try t.streamLocalClose(channelRef) }
+    }
+
+    // MARK: - Auxiliary exec channels
+
+    /// Start `command` in an auxiliary non-PTY session on the same tsshd
+    /// and return its exec channel handle. Unlike the primary session
+    /// there can be many, and they never carry the discard machinery.
+    func openExec(
+        on ref: TSSHTransportRef,
+        command: String
+    ) async throws -> Int64 {
+        let transport = registry.withLock { $0.transports[ref] }
+        guard let transport else {
+            throw TSSHCallGateError.unknownTransport
+        }
+        nonisolated(unsafe) let t = transport
+        return try await runOnWorker {
+            var channelRef: Int64 = 0
+            try t.openExec(command, ret0_: &channelRef)
+            return channelRef
+        }
+    }
+
+    func openExecPTY(on ref: TSSHTransportRef, command: String, term: String, rows: Int, cols: Int) async throws -> Int64 {
+        let transport = registry.withLock { $0.transports[ref] }
+        guard let transport else { throw TSSHCallGateError.unknownTransport }
+        nonisolated(unsafe) let t = transport
+        return try await runOnWorker {
+            var channelRef: Int64 = 0
+            try t.openExecPTY(command, term: term, rows: rows, cols: cols, ret0_: &channelRef)
+            return channelRef
+        }
+    }
+
+    func execResizePTY(on ref: TSSHTransportRef, channelRef: Int64, rows: Int, cols: Int) async throws {
+        let transport = registry.withLock { $0.transports[ref] }
+        guard let transport else { throw TSSHCallGateError.unknownTransport }
+        nonisolated(unsafe) let t = transport
+        try await runOnWorker { try t.execResizePTY(channelRef, rows: rows, cols: cols) }
+    }
+
+    /// Read up to `maxBytes` of the command's stdout. Blocks on the
+    /// concurrent worker until data arrives; nil on clean EOF.
+    func execRead(
+        on ref: TSSHTransportRef,
+        channelRef: Int64,
+        maxBytes: Int
+    ) async throws -> Data? {
+        let transport = registry.withLock { $0.transports[ref] }
+        guard let transport else {
+            throw TSSHCallGateError.unknownTransport
+        }
+        nonisolated(unsafe) let t = transport
+        let clamped = min(maxBytes, Int(Int32.max))
+        return try await runOnWorker {
+            do {
+                let data = try t.execRead(channelRef, maxBytes: clamped)
+                return data.isEmpty ? nil : data
+            } catch let error where Self.isBridgedNilReturn(error) {
+                // Clean EOF: Go hands back nil bytes with no error, and the
+                // ObjC bridge turns a nil object without an NSError into
+                // this generic failure. A real Go error carries its own
+                // domain and message and still throws.
+                return nil
+            }
+        }
+    }
+
+    /// Swift's `_GenericObjCError.nilError`: a throwing ObjC method that
+    /// returned nil without setting an error.
+    private nonisolated static func isBridgedNilReturn(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == "Foundation._GenericObjCError" && nsError.code == 0
+    }
+
+    /// Write to the command's stdin; returns the bytes accepted.
+    func execWrite(
+        on ref: TSSHTransportRef,
+        channelRef: Int64,
+        data: Data
+    ) async throws -> Int {
+        let transport = registry.withLock { $0.transports[ref] }
+        guard let transport else {
+            throw TSSHCallGateError.unknownTransport
+        }
+        nonisolated(unsafe) let t = transport
+        return try await runOnWorker {
+            var written: Int32 = 0
+            try t.execWrite(channelRef, data: data, ret0_: &written)
+            return Int(written)
+        }
+    }
+
+    /// Deliver EOF on the command's stdin while stdout stays readable.
+    func execCloseStdin(
+        on ref: TSSHTransportRef,
+        channelRef: Int64
+    ) async throws {
+        let transport = registry.withLock { $0.transports[ref] }
+        guard let transport else { return }
+        nonisolated(unsafe) let t = transport
+        try await runOnWorker { try t.execCloseStdin(channelRef) }
+    }
+
+    /// Exit code once the command finished, -1 while it runs.
+    func execExitCode(
+        on ref: TSSHTransportRef,
+        channelRef: Int64
+    ) async -> Int {
+        let transport = registry.withLock { $0.transports[ref] }
+        guard let transport else { return -1 }
+        nonisolated(unsafe) let t = transport
+        return (try? await runOnWorker { t.execExitCode(channelRef) }) ?? -1
+    }
+
+    /// Tear down an exec channel; idempotent.
+    func execClose(
+        on ref: TSSHTransportRef,
+        channelRef: Int64
+    ) async throws {
+        let transport = registry.withLock { $0.transports[ref] }
+        guard let transport else { return }
+        nonisolated(unsafe) let t = transport
+        try await runOnWorker { try t.execClose(channelRef) }
     }
 
     // MARK: - Session lifecycle

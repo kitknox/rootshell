@@ -186,6 +186,11 @@ extension Ghostty.TerminalView {
 
     private func sendCaptureAutoScrollTick(deltaY: CGFloat) {
         invalidateWritingAssistance()
+        if let state = herdrEndpointPane {
+            state.scroll(deltaX: 0, deltaY: deltaY, at: captureAutoScrollPinnedPosition)
+            state.mouseMove(at: captureAutoScrollEdgeDragPosition)
+            return
+        }
         guard let surface else { return }
         guard abs(deltaY) > 0.1 else { return }
 

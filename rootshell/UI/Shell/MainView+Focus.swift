@@ -71,6 +71,8 @@ extension MainView {
             // when already in sync. ROOTSHELL-TMUX (id=tmux-select-pane-user-only)
             if let terminal = pane.asTerminal, terminal.isTmuxPane {
                 terminal.requestTmuxSelectPane()
+            } else if let terminal = pane.asTerminal, terminal.isHerdrPane {
+                terminal.requestHerdrSelectPane()
             }
             return
         }
@@ -93,6 +95,8 @@ extension MainView {
         // ROOTSHELL-TMUX (id=tmux-select-pane-user-only)
         if let terminal = pane?.asTerminal, terminal.isTmuxPane {
             terminal.requestTmuxSelectPane()
+        } else if let terminal = pane?.asTerminal, terminal.isHerdrPane {
+            terminal.requestHerdrSelectPane()
         }
 
         // Unfocus old — only skip resignFirstResponder when the new pane
@@ -703,7 +707,7 @@ extension MainView {
             return
         }
 
-        tabsModel.displayedTabID = selectedID
+        tabsModel.displaySelectedTabImmediately()
         for (index, tab) in terminals.enumerated() {
             let isSelected = index == selectedIndex
             for terminal in tab.splitTree {
@@ -729,6 +733,8 @@ extension MainView {
             }
             if allowFocus, let terminal = focus.asTerminal, terminal.isTmuxPane {
                 terminal.requestTmuxSelectPane()
+            } else if allowFocus, let terminal = focus.asTerminal, terminal.isHerdrPane {
+                terminal.requestHerdrSelectPane()
             }
         }
 

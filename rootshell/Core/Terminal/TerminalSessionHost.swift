@@ -58,6 +58,9 @@ protocol TerminalSessionControllerHost: TerminalSessionHost, TerminalResponsePip
     var terminalLocalMultiplexerRecovery: LocalMultiplexerAttachment? { get }
     func terminalLocalMultiplexerSessionCreated(supported: Bool, accepted: Bool)
     var terminalHasTmuxController: Bool { get }
+    /// A herdr control-mode pane's session shim, or nil for every other
+    /// surface. Checked before any transport-specific start path.
+    func terminalMakeHerdrPaneSession() -> TerminalSession?
     var terminalSurfaceAvailable: Bool { get }
     var terminalSurfaceGridSize: (rows: UInt16, cols: UInt16)? { get }
     var terminalIsLiveDisconnectionOverlay: Bool { get set }

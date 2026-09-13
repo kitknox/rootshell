@@ -10,6 +10,10 @@ nonisolated enum LoginShellCommand {
     static let toolPathEntries = [
         "/opt/homebrew/bin",
         "/usr/local/bin",
+        // herdr's installer and cargo install here; .zshrc-only PATH
+        // additions never reach a non-interactive login shell.
+        "$HOME/.local/bin",
+        "$HOME/.cargo/bin",
         "$HOME/go/bin",
         "/usr/local/go/bin"
     ]

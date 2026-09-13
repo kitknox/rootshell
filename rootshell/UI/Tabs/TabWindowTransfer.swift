@@ -530,6 +530,11 @@ final class TabTransferCoordinator {
     func canTransfer(_ tab: TabModel) -> Bool {
         !tab.isHiddenTmuxWindow
             && !tab.awaitingTmuxReconcile
+            // A herdr control-mode family stays in its window while attached:
+            // moving either side alone would split the controller from its
+            // projected tabs. Detach first.
+            && !tab.isHerdrWindow
+            && !tab.isHerdrGateway
     }
 
     /// A tmux family member that may move under the relaxed (hidden /

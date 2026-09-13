@@ -26,6 +26,9 @@ nonisolated struct AgentProjectIdentity: Equatable, Sendable {
         case tmux = 2
         /// A command we ran on the host reported it.
         case probe = 3
+        /// herdr's server reported this exact pane's foreground directory.
+        /// Unlike a process-tree probe, this is tied to the pane's identity.
+        case herdr = 4
 
         static func < (lhs: Source, rhs: Source) -> Bool {
             lhs.rawValue < rhs.rawValue
@@ -61,6 +64,22 @@ nonisolated struct AgentProjectIdentity: Equatable, Sendable {
     /// resolve to `/repo`; unprobed/non-repository panes fall back to cwd.
     var identityPath: String {
         repositoryRoot ?? path
+    }
+
+    /// A current provider directory wins over stale detector state. Retain a
+    /// probe's more specific Git root (including submodules) only when it
+    /// still describes this directory on the same host.
+    static func forGrouping(reported: Self?, detected: Self?) -> Self? {
+        guard var reported else { return detected }
+        if let detected, detected.hostKey == reported.hostKey,
+           let root = detected.repositoryRoot,
+           AgentProjectPath.isInsideRepository(reported.path, root: root),
+           reported.repositoryRoot.map({ AgentProjectPath.isInsideRepository(root, root: $0) }) ?? true {
+            reported.repositoryRoot = root
+            reported.label = AgentProjectPath.label(forPath: reported.path, repoRoot: root) ?? reported.label
+            reported.branch = detected.branch
+        }
+        return reported
     }
 
     init(

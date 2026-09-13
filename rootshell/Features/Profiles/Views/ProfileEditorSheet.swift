@@ -166,6 +166,7 @@ struct ProfileEditorSheet: View {
 
     // tmux launch mode (regular vs control/-CC), meaningful when enableTmux is on
     @State private var tmuxAutoMode: TmuxAutoMode = .regular
+    @State private var herdrAutoMode: HerdrAutoMode = .regular
 
     // herdr auto-attach (mutually exclusive with enableTmux via the picker)
     @State private var enableHerdr: Bool = false
@@ -1504,14 +1505,21 @@ struct ProfileEditorSheet: View {
     private var tmuxLaunchSelection: Binding<TmuxLaunchSelection> {
         Binding(
             get: { TmuxLaunchSelection(tmuxEnabled: enableTmux, mode: effectiveTmuxAutoMode,
-                                       herdrEnabled: enableHerdr, zmxEnabled: enableZmx) },
+                                       herdrEnabled: enableHerdr, zmxEnabled: enableZmx,
+                                       herdrMode: effectiveHerdrAutoMode) },
             set: { sel in
                 enableTmux = sel.tmuxEnabled
                 enableHerdr = sel.herdrEnabled
                 enableZmx = sel.zmxEnabled
                 if sel.tmuxEnabled { tmuxAutoMode = sel.mode }
+                if sel.herdrEnabled { herdrAutoMode = sel.herdrMode }
             }
         )
+    }
+
+    /// herdr control mode needs the exec channel Mosh cannot carry.
+    private var effectiveHerdrAutoMode: HerdrAutoMode {
+        connectionProtocol == .mosh ? .regular : herdrAutoMode
     }
 
     /// Keep the rare TERM override compact in the main form. Its full value is
@@ -1546,6 +1554,9 @@ struct ProfileEditorSheet: View {
                     Text("tmux -CC (control)").tag(TmuxLaunchSelection.control)
                 }
                 Text("herdr").tag(TmuxLaunchSelection.herdr)
+                if connectionProtocol != .mosh {
+                    Text("herdr (control)").tag(TmuxLaunchSelection.herdrControl)
+                }
                 Text("zmx").tag(TmuxLaunchSelection.zmx)
             }
             .pickerStyle(.menu)
@@ -2107,6 +2118,7 @@ struct ProfileEditorSheet: View {
             enableTmux = config.tmuxAutoEnable
             tmuxAutoMode = config.tmuxAutoMode
             enableHerdr = config.herdrAutoEnable
+            herdrAutoMode = config.herdrAutoMode
             enableZmx = config.zmxAutoEnable
 
             // Load launch command
@@ -2227,6 +2239,7 @@ struct ProfileEditorSheet: View {
             enableTmux = entry.tmuxAutoEnable ?? false
             tmuxAutoMode = entry.tmuxAutoMode ?? .regular
             enableHerdr = entry.herdrAutoEnable ?? false
+            herdrAutoMode = entry.herdrAutoMode ?? .regular
             enableZmx = entry.zmxAutoEnable ?? false
 
             // Launch command from history
@@ -2405,6 +2418,7 @@ struct ProfileEditorSheet: View {
         }
         finalConfig.authMethod = sshAuthMethod
         finalConfig.herdrAutoEnable = enableHerdr
+        finalConfig.herdrAutoMode = effectiveHerdrAutoMode
         finalConfig.zmxAutoEnable = enableZmx
 
         // TERM override. Empty (or malformed) means inherit the global default
@@ -2764,7 +2778,7 @@ private struct ProfileMultiplexerSessionEditor: View {
         )
     }
 
-    private var isHerdr: Bool { selection == .herdr }
+    private var isHerdr: Bool { selection.herdrEnabled }
     private var isZmx: Bool { selection == .zmx }
 
     private var trimmed: String {

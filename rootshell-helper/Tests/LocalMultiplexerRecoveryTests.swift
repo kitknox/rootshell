@@ -84,6 +84,137 @@ final class LocalMultiplexerRecoveryTests: XCTestCase {
         XCTAssertTrue(value.attachCommand.contains("'HERDR_SOCKET_PATH=/tmp/custom/herdr.sock'"))
     }
 
+    func testHerdrControlPersistsAndLeavesGatewayPTYInShell() throws {
+        var value = fixture(kind: "herdr")
+        value.controlMode = true
+        value.socketPath = "/tmp/custom api.sock"
+        value.environment["HERDR_SOCKET_PATH"] = "/tmp/wrong.sock"
+        XCTAssertTrue(value.isValid)
+        XCTAssertTrue(value.isHerdrControl)
+        XCTAssertFalse(value.isTmuxControl)
+        XCTAssertNil(value.ptyRecoveryCommand)
+        XCTAssertEqual(value.launchEnvironment["HERDR_SOCKET_PATH"], value.socketPath)
+        XCTAssertEqual(value.attachArguments, ["control"])
+        let saved = SavedLeaf(title: "native gateway", attachment: value)
+        XCTAssertEqual(try JSONDecoder().decode(SavedLeaf.self, from: JSONEncoder().encode(saved)).attachment, value)
+        for args in [["control"], ["remote-client-bridge"], ["api", "snapshot"], ["terminal", "attach", "pane-1", "--takeover"]] {
+            XCTAssertTrue(value.command(arguments: args).contains("'HERDR_SOCKET_PATH=/tmp/custom api.sock'"))
+            XCTAssertFalse(value.command(arguments: args).contains("--session"))
+        }
+        var unsupported = fixture(kind: "zellij")
+        unsupported.controlMode = true
+        XCTAssertFalse(unsupported.isValid)
+    }
+
+    func testRecoveryIdentityDistinguishesControlKindsAndReplacementServers() {
+        var original = fixture(kind: "herdr")
+        original.controlMode = true
+        XCTAssertTrue(original.matchesIdentity(of: original))
+        var changed = original
+        changed.serverStartedAt += 1
+        XCTAssertFalse(changed.matchesIdentity(of: original))
+        changed = original
+        changed.socketInode += 1
+        XCTAssertFalse(changed.matchesIdentity(of: original))
+        changed = original
+        changed.sessionName = "another"
+        XCTAssertFalse(changed.matchesIdentity(of: original))
+        changed = original
+        changed.controlMode = false
+        XCTAssertFalse(changed.matchesIdentity(of: original))
+        var renamedTmux = fixture()
+        renamedTmux.sessionName = "renamed"
+        XCTAssertTrue(renamedTmux.matchesIdentity(of: fixture()))
+    }
+
+    func testHerdrTargetAndStatusValidation() throws {
+        XCTAssertTrue(LocalHerdrControlTarget(sessionName: nil).isValid)
+        XCTAssertFalse(LocalHerdrControlTarget(sessionName: "bad\nname").isValid)
+        XCTAssertFalse(LocalHerdrControlTarget(sessionName: "default", attachment: fixture()).isValid)
+        let oldRequest = try JSONDecoder().decode(LocalHerdrControlTarget.self, from: Data(#"{"sessionName":null}"#.utf8))
+        XCTAssertNil(oldRequest.attachment)
+        let output = #"{"client":{"binary":"/tmp/herdr","session":null},"server":{"running":true,"socket":"/tmp/custom.sock","session":null}}"#
+        XCTAssertEqual(LocalMultiplexerRecovery.HerdrStatus.parse("login greeting\n" + output)?.server.socket, "/tmp/custom.sock")
+        XCTAssertNil(LocalMultiplexerRecovery.HerdrStatus.parse("not JSON"))
+        XCTAssertNil(LocalMultiplexerRecovery.herdrControlAttachment(statusOutput: output, records: []))
+    }
+
+    /// No foreground multiplexer client or gateway PTY is involved. All
+    /// processes and sockets belong to this test's private config directory.
+    func testLiveHerdrControlIdentityWithoutForegroundPTY() throws {
+        let candidates = [FileManager.default.homeDirectoryForCurrentUser.path + "/.local/bin/herdr",
+                          "/opt/homebrew/bin/herdr", "/usr/local/bin/herdr"]
+        guard let executable = candidates.first(where: FileManager.default.isExecutableFile(atPath:)) else {
+            throw XCTSkip("herdr is not installed")
+        }
+        let directory = "/tmp/rs-herdr-recovery-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let config = directory + "/config.toml", socket = directory + "/custom.sock"
+        try Data().write(to: URL(fileURLWithPath: config))
+        let environment = ["HERDR_CONFIG_PATH": config, "HERDR_SOCKET_PATH": socket, "HERDR_SESSION": "recovery"]
+        let server = Process()
+        server.executableURL = URL(fileURLWithPath: executable)
+        server.arguments = ["server"]
+        server.environment = EnvironmentBuilder().build().merging(environment) { _, new in new }
+        server.standardInput = FileHandle.nullDevice
+        server.standardOutput = FileHandle.nullDevice
+        server.standardError = FileHandle.nullDevice
+        try server.run()
+        defer {
+            if server.isRunning { kill(server.processIdentifier, SIGKILL) }
+            server.waitUntilExit()
+            try? FileManager.default.removeItem(atPath: directory)
+        }
+        let deadline = Date().addingTimeInterval(6)
+        var attachment: LocalMultiplexerAttachment?
+        while Date() < deadline, server.isRunning {
+            if let status = LocalMultiplexerRecovery.run(executable, ["status", "--json"], environment: environment, deadline: deadline) {
+                attachment = LocalMultiplexerRecovery.herdrControlAttachment(statusOutput: status, records: LocalMultiplexerRecovery.processes())
+                if attachment != nil { break }
+            }
+            usleep(50_000)
+        }
+        let saved = try XCTUnwrap(attachment, "No verified herdr API server appeared")
+        XCTAssertTrue(saved.isHerdrControl)
+        XCTAssertNil(saved.ptyRecoveryCommand)
+        XCTAssertEqual(saved.socketPath, LocalMultiplexerRecovery.canonical(socket))
+        XCTAssertEqual(saved.serverPID, server.processIdentifier)
+        XCTAssertEqual(saved.sessionName, "recovery")
+        XCTAssertTrue(LocalMultiplexerRecovery.isAvailable(saved))
+        let target = LocalHerdrControlTarget(sessionName: "ignored", attachment: saved)
+        let observed = LocalMultiplexerRecovery.inspectHerdrControl(target, records: LocalMultiplexerRecovery.processes(), deadline: Date().addingTimeInterval(3))
+        XCTAssertEqual(observed, saved)
+        // A raw-capable server accepts two fresh pipe clients with the same
+        // boot identity. EOF closes each bridge; the original server survives.
+        let status = try XCTUnwrap(LocalMultiplexerRecovery.run(executable, ["status", "--json"],
+            environment: saved.launchEnvironment, deadline: Date().addingTimeInterval(3)))
+        let statusJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(status.utf8)) as? [String: Any])
+        let capabilities = (statusJSON["server"] as? [String: Any])?["capabilities"] as? [String: Any]
+        if (capabilities?["terminal_control_stream"] as? Int ?? 0) > 0 {
+            var bootID: String?
+            for _ in 0..<2 {
+                let output = try XCTUnwrap(LocalMultiplexerRecovery.run(executable, ["control"],
+                    environment: saved.launchEnvironment, deadline: Date().addingTimeInterval(3)))
+                let first = try XCTUnwrap(output.split(separator: "\n").first)
+                let opened = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(first.utf8)) as? [String: Any])
+                let result = try XCTUnwrap(opened["result"] as? [String: Any])
+                let currentBoot = try XCTUnwrap(result["boot_id"] as? String)
+                if let bootID { XCTAssertEqual(currentBoot, bootID) }
+                bootID = currentBoot
+                XCTAssertTrue(LocalMultiplexerRecovery.isAvailable(saved))
+            }
+        }
+        var stale = saved
+        stale.serverStartedAt += 1
+        XCTAssertFalse(LocalMultiplexerRecovery.isAvailable(stale))
+        stale = saved
+        stale.socketInode += 1
+        XCTAssertFalse(LocalMultiplexerRecovery.isAvailable(stale))
+        kill(server.processIdentifier, SIGKILL)
+        server.waitUntilExit()
+        XCTAssertFalse(LocalMultiplexerRecovery.isAvailable(saved))
+    }
+
     func testProbeUsesExistingLocalePolicy() {
         let output = LocalMultiplexerRecovery.run("/usr/bin/env", [], environment: [:], deadline: Date().addingTimeInterval(3))
         let expected = EnvironmentBuilder().build()["LANG"]

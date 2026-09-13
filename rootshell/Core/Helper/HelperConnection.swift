@@ -152,8 +152,32 @@ public class HelperConnection {
         }
     }
 
-    func inspectLocalMultiplexers() async throws -> [String: LocalMultiplexerAttachment?] {
-        try await socketConnection.inspectLocalMultiplexers()
+    func inspectLocalMultiplexers(herdrTargets: [String: LocalHerdrControlTarget] = [:]) async throws -> [String: LocalMultiplexerAttachment?] {
+        try await socketConnection.inspectLocalMultiplexers(herdrTargets: herdrTargets)
+    }
+
+    /// Spawns a long-lived non-PTY command and returns its pid plus the
+    /// session socket where the helper delivers the app's end of its stdio.
+    public func spawnPipedProcess(
+        command: String,
+        workingDirectory: String? = nil,
+        shell: String? = nil,
+        paneToken: String? = nil
+    ) async throws -> (processID: Int32, socketPath: String) {
+        try await socketConnection.spawnPipedProcess(
+            command: command,
+            cwd: workingDirectory,
+            shell: shell,
+            paneToken: paneToken
+        )
+    }
+
+    public func killPipedProcess(processID: Int32) async {
+        do {
+            try await socketConnection.killPipedProcess(processID: processID)
+        } catch {
+            Ghostty.logger.error("Failed to kill piped process \(processID): \(error)")
+        }
     }
 
     /// Resizes a shell session
@@ -287,23 +311,23 @@ public class HelperConnection {
     /// Ensures helper is running, launching it if necessary (non-sandboxed mode only)
     /// Returns true if helper is available (either existing or newly launched)
     public func ensureHelperRunning() async -> Bool {
-        ensureLock.lock()
-        if let inFlightEnsure {
-            ensureLock.unlock()
-            return await inFlightEnsure.value
-        }
-
-        let created = Task {
-            defer {
-                self.ensureLock.lock()
-                self.inFlightEnsure = nil
-                self.ensureLock.unlock()
+        let task = ensureLock.withLock {
+            if let inFlightEnsure {
+                return inFlightEnsure
             }
-            return await self.performEnsureHelperRunning()
+
+            let created = Task {
+                defer {
+                    self.ensureLock.withLock {
+                        self.inFlightEnsure = nil
+                    }
+                }
+                return await self.performEnsureHelperRunning()
+            }
+            inFlightEnsure = created
+            return created
         }
-        inFlightEnsure = created
-        ensureLock.unlock()
-        return await created.value
+        return await task.value
     }
 
     private func performEnsureHelperRunning() async -> Bool {

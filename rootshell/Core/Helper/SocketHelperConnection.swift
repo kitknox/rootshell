@@ -56,8 +56,9 @@ class SocketHelperConnection {
         return createResponse
     }
 
-    func inspectLocalMultiplexers() async throws -> [String: LocalMultiplexerAttachment?] {
-        let response = try await sendCommand(.inspectLocalMultiplexers)
+    func inspectLocalMultiplexers(herdrTargets: [String: LocalHerdrControlTarget] = [:]) async throws -> [String: LocalMultiplexerAttachment?] {
+        let payload = herdrTargets.isEmpty ? nil : try JSONEncoder().encode(herdrTargets)
+        let response = try await sendCommand(.inspectLocalMultiplexers, payload: payload)
         guard let payload = response.payload else { throw SocketHelperError.missingResponseData }
         return try JSONDecoder().decode([String: LocalMultiplexerAttachment?].self, from: payload)
     }
@@ -76,6 +77,38 @@ class SocketHelperConnection {
         let payload = try JSONEncoder().encode(request)
 
         _ = try await sendCommand(.killShell, payload: payload)
+    }
+
+    /// Spawns a non-PTY command whose stdio is a socketpair; the app receives
+    /// its end at the returned socket path with `FDReceiver`.
+    func spawnPipedProcess(
+        command: String,
+        cwd: String?,
+        shell: String?,
+        paneToken: String?
+    ) async throws -> (processID: Int32, socketPath: String) {
+        let request = SpawnPipedProcessRequest(
+            command: command,
+            workingDirectory: cwd,
+            shell: shell,
+            resourcesDir: Bundle.main.resourceURL?.path,
+            paneToken: paneToken
+        )
+        let payload = try JSONEncoder().encode(request)
+        let response = try await sendCommand(.spawnPipedProcess, payload: payload)
+        guard response.success else {
+            throw SocketHelperError.commandFailed(response.error ?? "spawn failed")
+        }
+        guard let responsePayload = response.payload else {
+            throw SocketHelperError.missingResponseData
+        }
+        let spawned = try JSONDecoder().decode(SpawnPipedProcessResponse.self, from: responsePayload)
+        return (spawned.processID, spawned.socketPath)
+    }
+
+    func killPipedProcess(processID: Int32) async throws {
+        let payload = try JSONEncoder().encode(KillPipedProcessRequest(processID: processID))
+        _ = try await sendCommand(.killPipedProcess, payload: payload)
     }
 
     /// Checks if helper is available

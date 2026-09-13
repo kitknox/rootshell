@@ -157,6 +157,9 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
         /// herdr auto-attach. Optional for backward compat — older serialized
         /// sessions decode as nil and restore as disabled.
         let herdrAutoEnable: Bool?
+        /// herdr launch mode. Optional for backward compat; nil restores as
+        /// regular.
+        let herdrAutoMode: HerdrAutoMode?
         let zmxAutoEnable: Bool?
         let launchCommand: String?
         let launchCommandMode: SSHConfig.LaunchCommandMode?
@@ -196,6 +199,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
             self.tmuxAutoEnable = config.tmuxAutoEnable
             self.tmuxAutoMode = config.tmuxAutoMode
             self.herdrAutoEnable = config.herdrAutoEnable
+            self.herdrAutoMode = config.herdrAutoMode
             self.zmxAutoEnable = config.zmxAutoEnable
             self.launchCommand = config.launchCommand
             self.launchCommandMode = config.launchCommandMode
@@ -279,6 +283,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
             config.tmuxAutoEnable = tmuxAutoEnable ?? false
             config.tmuxAutoMode = tmuxAutoMode ?? .regular
             config.herdrAutoEnable = herdrAutoEnable ?? false
+            config.herdrAutoMode = herdrAutoMode ?? .regular
             config.zmxAutoEnable = zmxAutoEnable ?? false
             config.launchCommand = launchCommand
             config.launchCommandMode = launchCommandMode ?? .afterConnect

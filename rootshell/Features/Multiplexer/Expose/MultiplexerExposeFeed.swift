@@ -9,7 +9,7 @@ import QuartzCore
 import os
 
 @MainActor
-final class MultiplexerExposeFeed {
+final class MultiplexerExposeFeed: MuxPreviewFrameSource {
     enum State: Equatable {
         case idle
         case detecting
@@ -107,7 +107,7 @@ final class MultiplexerExposeFeed {
 
     /// Returns the active multiplexer binding, preferring the raw slot.
     static func binding(for terminal: Ghostty.TerminalView?) -> Ghostty.TerminalView.RawMultiplexerBinding? {
-        guard let terminal, RemoteExecProbe.canProbe(terminal) else { return nil }
+        guard let terminal, canDetect(terminal) else { return nil }
         if let binding = terminal.rawMultiplexer, adapter(for: binding.type) != nil,
            binding.hasOwnedAltScreen || isAlternateScreenActive(terminal) {
             return binding
@@ -135,7 +135,11 @@ final class MultiplexerExposeFeed {
 
     /// A pane can be probed even when no binding has been recorded yet.
     static func canDetect(_ terminal: Ghostty.TerminalView) -> Bool {
-        RemoteExecProbe.canProbe(terminal)
+        // Projected panes are already native tabs. Their synthetic local
+        // session has no TTY to probe, so process discovery can find our own
+        // herdr bridge and incorrectly replace native selection with CLI focus.
+        !terminal.isMultiplexerPane && terminal.herdrController == nil && terminal.tmuxController == nil
+            && RemoteExecProbe.canProbe(terminal)
     }
 
     private static func isAlternateScreenActive(_ terminal: Ghostty.TerminalView) -> Bool {
@@ -161,11 +165,13 @@ final class MultiplexerExposeFeed {
     /// terminal has no usable multiplexer binding and nothing to detect.
     @discardableResult
     func start(terminal: Ghostty.TerminalView) -> Bool {
-        let binding = Self.binding(for: terminal)
-        guard binding != nil || Self.canDetect(terminal) else {
-            Self.logger.debug("not a multiplexer pane: bound=\(terminal.rawMultiplexer != nil) passthrough=\(terminal.passthroughMultiplexer != nil) probe=\(RemoteExecProbe.canProbe(terminal)) alt=\(Self.isAlternateScreenActive(terminal))")
+        guard Self.canDetect(terminal) else {
+            Self.logger.debug("not eligible for raw multiplexer exposé")
+            cancelFocus()
+            stopNow()
             return false
         }
+        let binding = Self.binding(for: terminal)
         Self.logger.debug("start: \(binding?.type.rawValue ?? "detect", privacy: .public)")
         stopTask?.cancel()
         stopTask = nil

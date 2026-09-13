@@ -51,6 +51,9 @@ nonisolated struct TabGroupID: Hashable, Codable, Sendable, Identifiable {
         case remoteDomain
         case remoteNetwork
         case tmux
+        /// A herdr control-mode family: the gateway tab and its projected
+        /// tabs, mirroring `.tmux`.
+        case herdr
         case other
     }
 
@@ -66,8 +69,18 @@ nonisolated struct TabGroupID: Hashable, Codable, Sendable, Identifiable {
         case .remoteDomain: return "domain:\(value)"
         case .remoteNetwork: return "network:\(value)"
         case .tmux: return "tmux:\(value)"
+        case .herdr: return "herdr:\(value)"
         case .other: return "other:\(value)"
         }
+    }
+
+    static func herdr(ownerID: UUID) -> TabGroupID {
+        TabGroupID(kind: .herdr, value: ownerID.uuidString.lowercased())
+    }
+
+    /// The gateway terminal UUID backing a `.herdr` group (nil for other kinds).
+    var herdrOwnerID: UUID? {
+        kind == .herdr ? UUID(uuidString: value) : nil
     }
 
     static let local = TabGroupID(kind: .local, value: "local")
@@ -106,6 +119,8 @@ nonisolated struct TabGroupID: Hashable, Codable, Sendable, Identifiable {
             return value
         case .tmux:
             return "tmux"
+        case .herdr:
+            return "herdr"
         case .other:
             return value.isEmpty ? String(localized: "Other", comment: "Tab group title for uncategorized terminals") : value
         }
@@ -175,24 +190,28 @@ struct TabGroup: Identifiable, Hashable {
     let tabIDs: [UUID]
 }
 
-/// Stable identity for a Coding Agent project section. The display label is
-/// deliberately not part of the identity: two repositories named "api" on
+/// Stable identity for a project section shared by all terminal providers.
+/// The display label is not part of the identity: two repositories named "api" on
 /// different hosts/paths must remain separate, while a better probe may refine
 /// how the same section is presented without merging it with a namesake.
 nonisolated struct ProjectGroupID: Hashable, Codable, Sendable, Identifiable {
     let hostKey: String
     let path: String
+    /// A named workspace with no known directory still gets a section. Its
+    /// identity survives renames and cannot collide with a filesystem project.
+    let workspaceKey: String?
 
     var id: String { rawValue }
-    var rawValue: String { "\(hostKey)\u{1f}\(path)" }
+    var rawValue: String { "\(hostKey)\u{1f}\(path)" + (workspaceKey.map { "\u{1f}\($0)" } ?? "") }
 
     static let other = ProjectGroupID(hostKey: "", path: "")
 
     var isOther: Bool { self == .other }
 
-    init(hostKey: String?, path: String) {
+    init(hostKey: String?, path: String, workspaceKey: String? = nil) {
         self.hostKey = hostKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         self.path = AgentProjectPath.normalize(path)
+        self.workspaceKey = workspaceKey
     }
 }
 
@@ -266,6 +285,41 @@ final class TabModel: Identifiable {
     /// launched `tmux -CC` and is intentionally NOT badged.
     var isTmuxWindow: Bool = false {
         didSet { markGroupingChanged(oldValue, isTmuxWindow) }
+    }
+
+    /// The tab whose connection carries a herdr control stream. Its own
+    /// pane is the user's shell; the projected tabs below hang off it.
+    var isHerdrGateway: Bool = false {
+        didSet { markGroupingChanged(oldValue, isHerdrGateway) }
+    }
+
+    /// herdr session the gateway is attached to. nil for ordinary tabs.
+    var herdrSessionName: String? {
+        didSet { markGroupingChanged(oldValue, herdrSessionName) }
+    }
+
+    /// True for a tab projected from a herdr tab by `HerdrController`.
+    /// Never persisted: the controller rebuilds it on reconnect.
+    var isHerdrWindow: Bool = false {
+        didSet { markGroupingChanged(oldValue, isHerdrWindow) }
+    }
+
+    /// herdr's ids for a projected tab. The workspace groups the tab in the
+    /// sidebar; its label is mirrored so grouping needs no controller lookup.
+    var herdrTabId: String? {
+        didSet { markGroupingChanged(oldValue, herdrTabId) }
+    }
+    var herdrWorkspaceId: String? {
+        didSet { markGroupingChanged(oldValue, herdrWorkspaceId) }
+    }
+    var herdrWorkspaceLabel: String? {
+        didSet { markGroupingChanged(oldValue, herdrWorkspaceLabel) }
+    }
+    var herdrHostKey: String? {
+        didSet { markGroupingChanged(oldValue, herdrHostKey) }
+    }
+    var herdrWorkspaceProject: AgentProjectIdentity? {
+        didSet { markGroupingChanged(oldValue, herdrWorkspaceProject) }
     }
 
     /// The tmux window id this tab models, once known (set by
@@ -445,14 +499,14 @@ final class TabModel: Identifiable {
     /// observed property consumed by the window, top tabs, and sidebar. A
     /// tmux agent spinner can otherwise invalidate that entire graph about ten
     /// times per second. Preserve a responsive leading update and the newest
-    /// trailing value while limiting observed publication to 5 Hz. Codex and
+    /// trailing value while limiting publication (75 ms for herdr, 200 ms otherwise). Codex and
     /// Claude commonly animate their title spinners at about 10 Hz; publishing
     /// every other frame keeps that motion legible without making SwiftUI
     /// process every source update.
     @ObservationIgnored private var pendingPublishedTitle: String?
     @ObservationIgnored private var titlePublicationTimer: Timer?
     @ObservationIgnored private var lastTitlePublicationUptime: TimeInterval = 0
-    private static let minimumTitlePublicationInterval: TimeInterval = 0.2
+    private var minimumTitlePublicationInterval: TimeInterval { isHerdrWindow ? 0.075 : 0.2 }
 
     private func markGroupingChanged<T: Equatable>(_ oldValue: T, _ newValue: T) {
         if oldValue != newValue {
@@ -590,12 +644,15 @@ final class TabModel: Identifiable {
     func startObserving(preserveExistingTitle: Bool = false) {
         observationCancellables.removeAll()
         cancelPendingTitlePublication()
+        if isHerdrWindow {
+            HerdrController.controller(forTab: self)?.refreshTitle(of: self)
+        }
 
         // Resolve the focused pane first (not the terminal shim) so a focused
         // non-terminal pane isn't silently skipped in favor of a background
         // terminal.
         guard let pane = focusedPane ?? splitTree.first else {
-            if title != "Terminal" {
+            if !isHerdrWindow, title != "Terminal" {
                 title = "Terminal"
             }
             recomputeRoamProtocol()
@@ -634,6 +691,7 @@ final class TabModel: Identifiable {
         // (id=tmux-window-title-single-writer)
         if !preserveExistingTitle,
            !isTmuxWindow,
+           !isHerdrWindow,
            let resolved = Self.resolveTitle(rawTitle: focusedTerminal.title, on: focusedTerminal),
            title != resolved {
             title = resolved
@@ -659,7 +717,9 @@ final class TabModel: Identifiable {
                 guard let self, let focusedTerminal else { return }
                 // tmux window tabs: reconcile is the sole title writer.
                 // (id=tmux-window-title-single-writer)
-                if self.isTmuxWindow { return }
+                // herdr resolves live titles and metadata in its controller;
+                // delayed publisher values must not become a second writer.
+                if self.isTmuxWindow || self.isHerdrWindow { return }
                 if !hasReceivedRealTitle {
                     if Self.shouldUseFallbackTitle(newTitle) {
                         return
@@ -730,14 +790,14 @@ final class TabModel: Identifiable {
 
         let now = ProcessInfo.processInfo.systemUptime
         let elapsed = now - lastTitlePublicationUptime
-        if lastTitlePublicationUptime == 0 || elapsed >= Self.minimumTitlePublicationInterval {
+        if lastTitlePublicationUptime == 0 || elapsed >= minimumTitlePublicationInterval {
             publishPendingTitle()
             return
         }
 
         guard titlePublicationTimer == nil else { return }
         let timer = Timer(
-            timeInterval: Self.minimumTitlePublicationInterval - elapsed,
+            timeInterval: minimumTitlePublicationInterval - elapsed,
             repeats: false
         ) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -866,6 +926,9 @@ final class TabModel: Identifiable {
 @Observable
 final class TabsModel {
     @ObservationIgnored private(set) var selectionRevision: UInt64 = 0
+    /// Kept through reconnect/autosave until the owning herdr gateway receives
+    /// its first snapshot. Choosing another tab cancels the pending selection.
+    @ObservationIgnored var pendingHerdrSelection: SerializableHerdrSelection?
     /// All tabs in the window, in display order.
     var tabs: [TabModel] = [] {
         didSet {
@@ -887,6 +950,10 @@ final class TabsModel {
         didSet {
             guard oldValue != selectedTabID else { return }
             selectionRevision &+= 1
+            if let pending = pendingHerdrSelection,
+               selectedTab?.splitTree.terminalLeaves.contains(where: { $0.uuid == pending.gatewayTerminalUUID }) != true {
+                pendingHerdrSelection = nil
+            }
             beginTabSwitchAnimationGate()
             if let tab = selectedTab { rememberSelectionScope(of: tab) }
             if isGroupedModeEnabled, !isProjectGroupingActive,
@@ -896,6 +963,7 @@ final class TabsModel {
             }
             syncDisplayedTab()
             AgentAttentionCenter.shared.visibilityDidChange()
+            HerdrController.selectedTabDidChange(in: self)
         }
     }
 
@@ -1118,7 +1186,10 @@ final class TabsModel {
             return groupingCache
         }
 
-        let groupableTabs = tabs.filter { !$0.isHiddenTmuxWindow || $0.isTmuxGateway || $0.isTmuxWindow }
+        // A hidden gateway still heads its family, tmux or herdr.
+        let groupableTabs = tabs.filter {
+            !$0.isHiddenTmuxWindow || $0.isTmuxGateway || $0.isTmuxWindow || $0.isHerdrGateway || $0.isHerdrWindow
+        }
         let visibleTabs = tabs.filter { !$0.isHiddenTmuxWindow }
         let autoIDs = autoGroupIDs(for: groupableTabs)
         let validIDs = Set(autoIDs.values)
@@ -1134,11 +1205,16 @@ final class TabsModel {
             if buckets[id] == nil { order.append(id) }
             buckets[id, default: []].append(tab.id)
         }
+        let byID = Dictionary(uniqueKeysWithValues: groupableTabs.map { ($0.id, $0) })
         for (groupID, tabIDs) in buckets {
-            buckets[groupID] = TabOrderRules.applyingPreferredOrder(
+            var ordered = TabOrderRules.applyingPreferredOrder(
                 sidebarGroupTabOrders[groupID.rawValue] ?? [],
                 to: tabIDs
             )
+            if groupID.kind == .herdr {
+                ordered = Self.groupedByHerdrWorkspace(ordered, byID: byID)
+            }
+            buckets[groupID] = ordered
         }
 
         let snapshot = GroupingSnapshot(
@@ -1152,6 +1228,32 @@ final class TabsModel {
         return snapshot
     }
 
+    /// A herdr family reads gateway first, then each workspace's projected
+    /// tabs contiguous in the order the workspaces first appear. The sidebar
+    /// nests the family that way, so navigation must agree with it whatever
+    /// order a drag left in the preferred list.
+    private static func groupedByHerdrWorkspace(_ ids: [UUID], byID: [UUID: TabModel]) -> [UUID] {
+        var gateway: [UUID] = []
+        var workspaceOrder: [String] = []
+        var byWorkspace: [String: [UUID]] = [:]
+        var rest: [UUID] = []
+        for id in ids {
+            guard let tab = byID[id] else {
+                rest.append(id)
+                continue
+            }
+            if tab.isHerdrGateway {
+                gateway.append(id)
+            } else if tab.isHerdrWindow, let workspaceId = tab.herdrWorkspaceId {
+                if byWorkspace[workspaceId] == nil { workspaceOrder.append(workspaceId) }
+                byWorkspace[workspaceId, default: []].append(id)
+            } else {
+                rest.append(id)
+            }
+        }
+        return gateway + workspaceOrder.flatMap { byWorkspace[$0] ?? [] } + rest
+    }
+
     private func navigationSnapshot() -> NavigationSnapshot {
         let grouping = groupingSnapshot()
         // Prefer the active group, but if it has dissolved (its tmux gateway
@@ -1163,10 +1265,8 @@ final class TabsModel {
         let projectMembership: [String] = projectScopedInboxEnabled
             ? grouping.visibleTabs.map(Self.projectMembershipRevision(for:))
             : []
-        let anyProject = projectScopedInboxEnabled && grouping.visibleTabs.contains { tab in
-            tab.splitTree.contains {
-                $0.presentation.agentRow?.project?.label.isEmpty == false
-            }
+        let anyProject = projectScopedInboxEnabled && grouping.visibleTabs.contains {
+            !projectCandidates(for: $0).isEmpty
         }
         let projectGrouping = projectScopedInboxEnabled && isGroupedModeEnabled && anyProject
         let revision = NavigationRevision(
@@ -1240,33 +1340,53 @@ final class TabsModel {
         return snapshot
     }
 
+    var hasAnyProject: Bool {
+        visibleTabs.contains { !projectCandidates(for: $0).isEmpty }
+    }
+
     /// Cache identity for every project-bearing pane in a tab. Pane UUIDs are
-    /// included so replacing one agent pane with another invalidates even when
+    /// included so replacing one pane with another invalidates even when
     /// their labels happen to match.
     private static func projectMembershipRevision(for tab: TabModel) -> String {
         let values = tab.splitTree.map { pane in
-            let project = pane.presentation.agentRow?.project
+            let project = pane.presentation.projectForGrouping
             let projectKey = project.map {
                 "\($0.hostKey ?? ""):\($0.identityPath):\($0.label)"
             } ?? ""
             let isAgent = pane.presentation.agentRow != nil ? "agent" : "other"
             return "\(pane.uuid.uuidString)=\(isAgent):\(projectKey)"
         }
-        return values.joined(separator: "|")
+        let fallback = workspaceProjectCandidate(for: tab).map { "\($0.id.rawValue):\($0.label)" } ?? ""
+        return ([fallback] + values).joined(separator: "|")
     }
 
     private static func projectGroupID(for project: AgentProjectIdentity) -> ProjectGroupID {
         ProjectGroupID(hostKey: project.hostKey, path: project.identityPath)
     }
 
+    private static func workspaceProjectCandidate(for tab: TabModel) -> (id: ProjectGroupID, label: String)? {
+        guard tab.isHerdrWindow else { return nil }
+        if let project = tab.herdrWorkspaceProject {
+            return (projectGroupID(for: project), project.label)
+        }
+        guard let workspaceID = tab.herdrWorkspaceId,
+              let ownerID = tab.owningGatewayTerminalUUID else { return nil }
+        return (ProjectGroupID(hostKey: tab.herdrHostKey, path: "",
+                               workspaceKey: "\(ownerID.uuidString):\(workspaceID)"),
+                tab.herdrWorkspaceLabel ?? workspaceID)
+    }
+
     private func projectCandidates(for tab: TabModel) -> [(id: ProjectGroupID, label: String)] {
         var seen = Set<ProjectGroupID>()
-        return tab.splitTree.compactMap { pane in
-            guard let project = pane.presentation.agentRow?.project else { return nil }
-            let id = Self.projectGroupID(for: project)
-            guard seen.insert(id).inserted else { return nil }
-            return (id, project.label)
+        let fallback = Self.workspaceProjectCandidate(for: tab)
+        let candidates = tab.splitTree.compactMap { pane -> (id: ProjectGroupID, label: String)? in
+            let candidate = pane.presentation.projectForGrouping.map {
+                (id: Self.projectGroupID(for: $0), label: $0.label)
+            } ?? fallback
+            guard let candidate, seen.insert(candidate.0).inserted else { return nil }
+            return candidate
         }
+        return candidates.isEmpty ? fallback.map { [$0] } ?? [] : candidates
     }
 
     func primaryProjectGroupID(for tab: TabModel) -> ProjectGroupID {
@@ -1281,9 +1401,9 @@ final class TabsModel {
     }
 
     func projectGroupID(forPane paneID: UUID, in tab: TabModel) -> ProjectGroupID? {
-        guard let project = tab.splitTree.first(where: { $0.uuid == paneID })?
-            .presentation.agentRow?.project else { return nil }
-        return Self.projectGroupID(for: project)
+        guard let pane = tab.splitTree.first(where: { $0.uuid == paneID }) else { return nil }
+        return pane.presentation.projectForGrouping.map(Self.projectGroupID(for:))
+            ?? Self.workspaceProjectCandidate(for: tab)?.id
     }
 
     private func buildProjectSections(visibleTabs: [TabModel]) -> [ProjectTabSection] {
@@ -1333,6 +1453,10 @@ final class TabsModel {
                 let disambiguator: String
                 if id.hostKey.isEmpty {
                     disambiguator = pathSuffix
+                } else if id.workspaceKey != nil, sameHostIDs.count > 1 {
+                    // Unknown-directory workspaces need readable names, not
+                    // the opaque owner/workspace IDs used for identity.
+                    disambiguator = "\(id.hostKey) · \((sameHostIDs.firstIndex(of: id) ?? 0) + 1)"
                 } else if sameHostIDs.count > 1 {
                     disambiguator = "\(id.hostKey) · \(pathSuffix)"
                 } else {
@@ -1432,6 +1556,22 @@ final class TabsModel {
         return selectedTab.id == gatewayTabID
     }
 
+    /// Preserve the server identity while its native tab is live, or while
+    /// its selected gateway is still reconnecting after a previous restore.
+    var herdrSelectionForPersistence: SerializableHerdrSelection? {
+        guard let selectedTab else { return nil }
+        if selectedTab.isHerdrWindow,
+           let owner = selectedTab.owningGatewayTerminalUUID,
+           let tabID = selectedTab.herdrTabId {
+            return SerializableHerdrSelection(gatewayTerminalUUID: owner, tabID: tabID)
+        }
+        if let pending = pendingHerdrSelection,
+           selectedTab.splitTree.terminalLeaves.contains(where: { $0.uuid == pending.gatewayTerminalUUID }) {
+            return pending
+        }
+        return nil
+    }
+
     /// Tabs the user can see and navigate to: everything except hidden tmux
     /// window tabs. The tab strip, Cmd+N shortcuts, and next/prev navigation
     /// all operate on this view of `tabs`. (id=tmux-hidden-windows)
@@ -1470,6 +1610,40 @@ final class TabsModel {
 
     func navigationIndex(of id: UUID) -> Int? {
         navigationSnapshot().indexByID[id]
+    }
+
+    /// Workspace siblings in the user's current presentation. A sidebar drag
+    /// can belong to a different group from the selected tab's navigation set.
+    func herdrReorderTabIDs(for tab: TabModel) -> [String]? {
+        guard tab.isHerdrWindow, let ownerID = tab.owningGatewayTerminalUUID,
+              let workspaceID = tab.herdrWorkspaceId else { return nil }
+        let ordered: [TabModel]
+        switch orderProjection.mode {
+        case .flat:
+            ordered = tabs
+        case .userGrouped:
+            let groupID = TabGroupID.herdr(ownerID: ownerID)
+            guard effectiveGroupID(for: tab) == groupID,
+                  let group = availableGroups.first(where: { $0.id == groupID }) else { return nil }
+            ordered = group.tabIDs.compactMap { self.tab(withID: $0) }
+        case .projectGrouped:
+            return nil
+        }
+        return ordered.filter {
+            $0.isHerdrWindow && $0.owningGatewayTerminalUUID == ownerID && $0.herdrWorkspaceId == workspaceID
+        }.compactMap(\.herdrTabId)
+    }
+
+    /// Server order also governs the native herdr group. Custom groups and
+    /// project orders keep their independent presentation preferences.
+    func synchronizeHerdrGroupOrder(_ orderedIDs: [UUID], ownerID: UUID) {
+        let groupID = TabGroupID.herdr(ownerID: ownerID)
+        guard let group = availableGroups.first(where: { $0.id == groupID }) else { return }
+        let members = Set(group.tabIDs)
+        guard let replacement = TabOrderRules.replacingSubsequence(
+            orderedIDs.filter { members.contains($0) }, in: group.tabIDs
+        ), replacement != group.tabIDs else { return }
+        sidebarGroupTabOrders[groupID.rawValue] = replacement
     }
 
     /// Reorder two visible tabs according to the active presentation. Flat
@@ -1561,7 +1735,7 @@ final class TabsModel {
     }
 
     /// Replace only the slots occupied by `orderedIDs` inside the active
-    /// projection. Used for tmux sibling drags where gateway/ordinary tabs
+    /// projection. Used for multiplexer sibling drags where gateway/ordinary tabs
     /// interleave the visual section and must keep their positions.
     func setActiveOrderSubsequence(_ orderedIDs: [UUID]) {
         switch orderProjection.mode {
@@ -1574,16 +1748,17 @@ final class TabsModel {
             withAnimation(.snappy(duration: 0.28, extraBounce: 0.0)) {
                 tabs = replacement.compactMap { byID[$0] }
             }
-        case .userGrouped(let groupID):
-            guard let groupID,
+        case .userGrouped:
+            guard let firstID = orderedIDs.first, let firstTab = tab(withID: firstID),
+                  let groupID = effectiveGroupID(for: firstTab),
+                  orderedIDs.allSatisfy({ effectiveGroupID(for: tab(withID: $0)) == groupID }),
                   let fullOrder = availableGroups.first(where: { $0.id == groupID })?.tabIDs,
                   let replacement = TabOrderRules.replacingSubsequence(
                     orderedIDs,
                     in: fullOrder
                   ) else { return }
             sidebarGroupTabOrders[groupID.rawValue] = replacement
-            // Keep tmux server-order synchronization compatible with the
-            // existing raw-slot based controller.
+            // Keep the canonical sibling slots aligned for multiplexer drags.
             let rawIDs = tabs.map(\.id)
             if let rawReplacement = TabOrderRules.replacingSubsequence(
                 orderedIDs,
@@ -1785,6 +1960,16 @@ final class TabsModel {
     }
 
     private func groupTitle(for id: TabGroupID, tabIDs: [UUID], byID: [UUID: TabModel]) -> String {
+        if id.kind == .herdr {
+            // Session name, then host: the same shape as a tmux family.
+            let tabs = tabIDs.compactMap { byID[$0] }
+            let gateway = tabs.first(where: { $0.isHerdrGateway })
+            let session = gateway?.herdrSessionName
+                ?? tabs.first?.owningGatewayTerminalUUID
+                    .flatMap { HerdrController.controller(forGateway: $0)?.sessionName }
+            let host = gateway.flatMap { groupHostLabel(for: $0) }
+            return TabOrderRules.scopeTitle(components: [session, host], fallback: id.title)
+        }
         guard id.kind == .tmux else { return id.title }
         if let gateway = tabIDs.compactMap({ byID[$0] }).first(where: { $0.isTmuxGateway }) {
             let controller = gateway.splitTree.terminalLeaves
@@ -1933,7 +2118,9 @@ final class TabsModel {
 
         var ids: [UUID: TabGroupID] = [:]
         for tab in groupableTabs {
-            if let ownerID = Self.tmuxOwnerID(for: tab) {
+            if let ownerID = TmuxTabBadgeResolver.herdrOwnerID(for: tab) {
+                ids[tab.id] = .herdr(ownerID: ownerID)
+            } else if let ownerID = Self.tmuxOwnerID(for: tab) {
                 ids[tab.id] = .tmux(ownerID: ownerID)
             } else if let host = hostByTab[tab.id] {
                 if let network = TabGroupID.ipNetworkGroup(for: host) {
@@ -1970,6 +2157,12 @@ final class TabsModel {
         }
         let hasLiveTmuxPane = tab.splitTree.contains { $0.asTerminal?.tmuxPaneBinding != nil }
         return hasLiveTmuxPane ? tab.owningGatewayTerminalUUID : nil
+    }
+
+    /// The host a tab's connection groups under, for labels outside the
+    /// grouping itself (a gateway family's header).
+    func groupHostLabel(for tab: TabModel) -> String? {
+        Self.groupHost(for: tab, allTabs: tabs)
     }
 
     private static func groupHost(for tab: TabModel, allTabs: [TabModel]) -> String? {
@@ -2078,6 +2271,41 @@ final class TabsModel {
         for tab in tabs { tab.flushDeferredTitle() }
     }
 
+    /// True while the selected tab is a restored herdr gateway whose saved
+    /// projected tab has not been re-selected yet and whose controller is
+    /// still connecting. A failed or ended controller lifts the hold so the
+    /// card can show its error and retry button.
+    private func isAwaitingHerdrRestoreReveal(for tab: TabModel) -> Bool {
+        guard let pending = pendingHerdrSelection,
+              tab.splitTree.terminalLeaves.contains(where: { $0.uuid == pending.gatewayTerminalUUID })
+        else { return false }
+        guard let controller = HerdrController.controller(forGateway: pending.gatewayTerminalUUID) else { return true }
+        // A transient connect failure with a retry queued is still "connecting".
+        return !controller.didEnd && (controller.connectionError == nil || controller.isReconnectPending)
+    }
+
+    /// Immediate reveal used after external tab mutations and key-window
+    /// changes. Honors the herdr restore hold; everything else shows at once.
+    func displaySelectedTabImmediately() {
+        guard let selectedTabID, let tab = selectedTab else { return }
+        if isAwaitingHerdrRestoreReveal(for: tab) {
+            scheduleHerdrRevealFailOpen(generation: displayRevealGeneration, targetID: tab.id)
+            return
+        }
+        displayedTabID = selectedTabID
+    }
+
+    /// Last resort for a host that neither answers nor errors.
+    private func scheduleHerdrRevealFailOpen(generation: Int, targetID: UUID) {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            guard let self, self.displayRevealGeneration == generation else { return }
+            guard self.displayedTabID != targetID, self.selectedTabID == targetID else { return }
+            Ghostty.logger.warning("herdr gateway reveal timed out waiting for its snapshot; revealing anyway")
+            self.displayedTabID = targetID
+        }
+    }
+
     /// Reconcile `displayedTabID` with `selectedTabID`. Called from the
     /// selection `didSet` and from tab-removal paths (the displayed tab may
     /// have been closed out from under a pending reveal).
@@ -2102,6 +2330,13 @@ final class TabsModel {
                 // function with a valid target.
                 repairSelectionIfNeeded()
             }
+            return
+        }
+        // A restored herdr gateway stands in for the projected tab it will
+        // select once its snapshot arrives. Keep the previous tab (or the
+        // backdrop) on screen rather than flashing the gateway card.
+        if isAwaitingHerdrRestoreReveal(for: target) {
+            scheduleHerdrRevealFailOpen(generation: generation, targetID: target.id)
             return
         }
         if displayedTabID == target.id {

@@ -41,6 +41,7 @@ struct SSHCommandParser {
         var tmuxAutoEnable: Bool = false
         var tmuxAutoMode: TmuxAutoMode = .regular
         var herdrAutoEnable: Bool = false
+        var herdrAutoMode: HerdrAutoMode = .regular
         var zmxAutoEnable: Bool = false
         var remoteCommand: String?
         var remoteCommandPolicy: SSHConfig.RemoteCommandPolicy = .verbatim
@@ -63,6 +64,7 @@ struct SSHCommandParser {
                 tmuxAutoMode: tmuxAutoMode
             )
             config.herdrAutoEnable = herdrAutoEnable
+            config.herdrAutoMode = herdrAutoMode
             config.zmxAutoEnable = zmxAutoEnable
             config.multiplexerSessionName = multiplexerSessionName
             config.remoteCommand = remoteCommand
@@ -106,6 +108,7 @@ struct SSHCommandParser {
         var remoteForwards: [PortForwardConfig.PortForward] = []
         var tmuxAutoEnable = false
         var herdrAutoEnable = false
+        var herdrAutoMode: HerdrAutoMode = .regular
         var zmxAutoEnable = false
         var remoteCommand: String?
         var remoteCommandPolicy: SSHConfig.RemoteCommandPolicy = .verbatim
@@ -203,6 +206,11 @@ struct SSHCommandParser {
                 case "--herdr":
                     // Enable herdr auto-attach
                     herdrAutoEnable = true
+
+                case "--herdr-control":
+                    // herdr control mode: shell stays, herdr drives tabs
+                    herdrAutoEnable = true
+                    herdrAutoMode = .control
 
                 case "--zmx":
                     // Enable zmx auto-attach
@@ -329,6 +337,7 @@ struct SSHCommandParser {
                 tmuxAutoEnable: tmuxAutoEnable
             )
             config.herdrAutoEnable = herdrAutoEnable
+            config.herdrAutoMode = herdrAutoMode
             config.zmxAutoEnable = zmxAutoEnable
             config.remoteCommand = remoteCommand
             config.remoteCommandPolicy = remoteCommandPolicy
@@ -362,6 +371,7 @@ struct SSHCommandParser {
                 tmuxAutoEnable: tmuxAutoEnable
             )
             config.herdrAutoEnable = herdrAutoEnable
+            config.herdrAutoMode = herdrAutoMode
             config.zmxAutoEnable = zmxAutoEnable
             config.remoteCommand = remoteCommand
             config.remoteCommandPolicy = remoteCommandPolicy
@@ -383,6 +393,7 @@ struct SSHCommandParser {
                 tmuxAutoEnable: tmuxAutoEnable
             )
             config.herdrAutoEnable = herdrAutoEnable
+            config.herdrAutoMode = herdrAutoMode
             config.zmxAutoEnable = zmxAutoEnable
             config.remoteCommand = remoteCommand
             config.remoteCommandPolicy = remoteCommandPolicy
@@ -409,6 +420,7 @@ struct SSHCommandParser {
                 tmuxAutoEnable: tmuxAutoEnable
             )
             config.herdrAutoEnable = herdrAutoEnable
+            config.herdrAutoMode = herdrAutoMode
             config.zmxAutoEnable = zmxAutoEnable
             config.remoteCommand = remoteCommand
             config.remoteCommandPolicy = remoteCommandPolicy
@@ -427,6 +439,7 @@ struct SSHCommandParser {
             cachedIP: cachedIP,
             tmuxAutoEnable: tmuxAutoEnable,
             herdrAutoEnable: herdrAutoEnable,
+            herdrAutoMode: herdrAutoMode,
             zmxAutoEnable: zmxAutoEnable,
             remoteCommand: remoteCommand,
             remoteCommandPolicy: remoteCommandPolicy

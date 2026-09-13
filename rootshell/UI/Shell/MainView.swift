@@ -136,6 +136,8 @@ struct MainView: View {
     /// "Ask Each Time" tmux tab-close: the tab whose ⌘W/✕ is awaiting the
     /// user's choice in the close action sheet. (id=tmux-tab-close-action)
     @State var pendingTmuxCloseTabID: UUID?
+    /// "Ask Each Time" close of a herdr control-mode tab.
+    @State var pendingHerdrCloseTabID: UUID?
     @State var pendingNewTabRequest: NewTabRequest?
     @State var unavailableNewTabRequest: NewTabRequest?
     @State var authenticationRetryRequest: SSHAuthenticationRetryRequest?
@@ -348,6 +350,7 @@ struct MainView: View {
     /// tmux session dashboard sheet (opened from a gateway/window tab's
     /// context menu). Carries the gateway's controller.
     @State var tmuxDashboardRequest: TmuxDashboardRequest?
+    @State var herdrDashboardRequest: HerdrWorkspaceDashboardRequest?
 
     // Trzsz transfer (Continuity Handoff) state
     @State var trzszTransferOriginRequest: TrzszTransferOriginRequest?

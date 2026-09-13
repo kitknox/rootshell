@@ -563,12 +563,16 @@ extension MainView {
         if terminals.indices.contains(selectedTabIndex),
            let focusedTerminal = terminals[selectedTabIndex].focusedTerminal,
            let sessions = focusedTerminal.discoveredSessions,
-           !sessions.isEmpty {
+           // A manual run keeps the card for an empty result, so it can report back.
+           !sessions.isEmpty || focusedTerminal.sessionDiscoveryIsManual {
             SessionPickerOverlay(
                 sessions: sessions,
                 sessionTypes: focusedTerminal.discoveredSessionTypes,
                 selectedIndex: focusedTerminal.sessionSelectionIndex,
-                hasUserTyped: focusedTerminal.hasUserTyped,
+                // The user invoking the command IS the intent, so skip the
+                // "you've already typed" confirmation on a manual run.
+                hasUserTyped: focusedTerminal.hasUserTyped && !focusedTerminal.sessionDiscoveryIsManual,
+                placeholder: focusedTerminal.sessionDiscoveryPlaceholder,
                 tmuxAttachMode: Binding(
                     get: { focusedTerminal.tmuxDiscoveryAttachMode },
                     set: { newValue in
@@ -583,6 +587,20 @@ extension MainView {
                     }
                 ),
                 allowsTmuxControlAttach: focusedTerminal.allowsTmuxControlDiscoveryAttach,
+                herdrAttachMode: Binding(
+                    get: { focusedTerminal.herdrDiscoveryAttachMode },
+                    set: { newValue in
+                        let resolvedValue = focusedTerminal.allowsHerdrControlDiscoveryAttach
+                            ? newValue
+                            : .regular
+                        focusedTerminal.herdrDiscoveryAttachMode = resolvedValue
+                        if focusedTerminal.allowsHerdrControlDiscoveryAttach {
+                            HerdrAutoMode.persistedDiscoveryAttachMode = resolvedValue
+                        }
+                        NotificationCenter.default.post(name: .ghosttySessionDiscoveryChanged, object: focusedTerminal)
+                    }
+                ),
+                allowsHerdrControlAttach: focusedTerminal.allowsHerdrControlDiscoveryAttach,
                 onSelect: { session in
                     focusedTerminal.attachToSession(session)
                 },

@@ -51,6 +51,9 @@ struct MultiplexerSession: Identifiable, Equatable, Sendable {
     var capturedContent: String?
     /// Whether this is an exited zellij session that can be resurrected
     let isExited: Bool
+    /// herdr only: whether the host's herdr offers control streams. nil
+    /// when unknown; false means control mode runs degraded.
+    var supportsControlStream: Bool? = nil
 
     var id: String { "\(type.rawValue):\(name)" }
 }
@@ -149,7 +152,8 @@ extension MultiplexerSession {
             // Raw-multiplexer bound like tmux; see the note there.
             workingDirectory: nil,
             capturedContent: session.capturedContent,
-            isExited: !session.isRunning
+            isExited: !session.isRunning,
+            supportsControlStream: session.supportsControlStream
         )
     }
 }

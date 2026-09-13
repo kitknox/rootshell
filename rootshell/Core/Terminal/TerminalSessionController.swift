@@ -156,6 +156,13 @@ final class TerminalSessionController {
             "setupPTYAndShell: uuid=\(host.terminalUUID.uuidString.prefix(8)), config=\(config.displayName), restoration=\(String(describing: host.terminalRestorationState))"
         )
 
+        // A herdr control-mode pane has no transport of its own: its bytes
+        // come from the gateway's controller through the session shim.
+        if let herdrSession = host.terminalMakeHerdrPaneSession() {
+            adoptAndStart(herdrSession, pty: herdrSession.pty, connectionConfig: .local())
+            return true
+        }
+
         guard prepareRestoredConnectionIfNeeded() else {
             return true
         }

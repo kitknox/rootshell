@@ -78,6 +78,13 @@ nonisolated struct SerializableTab: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+/// Projected herdr tabs are rebuilt on attach. Their server tab ID and the
+/// gateway terminal UUID survive that rebuild; the native tab UUID does not.
+nonisolated struct SerializableHerdrSelection: Codable, Equatable, Sendable {
+    let gatewayTerminalUUID: UUID
+    let tabID: String
+}
+
 /// Serializable state for a window
 nonisolated struct SerializableWindow: Codable, Identifiable, Equatable, Sendable {
     /// Window ID (from @SceneStorage)
@@ -88,6 +95,10 @@ nonisolated struct SerializableWindow: Codable, Identifiable, Equatable, Sendabl
 
     /// Index of the currently selected tab
     var selectedTabIndex: Int
+
+    /// The selected herdr tab, with selectedTabIndex pointing at its gateway
+    /// until that tab is projected again. Optional for older saved state.
+    var herdrSelection: SerializableHerdrSelection?
 
     /// Window-level theme override (if any)
     var themeOverride: String?
@@ -129,6 +140,7 @@ nonisolated struct SerializableWindow: Codable, Identifiable, Equatable, Sendabl
         id: String,
         tabs: [SerializableTab],
         selectedTabIndex: Int,
+        herdrSelection: SerializableHerdrSelection? = nil,
         themeOverride: String? = nil,
         tabThemeOverrides: [UUID: String] = [:],
         tabGroupingEnabled: Bool? = nil,
@@ -146,6 +158,7 @@ nonisolated struct SerializableWindow: Codable, Identifiable, Equatable, Sendabl
         self.id = id
         self.tabs = tabs
         self.selectedTabIndex = selectedTabIndex
+        self.herdrSelection = herdrSelection
         self.themeOverride = themeOverride
         self.tabThemeOverrides = tabThemeOverrides
         self.tabGroupingEnabled = tabGroupingEnabled

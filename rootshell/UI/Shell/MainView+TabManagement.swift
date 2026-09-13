@@ -425,10 +425,17 @@ extension MainView {
         if let controller = newTabTmuxController(for: terminal), controller.isActive {
             return NewTabRequest(target: .tmux(terminal.uuid, controller), localDirectory: nil)
         }
+        if let controller = HerdrController.controller(for: terminal), controller.isActive {
+            let target = controller.newTabTarget(inWorkspaceOf: terminals[selectedTabIndex])
+            return NewTabRequest(
+                target: .herdr(controller, workspaceID: target.workspaceID, afterTabID: target.afterTabID),
+                localDirectory: nil
+            )
+        }
         switch terminal.connectionConfig {
         case .local:
-            // A stale tmux surface is not a real local shell.
-            guard !terminal.isTmuxPane else {
+            // A stale multiplexer surface is not a real local shell.
+            guard !terminal.isMultiplexerPane else {
                 return NewTabRequest(target: .connections, localDirectory: nil)
             }
             if let profileID = terminal.sourceProfileID {
@@ -489,6 +496,9 @@ extension MainView {
             for pane in panes where pane.uuid != terminalID {
                 if requestNewTmuxWindow(on: pane, ownedBy: controller) { return }
             }
+            unavailableNewTabRequest = request
+        case .herdr(let controller, let workspaceID, let afterTabID):
+            if controller.requestNewTab(workspaceID: workspaceID, afterTabID: afterTabID) { return }
             unavailableNewTabRequest = request
         case .connection(let original, let profileID):
             // Never reuse roam/cloud session IDs. Keep the effective config and
@@ -742,7 +752,7 @@ extension MainView {
 
     /// Move a tab from one position to another (user gesture: sidebar drag
     /// or Move Left/Right context menu)
-    func moveTab(from sourceIndex: Int, to destinationIndex: Int) {
+    func moveTab(from sourceIndex: Int, to destinationIndex: Int, commitRemoteOrder: Bool = true) {
         guard sourceIndex != destinationIndex,
               sourceIndex >= 0, sourceIndex < terminals.count,
               destinationIndex >= 0, destinationIndex < terminals.count else { return }
@@ -761,26 +771,23 @@ extension MainView {
             selectedTabIndex = newIndex
         }
 
-        // tmux window tabs: mirror the user's reorder to the server so the
-        // order sticks (and propagates to other attached clients) instead of
-        // snapping back at the next reconcile.
-        if !tabsModel.isProjectGroupingActive {
-            TmuxController.syncWindowOrderAfterUserMove(of: movingTab, in: terminals)
+        if commitRemoteOrder {
+            commitTabReorder(draggedID: movingTab.id)
         }
     }
 
     /// Reorder tabs WITHIN the raw slots occupied by the given class
     /// members, leaving every other tab's raw index untouched (the sidebar's
-    /// tmux-WINDOW drag path; regular tabs use the top bar's raw `moveTab`).
-    /// The sidebar groups tmux window tabs under their gateway, so visually
+    /// multiplexer sibling drag path; regular tabs use raw `moveTab`).
+    /// The sidebar nests multiplexer tabs under their gateway, so visually
     /// adjacent rows can be far apart in the raw array; a raw remove+insert
     /// move would shift unrelated tabs that sit between them.
     /// `orderedClassIDs` is the class's complete membership in its new
     /// order; `draggedID` is the row the user moved.
     ///
     /// Local-only: live drag steps call this on every hover change; the
-    /// tmux server commit happens ONCE per gesture via
-    /// `commitTabReorderToTmux` at drop time.
+    /// multiplexer server commit happens ONCE per gesture via
+    /// `commitTabReorder` at drop time.
     func reorderTabsPreservingSlots(orderedClassIDs: [UUID], draggedID: UUID) {
         let selectedTabId = terminals.indices.contains(selectedTabIndex)
             ? terminals[selectedTabIndex].id
@@ -793,12 +800,13 @@ extension MainView {
         }
     }
 
-    /// Commit a finished sidebar drag: push the dragged tmux window tab's
-    /// final order to the server with one move-window (user gesture, never
-    /// reconcile-driven; no-op for non-tmux tabs or unchanged order).
-    func commitTabReorderToTmux(draggedID: UUID) {
-        guard let draggedTab = terminals.first(where: { $0.id == draggedID }) else { return }
+    /// Commit a completed user reorder to its owning multiplexer. Project
+    /// arrangements are local; server reconciliation never calls this.
+    func commitTabReorder(draggedID: UUID) {
+        guard !tabsModel.isProjectGroupingActive,
+              let draggedTab = terminals.first(where: { $0.id == draggedID }) else { return }
         TmuxController.syncWindowOrderAfterUserMove(of: draggedTab, in: terminals)
+        HerdrController.syncTabOrderAfterUserMove(of: draggedTab, in: tabsModel)
     }
 }
 
@@ -883,6 +891,31 @@ extension MainView {
         performTmuxClose(action, tab: tab, pane: pane, controller: controller, windowId: windowId)
     }
 
+    /// The tmux close-action setting applies to herdr tabs too: close on the
+    /// server, or detach (hide has no herdr meaning and detaches instead).
+    @MainActor
+    func performHerdrClose(_ action: TmuxTabCloseAction, tab: TerminalTab, controller: HerdrController) {
+        switch action {
+        case .closeWindow:
+            controller.requestCloseTab(tab)
+        case .detachSession, .hideTab:
+            controller.detach(closeGateway: false)
+        case .detachSessionAndCloseGateway:
+            controller.detach(closeGateway: true)
+        case .ask:
+            pendingHerdrCloseTabID = tab.id
+        }
+    }
+
+    @MainActor
+    func runPendingHerdrClose(_ action: TmuxTabCloseAction) {
+        defer { pendingHerdrCloseTabID = nil }
+        guard let id = pendingHerdrCloseTabID,
+              let tab = terminals.first(where: { $0.id == id }),
+              let controller = HerdrController.controller(forTab: tab), controller.isActive else { return }
+        performHerdrClose(action, tab: tab, controller: controller)
+    }
+
     func closeTab(at index: Int) {
         // Validate index before accessing array
         guard terminals.indices.contains(index) else { return }
@@ -923,6 +956,27 @@ extension MainView {
         // path too. ROOTSHELL-TMUX (id=tmux-window-tab-close-server)
         if closingTab.isTmuxWindow, closingTab.tmuxWindowId != nil,
            handleTmuxWindowTabClose(closingTab) {
+            return
+        }
+
+        // herdr control mode: a projected tab closes on the server; the
+        // `tab.closed` event prunes it here. A gateway tab ends control mode
+        // first so its projected tabs are removed while the stream is live.
+        if closingTab.isHerdrWindow, let controller = HerdrController.controller(forTab: closingTab),
+           controller.isActive {
+            let action = TmuxTabCloseAction.current
+            if action == .ask {
+                pendingHerdrCloseTabID = closingTab.id
+            } else {
+                performHerdrClose(action, tab: closingTab, controller: controller)
+            }
+            return
+        }
+        if closingTab.isHerdrGateway,
+           let controller = closingTab.splitTree.terminalLeaves.first(where: { $0.herdrController != nil })?.herdrController {
+            controller.stop()
+            guard let resolved = terminals.firstIndex(where: { $0.id == closingTab.id }) else { return }
+            closeTab(at: resolved)
             return
         }
 
@@ -987,9 +1041,7 @@ extension MainView {
         // bar "pulse" and a dull roam/tmux badge over the transitioning glass
         // (the same single-tab appearance storm fixed in
         // createLocalShellTabInternal). Suppress animation for that crossing;
-        // multi-tab closes keep the slide. `withAnimation`/`withTransaction`
-        // also force the selection re-evaluation even when the index is
-        // unchanged.
+        // multi-tab closes keep the slide.
         let collapsingToSingleTab = tabsModel.navigationTabs.filter { $0.id != tabId }.count <= 1
         if collapsingToSingleTab {
             var closeTxn = Transaction()
@@ -1032,8 +1084,8 @@ extension MainView {
             clampedIndex = fallbackIndex
         }
 
-        // Always update selectedTabIndex to trigger onChange and UI refresh
-        // Even if the numerical value is the same, the transaction should cause a refresh.
+        // The selectedTabID observer restores focus even when the replacement
+        // tab occupies the same index. Closing another tab preserves focus.
         // When collapsing to a single tab, suppress animation here too — animating
         // the selection drives the lone tab's Liquid Glass appearance (the pulse /
         // dull badge). Multi-tab closes keep the slide.
@@ -1046,38 +1098,6 @@ extension MainView {
         } else {
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedTabIndex = clampedIndex
-            }
-        }
-
-        // Restore focus to the selected tab
-        // When a tab closes and another slides into the same index position, onChange(of: selectedTabIndex)
-        // doesn't fire because the value hasn't changed. We must manually activate the new tab's terminal.
-        if closingLeftOfActive || closingActiveTab {
-            if clampedIndex < terminals.count {
-                // Mark all surfaces in the new active tab as visible (mirrors handleSelectedTabChange)
-                for terminal in terminals[clampedIndex].splitTree {
-                    terminal.setOcclusion(true)
-                }
-
-                if let pane = terminals[clampedIndex].focusedPane ?? terminals[clampedIndex].splitTree.first {
-                    terminals[clampedIndex].focusedPane = pane
-                    pane.isLogicallyFocused = true
-                    // Set flag so window observers will focus this terminal when window becomes ready
-                    pane.asTerminal?.shouldBecomeFirstResponderWhenReady = true
-                    // Try immediate focus - succeeds if window is already ready
-                    _ = pane.becomeFirstResponder()
-
-                    // USER closed a tab and landed on a tmux pane: sync tmux's
-                    // active window/pane explicitly. The core no longer echoes
-                    // select-pane on focus gain, so bare becomeFirstResponder
-                    // paths must send it themselves.
-                    // ROOTSHELL-TMUX (id=tmux-select-pane-user-only)
-                    if let terminal = pane.asTerminal, terminal.isTmuxPane {
-                        terminal.requestTmuxSelectPane()
-                    }
-
-                    ghosttyApp.appTick()
-                }
             }
         }
     }
@@ -1162,6 +1182,8 @@ struct NewTabRequest {
         case local
         case connection(ConnectionConfig, UUID?)
         case tmux(UUID, TmuxController)
+        /// New herdr tab beside the captured tab, even if the chooser changes focus.
+        case herdr(HerdrController, workspaceID: String?, afterTabID: String?)
         case connections
     }
 
@@ -1172,6 +1194,7 @@ struct NewTabRequest {
         switch target {
         case .local, .connections: return nil
         case .tmux: return String(localized: "New tmux Window")
+        case .herdr: return String(localized: "New herdr Tab")
         case .connection(let config, _):
             // Roaming transports decorate displayName with "roam". Use the
             // connection's own name here without removing user-authored text.

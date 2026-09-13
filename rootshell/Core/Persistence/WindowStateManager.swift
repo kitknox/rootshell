@@ -681,7 +681,7 @@ final class WindowStateManager {
                 return leaf.terminalId
             }
             #if targetEnvironment(macCatalyst)
-            if type == .local, leaf.localMultiplexerAttachment?.controlMode == true { return leaf.terminalId }
+            if type == .local, leaf.localMultiplexerAttachment?.isTmuxControl == true { return leaf.terminalId }
             #endif
             return nil
         })

@@ -131,12 +131,21 @@ extension Ghostty.TerminalView: TerminalSessionControllerHost {
         // agent detection never adopts an identity from a multi-window surface.
         self.applyConfiguredMultiplexerBinding()
 
+        #if targetEnvironment(macCatalyst)
+        if let attachment = restoredLocalMultiplexerAttachment, attachment.isHerdrControl {
+            startHerdrControlMode(sessionName: attachment.sessionName)
+            return
+        }
+        #endif
         // The helper is already attaching this restored local PTY. Do not
         // present connect-time discovery over it or inject a startup command.
         guard restoredLocalMultiplexerAttachment == nil else { return }
 
         // Send tmux auto-connect and/or launch command if configured
         self.sendLaunchCommandIfConfigured()
+
+        // herdr control mode rides its own exec channel beside the shell.
+        self.startHerdrControlModeIfConfigured()
 
         // Discover multiplexer sessions in the background (if configured)
         self.discoverSessionsIfConfigured()
@@ -171,6 +180,10 @@ extension Ghostty.TerminalView {
         #endif
     }
     var terminalHasTmuxController: Bool { tmuxController != nil }
+    func terminalMakeHerdrPaneSession() -> TerminalSession? {
+        guard let binding = herdrPaneBinding else { return nil }
+        return HerdrController.controller(forGateway: binding.gatewayUUID)?.makePaneSession(for: binding)
+    }
     var terminalSurfaceAvailable: Bool { surface != nil }
     var terminalSurfaceGridSize: (rows: UInt16, cols: UInt16)? {
         guard let surfaceSize else { return nil }

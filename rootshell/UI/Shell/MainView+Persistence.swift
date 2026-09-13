@@ -65,6 +65,11 @@ extension MainView {
         var persisted: [(tab: TabModel, serialized: SerializableTab)] = []
         persisted.reserveCapacity(terminals.count)
         for tab in terminals {
+            // herdr control-mode tabs are rebuilt from the server on the next
+            // attach; their panes are not sessions of their own.
+            if tab.isHerdrWindow || tab.splitTree.contains(where: { $0.asTerminal?.isHerdrPane == true }) {
+                continue
+            }
             let hasLivePane = tab.splitTree.contains { $0.asTerminal?.tmuxPaneBinding != nil }
             if tab.isTmuxWindow || hasLivePane {
                 // `tmuxWindowId` is set once adopted; a restored-but-not-yet-
@@ -102,9 +107,9 @@ extension MainView {
                     // autosave must not drop the preference — the same
                     // live-OR-restored treatment wasTmuxGateway gets.
                     // (id=tmux-hidden-gateway)
-                    isHiddenTmuxWindow: (((tab.isTmuxGateway && tab.isHiddenTmuxWindow)
+                    isHiddenTmuxWindow: ((((tab.isTmuxGateway || tab.isHerdrGateway) && tab.isHiddenTmuxWindow)
                         || tab.pendingHiddenTmuxGatewayRestore)
-                        && tab.splitTree.contains { resumableGatewayUUIDs.contains($0.uuid) })
+                        && tab.splitTree.contains { resumableGatewayUUIDs.contains($0.uuid) || $0.asTerminal?.hasPersistableHerdrGateway == true })
                         ? true : nil
                 )))
             }
@@ -138,9 +143,17 @@ extension MainView {
             }
         }
 
-        // Remap the selected index into the persisted tab list (an excluded tab
-        // would otherwise leave the selection pointing at the wrong tab).
-        let selectedId = terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].id : nil
+        // A projected herdr tab has no serializable session. Keep its server
+        // identity and select its owning gateway until the next attach, rather
+        // than falling back to the app's first tab. Autosaves during reconnect
+        // retain the pending server identity too.
+        let herdrSelection = tabsModel.herdrSelectionForPersistence.flatMap { selection in
+            persisted.contains { $0.serialized.splitTree.allTerminalIds.contains(selection.gatewayTerminalUUID) }
+                ? selection : nil
+        }
+        let selectedId = herdrSelection.flatMap { selection in
+            persisted.first { $0.serialized.splitTree.allTerminalIds.contains(selection.gatewayTerminalUUID) }?.tab.id
+        } ?? tabsModel.selectedTabID
         let remappedSelectedIndex = selectedId
             .flatMap { id in persisted.firstIndex(where: { $0.tab.id == id }) } ?? 0
 
@@ -163,6 +176,7 @@ extension MainView {
             id: windowId,
             tabs: serializedTabs,
             selectedTabIndex: remappedSelectedIndex,
+            herdrSelection: herdrSelection,
             themeOverride: windowTheme,
             tabThemeOverrides: tabThemes,
             tabGroupingEnabled: tabsModel.isGroupedModeEnabled ? true : nil,
@@ -183,6 +197,7 @@ extension MainView {
 
     /// Restore window state from saved data
     func restoreWindowState(_ state: SerializableWindow) {
+        tabsModel.pendingHerdrSelection = nil
         // Restore theme overrides first
         if let windowTheme = state.themeOverride {
             themeOverrideManager.setWindowTheme(windowId: windowId, themeName: windowTheme)
@@ -240,6 +255,18 @@ extension MainView {
            tabsModel.tab(withID: restoredID) != nil {
             tabsModel.selectedTabID = restoredID
         }
+        if let selection = state.herdrSelection,
+           let gatewayTab = terminals.first(where: { tab in
+               tab.splitTree.terminalLeaves.contains { $0.uuid == selection.gatewayTerminalUUID }
+           }) {
+            // Pending first: the selection's didSet keeps it (the gateway is in
+            // this tab) and holds the gateway off screen until its saved tab
+            // returns. Re-sync explicitly in case the saved index already
+            // chose the gateway and the didSet does not fire.
+            tabsModel.pendingHerdrSelection = selection
+            tabsModel.selectedTabID = gatewayTab.id
+            tabsModel.syncDisplayedTab()
+        }
 
         // The saved selected tab may no longer be restorable. Repair
         // so the displayed-tab reveal has a valid selection to follow
@@ -261,9 +288,9 @@ extension MainView {
         }
 
         // Explicitly mark the focused terminal so didMoveToWindow() will grant focus.
-        // This is needed because onChange(of: selectedTabIndex) may not fire if the
-        // restored index equals the initial value (0), and even when it does fire,
-        // the views aren't in the window yet for becomeFirstResponder() to succeed.
+        // Seed this before the restored views join the window: the selection
+        // observer may not have run yet, and becomeFirstResponder() cannot
+        // succeed until the view is attached.
         if terminals.indices.contains(selectedTabIndex),
            let focusedPane = terminals[selectedTabIndex].focusedPane {
             focusedPane.isLogicallyFocused = true

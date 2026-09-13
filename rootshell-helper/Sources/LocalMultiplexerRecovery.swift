@@ -36,7 +36,7 @@ enum LocalMultiplexerRecovery {
     }
 
     static func paths(_ record: Record, _ key: String) -> Set<String> {
-        Set((record[key] as? [String] ?? []).map(canonical))
+        Set((record[key] as? [String] ?? []).map { canonical($0) })
     }
 
     static func socketIdentity(_ path: String) -> (device: UInt64, inode: UInt64)? {
@@ -122,14 +122,7 @@ enum LocalMultiplexerRecovery {
     }
 
     static func isAvailable(_ attachment: LocalMultiplexerAttachment) -> Bool {
-        guard attachment.isValid, FileManager.default.isExecutableFile(atPath: attachment.executable),
-              let socket = socketIdentity(attachment.socketPath),
-              socket.device == attachment.socketDevice, socket.inode == attachment.socketInode,
-              processes().contains(where: {
-                  number($0, "pid") == UInt64(attachment.serverPID)
-                    && number($0, "startedAt") == attachment.serverStartedAt
-                    && paths($0, "listeners").contains(canonical(attachment.socketPath))
-              }) else { return false }
+        guard hasOriginalServer(attachment, records: processes()) else { return false }
         let deadline = Date().addingTimeInterval(6)
         if attachment.kind == "tmux" {
             guard let output = run(attachment.executable,
@@ -138,6 +131,75 @@ enum LocalMultiplexerRecovery {
             return tmuxRows(output).contains { $0 == ["$\(attachment.sessionID ?? -1)", String(attachment.sessionCreatedAt ?? 0)] }
         }
         return namespaceIsLive(attachment, deadline: deadline)
+    }
+
+    static func hasOriginalServer(_ attachment: LocalMultiplexerAttachment, records: [Record]) -> Bool {
+        guard attachment.isValid, FileManager.default.isExecutableFile(atPath: attachment.executable),
+              let socket = socketIdentity(attachment.socketPath),
+              socket.device == attachment.socketDevice, socket.inode == attachment.socketInode,
+              records.contains(where: {
+                  number($0, "pid") == UInt64(attachment.serverPID)
+                    && number($0, "startedAt") == attachment.serverStartedAt
+                    && ($0["executable"] as? String).map { ($0 as NSString).lastPathComponent } == attachment.kind
+                    && paths($0, "listeners").contains(canonical(attachment.socketPath))
+              }) else { return false }
+        return true
+    }
+
+    struct HerdrStatus: Decodable {
+        struct Client: Decodable { let binary: String; let session: String? }
+        struct Server: Decodable { let running: Bool; let socket: String; let session: String? }
+        let client: Client
+        let server: Server
+
+        static func parse(_ output: String) -> Self? {
+            // A login profile may print a greeting before the CLI's JSON line.
+            output.split(separator: "\n").reversed().compactMap {
+                try? JSONDecoder().decode(Self.self, from: Data($0.utf8))
+            }.first
+        }
+    }
+
+    /// Native herdr uses pipes/auxiliary PTYs instead of a foreground client
+    /// on the gateway PTY. The caller supplies controller intent; the helper
+    /// verifies the resolved API socket against its same-user server census.
+    static func inspectHerdrControl(_ target: LocalHerdrControlTarget, records: [Record], deadline: Date,
+                                    cache: ProbeCache = ProbeCache()) -> LocalMultiplexerAttachment? {
+        guard target.isValid else { return nil }
+        let output: String?
+        if let attachment = target.attachment {
+            output = cache.run(attachment.executable, ["status", "--json"],
+                               environment: attachment.launchEnvironment, deadline: deadline)
+        } else {
+            output = cache.run("/bin/zsh", ["-lc", "exec " + target.statusCommand], environment: [:], deadline: deadline)
+        }
+        guard let output else { return nil }
+        return herdrControlAttachment(statusOutput: output, records: records)
+    }
+
+    static func herdrControlAttachment(statusOutput: String, records: [Record]) -> LocalMultiplexerAttachment? {
+        guard let status = HerdrStatus.parse(statusOutput), status.server.running,
+              status.server.socket.hasPrefix("/"), status.client.binary.hasPrefix("/"),
+              (status.client.binary as NSString).lastPathComponent == "herdr",
+              FileManager.default.isExecutableFile(atPath: status.client.binary) else { return nil }
+        let socket = canonical(status.server.socket)
+        let servers = records.filter {
+            ($0["executable"] as? String).map { ($0 as NSString).lastPathComponent } == "herdr"
+                && paths($0, "listeners").contains(socket)
+        }
+        guard servers.count == 1, let server = servers.first,
+              let identity = socketIdentity(socket),
+              let pid = Int32(exactly: number(server, "pid")) else { return nil }
+        let name = status.server.session ?? status.client.session ?? "default"
+        var environment = server["environment"] as? [String: String] ?? [:]
+        environment["HERDR_SOCKET_PATH"] = socket
+        environment["HERDR_SESSION"] = name
+        let attachment = LocalMultiplexerAttachment(
+            kind: "herdr", controlMode: true, executable: status.client.binary, socketPath: socket,
+            socketDevice: identity.device, socketInode: identity.inode,
+            serverPID: pid, serverStartedAt: number(server, "startedAt"), sessionName: name,
+            environment: environment)
+        return attachment.isValid ? attachment : nil
     }
 
     /// Verifies the CLI namespace before an attach that can create/resurrect.
@@ -155,13 +217,20 @@ enum LocalMultiplexerRecovery {
             // Short output checks CLI namespace without parsing localized prose.
             return output.split(separator: "\n").contains(Substring(attachment.sessionName))
         case "herdr":
+            if attachment.isHerdrControl {
+                guard let output = cache.run(attachment.executable, ["status", "--json"],
+                                            environment: attachment.launchEnvironment, deadline: deadline),
+                      let status = HerdrStatus.parse(output) else { return false }
+                return status.server.running && canonical(status.server.socket) == canonical(attachment.socketPath)
+                    && (status.server.session ?? status.client.session ?? "default") == attachment.sessionName
+            }
             guard let output = cache.run(attachment.executable, ["session", "list", "--json"], environment: attachment.launchEnvironment, deadline: deadline),
                   let data = output.data(using: .utf8), let json = try? JSONSerialization.jsonObject(with: data) else { return false }
             let rows = (json as? [[String: Any]]) ?? ((json as? [String: Any])?["sessions"] as? [[String: Any]]) ?? []
             guard let apiSocket = attachment.launchEnvironment["HERDR_SOCKET_PATH"] else { return false }
             return rows.contains {
                 ($0["name"] as? String) == attachment.sessionName && ($0["running"] as? Bool) == true
-                    && ($0["socket_path"] as? String).map(canonical) == canonical(apiSocket)
+                    && ($0["socket_path"] as? String).map({ path in canonical(path) }) == canonical(apiSocket)
             }
         default: return false
         }

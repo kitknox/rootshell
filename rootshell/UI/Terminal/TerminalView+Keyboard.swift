@@ -542,8 +542,14 @@ extension Ghostty.TerminalView {
             return (true, true)
         }
 
-        // Intercept keys when session discovery overlay is visible.
-        if discoveredSessions != nil {
+        // herdr gateway: same ESC-detaches contract as the tmux gateway.
+        if key.keyCode == .keyboardEscape, detachHerdrGatewayIfCovered() {
+            return (true, true)
+        }
+
+        // Intercept keys when session discovery overlay is visible. A searching or
+        // empty card has nothing to select, so it must not eat Return/arrows.
+        if hasDiscoveredSessionRows {
             if key.keyCode == .keyboardReturnOrEnter {
                 selectHighlightedSession()
                 return (true, true)
@@ -566,6 +572,10 @@ extension Ghostty.TerminalView {
                 return (true, true)
             }
             // All other text keys: dismiss overlay and let them pass through
+            dismissSessionDiscovery()
+        } else if discoveredSessions != nil, !key.characters.isEmpty, !isModifierOnlyKey(key.keyCode) {
+            // Searching or empty card: typing still dismisses it, but every key
+            // reaches the terminal because there is nothing to select.
             dismissSessionDiscovery()
         }
         // Modifier-only key presses should update state but never emit terminal input.
@@ -1684,7 +1694,7 @@ extension Ghostty.TerminalView {
         guard let input = command.input else { return }
         if overlayConsumedKeyCommand(command) { return }
 
-        if discoveredSessions != nil {
+        if hasDiscoveredSessionRows {
             switch input {
             case UIKeyCommand.inputUpArrow: moveSessionSelection(by: -1)
             case UIKeyCommand.inputDownArrow: moveSessionSelection(by: 1)
@@ -1730,7 +1740,7 @@ extension Ghostty.TerminalView {
         // A one-shot action consumed this press; swallow repeats until release
         // so the held key doesn't leak input into the newly focused session.
         if keysConsumedByOverlayAction.contains(.keyboardReturnOrEnter) { return }
-        if discoveredSessions != nil {
+        if hasDiscoveredSessionRows {
             keysConsumedByOverlayAction.insert(.keyboardReturnOrEnter)
             selectHighlightedSession()
             return
@@ -1765,7 +1775,7 @@ extension Ghostty.TerminalView {
         commitKoreanCompositionIfNeeded(external: true)
         if overlayConsumedKeyCommand(command) { return }
         if keysConsumedByOverlayAction.contains(.keyboardReturnOrEnter) { return }
-        if discoveredSessions != nil {
+        if hasDiscoveredSessionRows {
             keysConsumedByOverlayAction.insert(.keyboardReturnOrEnter)
             selectHighlightedSession()
             return
@@ -1843,6 +1853,10 @@ extension Ghostty.TerminalView {
         if let target = selectedTmuxGatewayView() ?? ((tmuxController?.isActive == true || isTmuxGatewaySurfaceActive) ? self : nil) {
             keysConsumedByOverlayAction.insert(.keyboardEscape)
             target.sendTmuxDetach()
+            return
+        }
+        if detachHerdrGatewayIfCovered() {
+            keysConsumedByOverlayAction.insert(.keyboardEscape)
             return
         }
 
@@ -2313,6 +2327,10 @@ extension Ghostty.TerminalView {
 
     @objc func menuShowTmuxSessions(_ sender: Any?) {
         NotificationCenter.default.post(name: .showTmuxSessions, object: self)
+    }
+
+    @objc func menuDiscoverSessions(_ sender: Any?) {
+        NotificationCenter.default.post(name: .discoverSessions, object: self)
     }
 
     @objc func menuDetachOtherClients(_ sender: Any?) {

@@ -105,10 +105,10 @@ extension MainView {
                 reorderTabsPreservingSlots(orderedClassIDs: orderedIDs, draggedID: draggedID)
             },
             onMoveTab: { from, to in
-                moveTab(from: from, to: to)
+                moveTab(from: from, to: to, commitRemoteOrder: false)
             },
             onReorderEnded: { draggedID in
-                commitTabReorderToTmux(draggedID: draggedID)
+                commitTabReorder(draggedID: draggedID)
             },
             onNewTab: {
                 // addNewTab opens the connection sidebar (right overlay).
@@ -154,9 +154,41 @@ extension MainView {
     func showTmuxSessionsForSelectedTab() {
         guard terminals.indices.contains(selectedTabIndex) else { return }
         let tab = terminals[selectedTabIndex]
+        if let controller = HerdrController.controller(forAnyTab: tab) {
+            herdrDashboardRequest = HerdrWorkspaceDashboardRequest(controller: controller)
+            return
+        }
         guard tab.isTmuxWindow || tab.isTmuxGateway else { return }
         guard let controller = tmuxControllerForTab(tab) else { return }
         tmuxDashboardRequest = TmuxDashboardRequest(controller: controller)
+    }
+
+    /// Re-run multiplexer session discovery. Unlike the connect-time scan this
+    /// always presents the picker, so it reports back even when it finds nothing.
+    /// Invoking it while the picker is up dismisses it, so the shortcut toggles.
+    ///
+    /// `origin` is the pane that asked (the context menu's own surface, which is
+    /// not always the focused one); the menu bar and keybind rails pass nil and
+    /// get the focused pane of the selected tab.
+    func discoverSessionsForSelectedTab(origin: Ghostty.TerminalView? = nil) {
+        guard terminals.indices.contains(selectedTabIndex) else { return }
+        let tab = terminals[selectedTabIndex]
+        // The picker renders off the tab's focused pane, so a request from an
+        // unfocused split has to take focus or the card would never appear. An
+        // origin outside this tab is ignored for the same reason.
+        var target = tab.focusedTerminal
+        if let origin, tab.splitTree.contains(where: { $0 === origin }) {
+            if tab.focusedTerminal !== origin { setFocusedTerminal(origin, inTab: selectedTabIndex) }
+            target = origin
+        }
+        guard let target else { return }
+
+        // Second invocation closes the card, matching every other overlay toggle.
+        if target.dismissSessionDiscoveryIfPresented() {
+            target.becomeFirstResponder()
+            return
+        }
+        target.discoverSessionsIfConfigured(manual: true)
     }
 
     /// Evict every OTHER tmux client (`detach-client -a`) for the selected

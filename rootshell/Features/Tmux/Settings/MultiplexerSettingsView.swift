@@ -122,6 +122,15 @@ struct MultiplexerSettingsView: View {
             }
 
             Section {
+                SettingToggle(Settings.Multiplexer.herdrAutoHideGatewayOnAttach, title: "Auto-hide Gateway on Attach", icon: "eye.slash")
+                    .themedRow()
+            } header: {
+                SettingGroupHeader("herdr Control Mode", group: .multiplexer)
+            } footer: {
+                Text("Control mode keeps your shell in the gateway tab and projects every herdr tab and pane onto native tabs and splits, with herdr's agent status in the sidebar. Needs a herdr build with control stream support on the host.")
+            }
+
+            Section {
                 NewTabActionSettingsRow()
             } header: {
                 Text("New Tabs")

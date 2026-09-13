@@ -788,6 +788,24 @@ final class TrzszGoTransport: NSObject {
         return try await TSSHCallGate.shared.runRemoteCommand(on: tRef, command: command)
     }
 
+    /// Start a long-lived command in an auxiliary session on this transport
+    /// and return a byte pipe over its stdin/stdout. The channel survives
+    /// roaming with the transport and dies with it.
+    func openExecChannel(_ command: String) async throws -> AsyncBytePipe {
+        guard let tRef = transportRef else {
+            throw TrzszError.connectionFailed("No transport for openExecChannel")
+        }
+        let channelRef = try await TSSHCallGate.shared.openExec(on: tRef, command: command)
+        return TrzszExecPipe(channelRef: channelRef, transportRef: tRef)
+    }
+
+    func openPTYChannel(_ command: String, cols: Int, rows: Int) async throws -> HerdrPTYChannel {
+        guard let transportRef else { throw TrzszError.connectionFailed("No transport for auxiliary PTY") }
+        return try await HerdrTSSHPTYChannel.open(
+            transport: transportRef, command: command, term: terminalType, cols: cols, rows: rows
+        )
+    }
+
     /// Opens a session stream with PTY
     /// - Parameters:
     ///   - cols: Terminal columns

@@ -18,10 +18,12 @@ extension Ghostty.TerminalView {
         if connectionConfig.isTrzsz {
             return tmuxController != nil || restoredWasTmuxGateway || tmuxResumeRequested || tmuxResumeCancelRequested
         }
-        return localMultiplexerAttachmentForPersistence?.controlMode == true
+        return localMultiplexerAttachmentForPersistence?.isTmuxControl == true
     }
 
-    var isRestoringLocalTmux: Bool { restoredLocalMultiplexerAttachment?.controlMode == true }
+    var hasPersistableHerdrGateway: Bool { localMultiplexerAttachmentForPersistence?.isHerdrControl == true }
+
+    var isRestoringLocalTmux: Bool { restoredLocalMultiplexerAttachment?.isTmuxControl == true }
 
     /// A fresh client supplies its own DCS preamble. Never synthesize tssh
     /// resume or replay the previous gateway's ANSI into this stream.
@@ -64,19 +66,30 @@ extension Ghostty.TerminalView {
         localMultiplexerAttachment = failed ? nil : restored
         if failed {
             let wasSelected = TmuxWindowRegistry.selectedAwaitingWindow(ownerTerminalUUID: uuid) != nil
-            removeAwaitingTmuxPlaceholders()
+            if restored.isTmuxControl { removeAwaitingTmuxPlaceholders() }
             if restored.controlMode, let gateway = TmuxWindowRegistry.gatewayTab(ownerTerminalUUID: uuid) {
                 gateway.tab.isHiddenTmuxWindow = false
                 gateway.tab.pendingHiddenTmuxGatewayRestore = false
+                if gateway.model.pendingHerdrSelection?.gatewayTerminalUUID == uuid {
+                    gateway.model.pendingHerdrSelection = nil
+                }
                 if wasSelected { _ = TmuxWindowRegistry.selectGateway(ownerTerminalUUID: uuid, allowFocus: false) }
             }
             writeToGhostty(string: "\r\n" + String(localized: "Could not restore the multiplexer session.") + "\r\n")
         }
-        WindowStateManager.shared.saveAllState()
+        WindowStateManager.shared.forceSaveAllState()
     }
 
     func cancelLocalMultiplexerRecovery() {
-        guard restoredLocalMultiplexerAttachment != nil else { return }
+        guard let restored = restoredLocalMultiplexerAttachment else { return }
+        if restored.isHerdrControl {
+            // The gateway already has an ordinary shell. Discard only this
+            // controller's auxiliary connections when recovery is cancelled.
+            herdrController?.stop()
+            finishLocalMultiplexerRecovery(failed: true)
+            _ = releaseLocalMultiplexerScrollbackGate()
+            if (session as? CatalystLocalShellSession)?.isRunning == true { return }
+        }
         let wasControlMode = isRestoringLocalTmux
         // Invalidate the old callbacks before closing its PTY. No server or
         // session kill is issued; only this startup client is discarded.
@@ -125,6 +138,24 @@ final class LocalMultiplexerTracker {
                 }
             })
         }
+        for name in [Notification.Name.herdrControlStateDidChange, .herdrControlModeDidEnd] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                let ended = note.name == .herdrControlModeDidEnd
+                let id = note.object as? UUID
+                Task { @MainActor [weak self] in
+                    if ended, let id, let view = self?.terminals.object(forKey: id as NSUUID), view.herdrController == nil {
+                        view.localMultiplexerTrackingRevision &+= 1
+                        view.localMultiplexerAttachment = nil
+                        if view.restoredLocalMultiplexerAttachment?.isHerdrControl == true {
+                            view.finishLocalMultiplexerRecovery(failed: true)
+                        } else {
+                            WindowStateManager.shared.forceSaveAllState()
+                        }
+                    }
+                    self?.refresh()
+                }
+            })
+        }
     }
 
     func watch(_ terminal: Ghostty.TerminalView) {
@@ -149,33 +180,43 @@ final class LocalMultiplexerTracker {
     func refresh() {
         guard WindowStateManager.isSessionPersistenceEnabled else { return }
         guard refreshTask == nil else { refreshAgain = true; return }
-        let views = (terminals.objectEnumerator()?.allObjects as? [Ghostty.TerminalView] ?? []).compactMap { view -> (Ghostty.TerminalView, UUID, UInt64)? in
+        let views = (terminals.objectEnumerator()?.allObjects as? [Ghostty.TerminalView] ?? []).compactMap { view -> (Ghostty.TerminalView, UUID, UInt64, HerdrController?)? in
             guard case .local = view.connectionConfig, let session = view.session as? CatalystLocalShellSession, session.isRunning else { return nil }
-            return (view, session.sessionID, view.localMultiplexerTrackingRevision)
+            return (view, session.sessionID, view.localMultiplexerTrackingRevision, view.herdrController)
         }
         guard !views.isEmpty else { return }
+        var herdrTargets: [String: LocalHerdrControlTarget] = [:]
+        for (view, id, _, controller) in views {
+            if let controller {
+                herdrTargets[id.uuidString] = controller.localInspectionTarget
+            } else if let pending = view.restoredLocalMultiplexerAttachment, pending.isHerdrControl {
+                herdrTargets[id.uuidString] = .init(sessionName: pending.sessionName, attachment: pending)
+            }
+        }
         refreshTask = Task { @MainActor [weak self] in
             defer {
                 self?.refreshTask = nil
                 if self?.refreshAgain == true { self?.refreshAgain = false; self?.refresh() }
             }
-            guard let result = try? await HelperConnection.shared.inspectLocalMultiplexers() else { return }
+            guard let result = try? await HelperConnection.shared.inspectLocalMultiplexers(herdrTargets: herdrTargets) else { return }
             var changed = false
-            for (view, id, revision) in views {
+            for (view, id, revision, controller) in views {
                 guard (view.session as? CatalystLocalShellSession)?.sessionID == id,
-                      view.localMultiplexerTrackingRevision == revision else { continue }
+                      view.localMultiplexerTrackingRevision == revision,
+                      view.herdrController === controller else { continue }
                 guard let observed = result[id.uuidString] else { continue }
                 let attachment = observed.flatMap { $0.isValid ? $0 : nil }
+                if herdrTargets[id.uuidString] != nil {
+                    // An old helper ignores the payload and returns PTY data.
+                    // Only a verified controller observation may update this owner.
+                    if let attachment, attachment.isHerdrControl {
+                        controller?.recordLocalControlAttachment(attachment)
+                    }
+                    continue
+                }
                 if let pending = view.restoredLocalMultiplexerAttachment {
-                    guard let attachment, attachment.kind == pending.kind,
-                          attachment.controlMode == pending.controlMode,
-                          attachment.socketPath == pending.socketPath,
-                          attachment.socketDevice == pending.socketDevice, attachment.socketInode == pending.socketInode,
-                          attachment.serverPID == pending.serverPID, attachment.serverStartedAt == pending.serverStartedAt,
-                          attachment.sessionID == pending.sessionID,
-                          attachment.sessionCreatedAt == pending.sessionCreatedAt,
-                          pending.kind == "tmux" || attachment.sessionName == pending.sessionName,
-                          !pending.controlMode || view.tmuxController != nil else { continue }
+                    guard let attachment, attachment.matchesIdentity(of: pending),
+                          !pending.isTmuxControl || view.tmuxController != nil else { continue }
                     view.finishLocalMultiplexerRecovery(failed: false)
                 }
                 if let attachment, !attachment.controlMode, let type = MultiplexerType(rawValue: attachment.kind) {

@@ -102,6 +102,7 @@ final class KeybindManager: ObservableObject {
             Keybind(key: .leftBrace, modifiers: .command, action: .previous_tab),
             Keybind(key: .rightBrace, modifiers: .command, action: .next_tab),
             Keybind(key: .s, modifiers: [.command, .shift], action: .show_tmux_sessions),
+            Keybind(key: .s, modifiers: [.command, .control], action: .discover_sessions),
             Keybind(key: .x, modifiers: [.command, .shift], action: .detach_other_clients),
 
             // Tab Selection

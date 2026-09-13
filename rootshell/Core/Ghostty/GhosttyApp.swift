@@ -707,6 +707,10 @@ extension Ghostty {
                 }
             }
 
+            let overrideConfigs = Dictionary(uniqueKeysWithValues: overrideSurfaces.map { (Int(bitPattern: $0.0), $0.1) })
+            let herdrDeliveries = activeSurfaces.compactMap { surface in
+                prepareHerdrThemeDelivery(surface, config: overrideConfigs[Int(bitPattern: surface)] ?? globalConfig)
+            }
             nonisolated(unsafe) let appPtr = app
             nonisolated(unsafe) let cfg = globalConfig
             nonisolated(unsafe) let overrides = overrideSurfaces
@@ -716,6 +720,7 @@ extension Ghostty {
                     ghostty_surface_update_config(surface, surfaceConfig)
                     ghostty_config_free(surfaceConfig)
                 }
+                for deliver in herdrDeliveries { deliver() }
                 if let completion {
                     Task { @MainActor in completion() }
                 }
@@ -743,11 +748,44 @@ extension Ghostty {
             config surfaceConfig: ghostty_config_t,
             owned: Bool
         ) {
+            let deliverHerdrTheme = prepareHerdrThemeDelivery(surface, config: surfaceConfig)
             nonisolated(unsafe) let surface = surface
             nonisolated(unsafe) let surfaceConfig = surfaceConfig
             Ghostty.TerminalView.ghosttyAPIQueue.async {
                 ghostty_surface_update_config(surface, surfaceConfig)
+                deliverHerdrTheme?()
                 if owned { ghostty_config_free(surfaceConfig) }
+            }
+        }
+
+        /// Capture the finalized defaults before an owned config is freed.
+        /// Run the result on ghosttyAPIQueue, after the surface's final config
+        /// (including its override) lands and before its queued destruction.
+        private func prepareHerdrThemeDelivery(
+            _ surface: ghostty_surface_t, config: ghostty_config_t
+        ) -> (@Sendable () -> Void)? {
+            guard let view = surfaceView(for: surface), view.herdrPaneBinding != nil else { return nil }
+            let (themeName, _) = ThemeOverrideManager.shared.resolveTheme(
+                tabId: view.containingTabID, windowId: view.windowId)
+            guard let theme = HerdrHostTheme(config: config, themeName: themeName) else { return nil }
+            let deliveryID = UUID()
+            view.herdrThemeDeliveryID = deliveryID
+            let raw = !view.usesHerdrFallbackScrolling
+            let address = Int(bitPattern: surface)
+            nonisolated(unsafe) let surface = surface
+            return { [weak view] in
+                // Fallback's renderer must not manufacture replies to the
+                // child: the server owns that terminal and its notifications.
+                if raw {
+                    ghostty_surface_set_color_scheme(surface, theme.isLight ? GHOSTTY_COLOR_SCHEME_LIGHT : GHOSTTY_COLOR_SCHEME_DARK)
+                }
+                Task { @MainActor [weak view] in
+                    guard let view, view.herdrThemeDeliveryID == deliveryID,
+                          view.surface.map({ Int(bitPattern: $0) }) == address else { return }
+                    view.herdrHostTheme = theme
+                    view.herdrEndpointPane?.refreshAppearance()
+                    HerdrController.controller(for: view)?.synchronizeEndpointTheme()
+                }
             }
         }
 

@@ -128,12 +128,13 @@ extension MainView {
             }
             print("TabDrag: performDrop called, clearing draggingTab")
             // The incremental dropEntered moves above are local-only; commit
-            // a dragged tmux window tab's final position to the server once,
+            // a dragged multiplexer tab's final position to the server once,
             // at drop time (user gesture, never reconcile-driven).
             if !tabsModel.isProjectGroupingActive,
                let draggingID = tabsModel.draggingTabID,
                let draggedTab = tabsModel.tabs.first(where: { $0.id == draggingID }) {
                 TmuxController.syncWindowOrderAfterUserMove(of: draggedTab, in: tabsModel.tabs)
+                HerdrController.syncTabOrderAfterUserMove(of: draggedTab, in: tabsModel)
             }
             tabsModel.draggingTabID = nil
             TabTransferCoordinator.shared.clearDrag()

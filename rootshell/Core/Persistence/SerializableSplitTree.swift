@@ -22,7 +22,9 @@ nonisolated struct SerializableSplitTree: Codable, Equatable, Sendable {
         case leaf(LeafData)
         case split(SplitData)
 
-        nonisolated struct LeafData: Codable, Equatable, Sendable {
+        // Nonisolated via the enclosing types; spelling it here again applies
+        // the attribute to the wrapped `var` below, which is not allowed.
+        struct LeafData: Codable, Equatable, Sendable {
             /// Original terminal UUID (for matching focused terminal)
             let terminalId: UUID
 

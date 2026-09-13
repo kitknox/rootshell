@@ -90,6 +90,10 @@ final class TabExposeView: UIView, TabExposeControllerObserver, PreviewRendering
     private var lastScrolledHighlightID: UUID?
     private var displayLink: CADisplayLink?
     private var renderingSuspended = false
+    /// Keep cancelled feeds through a quick reopen so a closing capture
+    /// cannot overlap a replacement batch for the same gateway.
+    private var fallbackFeeds: [UUID: HerdrFallbackPreviewFeed] = [:]
+    private var fallbackOwners: [UUID: ObjectIdentifier] = [:]
     private var lastAppliedProgress: CGFloat = -1
     private var lastAppliedShift: CGFloat = 0
     private lazy var edgePan: InteractiveEdgePanRecognizer = makeEdgePan()
@@ -174,6 +178,8 @@ final class TabExposeView: UIView, TabExposeControllerObserver, PreviewRendering
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        if window == nil { stopDisplayLink() }
+        else if controller.isActive, !renderingSuspended { startDisplayLink() }
         #if !os(visionOS)
         edgePan.install(on: window)
         scopePan.install(on: window)
@@ -247,11 +253,11 @@ final class TabExposeView: UIView, TabExposeControllerObserver, PreviewRendering
             primary.scrollCellIntoView(id: controller.highlightedTabID, animated: false)
             startDisplayLink()
             if controller.wantsFirstResponderFallback {
-                becomeFirstResponder()
+                _ = becomeFirstResponder()
             }
         } else {
             stopDisplayLink()
-            if isFirstResponder { resignFirstResponder() }
+            if isFirstResponder { _ = resignFirstResponder() }
             isHidden = true
             accessibilityViewIsModal = false
             hero.releaseContents()
@@ -536,6 +542,7 @@ final class TabExposeView: UIView, TabExposeControllerObserver, PreviewRendering
     private func stopDisplayLink() {
         displayLink?.invalidate()
         displayLink = nil
+        for feed in fallbackFeeds.values { feed.stop() }
     }
 
     fileprivate func tick(_ link: CADisplayLink) {
@@ -561,9 +568,47 @@ final class TabExposeView: UIView, TabExposeControllerObserver, PreviewRendering
         // Both pages report: a swipe drags the multiplexer page in as the
         // companion, and paging away from it leaves no mux cells at all —
         // which the feed must hear, or it keeps refreshing panes nobody sees.
-        var visibleMuxPanes = primary.syncVisibleMirrors()
-        if let companion { visibleMuxPanes.formUnion(companion.syncVisibleMirrors()) }
+        let trays = [primary] + (companion.map { [$0] } ?? [])
+        let visibleCells = trays.flatMap { $0.visibleCells(in: self) }
+        let sources = updateFallbackFeeds(for: visibleCells)
+        let visibleIDs = Set(visibleCells.map(ObjectIdentifier.init))
+        for cell in trays.flatMap(\.cells) where !visibleIDs.contains(ObjectIdentifier(cell)) {
+            cell.releaseFallbackPreview()
+        }
+        var visibleMuxPanes: Set<String> = []
+        for cell in visibleCells {
+            cell.syncPreview(fallbackFeed: sources[cell.tabID])
+            if controller.tabsModel?.tab(withID: cell.tabID) == nil {
+                visibleMuxPanes.formUnion(cell.muxPreview.paneIDs)
+            }
+        }
         controller.muxFeed?.setVisiblePanes(visibleMuxPanes)
+    }
+
+    private func updateFallbackFeeds(for cells: [TabExposeCellView]) -> [UUID: HerdrFallbackPreviewFeed] {
+        var demand: [UUID: Set<String>] = [:]
+        var owners: [UUID: UUID] = [:]
+        for cell in cells {
+            guard let tab = controller.tabsModel?.tab(withID: cell.tabID),
+                  tab.id != controller.tabsModel?.selectedTabID,
+                  let tabID = tab.herdrTabId, let owner = HerdrController.controller(forTab: tab),
+                  owner.mode == .legacy, !owner.didEnd else { continue }
+            let key = owner.gatewayUUID
+            if fallbackOwners[key] != ObjectIdentifier(owner) {
+                fallbackFeeds[key]?.stop()
+                fallbackOwners[key] = ObjectIdentifier(owner)
+                fallbackFeeds[key] = HerdrFallbackPreviewFeed(ghosttyApp: owner.ghosttyApp,
+                    context: { [weak owner] in owner?.fallbackPreviewContext(tabIDs: $0) },
+                    capture: { [weak owner] request in
+                        guard let owner else { throw HerdrChannelError.closed }
+                        return try await owner.captureFallbackPreview(request)
+                    })
+            }
+            demand[key, default: []].insert(tabID)
+            owners[tab.id] = key
+        }
+        for (key, feed) in fallbackFeeds { feed.update(visibleTabIDs: demand[key] ?? []) }
+        return owners.compactMapValues { fallbackFeeds[$0] }
     }
 
     private final class DisplayLinkProxy: NSObject {
@@ -1105,6 +1150,7 @@ final class TabExposeCellView: UIView {
     private let currentRing = UIView()
     private let highlightRing = UIView()
     private var captionHost: UIHostingController<AnyView>?
+    private weak var nativeTab: TabModel?
 
     var previewBackgroundColor: UIColor = .black {
         didSet {
@@ -1182,15 +1228,16 @@ final class TabExposeCellView: UIView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func showMirror(of tab: TabModel) {
-        muxPreview.releaseResources()
-        muxPreview.isHidden = true
-        mirror.isHidden = false
-        mirror.tab = tab
+        if nativeTab !== tab {
+            nativeTab = tab
+            releaseFallbackPreview()
+        }
         isAccessibilityElement = true
         accessibilityLabel = tab.title
     }
 
     func showMultiplexerTab(_ tab: MuxTab, feed: MultiplexerExposeFeed?) {
+        nativeTab = nil
         mirror.releaseContents()
         mirror.isHidden = true
         muxPreview.isHidden = false
@@ -1201,8 +1248,27 @@ final class TabExposeCellView: UIView {
     }
 
     /// Per display tick: refresh whichever picture is showing.
-    func syncPreview() {
+    func syncPreview(fallbackFeed: HerdrFallbackPreviewFeed? = nil) {
+        if let nativeTab {
+            if let id = nativeTab.herdrTabId, let fallbackFeed, let tab = fallbackFeed.tab(for: id) {
+                if !mirror.isHidden { mirror.releaseContents() }
+                mirror.isHidden = true
+                muxPreview.feed = fallbackFeed
+                muxPreview.tab = tab
+                muxPreview.isHidden = false
+            } else {
+                releaseFallbackPreview()
+            }
+        }
         if mirror.isHidden { muxPreview.sync() } else { mirror.sync() }
+    }
+
+    func releaseFallbackPreview() {
+        guard let nativeTab else { return }
+        if muxPreview.feed != nil || muxPreview.tab != nil { muxPreview.releaseResources() }
+        muxPreview.isHidden = true
+        mirror.isHidden = false
+        mirror.tab = nativeTab
     }
 
     func setCaption(_ view: AnyView?) {
@@ -1226,6 +1292,7 @@ final class TabExposeCellView: UIView {
     /// Release renderer-backed previews and hosted caption state before this
     /// cell is detached. Both can otherwise outlive the visible exposé tray.
     func prepareForRemoval() {
+        nativeTab = nil
         layer.removeAllAnimations()
         mirror.releaseContents()
         muxPreview.releaseResources()

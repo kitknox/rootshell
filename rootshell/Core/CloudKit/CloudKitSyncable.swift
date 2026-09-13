@@ -119,7 +119,8 @@ extension SSHConnectionHistoryEntry: CloudKitSyncable {
         // precisely so later fields do not.
         let envelope = HistoryExtensionPayload(terminalType: terminalType,
                                                multiplexerSessionName: multiplexerSessionName,
-                                               zmxAutoEnable: zmxAutoEnable)
+                                               zmxAutoEnable: zmxAutoEnable,
+                                               herdrAutoMode: herdrAutoMode)
         if let envelopeData = try? JSONEncoder().encode(envelope) {
             record["extensionData"] = envelopeData
         } else {
@@ -239,6 +240,7 @@ extension SSHConnectionHistoryEntry: CloudKitSyncable {
             tmuxAutoEnable: tmuxAutoEnable,
             tmuxAutoMode: tmuxAutoMode,
             herdrAutoEnable: herdrAutoEnable,
+            herdrAutoMode: extensionPayload?.herdrAutoMode,
             zmxAutoEnable: extensionPayload?.zmxAutoEnable,
             launchCommand: launchCommand,
             launchCommandMode: launchCommandMode,

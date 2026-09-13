@@ -128,9 +128,12 @@ enum SessionDiscoveryCommand {
             // enumeration only. The sed extracts names of running sessions
             // from the compact JSON; names are ASCII [A-Za-z0-9._-] so no
             // further quoting is needed.
+            // Control-stream support shows in the subcommand's own help; a
+            // herdr without it prints the general usage there instead.
             var section = "_hj=$(herdr session list --json 2>/dev/null);"
                 + " echo \"::SESSIONS::\";"
                 + " printf \"%s\\n\" \"$_hj\";"
+                + " if herdr control --help 2>/dev/null | grep -q \"control stream\"; then echo \"::CONTROL:1::\"; else echo \"::CONTROL:0::\"; fi;"
             if !skipCaptures {
                 let runningNames = "$(printf \"%s\\n\" \"$_hj\" | tr \"{}\" \"\\n\\n\" | sed -n \"/\\\"running\\\":true/s/.*\\\"name\\\":\\\"\\([^\\\"]*\\)\\\".*/\\1/p\")"
                 section += " echo \"::AGENTS::\";"

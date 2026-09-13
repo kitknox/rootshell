@@ -13,7 +13,11 @@ enum SocketCommand: String, Codable, Sendable {
     case killShell
     case ping
     case executeCommand
+    /// Optional payload: [gateway shell UUID: LocalHerdrControlTarget].
+    /// Omitted targets retain foreground-PTY discovery for older callers.
     case inspectLocalMultiplexers
+    case spawnPipedProcess
+    case killPipedProcess
 }
 
 // MARK: - Request/Response Messages
@@ -82,6 +86,29 @@ struct ResizeShellRequest: Codable, Sendable {
 
 struct KillShellRequest: Codable, Sendable {
     let sessionID: UUID
+}
+
+// MARK: - Piped Process (non-PTY, bidirectional)
+
+/// Spawn a long-lived command whose stdin and stdout are one end of a
+/// socketpair; the other end is passed to the app over the session socket
+/// exactly like a PTY master. Used for local `herdr control`.
+struct SpawnPipedProcessRequest: Codable, Sendable {
+    let command: String
+    let workingDirectory: String?
+    /// Login shell that runs `command`; nil = the helper's default.
+    let shell: String?
+    let resourcesDir: String?
+    let paneToken: String?
+}
+
+struct SpawnPipedProcessResponse: Codable, Sendable {
+    let processID: Int32
+    let socketPath: String
+}
+
+struct KillPipedProcessRequest: Codable, Sendable {
+    let processID: Int32
 }
 
 // MARK: - Execute Command (Non-Interactive)

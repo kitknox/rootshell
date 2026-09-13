@@ -233,7 +233,10 @@ extension Ghostty {
 
         /// Title set by the user via the context menu (overrides session-provided title)
         var userOverrideTitle: String? {
-            didSet { refreshPanePresentationTitle() }
+            didSet {
+                refreshPanePresentationTitle()
+                if isHerdrPane { publishHerdrTitle() }
+            }
         }
 
         /// Title provided by the terminal session (from escape sequences)
@@ -322,6 +325,19 @@ extension Ghostty {
             }
         }
 
+        /// Server-rendered panes own scrollback even when the application does
+        /// not capture the pointer. Keep scroll routing separate from selection.
+        @Published var usesHerdrFallbackScrolling = false
+        var herdrEndpointPane: HerdrEndpointPane?
+        var herdrHostTheme: HerdrHostTheme?
+        var herdrThemeDeliveryID = UUID()
+        var herdrHostWindowFocused: Bool { windowIsActiveForFocus() }
+
+        var hasTerminalTextSelection: Bool {
+            if let herdrEndpointPane { return herdrEndpointPane.hasSelection }
+            return surface.map { ghostty_surface_has_selection($0) } ?? false
+        }
+
         /// User-toggled override that force-disables mouse reporting for this terminal.
         /// When active, native text selection and scrolling work even when the
         /// terminal program has mouse reporting enabled (tmux, vim, etc.).
@@ -407,6 +423,49 @@ extension Ghostty {
         }
         var isTmuxPane: Bool { tmuxPaneBinding != nil }
 
+        /// When set, this view renders one herdr control-mode pane: its
+        /// surface is an ordinary external-IO pipe surface fed by the
+        /// gateway's HerdrController (raw terminal bytes in, keystrokes out
+        /// as `terminal.input`). Keyed by herdr's terminal id, which survives
+        /// pane moves; pane and tab ids are rebound as herdr reports them.
+        struct HerdrPaneBinding: Equatable {
+            let gatewayUUID: UUID
+            let terminalId: String
+            var paneId: String
+            var tabId: String
+        }
+        var herdrPaneBinding: HerdrPaneBinding? {
+            didSet {
+                if herdrPaneBinding?.terminalId != oldValue?.terminalId
+                    || herdrPaneBinding?.gatewayUUID != oldValue?.gatewayUUID {
+                    endHerdrTitleAttachment()
+                    herdrTitleState = HerdrPaneTitleState()
+                    herdrTitlePublicationUptime = nil
+                }
+                if (herdrPaneBinding == nil) != (oldValue == nil) {
+                    invalidateWritingAssistance(resetDocument: true)
+                    refreshPanePresentationTitle()
+                }
+            }
+        }
+        var isHerdrPane: Bool { herdrPaneBinding != nil }
+        var herdrTitleState = HerdrPaneTitleState()
+        var herdrTitlePublicationUptime: TimeInterval?
+
+        /// The grid herdr laid this pane out with. The split host keeps its
+        /// partial-cell drawable remainder but never adds a server row/column.
+        var herdrTargetGrid: (cols: Int, rows: Int)? {
+            didSet {
+                if herdrTargetGrid?.cols != oldValue?.cols || herdrTargetGrid?.rows != oldValue?.rows {
+                    enclosingSplitHost?.setNeedsLayout()
+                }
+            }
+        }
+
+        /// A pane a multiplexer controller owns (tmux -CC or herdr control
+        /// mode): local split edits must round-trip through the server.
+        var isMultiplexerPane: Bool { isTmuxPane || isHerdrPane }
+
         /// Per-pane identity queried from tmux. A projected tmux surface has a
         /// synthetic Ghostty title such as "Pane%196", so its ordinary OSC
         /// title publisher cannot be used as the pane label.
@@ -485,6 +544,15 @@ extension Ghostty {
         /// topology onto native tabs/splits. Created lazily on the first
         /// reconcile. nil for pane views and non-tmux sessions.
         var tmuxController: TmuxController?
+
+        /// Set on the gateway view while it drives a herdr session in
+        /// control mode. nil for pane views and non-herdr sessions.
+        var herdrController: HerdrController?
+        var herdrGatewayHost: UIHostingController<HerdrGatewayView>?
+
+        /// A takeover leaves this gateway at its shell until an explicit attach.
+        /// Retained across transport reconnects for the lifetime of this view.
+        var herdrAutoAttachSuppressed = false
 
         /// Gateway session object the transport rebinding in
         /// `applyTmuxReconcile` last ran for. A title-only batch on the same
@@ -753,10 +821,17 @@ extension Ghostty {
         /// UIKeyCommand handlers (arrows/Return/Tab/Escape). Return true to consume.
         var presentedOverlayKeyHandler: ((OverlayKeyEvent) -> Bool)?
         var discoveredSessionTypes: Set<MultiplexerType> = []
+        /// True while the picker was raised by the user (menu/keybind) rather than
+        /// by connect-time discovery. Manual runs present the card up front and
+        /// keep it to report why there are no rows.
+        var sessionDiscoveryIsManual: Bool = false
+        /// Why a manual card has no rows. Nil once rows arrive.
+        var sessionDiscoveryPlaceholder: SessionDiscoveryPlaceholder?
         var discoveredMultiplexerSwipeBindings = MultiplexerSwipeBindings()
         var hasUserTyped: Bool = false
         var sessionSelectionIndex: Int = 0
         var tmuxDiscoveryAttachMode: TmuxAutoMode = TmuxAutoMode.persistedDiscoveryAttachMode
+        var herdrDiscoveryAttachMode: HerdrAutoMode = HerdrAutoMode.persistedDiscoveryAttachMode
         var sessionDiscoveryTask: Task<Void, Never>?
 
         // MARK: Restoration State
@@ -918,7 +993,7 @@ extension Ghostty {
         /// Cursor registration token while hovered (Mac Catalyst only)
         var cursorToken: UUID?
 
-        private func clearCursorRegistration() {
+        func clearCursorRegistration() {
             if let cursorToken {
                 CatalystCursorCoordinator.shared.unregister(cursorToken)
                 self.cursorToken = nil
@@ -1095,6 +1170,7 @@ extension Ghostty {
         // Mouse/trackpad state
         var mousePressed = false
         var selectionMouseDragActive = false
+        var herdrFallbackScroll = HerdrFallbackScroll()
 
         /// Last known mouse position for discrete scroll wheel events (Mac Catalyst)
         var lastMousePosition: CGPoint = .zero
@@ -1411,6 +1487,11 @@ extension Ghostty {
                     guard let self else { return }
                     if let controller = self.tmuxController {
                         controller.resetForDiscard(outputLines: 0, outputBytes: droppedBytes)
+                    } else if let binding = self.herdrPaneBinding {
+                        // A herdr pane's screen is now gapped; ask the
+                        // server for a fresh snapshot instead of guessing.
+                        HerdrController.controller(forGateway: binding.gatewayUUID)?
+                            .pipelineDidOverflow(terminalId: binding.terminalId)
                     } else if self.isTmuxGatewaySurfaceActive
                                 || self.restoredWasTmuxGateway || self.isRestoringLocalTmux
                                 || self.tmuxResumeRequested {
@@ -1630,6 +1711,13 @@ extension Ghostty {
                 tmuxGatewayOwnerKey = 0
                 sessionController.resetGatewayReportFilter()
                 tmuxController = nil
+            }
+            // A herdr gateway going away ends control mode with it, so the
+            // registry never keeps a controller (and a local bridge process)
+            // alive for a surface that no longer exists.
+            if let controller = herdrController {
+                controller.stop()
+                herdrController = nil
             }
             // Loss stashed for a controller that never got created belongs to
             // the surface generation being torn down; don't let it fire a
@@ -1920,7 +2008,7 @@ extension Ghostty {
                 && !rightBinding.isAppTabNavigation
             appTabSwipePanGesture?.isEnabled = scrollMode
                 && (leftBinding.isAppTabNavigation || rightBinding.isAppTabNavigation)
-            captureScrollPanGesture?.isEnabled = scrollMode && captured
+            captureScrollPanGesture?.isEnabled = scrollMode && (captured || usesHerdrFallbackScrolling)
             captureLongPressGesture?.isEnabled = scrollMode && captured
             pinchZoomGesture?.isEnabled = scrollMode
             let twoFingerLongPressDuration = TwoFingerLongPressSetting.storedDuration()
@@ -2074,6 +2162,7 @@ extension Ghostty {
             }
 
             sizeDidChange(bounds.size)
+            if isHerdrPane { noteHerdrHostLayout() }
             let boundsSize = bounds.size
             let windowHeight = window?.bounds.height ?? -1
             let grid = surfaceController.surfaceSize
@@ -2483,6 +2572,14 @@ extension Ghostty {
             mods: ghostty_input_mods_e = Ghostty.Input.Mods.none.cMods
         ) {
             invalidateWritingAssistance()
+            if let state = herdrEndpointPane {
+                if state.capturesMouse {
+                    state.mouse(kind: action == GHOSTTY_MOUSE_PRESS ? 0 : 1,
+                                button: button == GHOSTTY_MOUSE_RIGHT ? 1 : (button == GHOSTTY_MOUSE_MIDDLE ? 2 : 0),
+                                at: lastMousePosition)
+                } else if action == GHOSTTY_MOUSE_RELEASE { state.endDrag() }
+                return
+            }
             guard let surface = surface else { return }
             Self.ghosttyAPIQueue.async {
                 ghostty_surface_mouse_button(surface, action, button, mods)
@@ -2492,6 +2589,10 @@ extension Ghostty {
         /// Send mouse scroll event to Ghostty on background queue to avoid blocking main thread.
         func sendMouseScroll(deltaX: Double, deltaY: Double, mods: ghostty_input_scroll_mods_t = Ghostty.Input.ScrollMods.none.cMods) {
             invalidateWritingAssistance()
+            if let state = herdrEndpointPane {
+                state.scroll(deltaX: CGFloat(deltaX), deltaY: CGFloat(deltaY), at: lastMousePosition)
+                return
+            }
             guard let surface = surface else { return }
             Self.ghosttyAPIQueue.async {
                 ghostty_surface_mouse_scroll(surface, deltaX, deltaY, mods)
@@ -2594,6 +2695,7 @@ extension Ghostty {
         /// Dispatch a terminal binding action off the main thread so heavy
         /// mailbox contention doesn't block UI responsiveness.
         func performActionAsync(_ action: String) {
+            if herdrEndpointPane?.action(action) == true { return }
             invalidateWritingAssistance()
             guard let surface = surface else { return }
             let len = action.utf8CString.count
@@ -2618,6 +2720,7 @@ extension Ghostty {
         }
 
         private func applyGhosttyFocus(_ focused: Bool) {
+            HerdrController.controller(for: self)?.synchronizeEndpointTheme()
             guard let surface = surface else { return }
 
             // Dispatch focus change to background queue to prevent main thread deadlock.
@@ -2658,6 +2761,7 @@ extension Ghostty {
             selectionUIExternallyOccluded = occluded
             pointerInteraction?.invalidate()
             if occluded {
+                herdrEndpointPane?.cancelInteraction()
                 removeSelectionHandleViewsFromWindow()
                 hideSelectionHandles(animated: false)
                 hideSelectionMagnifier(animated: false)
@@ -2676,6 +2780,7 @@ extension Ghostty {
             guard selectionUISwipeSuppressed != suppressed else { return }
             selectionUISwipeSuppressed = suppressed
             if suppressed {
+                herdrEndpointPane?.cancelInteraction()
                 removeSelectionHandleViewsFromWindow()
                 hideSelectionHandles(animated: false)
                 hideSelectionMagnifier(animated: false)
@@ -2751,6 +2856,7 @@ extension Ghostty {
             session?.setTabVisible(visible)
 
             surfaceController.setOcclusion(visible)
+            if visible { updateHerdrGatewayOverlay() }
         }
 
         /// Backstop re-assert used by the tab-switch + foreground reconcile paths
@@ -2803,6 +2909,7 @@ extension Ghostty {
                isLogicallyFocused,
                !isFirstResponder,
                !overlayOwnsKeyboard,
+               !isHUDFieldFocused(),
                !isModalPresented() {
                 // A `windowActiveOverride` stuck `false` (a terminal that missed a
                 // `setWindowActive(true)` propagation) blocks first responder even
@@ -2945,17 +3052,16 @@ extension Ghostty {
             // triggers a real resize.
             surfaceController.invalidateCachedSize()
             sizeDidChange(bounds.size)
+            // The host may have grown while this pane remained clamped to
+            // herdr's old grid, so no PTY grid callback will report it.
+            if isHerdrPane { noteHerdrHostLayout() }
         }
 
         /// Clears stale touch/selection state when entering background.
         /// Prevents ghost selections from touches that were interrupted by app switch.
         func clearTouchState() {
-            let preserveTouchSelection: Bool
-            if let surface {
-                preserveTouchSelection = ghostty_surface_has_selection(surface)
-            } else {
-                preserveTouchSelection = false
-            }
+            herdrEndpointPane?.cancelInteraction()
+            let preserveTouchSelection = hasTerminalTextSelection
 
             isSelecting = false
             selectionStartPoint = nil
@@ -2977,6 +3083,11 @@ extension Ghostty {
         private func isModalPresented() -> Bool {
             guard let rootVC = window?.rootViewController else { return false }
             return rootVC.presentedViewController != nil
+        }
+
+        private func isHUDFieldFocused() -> Bool {
+            guard let window else { return false }
+            return DraggableHUDHostView.ownsFirstResponder(in: window)
         }
 
         private func syncFocusForWindowStateChange(sceneIsDeactivating: Bool = false) {
@@ -3018,11 +3129,10 @@ extension Ghostty {
                     Ghostty.logger.info("syncFocusForWindowStateChange: skipping focus - modal presented")
                     return
                 }
-                // Same for an in-hierarchy keyboard-owning overlay (the tab
-                // sidebar isn't a presented VC, so isModalPresented() misses
-                // it). becomeFirstResponder() would refuse anyway; bail early
-                // to skip the +0.05s retry churn while the overlay is up.
-                if overlayOwnsKeyboard {
+                // In-hierarchy overlays and focused passthrough HUD fields
+                // are not presented VCs. Yield to their keyboard ownership;
+                // Find intentionally leaves the terminal logically focused.
+                if overlayOwnsKeyboard || isHUDFieldFocused() {
                     return
                 }
                 if window != nil && !isFirstResponder {
@@ -3035,9 +3145,9 @@ extension Ghostty {
                             guard self.windowIsActiveForFocus(),
                                   self.isLogicallyFocused,
                                   !self.isFirstResponder else { return }
-                            // Also check for modal in retry path
-                            if self.isModalPresented() {
-                                Ghostty.logger.info("syncFocusForWindowStateChange retry: skipping focus - modal presented")
+                            // A modal or HUD field may take focus after scheduling.
+                            if self.isModalPresented() || self.isHUDFieldFocused() {
+                                Ghostty.logger.info("syncFocusForWindowStateChange retry: skipping focus - modal or HUD owns keyboard")
                                 return
                             }
                             let retryResult = self.becomeFirstResponder()
@@ -3089,6 +3199,9 @@ extension Ghostty {
         /// focus watchdog after a tmux reconcile, whose split-tree rebuild can
         /// transiently defeat the one-shot retries in
         /// `syncFocusForWindowStateChange` / `didMoveToWindow`.
+        /// A focused passthrough HUD field is intentional keyboard ownership,
+        /// not lost terminal focus. Direct taps and HUD dismissal still use
+        /// becomeFirstResponder() to hand the keyboard back explicitly.
         /// ROOTSHELL-TMUX (id=tmux-focus-reassert)
         @discardableResult
         func reassertFirstResponderIfFocused() -> Bool {
@@ -3097,6 +3210,7 @@ extension Ghostty {
                   window != nil,
                   windowIsActiveForFocus(),
                   !overlayOwnsKeyboard,
+                  !isHUDFieldFocused(),
                   !isModalPresented() else { return false }
             if becomeFirstResponder() {
                 // Consume the one-shot hint here too: every other successful
@@ -3357,6 +3471,7 @@ extension Ghostty {
             }
             
             registerWindowFocusObservers()
+            updateHerdrGatewayOverlay()
 
             clearInputAssistantsRecursively()
 
@@ -3380,7 +3495,7 @@ extension Ghostty {
                           !self.isFirstResponder,
                           self.window != nil else { return }
                     guard self.windowIsActiveForFocus() else { return }
-                    if self.isModalPresented() { return }
+                    if self.isModalPresented() || self.isHUDFieldFocused() { return }
                     let result = self.becomeFirstResponder()
                     if result {
                         self.reloadInputViews()
@@ -4367,7 +4482,6 @@ extension Ghostty {
                 pixelWidth: UInt16(size.width * scale),
                 pixelHeight: UInt16(size.height * scale)
             )
-
             do {
                 invalidateWritingAssistance()
                 try session.setSize(ptySize)
@@ -4381,11 +4495,9 @@ extension Ghostty {
         }
 
         var shouldUseOutputCoalescer: Bool {
-            // tmux control mode gateway: the session output IS the control
-            // stream that drives every pane's reconcile + rendering, so it is
-            // latency-sensitive and must not be batched. Pane surfaces render
-            // from the viewer terminal and have no session at all.
-            if tmuxController != nil || isTmuxPane { return false }
+            // Multiplexer streams drive pane rendering. Herdr already frames
+            // synchronized output; batching it again adds latency to typed echo.
+            if tmuxController != nil || herdrController != nil || isMultiplexerPane { return false }
             switch connectionConfig {
             case .ssh, .local:
                 return true
@@ -4415,6 +4527,10 @@ extension Ghostty {
         /// Updates the mouse capture state and publishes changes.
         /// Called from handleScrollbar() and scroll events to detect mode changes.
         func updateMouseCaptureState() {
+            if let state = herdrEndpointPane {
+                if isMouseCaptured != state.capturesMouse { isMouseCaptured = state.capturesMouse }
+                return
+            }
             guard let surface = surface else {
                 if isMouseCaptured {
                     isMouseCaptured = false
@@ -4441,6 +4557,7 @@ extension Ghostty {
         /// `skipResign` is safe when unfocusing the old terminal.
         @discardableResult
         override func focusDidChange(_ focused: Bool, skipResign: Bool = false) -> Bool {
+            if !focused { herdrEndpointPane?.cancelInteraction() }
             #if os(iOS) && !targetEnvironment(macCatalyst)
             if focused && !iPadVisorController.permitsFocus(self) { return false }
             #endif
@@ -4625,6 +4742,10 @@ extension Ghostty.TerminalView: TerminalKeyboardAccessoryHost {
 
 extension Ghostty.TerminalView: GhosttyActionDelegate {
     func handleTitleChange(_ title: String) {
+        if isHerdrPane {
+            handleHerdrTitleChange(title)
+            return
+        }
         // Coalesce rapid title changes with a timer (0.075s, like macOS)
         // This prevents flickering and excessive updates
         titleChangeTimer?.invalidate()
@@ -4700,7 +4821,9 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
     /// Runs before SwiftUI's first post-resume render so stale values never
     /// reach the UI.
     func replayCachedSessionStateOnForeground() {
-        if userOverrideTitle == nil,
+        if isHerdrPane {
+            publishHerdrTitle()
+        } else if userOverrideTitle == nil,
            let cached = sessionProvidedTitle,
            cached != title {
             title = cached
@@ -4946,6 +5069,7 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
     }
     
     func handleScrollbar(total: UInt64, offset: UInt64, len: UInt64) {
+        if herdrEndpointPane != nil { return }
         // While multiplexer tracking owns the scrollbar values, drop
         // native callbacks (which fire for the alt screen the multiplexer
         // is on, with useless at-bottom values that would clobber the
@@ -5003,6 +5127,7 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
     /// handleScrollbarUpdate path sizes the document and flashes
     /// UIScrollView's native scroll indicator.
     func applyMultiplexerScrollSample(_ sample: Ghostty.MultiplexerScrollIndicatorObserver.Sample?) {
+        guard herdrEndpointPane == nil else { return }
         guard let sample = sample else {
             // Tracking ended. Restore the pre-tracking native scrollbar
             // state so TerminalScrollView resizes its document view back
@@ -5066,6 +5191,20 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
         let maxOffset = total > len ? total - len : 0
         let offset = min(sample.history > sample.oy ? sample.history - sample.oy : 0, maxOffset)
 
+        applyExternalScrollbar(total: total, offset: offset, len: len)
+    }
+
+    /// Shared indicator sink. Endpoint metadata must never bind the pane to
+    /// the raw tmux/zellij text detector merely to borrow its scrollbar UI.
+    func applyHerdrEndpointScroll(_ scroll: HerdrEndpointSurface.Scroll?) {
+        applyExternalScrollbar(total: scroll?.total ?? 0, offset: scroll?.top ?? 0, len: scroll?.viewport_rows ?? 0)
+        if scroll == nil { multiplexerScrollActive = false }
+        updateScrollIndicatorLayout()
+        updateScrollIndicatorVisibility(animated: true, reveal: Date().timeIntervalSinceReferenceDate <= scrollIndicatorRevealDeadline)
+    }
+
+    private func applyExternalScrollbar(total: UInt64, offset: UInt64, len: UInt64) {
+        let changed = scrollbarTotal != total || scrollbarOffset != offset || scrollbarLen != len || !multiplexerScrollActive
         scrollbarTotal = total
         scrollbarOffset = offset
         scrollbarLen = len
@@ -5075,7 +5214,7 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
         if !multiplexerScrollActive {
             multiplexerScrollActive = true
         }
-        NotificationCenter.default.post(name: .ghosttyDidUpdateScrollbar, object: self)
+        if changed { NotificationCenter.default.post(name: .ghosttyDidUpdateScrollbar, object: self) }
     }
 
     func handleProgressReport(_ report: Ghostty.Action.ProgressReport) {
@@ -5144,6 +5283,7 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
     /// - Parameter action: The action string (e.g., "scroll_to_row:100", "select_all")
     /// - Returns: True if the action was performed successfully
     func performAction(_ action: String) -> Bool {
+        if herdrEndpointPane?.action(action) == true { return true }
         invalidateWritingAssistance()
         guard let surface = surface else { return false }
         let len = action.utf8CString.count
@@ -5398,6 +5538,14 @@ extension Ghostty.TerminalView {
         unshiftedCodepoint: UInt32 = 0
     ) -> Bool {
         invalidateWritingAssistance()
+        // Covered herdr gateway: Ghostty would encode straight into the hidden
+        // shell. Escape already detached upstream; swallow the rest as handled.
+        if herdrController?.showsGatewayStatus == true { return true }
+        if let state = herdrEndpointPane {
+            state.sendKey(keyCode, action: action, mods: mods,
+                          text: text.flatMap { KeyCode.isUIKeyInputSentinel($0) ? nil : $0 }, unshifted: unshiftedCodepoint)
+            return true
+        }
         guard let surface = surface else { return false }
         guard let nativeKeycode = Ghostty.Input.nativeKeyCode(for: keyCode) else { return false }
 

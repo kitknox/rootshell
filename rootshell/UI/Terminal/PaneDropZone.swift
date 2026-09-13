@@ -63,25 +63,82 @@ struct TmuxPaneMoveIdentity {
     }
 }
 
+/// herdr refuses a cross-tab swap, and a reconcile can rebind a pane's tab
+/// while the drag is live, so the tab is part of the identity.
+struct HerdrPaneMoveIdentity {
+    let gatewayUUID: UUID
+    let tabID: String
+    let paneID: String
+
+    func canSwap(with destination: Self) -> Bool {
+        gatewayUUID == destination.gatewayUUID && tabID == destination.tabID
+            && !paneID.isEmpty && !destination.paneID.isEmpty && paneID != destination.paneID
+    }
+}
+
+/// How a drop commits. tmux and native trees insert the source at the dropped
+/// edge; herdr has no same-tab insert primitive, so a herdr drop exchanges the
+/// two panes and the zone is only a hit test.
+enum PaneMoveKind: Equatable {
+    case insert
+    case swap
+}
+
 /// Shared by drag previews and the commit path. Never move a native leaf into a
 /// server-owned tree, or a tmux pane between gateways/windows via a local edit.
 @MainActor
 enum PaneMoveEligibility {
     static func allows(_ source: SplitPaneView, _ destination: SplitPaneView) -> Bool {
+        kind(source, destination) != nil
+    }
+
+    /// nil when the pair cannot be rearranged at all. herdr is resolved first:
+    /// a herdr pane has no tmux binding, so it would otherwise pass as native
+    /// and the drop would silently no-op against a server-owned tree.
+    static func kind(_ source: SplitPaneView, _ destination: SplitPaneView) -> PaneMoveKind? {
         guard source !== destination,
-              !source.isDetachedForFullScreen, !destination.isDetachedForFullScreen else { return false }
-        switch (source.asTerminal?.tmuxPaneBinding, destination.asTerminal?.tmuxPaneBinding) {
-        case (nil, nil): return true
-        case let (source?, destination?):
-            let sourceID = TmuxPaneMoveIdentity(ownerID: source.parentUUID, windowID: source.windowId, paneID: source.paneId)
-            let destinationID = TmuxPaneMoveIdentity(ownerID: destination.parentUUID, windowID: destination.windowId, paneID: destination.paneId)
-            guard sourceID.canMove(to: destinationID),
-                  source.parentSurface == destination.parentSurface,
-                  let controller = TmuxController.controller(forOwnerSurface: source.parentSurface),
-                  controller.ownerTerminalUUIDForNotifications == source.parentUUID,
-                  controller.isActive else { return false }
-            return true
-        default: return false
+              !source.isDetachedForFullScreen, !destination.isDetachedForFullScreen else { return nil }
+        let sourceTerminal = source.asTerminal
+        let destinationTerminal = destination.asTerminal
+        switch (sourceTerminal?.herdrPaneBinding, destinationTerminal?.herdrPaneBinding) {
+        case let (from?, to?):
+            return allowsHerdrSwap(from, to) ? .swap : nil
+        case (nil, nil):
+            break
+        // A herdr pane and a native or tmux pane never share a tree edit.
+        default:
+            return nil
         }
+        switch (sourceTerminal?.tmuxPaneBinding, destinationTerminal?.tmuxPaneBinding) {
+        case (nil, nil): return .insert
+        case let (from?, to?): return allowsTmuxMove(from, to) ? .insert : nil
+        default: return nil
+        }
+    }
+
+    private static func allowsTmuxMove(
+        _ source: Ghostty.TerminalView.TmuxPaneBinding,
+        _ destination: Ghostty.TerminalView.TmuxPaneBinding
+    ) -> Bool {
+        let sourceID = TmuxPaneMoveIdentity(ownerID: source.parentUUID, windowID: source.windowId, paneID: source.paneId)
+        let destinationID = TmuxPaneMoveIdentity(ownerID: destination.parentUUID, windowID: destination.windowId, paneID: destination.paneId)
+        guard sourceID.canMove(to: destinationID),
+              source.parentSurface == destination.parentSurface,
+              let controller = TmuxController.controller(forOwnerSurface: source.parentSurface),
+              controller.ownerTerminalUUIDForNotifications == source.parentUUID,
+              controller.isActive else { return false }
+        return true
+    }
+
+    private static func allowsHerdrSwap(
+        _ source: Ghostty.TerminalView.HerdrPaneBinding,
+        _ destination: Ghostty.TerminalView.HerdrPaneBinding
+    ) -> Bool {
+        let sourceID = HerdrPaneMoveIdentity(gatewayUUID: source.gatewayUUID, tabID: source.tabId, paneID: source.paneId)
+        let destinationID = HerdrPaneMoveIdentity(gatewayUUID: destination.gatewayUUID, tabID: destination.tabId, paneID: destination.paneId)
+        guard sourceID.canSwap(with: destinationID),
+              let controller = HerdrController.controller(forGateway: source.gatewayUUID),
+              controller.isActive, !controller.didEnd else { return false }
+        return true
     }
 }

@@ -33,6 +33,9 @@ struct HerdrSessionInfo: Identifiable, Equatable, Sendable {
     var agents: [HerdrAgentInfo]?
     /// ANSI capture of the session's focused pane for preview rendering.
     var capturedContent: String?
+    /// Whether the host's herdr offers control streams; nil when the probe
+    /// did not run (minimal retry).
+    var supportsControlStream: Bool?
 
     var id: String { name }
 
@@ -129,6 +132,9 @@ enum HerdrDiscoveryParser {
 
         let agentsBySession = parseAgents(block: agentsBlock)
         let capturesBySession = parseCaptures(block: capturesBlock)
+        let supportsControlStream: Bool? = sessionsBlock.contains("::CONTROL:1::")
+            ? true
+            : (sessionsBlock.contains("::CONTROL:0::") ? false : nil)
 
         var sessions: [HerdrSessionInfo] = []
         for entry in envelope.sessions {
@@ -143,7 +149,8 @@ enum HerdrDiscoveryParser {
                 isDefault: isDefault,
                 isRunning: isRunning,
                 agents: agentsBySession[entry.name],
-                capturedContent: capturesBySession[entry.name]
+                capturedContent: capturesBySession[entry.name],
+                supportsControlStream: supportsControlStream
             ))
         }
 

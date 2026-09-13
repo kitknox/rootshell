@@ -258,16 +258,34 @@ class SocketCommandServer {
         case .killShell:
             return handleKillShell(request)
         case .inspectLocalMultiplexers:
+            let herdrTargets: [String: LocalHerdrControlTarget]
+            do {
+                herdrTargets = try request.payload.map { try JSONDecoder().decode([String: LocalHerdrControlTarget].self, from: $0) } ?? [:]
+            } catch {
+                return SocketResponse(success: false, error: "Invalid herdr inspection targets")
+            }
             let records = LocalMultiplexerRecovery.processes()
             let cache = LocalMultiplexerRecovery.ProbeCache()
             let deadline = Date().addingTimeInterval(6)
             var attachments: [String: LocalMultiplexerAttachment?] = [:]
             // A single process census serves all this app's local PTYs.
-            for id in SessionManager.shared.listSessions() {
+            // Recovery handshakes must not sit behind a large collection of
+            // legacy pane PTYs and exhaust the shared census deadline.
+            let sessions = SessionManager.shared.listSessions().sorted {
+                let lhs = herdrTargets[$0.uuidString] != nil
+                let rhs = herdrTargets[$1.uuidString] != nil
+                return lhs != rhs ? lhs : $0.uuidString < $1.uuidString
+            }
+            for id in sessions {
                 guard let session = SessionManager.shared.getSession(id), session.clientPID == clientPID else { continue }
                 guard Date() < deadline, !records.isEmpty else { continue }
-                let attachment = LocalMultiplexerRecovery.inspect(
-                    shellPID: session.pid, pty: session.pty, records: records, deadline: deadline, cache: cache)
+                let attachment: LocalMultiplexerAttachment?
+                if let target = herdrTargets[id.uuidString] {
+                    attachment = LocalMultiplexerRecovery.inspectHerdrControl(target, records: records, deadline: deadline, cache: cache)
+                } else {
+                    attachment = LocalMultiplexerRecovery.inspect(
+                        shellPID: session.pid, pty: session.pty, records: records, deadline: deadline, cache: cache)
+                }
                 // Missing key means unobserved (deadline/failed census); an
                 // explicit null means this PTY has no verified attachment.
                 if Date() < deadline { attachments.updateValue(attachment, forKey: id.uuidString) }
@@ -275,6 +293,10 @@ class SocketCommandServer {
             return SocketResponse(success: true, payload: try? JSONEncoder().encode(attachments))
         case .ping:
             return SocketResponse(success: true)
+        case .spawnPipedProcess:
+            return handleSpawnPipedProcess(request)
+        case .killPipedProcess:
+            return handleKillPipedProcess(request)
         case .executeCommand:
             // Note: executeCommand is handled specially in handleConnection
             // because it needs to stream output before returning
@@ -330,9 +352,10 @@ class SocketCommandServer {
                 resourcesDir: createRequest.resourcesDir
             )
 
-            let recoveryAccepted = createRequest.recoveryAttachment.map(LocalMultiplexerRecovery.isAvailable) ?? false
-            if let attachment = createRequest.recoveryAttachment, recoveryAccepted {
-                spawnConfig.recoveryCommand = attachment.attachCommand
+            let recoveryAccepted = createRequest.recoveryAttachment.map { LocalMultiplexerRecovery.isAvailable($0) } ?? false
+            if let attachment = createRequest.recoveryAttachment, recoveryAccepted,
+               let command = attachment.ptyRecoveryCommand {
+                spawnConfig.recoveryCommand = command
                     + " || /usr/bin/printf '%s\\n' 'Could not restore the multiplexer session; returned to shell.'"
             }
             if createRequest.recoveryAttachment != nil {
@@ -443,6 +466,101 @@ class SocketCommandServer {
 
     /// Handles executeCommand with streaming output
     /// Sends ExecuteOutputChunk messages during execution, then ExecuteComplete at the end
+    // MARK: - Piped processes
+
+    /// Live non-PTY children keyed by pid, so the app can end them by pid and
+    /// a finished child drops out on its own.
+    private static let pipedProcesses = PipedProcessRegistry()
+
+    private func handleSpawnPipedProcess(_ request: SocketRequest) -> SocketResponse {
+        guard let payload = request.payload else {
+            return SocketResponse(success: false, error: "Missing payload")
+        }
+        do {
+            let spawnRequest = try JSONDecoder().decode(SpawnPipedProcessRequest.self, from: payload)
+            let handoffID = UUID()
+            guard let socketPath = SessionManager.generateSocketPath(for: handoffID) else {
+                return SocketResponse(success: false, error: "App Group container not available")
+            }
+
+            var envConfig = EnvironmentBuilder.Config()
+            envConfig.resourcesDir = spawnRequest.resourcesDir
+            envConfig.enableShellIntegration = false
+            envConfig.paneToken = spawnRequest.paneToken
+            let environment = EnvironmentBuilder().build(with: envConfig)
+
+            var fds: [Int32] = [-1, -1]
+            guard socketpair(AF_UNIX, SOCK_STREAM, 0, &fds) == 0 else {
+                return SocketResponse(success: false, error: "socketpair failed: errno=\(errno)")
+            }
+            let appEnd = fds[0]
+            let childEnd = fds[1]
+
+            let process = Process()
+            let shell = spawnRequest.shell ?? "/bin/zsh"
+            process.executableURL = URL(fileURLWithPath: shell)
+            // A login shell so the user's PATH resolves the command.
+            process.arguments = ["-lc", "exec \(spawnRequest.command)"]
+            process.environment = environment
+            if let cwd = spawnRequest.workingDirectory {
+                process.currentDirectoryURL = URL(fileURLWithPath: cwd)
+            }
+            let childHandle = FileHandle(fileDescriptor: childEnd, closeOnDealloc: false)
+            process.standardInput = childHandle
+            process.standardOutput = childHandle
+            process.standardError = FileHandle.nullDevice
+            process.terminationHandler = { finished in
+                Self.pipedProcesses.remove(pid: finished.processIdentifier)
+                NSLog("Piped process \(finished.processIdentifier) exited: \(finished.terminationStatus)")
+            }
+            do {
+                try process.run()
+            } catch {
+                close(appEnd)
+                close(childEnd)
+                return SocketResponse(success: false, error: "spawn failed: \(error.localizedDescription)")
+            }
+            // The child holds its own copy; the helper keeps only the app's end
+            // until it has been handed over.
+            close(childEnd)
+            let pid = process.processIdentifier
+            Self.pipedProcesses.add(process)
+            NSLog("Spawned piped process \(pid): \(spawnRequest.command.prefix(80))")
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                defer { close(appEnd) }
+                var lastError: Error?
+                for attempt in 1...20 {
+                    do {
+                        try FDPassingServerImpl.sendFileDescriptor(appEnd, toSocketAtPath: socketPath)
+                        NSLog("Sent piped fd for pid \(pid) (attempt \(attempt))")
+                        return
+                    } catch {
+                        lastError = error
+                        usleep(100_000)
+                    }
+                }
+                NSLog("Failed to send piped fd for pid \(pid): \(String(describing: lastError))")
+                Self.pipedProcesses.kill(pid: pid)
+            }
+
+            let response = SpawnPipedProcessResponse(processID: pid, socketPath: socketPath)
+            return SocketResponse(success: true, payload: try JSONEncoder().encode(response))
+        } catch {
+            return SocketResponse(success: false, error: error.localizedDescription)
+        }
+    }
+
+    private func handleKillPipedProcess(_ request: SocketRequest) -> SocketResponse {
+        guard let payload = request.payload,
+              let killRequest = try? JSONDecoder().decode(KillPipedProcessRequest.self, from: payload)
+        else {
+            return SocketResponse(success: false, error: "Missing payload")
+        }
+        Self.pipedProcesses.kill(pid: killRequest.processID)
+        return SocketResponse(success: true)
+    }
+
     private func handleExecuteCommand(_ request: SocketRequest, clientSocket: Int32) {
         guard let payload = request.payload else {
             sendExecuteError("Missing payload", to: clientSocket)

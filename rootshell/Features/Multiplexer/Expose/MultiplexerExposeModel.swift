@@ -85,6 +85,8 @@ nonisolated struct MuxTickResult: Sendable {
     /// Cheap per-pane "probably changed" signals (tmux activity/cursor tuple);
     /// a differing hint forces a fetch, an equal one only delays it.
     var changeHints: [String: String] = [:]
+    /// Underlying terminal identity, distinct from a reusable public pane ID.
+    var paneIdentities: [String: String] = [:]
 }
 
 nonisolated enum MuxExposeIdentity {
