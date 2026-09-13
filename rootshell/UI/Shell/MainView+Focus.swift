@@ -707,7 +707,7 @@ extension MainView {
             return
         }
 
-        tabsModel.displayedTabID = selectedID
+        tabsModel.displaySelectedTabImmediately()
         for (index, tab) in terminals.enumerated() {
             let isSelected = index == selectedIndex
             for terminal in tab.splitTree {

@@ -2271,6 +2271,41 @@ final class TabsModel {
         for tab in tabs { tab.flushDeferredTitle() }
     }
 
+    /// True while the selected tab is a restored herdr gateway whose saved
+    /// projected tab has not been re-selected yet and whose controller is
+    /// still connecting. A failed or ended controller lifts the hold so the
+    /// card can show its error and retry button.
+    private func isAwaitingHerdrRestoreReveal(for tab: TabModel) -> Bool {
+        guard let pending = pendingHerdrSelection,
+              tab.splitTree.terminalLeaves.contains(where: { $0.uuid == pending.gatewayTerminalUUID })
+        else { return false }
+        guard let controller = HerdrController.controller(forGateway: pending.gatewayTerminalUUID) else { return true }
+        // A transient connect failure with a retry queued is still "connecting".
+        return !controller.didEnd && (controller.connectionError == nil || controller.isReconnectPending)
+    }
+
+    /// Immediate reveal used after external tab mutations and key-window
+    /// changes. Honors the herdr restore hold; everything else shows at once.
+    func displaySelectedTabImmediately() {
+        guard let selectedTabID, let tab = selectedTab else { return }
+        if isAwaitingHerdrRestoreReveal(for: tab) {
+            scheduleHerdrRevealFailOpen(generation: displayRevealGeneration, targetID: tab.id)
+            return
+        }
+        displayedTabID = selectedTabID
+    }
+
+    /// Last resort for a host that neither answers nor errors.
+    private func scheduleHerdrRevealFailOpen(generation: Int, targetID: UUID) {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            guard let self, self.displayRevealGeneration == generation else { return }
+            guard self.displayedTabID != targetID, self.selectedTabID == targetID else { return }
+            Ghostty.logger.warning("herdr gateway reveal timed out waiting for its snapshot; revealing anyway")
+            self.displayedTabID = targetID
+        }
+    }
+
     /// Reconcile `displayedTabID` with `selectedTabID`. Called from the
     /// selection `didSet` and from tab-removal paths (the displayed tab may
     /// have been closed out from under a pending reveal).
@@ -2295,6 +2330,13 @@ final class TabsModel {
                 // function with a valid target.
                 repairSelectionIfNeeded()
             }
+            return
+        }
+        // A restored herdr gateway stands in for the projected tab it will
+        // select once its snapshot arrives. Keep the previous tab (or the
+        // backdrop) on screen rather than flashing the gateway card.
+        if isAwaitingHerdrRestoreReveal(for: target) {
+            scheduleHerdrRevealFailOpen(generation: generation, targetID: target.id)
             return
         }
         if displayedTabID == target.id {

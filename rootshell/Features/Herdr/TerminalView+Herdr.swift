@@ -14,16 +14,19 @@ import UIKit
 
 extension Ghostty.TerminalView {
 
+    /// The card is a plain hosted subview: the gateway terminal keeps first
+    /// responder, its keyboard, and its gestures. Installed lazily so a
+    /// gateway restored into a hidden tab never lays out until it is shown.
     func updateHerdrGatewayOverlay() {
         guard let controller = herdrController, controller.showsGatewayStatus else {
-            let hadOverlay = herdrGatewayHost != nil
-            herdrGatewayHost?.relinquishFocus()
             herdrGatewayHost?.willMove(toParent: nil)
             herdrGatewayHost?.view.removeFromSuperview()
             herdrGatewayHost?.removeFromParent()
             herdrGatewayHost = nil
-            if hadOverlay, isLogicallyFocused { _ = becomeFirstResponder() }
             return
+        }
+        if herdrGatewayHost == nil {
+            guard isTabVisible, window != nil, !bounds.isEmpty else { return }
         }
         #if targetEnvironment(macCatalyst)
         // Installing the overlay need not produce a hover exit. Release any
@@ -45,16 +48,16 @@ extension Ghostty.TerminalView {
             workspaces: { [weak controller] in controller?.showWorkspaceOverview() },
             newTab: { [weak controller] in controller?.requestNewTab(workspaceID: nil) },
             retryConnection: { [weak controller] in controller?.applicationDidBecomeActive() },
-            detach: { [weak controller] in controller?.detach(closeGateway: false) },
-            installPresentationChanged: { [weak self] presented in
-                self?.herdrGatewayHost?.presentsInstallInstructions = presented
-                self?.herdrGatewayHost?.reconcileFocus()
-            }
+            detach: { [weak controller] in controller?.detach(closeGateway: false) }
         )
-        if let host = herdrGatewayHost {
-            host.rootView = content
-        } else {
-            let host = HerdrGatewayHostingController(gateway: self, rootView: content)
+        // Split-host and tab-switch animations may be in flight; the card
+        // must snap into place, never slide or grow.
+        UIView.performWithoutAnimation {
+            if let host = herdrGatewayHost {
+                host.rootView = content
+                return
+            }
+            let host = UIHostingController(rootView: content)
             host.view.backgroundColor = .clear
             host.view.translatesAutoresizingMaskIntoConstraints = false
             var responder: UIResponder? = next
@@ -69,10 +72,34 @@ extension Ghostty.TerminalView {
                 host.view.bottomAnchor.constraint(equalTo: bottomAnchor)
             ])
             host.didMove(toParent: parent)
+            host.view.layoutIfNeeded()
             herdrGatewayHost = host
         }
-        if isFirstResponder { _ = resignFirstResponder() }
-        herdrGatewayHost?.reconcileFocus()
+    }
+
+    /// Bare ESC on the covered gateway leaves control mode, like the tmux
+    /// gateway. Panes and unrelated splits have no controller and are unaffected.
+    @discardableResult
+    func detachHerdrGatewayIfCovered() -> Bool {
+        guard let controller = herdrController, controller.showsGatewayStatus else { return false }
+        controller.detach(closeGateway: false)
+        return true
+    }
+
+    /// Gestures that navigate tabs or the app stay live over the card; the
+    /// rest would click, select, or scroll a shell the user cannot see.
+    func herdrGatewayAllowsGesture(_ gesture: UIGestureRecognizer) -> Bool {
+        if isTrackpadTabSwipeGesture(gesture) { return true }
+        #if !targetEnvironment(macCatalyst)
+        return gesture === appTabSwipePanGesture
+            || gesture === tabSwipeLeftGesture
+            || gesture === tabSwipeRightGesture
+            || gesture === twoFingerTapGesture
+            || gesture === twoFingerLongPressGesture
+            || gesture === pinchZoomGesture
+        #else
+        return false
+        #endif
     }
 
     /// Fixed space outside the grid. TerminalScrollView pins the terminal to

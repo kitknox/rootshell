@@ -10,6 +10,9 @@ extension HerdrController {
     func publishSessionState() {
         publishManagementState()
         gateway?.updateHerdrGatewayOverlay()
+        // A restored gateway is held off screen until its saved tab returns.
+        // An error or an ended controller releases that hold.
+        if didEnd || connectionError != nil { tabsModel.syncDisplayedTab() }
         NotificationCenter.default.post(name: .herdrControlStateDidChange, object: gatewayUUID)
     }
 

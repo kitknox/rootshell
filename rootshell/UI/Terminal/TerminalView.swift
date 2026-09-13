@@ -548,7 +548,7 @@ extension Ghostty {
         /// Set on the gateway view while it drives a herdr session in
         /// control mode. nil for pane views and non-herdr sessions.
         var herdrController: HerdrController?
-        var herdrGatewayHost: HerdrGatewayHostingController?
+        var herdrGatewayHost: UIHostingController<HerdrGatewayView>?
 
         /// A takeover leaves this gateway at its shell until an explicit attach.
         /// Retained across transport reconnects for the lifetime of this view.
@@ -2384,7 +2384,6 @@ extension Ghostty {
         override func setOverlayOwnsKeyboard(_ owns: Bool) {
             guard overlayOwnsKeyboard != owns else { return }
             overlayOwnsKeyboard = owns
-            herdrGatewayHost?.reconcileFocus()
             Ghostty.logger.info("setOverlayOwnsKeyboard(\(owns)) terminal=\(self.uuid.uuidString.prefix(8)) isFR=\(self.isFirstResponder) logical=\(self.isLogicallyFocused)")
             if owns {
                 if isFirstResponder {
@@ -2857,6 +2856,7 @@ extension Ghostty {
             session?.setTabVisible(visible)
 
             surfaceController.setOcclusion(visible)
+            if visible { updateHerdrGatewayOverlay() }
         }
 
         /// Backstop re-assert used by the tab-switch + foreground reconcile paths
@@ -3092,11 +3092,6 @@ extension Ghostty {
 
         private func syncFocusForWindowStateChange(sceneIsDeactivating: Bool = false) {
             let windowActive = windowIsActiveForFocus()
-            if let herdrGatewayHost {
-                applyGhosttyFocus(false)
-                herdrGatewayHost.reconcileFocus()
-                return
-            }
             #if !targetEnvironment(macCatalyst)
             if (!windowActive || sceneIsDeactivating),
                shouldPreserveFirstResponderForSoftwareKeyboardAppTransition(sceneIsDeactivating: sceneIsDeactivating) {
@@ -3476,6 +3471,7 @@ extension Ghostty {
             }
             
             registerWindowFocusObservers()
+            updateHerdrGatewayOverlay()
 
             clearInputAssistantsRecursively()
 
@@ -3619,17 +3615,8 @@ extension Ghostty {
             #endif
         }
         
-        var herdrGatewayCanOwnKeyboard: Bool {
-            #if os(iOS) && !targetEnvironment(macCatalyst)
-            guard iPadVisorController.permitsFocus(self) else { return false }
-            #endif
-            return herdrController?.showsGatewayStatus == true && isLogicallyFocused
-                && windowIsActiveForFocus() && !overlayOwnsKeyboard
-                && !isModalPresented() && !isHUDFieldFocused()
-        }
-
         override var canBecomeFirstResponder: Bool {
-            return herdrController?.showsGatewayStatus != true
+            return true
         }
 
         #if targetEnvironment(macCatalyst)
@@ -3644,9 +3631,6 @@ extension Ghostty {
 
         @discardableResult
         override func becomeFirstResponder() -> Bool {
-            if herdrController?.showsGatewayStatus == true {
-                return herdrGatewayHost?.reconcileFocus() ?? false
-            }
             #if os(iOS) && !targetEnvironment(macCatalyst)
             guard iPadVisorController.permitsFocus(self) else { return false }
             #endif
@@ -3738,9 +3722,6 @@ extension Ghostty {
 
         @discardableResult
         override func resignFirstResponder() -> Bool {
-            if let herdrGatewayHost, herdrGatewayHost.isFirstResponder {
-                return herdrGatewayHost.resignFirstResponder()
-            }
             invalidateWritingAssistance(resetDocument: true)
             #if !targetEnvironment(macCatalyst)
             if shouldPreserveFirstResponderForSoftwareKeyboardAppTransition() {
@@ -4576,7 +4557,6 @@ extension Ghostty {
         /// `skipResign` is safe when unfocusing the old terminal.
         @discardableResult
         override func focusDidChange(_ focused: Bool, skipResign: Bool = false) -> Bool {
-            if !focused { herdrGatewayHost?.relinquishFocus() }
             if !focused { herdrEndpointPane?.cancelInteraction() }
             #if os(iOS) && !targetEnvironment(macCatalyst)
             if focused && !iPadVisorController.permitsFocus(self) { return false }
@@ -5558,6 +5538,9 @@ extension Ghostty.TerminalView {
         unshiftedCodepoint: UInt32 = 0
     ) -> Bool {
         invalidateWritingAssistance()
+        // Covered herdr gateway: Ghostty would encode straight into the hidden
+        // shell. Escape already detached upstream; swallow the rest as handled.
+        if herdrController?.showsGatewayStatus == true { return true }
         if let state = herdrEndpointPane {
             state.sendKey(keyCode, action: action, mods: mods,
                           text: text.flatMap { KeyCode.isUIKeyInputSentinel($0) ? nil : $0 }, unshifted: unshiftedCodepoint)

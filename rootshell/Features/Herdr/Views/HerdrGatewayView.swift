@@ -27,18 +27,18 @@ struct HerdrGatewayView: View {
     let newTab: () -> Void
     let retryConnection: () -> Void
     let detach: () -> Void
-    let installPresentationChanged: (Bool) -> Void
 
     var body: some View {
         let theme = resolvedTheme
         gatewayContent(theme: theme)
+            // Pane sizing settles over several passes on restore; the layout
+            // switches below must snap, not animate.
+            .transaction { $0.animation = nil }
             .background(theme.themeColors?.background ?? Color(uiColor: .systemBackground))
             .environment(\.sheetThemeColors, theme.themeColors)
             .tint(theme.accentColor)
             .environment(\.colorScheme, theme.colorScheme ?? systemColorScheme)
-            .sheet(isPresented: $showsInstallInstructions, onDismiss: {
-                installPresentationChanged(false)
-            }) {
+            .sheet(isPresented: $showsInstallInstructions) {
                 HerdrInstallInstructionsView(isFallbackForced: fallback?.isForced == true)
                     .themedSheet(themeColors: theme.themeColors, accentColor: theme.accentColor,
                                  colorScheme: theme.colorScheme)
@@ -171,7 +171,6 @@ struct HerdrGatewayView: View {
                     .foregroundStyle(.secondary)
             }
             Button("Optional: Full Control Mode") {
-                installPresentationChanged(true)
                 showsInstallInstructions = true
             }
             .buttonStyle(.bordered)

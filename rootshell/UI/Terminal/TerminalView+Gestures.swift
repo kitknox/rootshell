@@ -1562,7 +1562,12 @@ extension Ghostty.TerminalView {
 
     /// Sends user input to the appropriate destination based on platform
     func sendUserInput(_ data: Data, documentMutation: TerminalCorrectionContext.Mutation? = nil) {
-        guard herdrController?.showsGatewayStatus != true else { return }
+        // herdr gateway: lone ESC detaches; anything else typed at the covered
+        // shell is dropped rather than landing in a pane the user cannot see.
+        if herdrController?.showsGatewayStatus == true {
+            if data.count == 1, data.first == 0x1b { detachHerdrGatewayIfCovered() }
+            return
+        }
         // Input and UIKit document mutations are serialized on the main actor.
         // Rendering output is not an edit to an application's logical input.
         if let documentMutation {
@@ -2937,11 +2942,6 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
 
 extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        if let overlay = herdrGatewayHost?.view,
-           let touchView = touch.view,
-           touchView === overlay || touchView.isDescendant(of: overlay) {
-            return false
-        }
         // The brightness HUD is an interactive `UIHostingController` view (a
         // horizontal `Slider`) added as a subview of this terminal view. Without
         // this exclusion the terminal's tab-swipe pan (`appTabSwipePanGesture`)
@@ -2988,10 +2988,11 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
     }
 
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        // Tap and Catalyst long-press recognizers have no delegate, so the
-        // shouldReceive-touch exclusion alone cannot keep them off the overlay.
-        // Also gate scroll gestures, which may begin without a touch event.
-        if gestureRecognizer.view === self, herdrController?.showsGatewayStatus == true {
+        // Covered herdr gateway: the overlay is a subview, so every recognizer
+        // here still sees its touches. Keep the tab/app navigation gestures and
+        // refuse the ones that would click, select, or scroll the hidden shell.
+        if gestureRecognizer.view === self, herdrController?.showsGatewayStatus == true,
+           !herdrGatewayAllowsGesture(gestureRecognizer) {
             return false
         }
         if let shouldBegin = shouldBeginTrackpadTabSwipeGesture(gestureRecognizer) {

@@ -86,6 +86,7 @@ final class HerdrController {
     private var connectTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     var reconnectAttempt = 0
+    var isReconnectPending: Bool { reconnectTask != nil }
 
     enum Mode {
         /// Control stream: raw pane bytes, herdr drives layout.

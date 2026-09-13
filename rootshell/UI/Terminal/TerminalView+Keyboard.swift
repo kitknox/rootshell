@@ -312,9 +312,6 @@ extension Ghostty.TerminalView {
     // Register key commands for dynamic keybindings
     // Uses cached array to avoid 26+ allocations per keystroke
     override var keyCommands: [UIKeyCommand]? {
-        // The gateway host advertises app shortcuts. If UIKit includes this
-        // ancestor in its responder chain, never add shell-input commands.
-        guard herdrController?.showsGatewayStatus != true else { return nil }
         guard !shouldYieldHardwareInputToEmojiUI else { return nil }
         #if targetEnvironment(macCatalyst)
         let shouldSuppressControlShortcuts = false
@@ -339,10 +336,6 @@ extension Ghostty.TerminalView {
 extension Ghostty.TerminalView {
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        if herdrController?.showsGatewayStatus == true {
-            super.pressesBegan(presses, with: event)
-            return
-        }
         lastHardwareTextInputTime = ProcessInfo.processInfo.systemUptime
         lastDictationActivityAt = nil
         invalidateWritingAssistance()
@@ -546,6 +539,11 @@ extension Ghostty.TerminalView {
         if key.keyCode == .keyboardEscape,
            let target = selectedTmuxGatewayView() ?? ((tmuxController?.isActive == true || isTmuxGatewaySurfaceActive) ? self : nil) {
             target.sendTmuxDetach()
+            return (true, true)
+        }
+
+        // herdr gateway: same ESC-detaches contract as the tmux gateway.
+        if key.keyCode == .keyboardEscape, detachHerdrGatewayIfCovered() {
             return (true, true)
         }
 
@@ -1073,10 +1071,6 @@ extension Ghostty.TerminalView {
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        if herdrController?.showsGatewayStatus == true {
-            super.pressesEnded(presses, with: event)
-            return
-        }
         if shouldYieldHardwareInputToEmojiUI {
             resetKeyboardInteractionState(sendSyntheticKeyReleases: true)
             super.pressesEnded(presses, with: event)
@@ -1859,6 +1853,10 @@ extension Ghostty.TerminalView {
         if let target = selectedTmuxGatewayView() ?? ((tmuxController?.isActive == true || isTmuxGatewaySurfaceActive) ? self : nil) {
             keysConsumedByOverlayAction.insert(.keyboardEscape)
             target.sendTmuxDetach()
+            return
+        }
+        if detachHerdrGatewayIfCovered() {
+            keysConsumedByOverlayAction.insert(.keyboardEscape)
             return
         }
 

@@ -259,8 +259,13 @@ extension MainView {
            let gatewayTab = terminals.first(where: { tab in
                tab.splitTree.terminalLeaves.contains { $0.uuid == selection.gatewayTerminalUUID }
            }) {
-            tabsModel.selectedTabID = gatewayTab.id
+            // Pending first: the selection's didSet keeps it (the gateway is in
+            // this tab) and holds the gateway off screen until its saved tab
+            // returns. Re-sync explicitly in case the saved index already
+            // chose the gateway and the didSet does not fire.
             tabsModel.pendingHerdrSelection = selection
+            tabsModel.selectedTabID = gatewayTab.id
+            tabsModel.syncDisplayedTab()
         }
 
         // The saved selected tab may no longer be restorable. Repair

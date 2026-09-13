@@ -618,6 +618,9 @@ extension HerdrController {
             $0.gatewayTerminalUUID == gatewayUUID ? $0 : nil
         }
         if restored != nil { tabsModel.pendingHerdrSelection = nil }
+        // The gateway tab was held off screen while its selection was pending.
+        // Whatever gets selected below re-syncs; this covers staying put.
+        defer { tabsModel.syncDisplayedTab() }
         guard maySelectTab else { return }
         if let restored, let tab = tabs[restored.tabID] {
             tabsModel.selectedTabID = tab.id
