@@ -384,6 +384,7 @@ class ShortcutCaptureUIView: UIView {
     private var firstTrigger: KeyTrigger?
     private var firstTriggerTime: Date?
     private var hasCompleted = false
+    private var isSuppressingMenuShortcuts = false
     private let instructionLabel = UILabel()
     private let captureLabel = UILabel()
     private var themeColors: SheetThemeColors?
@@ -500,7 +501,14 @@ class ShortcutCaptureUIView: UIView {
         super.didMoveToWindow()
         if window != nil {
             claimFirstResponder()
+            suppressMenuShortcutsForCapture()
+        } else {
+            restoreMenuShortcutsAfterCapture()
         }
+    }
+
+    deinit {
+        restoreMenuShortcutsAfterCapture()
     }
 
     func claimFirstResponder() {
@@ -632,88 +640,34 @@ class ShortcutCaptureUIView: UIView {
         onCancel?()
     }
 
-    /// Catalyst delivers reserved and menu-owned chords (⌘T, ⌘N, ⌘.) through
-    /// the menu rail as a nil-target `sendAction`. Those never reach
-    /// `keyCommands` or `pressesBegan`. The walk starts at first responder, so
-    /// implementing the same selectors here records the chord instead of
-    /// creating a tab / firing the bound action.
+    /// Catalyst delivers the reserved Cmd+Period chord only through the menu
+    /// rail (nil-target menuSystemCancel action). That reserved chord never
+    /// arrives as a key event, so recording still has to implement this one
+    /// selector. Every other menu-owned shortcut is handled by temporarily
+    /// clearing `MenuShortcutState` so `keyCommands` sees the physical press.
     @objc func menuSystemCancel(_ sender: Any?) {
         processCapture(trigger: .commandPeriod)
     }
 
-    @objc func menuCreateLocalShell(_ sender: Any?) { captureMenuBinding(.new_local_shell) }
-    @objc func menuNewTab(_ sender: Any?) { captureMenuBinding(.new_tab) }
-    @objc func menuNewWindow(_ sender: Any?) { captureMenuBinding(.new_window) }
-    @objc func menuDuplicateTabWithSSH(_ sender: Any?) { captureMenuBinding(.duplicate_ssh_tab) }
-    @objc func menuClearScreen(_ sender: Any?) { captureMenuBinding(.clear_screen) }
-    @objc func findInTerminal(_ sender: Any?) { captureMenuBinding(.start_search) }
-    @objc func increaseFontSize(_ sender: Any?) { captureMenuBinding(.increase_font_size) }
-    @objc func decreaseFontSize(_ sender: Any?) { captureMenuBinding(.decrease_font_size) }
-    @objc func resetFontSizeToDefault(_ sender: Any?) { captureMenuBinding(.reset_font_size) }
-    @objc func menuSplitRight(_ sender: Any?) { captureMenuBinding(.split_right) }
-    @objc func menuSplitDown(_ sender: Any?) { captureMenuBinding(.split_down) }
-    @objc func menuNavigateSplitLeft(_ sender: Any?) { captureMenuBinding(.navigate_split_left) }
-    @objc func menuNavigateSplitRight(_ sender: Any?) { captureMenuBinding(.navigate_split_right) }
-    @objc func menuNavigateSplitUp(_ sender: Any?) { captureMenuBinding(.navigate_split_up) }
-    @objc func menuNavigateSplitDown(_ sender: Any?) { captureMenuBinding(.navigate_split_down) }
-    @objc func menuToggleSplitZoom(_ sender: Any?) { captureMenuBinding(.toggle_split_zoom) }
-    @objc func menuEqualizeSplits(_ sender: Any?) { captureMenuBinding(.equalize_splits) }
-    @objc func menuToggleTabBar(_ sender: Any?) { captureMenuBinding(.toggle_tab_bar) }
-    @objc func menuToggleGroupMode(_ sender: Any?) { captureMenuBinding(.toggle_group_mode) }
-    @objc func menuToggleTabSwitcher(_ sender: Any?) { captureMenuBinding(.toggle_tab_switcher) }
-    @objc func menuToggleTabExpose(_ sender: Any?) { captureMenuBinding(.toggle_tab_expose) }
-    @objc func menuPreviousTab(_ sender: Any?) { captureMenuBinding(.previous_tab) }
-    @objc func menuNextTab(_ sender: Any?) { captureMenuBinding(.next_tab) }
-    @objc func menuSelectTab1(_ sender: Any?) { captureMenuBinding(.select_tab_1) }
-    @objc func menuSelectTab2(_ sender: Any?) { captureMenuBinding(.select_tab_2) }
-    @objc func menuSelectTab3(_ sender: Any?) { captureMenuBinding(.select_tab_3) }
-    @objc func menuSelectTab4(_ sender: Any?) { captureMenuBinding(.select_tab_4) }
-    @objc func menuSelectTab5(_ sender: Any?) { captureMenuBinding(.select_tab_5) }
-    @objc func menuSelectTab6(_ sender: Any?) { captureMenuBinding(.select_tab_6) }
-    @objc func menuSelectTab7(_ sender: Any?) { captureMenuBinding(.select_tab_7) }
-    @objc func menuSelectTab8(_ sender: Any?) { captureMenuBinding(.select_tab_8) }
-    @objc func menuSelectTab9(_ sender: Any?) { captureMenuBinding(.select_tab_9) }
-    @objc func menuBrowseHosts(_ sender: Any?) { captureMenuBinding(.browse_hosts) }
-    @objc func menuBrowseProfiles(_ sender: Any?) { captureMenuBinding(.browse_profiles) }
-    @objc func menuToggleAIAgent(_ sender: Any?) { captureMenuBinding(.toggle_ai_agent) }
-    @objc func menuToggleVoiceAgent(_ sender: Any?) { captureMenuBinding(.toggle_voice_agent) }
-    @objc func menuOpenSettings(_ sender: Any?) { captureMenuBinding(.open_settings) }
-    @objc func menuShowTmuxSessions(_ sender: Any?) { captureMenuBinding(.show_tmux_sessions) }
-    @objc func menuDetachSession(_ sender: Any?) { captureMenuBinding(.detach_session) }
-    @objc func menuDetachAllSessions(_ sender: Any?) { captureMenuBinding(.detach_all_sessions) }
-    @objc func menuDetachOtherClients(_ sender: Any?) { captureMenuBinding(.detach_other_clients) }
-    @objc func menuToggleTransparency(_ sender: Any?) { captureMenuBinding(.toggle_transparency) }
-    @objc func menuToggleTitleBar(_ sender: Any?) { captureMenuBinding(.toggle_titlebar) }
-    @objc func menuToggleAutoRedact(_ sender: Any?) { captureMenuBinding(.toggle_auto_redact) }
-    @objc func menuToggleBackgroundEffect(_ sender: Any?) { captureMenuBinding(.toggle_background_effect) }
-    @objc func menuToggleFullScreen(_ sender: Any?) { captureMenuBinding(.toggle_full_screen) }
-    @objc func menuToggleCompose(_ sender: Any?) { captureMenuBinding(.toggle_compose) }
-    @objc func menuToggleMouseCapture(_ sender: Any?) { captureMenuBinding(.toggle_mouse_capture) }
-    @objc func menuToggleClipboardManager(_ sender: Any?) { captureMenuBinding(.toggle_clipboard_manager) }
-    @objc func menuToggleThemePicker(_ sender: Any?) { captureMenuBinding(.toggle_theme_picker) }
-    @objc func menuToggleQuickSettings(_ sender: Any?) { captureMenuBinding(.toggle_quick_settings) }
-    @objc func menuScrollPageUp(_ sender: Any?) { captureMenuBinding(.scroll_page_up) }
-    @objc func menuScrollPageDown(_ sender: Any?) { captureMenuBinding(.scroll_page_down) }
-    @objc func menuScrollToTop(_ sender: Any?) { captureMenuBinding(.scroll_to_top) }
-    @objc func menuScrollToBottom(_ sender: Any?) { captureMenuBinding(.scroll_to_bottom) }
-    @objc func menuBrightnessBoost(_ sender: Any?) { captureMenuBinding(.brightness_boost) }
-    @objc func menuCycleInputSource(_ sender: Any?) { captureMenuBinding(.cycle_input_source) }
-    @objc func menuPreviousGroup(_ sender: Any?) { captureMenuBinding(.previous_group) }
-    @objc func menuNextGroup(_ sender: Any?) { captureMenuBinding(.next_group) }
+    private func suppressMenuShortcutsForCapture() {
+        guard !isSuppressingMenuShortcuts else { return }
+        isSuppressingMenuShortcuts = true
+        let apply = {
+            MenuShortcutState.shared.beginRecordingCapture()
+        }
+        if Thread.isMainThread {
+            MainActor.assumeIsolated(apply)
+        } else {
+            DispatchQueue.main.async(execute: apply)
+        }
+    }
 
-    /// Record the chord that just fired a menu item. Use the bound key plus
-    /// modifiers that are physically held so Shift+⌘T records as Shift+⌘T
-    /// even when the menu item itself is ⌘T.
-    private func captureMenuBinding(_ action: KeybindAction) {
-        guard let binding = KeybindManager.shared.keybind(for: action),
-              let first = binding.sequence.first,
-              !binding.sequence.isSequence
-        else { return }
-
-        var modifiers = first.modifiers
-        let hardware = KeybindModifiers(uiModifierFlags: KeyboardTracker.shared.hardwareModifierFlags)
-        modifiers.formUnion(hardware)
-        processCapture(trigger: KeyTrigger(key: first.key, modifiers: modifiers))
+    private func restoreMenuShortcutsAfterCapture() {
+        guard isSuppressingMenuShortcuts else { return }
+        isSuppressingMenuShortcuts = false
+        DispatchQueue.main.async {
+            MenuShortcutState.shared.endRecordingCapture()
+        }
     }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {

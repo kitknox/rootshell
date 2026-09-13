@@ -23,6 +23,9 @@ final class MenuShortcutState: ObservableObject {
     static let shared = MenuShortcutState()
 
     @Published var shortcuts: [KeybindAction: KeyboardShortcut] = [:]
+    /// Nested count so overlapping capture views don't restore the menu rail
+    /// while another is still recording.
+    private var recordingCaptureCount = 0
 
     /// Whether a menu bar exists to carry app shortcuts. Both menu rails dispatch
     /// through UIApplication notifications rather than the responder chain, so a
@@ -56,7 +59,32 @@ final class MenuShortcutState: ObservableObject {
             .store(in: &cancellables)
     }
 
+    /// Drop menu key equivalents while a shortcut is being recorded so the
+    /// capture view's `keyCommands` see the physical chord. Otherwise the menu
+    /// rail steals registered shortcuts (⌘T, ⌘N, …) and they never reach the
+    /// editor. ⌘. stays on its dedicated Send Escape item — that reserved
+    /// chord never arrives as a key event on Catalyst.
+    func beginRecordingCapture() {
+        recordingCaptureCount += 1
+        if recordingCaptureCount == 1 {
+            shortcuts = [:]
+        }
+    }
+
+    func endRecordingCapture() {
+        guard recordingCaptureCount > 0 else { return }
+        recordingCaptureCount -= 1
+        if recordingCaptureCount == 0 {
+            rebuildShortcuts()
+        }
+    }
+
     private func rebuildShortcuts() {
+        guard recordingCaptureCount == 0 else {
+            shortcuts = [:]
+            return
+        }
+
         var newShortcuts: [KeybindAction: KeyboardShortcut] = [:]
 
         for binding in KeybindManager.shared.activeBindings {
@@ -556,14 +584,6 @@ struct ShellCommands: Commands {
                 )
             }
             .modifier(DynamicShortcut(action: .open_settings, shortcuts: shortcutState.shortcuts))
-
-            Button("Quick Settings…") {
-                UIApplication.shared.sendAction(
-                    #selector(UIApplication.menuToggleQuickSettings(_:)),
-                    to: nil, from: nil, for: nil
-                )
-            }
-            .modifier(DynamicShortcut(action: .toggle_quick_settings, shortcuts: shortcutState.shortcuts))
         }
     }
 }
@@ -625,13 +645,21 @@ struct WindowCommands: Commands {
             }
             .modifier(DynamicShortcut(action: .show_tmux_sessions, shortcuts: shortcutState.shortcuts))
 
-            Button("Discover Sessions") {
+            Button("Detach Session") {
                 UIApplication.shared.sendAction(
-                    #selector(Ghostty.TerminalView.menuDiscoverSessions(_:)),
+                    #selector(Ghostty.TerminalView.menuDetachSession(_:)),
                     to: nil, from: nil, for: nil
                 )
             }
-            .modifier(DynamicShortcut(action: .discover_sessions, shortcuts: shortcutState.shortcuts))
+            .modifier(DynamicShortcut(action: .detach_session, shortcuts: shortcutState.shortcuts))
+
+            Button("Detach All Sessions") {
+                UIApplication.shared.sendAction(
+                    #selector(Ghostty.TerminalView.menuDetachAllSessions(_:)),
+                    to: nil, from: nil, for: nil
+                )
+            }
+            .modifier(DynamicShortcut(action: .detach_all_sessions, shortcuts: shortcutState.shortcuts))
 
             Button("Detach Other Clients") {
                 UIApplication.shared.sendAction(
