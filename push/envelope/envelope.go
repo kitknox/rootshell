@@ -31,12 +31,15 @@ var (
 
 // Route identifies the terminal pane the event came from. All fields optional.
 type Route struct {
-	Pane        string `json:"pane,omitempty"`         // LC_ROOTSHELL_PANE (surface UUID)
-	TmuxPane    string `json:"tmux_pane,omitempty"`    // "%12"
-	TmuxServer  string `json:"tmux_server,omitempty"`  // canonical tmux server instance
-	TmuxSession string `json:"tmux_session,omitempty"` // tmux session name
-	Host        string `json:"host,omitempty"`         // user@hostname
-	Cwd         string `json:"cwd,omitempty"`
+	Pane          string `json:"pane,omitempty"`           // LC_ROOTSHELL_PANE (surface UUID)
+	TmuxPane      string `json:"tmux_pane,omitempty"`      // "%12"
+	TmuxServer    string `json:"tmux_server,omitempty"`    // canonical tmux server instance
+	TmuxSession   string `json:"tmux_session,omitempty"`   // tmux session name
+	HerdrServer   string `json:"herdr_server,omitempty"`   // hashed host/uid/socket namespace
+	HerdrTerminal string `json:"herdr_terminal,omitempty"` // stable server-owned terminal ID
+	HerdrPane     string `json:"herdr_pane,omitempty"`     // public pane ID; hint only
+	Host          string `json:"host,omitempty"`           // user@hostname
+	Cwd           string `json:"cwd,omitempty"`
 }
 
 // Header is the plaintext protected by Seal.

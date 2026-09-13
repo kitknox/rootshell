@@ -99,8 +99,8 @@ showing twice.
     "tmux_pane": "%3",
     "tmux_server": "dev:/tmp/tmux-1000/default,42410,1788022920",
     "tmux_session": "main",
-    "host": "kit@dev",
-    "cwd": "/home/kit/rootshell"
+    "host": "user@dev.example",
+    "cwd": "/home/user/example-project"
   }
 }
 ```
@@ -122,6 +122,34 @@ are allocated server-wide, so the pair `(tmux_server, tmux_pane)` identifies
 the same underlying pane through every `tmux -CC` client and on every paired
 rootshell device. `pane` remains the rootshell surface UUID for ordinary
 local and SSH panes.
+
+Herdr routes add three optional fields:
+
+| Field | Meaning |
+|-------|---------|
+| `herdr_server` | Lowercase SHA-256 of `hostname + NUL + effective numeric UID + NUL + socket path` (UTF-8, no trailing NUL). |
+| `herdr_terminal` | Opaque `terminal_id` returned by herdr's `pane.get` API. |
+| `herdr_pane` | Public pane ID, such as `w1:p2`; a hint, never sufficient for routing alone. |
+
+The hostname is the full result of `gethostname` / `hostname`; the UID is
+decimal without leading zeros. The socket path is the path herdr resolves
+for the session, without additional symlink resolution. Raw socket paths and
+UIDs are not included in the route. This namespace is shared across control
+clients; the terminal ID distinguishes terminals within it, including across
+server restarts. Public pane and tab IDs can change when a terminal moves.
+
+The notifier queries `pane.get` at `HERDR_SOCKET_PATH` using `HERDR_PANE_ID`.
+Herdr resolves old pane aliases after moves. Lookup is limited to one second
+and 64 KiB; failure retains `herdr_pane` but omits the canonical identity.
+`HERDR_BIN_PATH`, tab IDs, and workspace IDs are not required.
+
+Receivers prefer a unique live match on `(herdr_server, herdr_terminal)` in
+regular or fallback control mode. If no such match exists, an exact `pane`
+UUID can still identify an ordinary local/SSH tab running the herdr TUI.
+Control gateways and projected panes are excluded from this UUID path.
+Ambiguous matches remain unresolved; descriptive host/cwd hints never select
+a destination. The fields are optional additions to protocol version 1;
+older receivers ignore them and retain ordinary-tab routing.
 
 The serialized header must be at most 1600 bytes. Unknown fields are
 ignored by receivers. There are no attachments.
@@ -147,7 +175,7 @@ rspair1.<base64url(json)>
 ```
 
 ```json
-{"server":"https://push.rootshell.com","label":"Kit's iPhone","cred":"rsc1....","pk":"<base64 std public key>"}
+{"server":"https://push.rootshell.com","label":"Test iPhone","cred":"rsc1....","pk":"<base64 std public key>"}
 ```
 
 `server` must be `https` with no credentials, query or fragment. `cred` must

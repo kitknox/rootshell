@@ -22,6 +22,7 @@ extension HerdrController {
     /// mode was explicitly requested in Debug settings.
     func startLegacyMode(reason: String, forced: Bool = false) {
         guard mode == .raw, !didEnd else { return }
+        resetPushRouteIdentity()
         mode = .legacy
         legacyFallbackForced = forced
         isActive = false
@@ -44,6 +45,7 @@ extension HerdrController {
     }
 
     func stopLegacyMode() {
+        resetPushRouteIdentity()
         endpointMetadata = nil
         legacyTopologyDirty = true
         for view in paneViews.values { view.herdrTitleState.endFallback() }
@@ -113,7 +115,7 @@ extension HerdrController {
 
     /// Socket requests stop at the first complete JSON response; nc may keep
     /// its stdin open after herdr replies, so waiting for process exit can hang.
-    private func legacyRun(command: String, method: String, input: Data? = nil,
+    func legacyRun(command: String, method: String, input: Data? = nil,
                            timeout: Duration = .seconds(15), maxResponseBytes: Int = legacyMaxResponseBytes,
                            allowsTruncation: Bool = false) async throws -> Data {
         try Task.checkCancellation()
@@ -274,6 +276,7 @@ extension HerdrController {
             ).result.snapshot
             isActive = true
             connectionError = nil
+            refreshPushRouteIdentity()
             legacyTopologyDirty = endpointMetadata.map { latest in
                 metadataAtStart.map { !latest.hasSameTopology(as: $0) } ?? true
             } ?? false
@@ -289,6 +292,7 @@ extension HerdrController {
                   capturedManagementRevision == managementRevision, !management.isBusy else { return }
             if refuseUnsupportedVersion(error) { return }
             isActive = false
+            resetPushRouteIdentity()
             connectionError = error.localizedDescription
             publishSessionState()
             Self.logger.warning("herdr degraded poll failed: \(error.localizedDescription)")

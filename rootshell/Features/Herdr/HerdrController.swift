@@ -80,6 +80,8 @@ final class HerdrController {
     private(set) var bootId: String?
     private(set) var serverVersion: String?
     private(set) var serverPid: Int?
+    var pushRouteServerIdentity: String?
+    var pushRouteServerIdentityTask: Task<Void, Never>?
     /// True while a control stream is open and the topology has been applied.
     var isActive = false
     private(set) var didEnd = false
@@ -338,6 +340,7 @@ final class HerdrController {
             // A late callback from an old stream must never reach a newly
             // attached pane, even if the server reuses an attach id.
             let generation = UUID()
+            resetPushRouteIdentity()
             streamGeneration = generation
             let router = HerdrOutputRouter()
             self.router = router
@@ -428,6 +431,7 @@ final class HerdrController {
             }
             isActive = true
             connectionError = nil
+            refreshPushRouteIdentity()
             applySnapshot(snapshot, preservingAgentUpdatesAfter: statusRevision)
             subscribeAgentStatus()
             // Optional additions must not make an older control server fail
@@ -605,6 +609,7 @@ final class HerdrController {
     /// The app came back to the foreground: verify the stream is alive.
     func applicationDidBecomeActive() {
         guard !didEnd else { return }
+        refreshPushRouteIdentity()
         if mode == .legacy {
             Task { [weak self] in
                 await self?.legacyPollOnce()
@@ -780,6 +785,7 @@ final class HerdrController {
     }
 
     private func detachAllLocally() {
+        resetPushRouteIdentity()
         agentSubscriptionTask?.cancel()
         agentSubscriptionTask = nil
         subscribedAgentPanes.removeAll()

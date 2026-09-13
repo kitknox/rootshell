@@ -197,7 +197,8 @@ enum AgentAttentionNotificationRouter {
     static let crossSourceWindow: TimeInterval = 90
 
     static func externalEventDelivered(pane: UUID, status: AgentAttentionStatus, at date: Date = Date()) {
-        externalDelivered[SourceKey(pane: pane, status: status)] = date
+        let key = SourceKey(pane: pane, status: status)
+        externalDelivered[key] = max(externalDelivered[key] ?? .distantPast, date)
     }
 
     static func shouldSuppressExternal(pane: UUID, status: AgentAttentionStatus, now: Date = Date()) -> Bool {

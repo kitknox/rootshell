@@ -25,6 +25,9 @@ public struct PushRoute: Codable, Sendable, Equatable {
     public var tmuxPane: String?
     public var tmuxServer: String?
     public var tmuxSession: String?
+    public var herdrServer: String?
+    public var herdrTerminal: String?
+    public var herdrPane: String?
     public var host: String?
     public var cwd: String?
 
@@ -33,12 +36,22 @@ public struct PushRoute: Codable, Sendable, Equatable {
         case tmuxPane = "tmux_pane"
         case tmuxServer = "tmux_server"
         case tmuxSession = "tmux_session"
+        case herdrServer = "herdr_server"
+        case herdrTerminal = "herdr_terminal"
+        case herdrPane = "herdr_pane"
     }
 
     public init(pane: String? = nil, tmuxPane: String? = nil, tmuxServer: String? = nil,
-                tmuxSession: String? = nil, host: String? = nil, cwd: String? = nil) {
+                tmuxSession: String? = nil, host: String? = nil, cwd: String? = nil,
+                herdrServer: String? = nil, herdrTerminal: String? = nil, herdrPane: String? = nil) {
         self.pane = pane; self.tmuxPane = tmuxPane; self.tmuxServer = tmuxServer
         self.tmuxSession = tmuxSession; self.host = host; self.cwd = cwd
+        self.herdrServer = herdrServer; self.herdrTerminal = herdrTerminal; self.herdrPane = herdrPane
+    }
+
+    /// An incomplete herdr route must not select an inherited gateway/tmux pane.
+    public var hasHerdrRoute: Bool {
+        herdrServer != nil || herdrTerminal != nil || herdrPane != nil
     }
 }
 

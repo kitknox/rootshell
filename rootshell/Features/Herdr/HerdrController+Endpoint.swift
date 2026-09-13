@@ -72,6 +72,7 @@ extension HerdrController {
                     }
                     candidate.onClosed = { [weak self, weak candidate] error in
                         guard let self, self.endpoint === candidate else { return }
+                        self.resetPushRouteIdentity()
                         self.endpointMetadata = nil
                         self.legacyTopologyDirty = true
                         for view in self.paneViews.values { view.herdrTitleState.endFallback() }

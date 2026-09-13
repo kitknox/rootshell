@@ -87,7 +87,7 @@ To change agent-hook recipients directly or from a script:
 
 ```sh
 rootshell-notify devices off "Desk iPad"
-rootshell-notify devices toggle "Kit's iPhone"
+rootshell-notify devices toggle "Test iPhone"
 rootshell-notify devices on "Desk iPad"
 ```
 
@@ -150,7 +150,8 @@ blocked notification only while an approval prompt is visibly waiting.
   assistant message with code blocks, links and URLs stripped, or the
   notification text, question, or pending command when the agent is blocked.
 - Routing hints so rootshell can jump to the right place: the rootshell
-  pane id, tmux pane and session, `user@host`, and the working directory.
+  pane id, tmux pane and session, herdr terminal and server namespace,
+  `user@host`, and the working directory.
 - A per-session thread id and a per-event id (both hashes) for grouping and
   deduplication.
 
@@ -161,11 +162,28 @@ Anthropic/Slack key formats, PEM private keys, long hex or base64 runs).
 
 Everything above is encrypted to the device before leaving your computer.
 
+### Herdr routing
+
+Herdr needs no additional hook installation. Inside a herdr pane,
+`rootshell-notify` uses `HERDR_PANE_ID` and `HERDR_SOCKET_PATH` to look up the
+stable terminal ID. It works with the Rootshell fork and stock herdr exposing
+the terminal ID API, without invoking the herdr binary.
+
+With the updated rootshell app, regular and fallback control modes route taps
+to the originating terminal, including after pane moves. Existing viewed-pane
+and duplicate-agent-alert suppression apply. When running the ordinary herdr
+TUI in a regular rootshell tab, taps continue returning to that exact tab using
+its rootshell surface UUID. The app does not change the TUI's internal pane
+selection. A failed herdr lookup never prevents sending a notification.
+
+An unresolved control route opens rootshell and can resolve during reconnect
+for up to 60 seconds; it never guesses a pane from its name or working directory.
+
 ## Custom notifications
 
 ```sh
 rootshell-notify send --title "Deploy finished" --body "prod is green" --status done
-rootshell-notify send --title "Build" --status failed --device "Kit's iPhone" --priority high
+rootshell-notify send --title "Build" --status failed --device "Test iPhone" --priority high
 ```
 
 Notifications are text only: a title, an optional body and routing hints.

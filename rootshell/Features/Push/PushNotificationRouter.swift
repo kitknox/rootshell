@@ -4,7 +4,7 @@
 //
 //  Presentation, tap routing, and cross-source arbitration for decrypted
 //  push notifications (category com.rootshell.push). Routes resolve to the
-//  window + tab + pane the hook ran in, including tmux -CC panes.
+//  window + tab + pane the hook ran in, including tmux and herdr control panes.
 //
 
 import Foundation
@@ -48,7 +48,9 @@ enum PushNotificationRouter {
     }
 
     private static var pending: PendingRoute?
-    private static var lastSyncedEvent: Date = .distantPast
+    private static var deliveryReconciler = PushDeliveryReconciler()
+    private static var deliverySyncTask: Task<Void, Never>?
+    private static var deliverySyncRequested = false
     private static var deliveredIdentifiers: [UUID: Set<String>] = [:]
 
     // MARK: - Header
@@ -103,7 +105,8 @@ enum PushNotificationRouter {
         // The stable local identifier below makes retries idempotent. The
         // claim only controls ledger bookkeeping; a duplicate must still
         // replace any raw encrypted notification with decrypted content.
-        let createdClaim = shared.claim(PushEventRecord(header: header, eid: eid))
+        let record = PushEventRecord(header: header, eid: eid)
+        let createdClaim = shared.claim(record)
         if !createdClaim {
             logger.info("replacing redelivered eid=\(eid, privacy: .public) with decrypted content")
         }
@@ -119,6 +122,12 @@ enum PushNotificationRouter {
             if createdClaim { shared.release(eid: eid) }
             return
         }
+        // This may run after syncDelivered's initial history read. Keep the
+        // replacement's identifier even if routing is not ready yet.
+        deliveryReconciler.ingest(shared.load())
+        if createdClaim { deliveryReconciler.ingest([record]) }
+        deliveryReconciler.trackFresh(identifier: request.identifier, header: header, receivedAt: record.receivedAt)
+        reconcileDeliveries()
     }
 
     static func attentionStatus(_ status: String?) -> AgentAttentionStatus? {
@@ -135,10 +144,12 @@ enum PushNotificationRouter {
     /// Resolve only stable identities. A regular pane is identified by its
     /// TerminalView UUID. A control-mode pane is identified independently of
     /// any rootshell client by its canonical tmux server lifetime plus the
-    /// server-global tmux pane ID. Hostname and working directory are
-    /// descriptive metadata, never routing keys.
+    /// server-global tmux pane ID, or herdr namespace plus terminal ID.
+    /// The host and working directory fields are descriptive metadata,
+    /// never routing keys.
     static func resolve(_ route: PushRoute?) -> Resolved? {
         guard let route else { return nil }
+        if route.hasHerdrRoute { return resolveHerdr(route) }
         let paneUUID = route.pane.flatMap(UUID.init(uuidString:))
         let tmuxPaneId = route.tmuxPane.flatMap {
             $0.hasPrefix("%") ? Int($0.dropFirst()) : nil
@@ -174,6 +185,8 @@ enum PushNotificationRouter {
                     } else if let paneUUID,
                               view.tmuxPaneBinding == nil,
                               view.tmuxController?.isActive != true,
+                              view.herdrPaneBinding == nil,
+                              view.herdrController?.didEnd != false,
                               view.uuid == paneUUID {
                         // Ordinary (non-control-mode) tmux sets TMUX_PANE but
                         // remains a regular terminal view. Its UUID is still
@@ -198,6 +211,32 @@ enum PushNotificationRouter {
             return nil
         }
         return matches[0]
+    }
+
+    private static func resolveHerdr(_ route: PushRoute) -> Resolved? {
+        var destinations: [Resolved] = []
+        var candidates: [PushHerdrRoute.Candidate] = []
+        for (windowId, model) in TmuxWindowRegistry.allWindows() {
+            for tab in model.tabs {
+                for pane in tab.splitTree {
+                    guard let view = pane as? Ghostty.TerminalView else { continue }
+                    let candidate: PushHerdrRoute.Candidate
+                    if let binding = view.herdrPaneBinding,
+                       let controller = HerdrController.controller(forGateway: binding.gatewayUUID) {
+                        candidate = .init(server: controller.pushRouteServerIdentity,
+                            terminal: binding.terminalId, isActive: controller.isActive && !controller.didEnd)
+                    } else if view.herdrPaneBinding == nil, view.herdrController?.didEnd != false,
+                              view.tmuxPaneBinding == nil, view.tmuxController == nil {
+                        candidate = .init(server: nil, terminal: "", isActive: true,
+                                          surfaceID: view.uuid, isOrdinary: true)
+                    } else { continue }
+                    destinations.append(Resolved(windowId: windowId, tabID: tab.id, surfaceID: view.uuid))
+                    candidates.append(candidate)
+                }
+            }
+        }
+        guard let index = PushHerdrRoute.matchingIndex(route: route, candidates: candidates) else { return nil }
+        return destinations[index]
     }
 
     static func isViewed(_ resolved: Resolved) -> Bool {
@@ -250,6 +289,12 @@ enum PushNotificationRouter {
                 }
             }
             noteDelivered(identifier: notification.request.identifier, pane: resolved.surfaceID, status: status)
+        } else {
+            deliveryReconciler.trackFresh(identifier: notification.request.identifier,
+                                          header: header, receivedAt: notification.date)
+            let eid = PushEnvelope(userInfo: content.userInfo)?.eid ?? notification.request.identifier
+            deliveryReconciler.ingest([PushEventRecord(eid: eid, receivedAt: notification.date,
+                status: header.status, agent: header.agent, thread: header.thread, route: header.route)])
         }
         var options: UNNotificationPresentationOptions = [.banner, .list]
         if content.sound != nil { options.insert(.sound) }
@@ -293,13 +338,52 @@ enum PushNotificationRouter {
         }
     }
 
-    /// Retried when tabs restore, tmux panes project, or a scene activates.
+    /// Retried when tabs restore, multiplexer panes project, or a scene activates.
     static func retryPending() {
         guard let p = pending else { return }
         guard p.expires > Date() else { pending = nil; return }
         guard let resolved = resolve(p.route) else { return }
         pending = nil
         navigate(to: resolved)
+    }
+
+    /// No disk or Notification Center read on frequent topology callbacks.
+    /// Async delivery snapshots reconcile again on completion, so readiness
+    /// arriving before or during a snapshot cannot strand its records.
+    static func bindingsDidChange() {
+        reconcileDeliveries()
+        retryPending()
+    }
+
+    private static func reconcileDeliveries() {
+        var destinations: [UUID: Resolved] = [:]
+        let matches = deliveryReconciler.reconcile { route in
+            guard let resolved = resolve(route) else { return nil }
+            destinations[resolved.surfaceID] = resolved
+            return resolved.surfaceID
+        }
+        for (record, pane) in matches.events {
+            if let status = attentionStatus(record.status) {
+                AgentAttentionNotificationRouter.externalEventDelivered(pane: pane, status: status, at: record.receivedAt)
+            }
+        }
+        var withdrawals: [String] = []
+        for (identifier, pane, allowsCatchUpWithdrawal) in matches.deliveries {
+            if allowsCatchUpWithdrawal, let resolved = destinations[pane], isViewed(resolved) {
+                // Withdraw only this catch-up delivery. paneViewed() would
+                // also remove fresh send/test alerts associated with the pane.
+                withdrawals.append(identifier)
+                deliveredIdentifiers[pane]?.remove(identifier)
+                if deliveredIdentifiers[pane]?.isEmpty == true {
+                    deliveredIdentifiers.removeValue(forKey: pane)
+                }
+            } else {
+                deliveredIdentifiers[pane, default: []].insert(identifier)
+            }
+        }
+        if !withdrawals.isEmpty {
+            NotificationManager.shared.removeNotifications(identifiers: withdrawals)
+        }
     }
 
     static func navigate(to resolved: Resolved) {
@@ -428,36 +512,40 @@ enum PushNotificationRouter {
     /// Feeds pushes decrypted while the app was not running into the
     /// arbitration ledger, and tracks their identifiers for withdrawal.
     static func syncDelivered() {
-        let records = PushSharedState().load().filter { $0.receivedAt > lastSyncedEvent }
-        for record in records {
-            guard let resolved = resolve(record.route) else { continue }
-            if let status = attentionStatus(record.status) {
-                AgentAttentionNotificationRouter.externalEventDelivered(pane: resolved.surfaceID, status: status, at: record.receivedAt)
+        deliveryReconciler.ingest(PushSharedState().load())
+        bindingsDidChange()
+        deliverySyncRequested = true
+        guard deliverySyncTask == nil else { return }
+        deliverySyncTask = Task {
+            defer { deliverySyncTask = nil }
+            while deliverySyncRequested {
+                deliverySyncRequested = false
+                await syncDeliveredSnapshot()
             }
         }
-        if let last = records.map(\.receivedAt).max() { lastSyncedEvent = last }
+    }
 
-        Task {
-            let delivered = await UNUserNotificationCenter.current().deliveredNotifications()
-            let fallbacks = delivered.filter { $0.request.content.userInfo[PushConfiguration.fallbackUserInfoKey] != nil }.count
-            if fallbacks > 0 { logger.warning("extension fallbacks awaiting re-post: \(fallbacks, privacy: .public)") }
-            for n in delivered where n.request.content.categoryIdentifier == PushConfiguration.categoryIdentifier {
-                if isRejected(n.request.content.userInfo) {
-                    UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [n.request.identifier])
-                    continue
-                }
-                guard let (header, decryptedLocally) = decryptedHeader(from: n.request.content.userInfo) else { continue }
-                if decryptedLocally {
-                    // Delivered raw while the app was not running: replace it with the decrypted version.
-                    let eid = PushEnvelope(userInfo: n.request.content.userInfo)?.eid ?? n.request.identifier
-                    UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [n.request.identifier])
-                    await presentLocally(header, eid: eid, sound: n.request.content.sound)
-                    continue
-                }
-                guard let resolved = resolve(header.route) else { continue }
-                deliveredIdentifiers[resolved.surfaceID, default: []].insert(n.request.identifier)
+    private static func syncDeliveredSnapshot() async {
+        let delivered = await UNUserNotificationCenter.current().deliveredNotifications()
+        let fallbacks = delivered.filter { $0.request.content.userInfo[PushConfiguration.fallbackUserInfoKey] != nil }.count
+        if fallbacks > 0 { logger.warning("extension fallbacks awaiting re-post: \(fallbacks, privacy: .public)") }
+        for n in delivered where n.request.content.categoryIdentifier == PushConfiguration.categoryIdentifier {
+            if isRejected(n.request.content.userInfo) {
+                UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [n.request.identifier])
+                continue
             }
+            guard let (header, decryptedLocally) = decryptedHeader(from: n.request.content.userInfo) else { continue }
+            if decryptedLocally {
+                // Delivered raw while the app was not running: replace it with the decrypted version.
+                let eid = PushEnvelope(userInfo: n.request.content.userInfo)?.eid ?? n.request.identifier
+                UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [n.request.identifier])
+                await presentLocally(header, eid: eid, sound: n.request.content.sound)
+                continue
+            }
+            deliveryReconciler.track(identifier: n.request.identifier,
+                                     route: header.route, receivedAt: n.date)
         }
-        retryPending()
+        deliveryReconciler.ingest(PushSharedState().load())
+        bindingsDidChange()
     }
 }

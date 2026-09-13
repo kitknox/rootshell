@@ -518,9 +518,15 @@ extension MainView {
         }
 
         observerBag.observeOnMainActor(.tmuxPaneBindingsChanged) { _ in
-            PushNotificationRouter.retryPending()
+            PushNotificationRouter.bindingsDidChange()
         }
-        PushNotificationRouter.retryPending()
+        observerBag.observeOnMainActor(.herdrPaneBindingsChanged) { _ in
+            PushNotificationRouter.bindingsDidChange()
+        }
+        observerBag.observeOnMainActor(.herdrControlStateDidChange) { _ in
+            PushNotificationRouter.bindingsDidChange()
+        }
+        PushNotificationRouter.bindingsDidChange()
 
         observerBag.observeOnMainActor(.showTabSwitcher) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }

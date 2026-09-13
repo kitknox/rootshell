@@ -213,10 +213,13 @@ func hashOf(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Route reads pane, tmux and host identity from the environment.
+// Route reads pane, multiplexer and host identity from the environment.
 func Route(ctx context.Context, cwd string) *envelope.Route {
 	r := &envelope.Route{Pane: os.Getenv("LC_ROOTSHELL_PANE"), TmuxPane: os.Getenv("TMUX_PANE"), Cwd: cwd}
-	if os.Getenv("TMUX") != "" {
+	r.HerdrPane = os.Getenv("HERDR_PANE_ID")
+	if r.HerdrPane != "" {
+		populateHerdrRoute(ctx, r)
+	} else if os.Getenv("TMUX") != "" {
 		r.TmuxServer = tmuxServer(ctx, r.TmuxPane)
 		r.TmuxSession = tmuxSession(ctx)
 	}

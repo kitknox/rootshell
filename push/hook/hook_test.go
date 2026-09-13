@@ -166,6 +166,7 @@ func TestRedact(t *testing.T) {
 }
 
 func TestRoute(t *testing.T) {
+	t.Setenv("HERDR_PANE_ID", "")
 	t.Setenv("LC_ROOTSHELL_PANE", "pane-1")
 	t.Setenv("TMUX_PANE", "%3")
 	t.Setenv("TMUX", "")
@@ -177,6 +178,7 @@ func TestRoute(t *testing.T) {
 }
 
 func TestRouteUsesCanonicalTmuxServerIdentity(t *testing.T) {
+	t.Setenv("HERDR_PANE_ID", "")
 	dir := t.TempDir()
 	tmux := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
