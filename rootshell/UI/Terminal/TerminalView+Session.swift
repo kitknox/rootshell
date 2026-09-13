@@ -533,6 +533,7 @@ extension Ghostty.TerminalView {
     /// (id=agent-attention-raw-mux)
     func applyConfiguredMultiplexerBinding() {
         guard let sshConfig = connectionConfig.sshConfigForHistory else { return }
+        guard !multiplexerAutoStartFellBack else { return }
 
         // Keep zmx's transparent identity separate from raw multiplexer
         // bindings, since raw bindings also suppress agent attention.

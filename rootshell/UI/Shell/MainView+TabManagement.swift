@@ -324,10 +324,12 @@ extension MainView {
     // MARK: - Per-Protocol Creators
 
     func createSSHTab(with config: SSHConfig, sourceProfileID: UUID? = nil) {
+        if focusLiveMuxAttachmentIfPresent(for: config) { return }
         openTerminalTab(config: .ssh(config), title: config.displayName, sourceProfileID: sourceProfileID)
     }
 
     func createMoshTab(with config: MoshConfig, sourceProfileID: UUID? = nil) {
+        if focusLiveMuxAttachmentIfPresent(for: config.sshConfig) { return }
         openTerminalTab(config: .mosh(config), title: config.sshConfig.displayName, sourceProfileID: sourceProfileID)
     }
 
@@ -342,6 +344,7 @@ extension MainView {
     }
 
     func createTrzszTab(with config: TrzszConfig, sourceProfileID: UUID? = nil) {
+        if focusLiveMuxAttachmentIfPresent(for: config.sshConfig) { return }
         openTerminalTab(config: .trzsz(config), title: config.sshConfig.displayName, sourceProfileID: sourceProfileID)
     }
 

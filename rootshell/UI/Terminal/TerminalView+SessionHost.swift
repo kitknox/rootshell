@@ -26,9 +26,10 @@ extension Ghostty.TerminalView: TerminalSessionControllerHost {
     /// adopted session. Captures the view-owned I/O plumbing (coalescer / gate /
     /// buffered writer) and the persistence-notify coalescer, exactly as the old
     /// `outputHandler` did. Runs on the session's background queue — no main
-    /// actor hop on the hot output path.
+    /// actor hop on the hot output path, except when a missing-mux auto-start
+    /// marker is detected (SSH never went through `writeSessionOutputToGhostty`).
     func makeSessionOutputSink() -> @Sendable (Data) -> Void {
-        outputPipeline.makeSessionOutputSink(
+        let base = outputPipeline.makeSessionOutputSink(
             useOutputCoalescer: shouldUseOutputCoalescer,
             terminalUUID: uuid,
             noteGatewayInboundBytes: { [weak self] byteCount in
@@ -39,6 +40,64 @@ extension Ghostty.TerminalView: TerminalSessionControllerHost {
                 }
             }
         )
+        let textMarker = Data(SSHConfig.multiplexerMissingFallbackMarker.utf8)
+        let oscMarker = Data(SSHConfig.multiplexerMissingFallbackOSCPrefix.utf8)
+        // Capture at sink creation: custom mux commands may omit our printf
+        // wrapper, so also watch for shell "not found" lines.
+        let expectedMissing: String? = {
+            guard let ssh = connectionConfig.sshConfigForHistory else { return nil }
+            if ssh.herdrAutoEnable { return "herdr" }
+            if ssh.zmxAutoEnable { return "zmx" }
+            if ssh.tmuxAutoEnable { return "tmux" }
+            return nil
+        }()
+        let notFoundNeedles: [Data] = {
+            guard let name = expectedMissing else { return [] }
+            return [
+                Data("\(name): command not found".utf8),
+                Data("command not found: \(name)".utf8),
+                Data("\(name): not found".utf8),
+                Data("Unknown command: \(name)".utf8)
+            ]
+        }()
+        // Keep enough carry for either marker plus a little context (wanted=…).
+        let keep = max(max(textMarker.count, oscMarker.count) + 32, 64)
+        let carry = OSAllocatedUnfairLock(initialState: Data())
+        let fired = OSAllocatedUnfairLock(initialState: false)
+        return { [weak self] data in
+            // Scan before writing so display/coalescing cannot affect detection.
+            let matchedText: String? = carry.withLock { tail -> String? in
+                if fired.withLock({ $0 }) { return nil }
+                var window = tail
+                window.append(data)
+                let maxWindow = keep + max(textMarker.count, oscMarker.count) * 3
+                if window.count > maxWindow {
+                    window = Data(window.suffix(maxWindow))
+                }
+                tail = Data(window.suffix(keep))
+                let hitText = window.range(of: textMarker) != nil
+                let hitOSC = window.range(of: oscMarker) != nil
+                let hitNotFound = notFoundNeedles.contains { window.range(of: $0) != nil }
+                guard hitText || hitOSC || hitNotFound else { return nil }
+                fired.withLock { $0 = true }
+                // Lossy decode: invalid UTF-8 at a truncated window edge must
+                // not suppress a Data-level marker match (previous bug).
+                var text = String(decoding: window, as: UTF8.self)
+                if hitNotFound, let name = expectedMissing,
+                   !text.contains(SSHConfig.multiplexerMissingFallbackMarker),
+                   !text.contains(SSHConfig.multiplexerMissingFallbackOSCPrefix) {
+                    // Synthesize markers so applyMuxAutoStartFallback can label
+                    // the banner even when only a shell error line was seen.
+                    text += "\(SSHConfig.multiplexerMissingFallbackOSCPrefix)\(name) (wanted \(name))"
+                }
+                return text
+            }
+            base(data)
+            guard let matchedText else { return }
+            Task { @MainActor [weak self] in
+                self?.applyMuxAutoStartFallback(from: matchedText)
+            }
+        }
     }
 
     func sessionDidChangeTitle(_ title: String) {

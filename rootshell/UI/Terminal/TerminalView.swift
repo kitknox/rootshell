@@ -508,6 +508,15 @@ extension Ghostty {
         /// A transparent multiplexer identity that does not suppress agent
         /// attention or depend on alternate-screen ownership.
         var passthroughMultiplexer: RawMultiplexerBinding?
+
+        /// Set when auto-start printed `multiplexerMissingFallbackMarker`.
+        /// Blocks later binding and drives the missing-binary banner.
+        var multiplexerAutoStartFellBack: Bool = false
+
+        /// Carry buffer so a missing-mux marker split across two SSH packets
+        /// still matches.
+        var multiplexerFallbackScanTail: Data = Data()
+
         nonisolated(unsafe) var tmuxDetachInProgressAtomic: Bool = false
 
         var isTmuxDetachInProgress: Bool {
@@ -1572,13 +1581,19 @@ extension Ghostty {
 
         /// Why the terminal is being torn down. Drives the resumable-session
         /// branch in `cleanup` — the wrong choice here either kills a server
-        /// session the user wants preserved (.userClose during a scene
-        /// teardown) or strands a server session the user wanted closed
-        /// (.sceneTeardown for an explicit tab close).
+        /// session the user wants preserved (`.userClose` / `.muxDetach` during
+        /// a scene teardown) or strands a server session the user wanted
+        /// closed (`.sceneTeardown` for an explicit tab close). Detach and
+        /// Close Tab both leave a zmx session running (closing the client is
+        /// zmx’s supported detach path).
         enum CleanupReason {
             /// User tapped Close Tab / closed the split. Send "close" to
-            /// tsshd/mosh-server and delete local credentials.
+            /// tsshd/mosh-server and delete local credentials. A zmx session
+            /// stays alive on the host.
             case userClose
+            /// Detaching from a multiplexer: tear down the local client like
+            /// `.userClose` and leave a zmx session running.
+            case muxDetach
             /// Scene/window is being torn down (rotation, app exit). Keep
             /// server-side session alive so resume can pick it back up.
             case sceneTeardown
@@ -1629,10 +1644,17 @@ extension Ghostty {
                 TrzszTransferInbox.shared.cancel(ticketID)
             }
 
-            // 1-2. Stop the session and close the PTY. The per-session-type
+            completeCleanupAfterSessionStop(reason: reason)
+        }
+
+        /// Remainder of ``cleanup(reason:)`` after session-stop work that
+        /// used to run asynchronously (zmx kill). Close Tab now leaves zmx
+        /// running, same as Detach.
+        private func completeCleanupAfterSessionStop(reason: CleanupReason) {
+            // 2. Stop the session and close the PTY. The per-session-type
             // teardown semantics (resumable Trzsz/Mosh keep the server session
-            // alive for .sceneTeardown; .userClose terminates) live on the
-            // owning controller now. See TerminalSessionController.teardown.
+            // alive for .sceneTeardown; .userClose / .muxDetach terminate)
+            // live on the owning controller now. See TerminalSessionController.teardown.
             sessionController.teardown(reason: reason)
 
             // 3. Cancel async tasks and timers
@@ -4565,6 +4587,7 @@ extension Ghostty {
             #if os(iOS) && !targetEnvironment(macCatalyst)
             if focused && !iPadVisorController.permitsFocus(self) { return false }
             #endif
+
             invalidateWritingAssistance(resetDocument: true)
             // Update mouse capture state when focus changes to ensure scroll handling
             // has accurate state for this terminal (fixes split view mouse capture scrolling)

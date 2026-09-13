@@ -191,6 +191,66 @@ extension MainView {
         target.discoverSessionsIfConfigured(manual: true)
     }
 
+    /// Leave the multiplexer on the selected tab. Works for tmux -CC (including
+    /// window tabs when the gateway is auto-hidden), raw tmux / zellij / herdr,
+    /// and zmx. Sessions keep running for later reattach.
+    func detachSessionForSelectedTab() {
+        guard terminals.indices.contains(selectedTabIndex) else { return }
+        let tab = terminals[selectedTabIndex]
+        _ = MuxSessionDetach.detach(tab: tab, tmuxController: tmuxControllerForTab)
+    }
+
+    func scheduleMuxDetachBannerDismiss() {
+        muxDetachBannerDismissTask?.cancel()
+        muxDetachBannerDismissTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { return }
+            dismissMuxDetachBanner()
+        }
+    }
+
+    func dismissMuxDetachBanner() {
+        muxDetachBannerDismissTask?.cancel()
+        muxDetachBannerDismissTask = nil
+        muxDetachBanner = nil
+    }
+
+    /// If a live mux auto-start attachment already matches `config`, focus it
+    /// and show a short banner. Returns true when a new connection was skipped.
+    @discardableResult
+    func focusLiveMuxAttachmentIfPresent(for config: SSHConfig) -> Bool {
+        guard let match = MuxSessionResume.findLiveAttachment(for: config) else {
+            return false
+        }
+        _ = MuxSessionResume.focus(match, in: windowId) { id in
+            selectTab(id: id)
+        }
+        muxDetachBanner = MuxDetachBannerState(
+            message: String(
+                localized: "Already attached to \(match.displayName)",
+                comment: "Banner when opening a mux profile that is already live"
+            ),
+            offer: nil
+        )
+        scheduleMuxDetachBannerDismiss()
+        return true
+    }
+
+    func reconnectFromMuxDetachBanner() {
+        guard let offer = muxDetachBanner?.offer else { return }
+        dismissMuxDetachBanner()
+        if let profileID = offer.profileID,
+           let profile = ConnectionProfileManager.shared.profiles.first(where: { $0.id == profileID }) {
+            connectToProfile(profile, splitOption: .newTab)
+            return
+        }
+        connectWithConfig(
+            offer.sshConfig,
+            connectionProtocol: offer.connectionProtocol,
+            splitOption: .newTab
+        )
+    }
+
     /// Evict every OTHER tmux client (`detach-client -a`) for the selected
     /// tab's gateway, keeping this client attached. Works from ANY tmux CC tab:
     /// `tmuxControllerForTab` resolves a window tab through its pane binding to

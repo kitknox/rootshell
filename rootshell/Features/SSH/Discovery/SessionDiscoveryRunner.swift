@@ -397,6 +397,8 @@ enum SessionDiscoveryParser {
             swipeBindings.tmuxPreviousSession,
             swipeBindings.zellijNextTab,
             swipeBindings.zellijPreviousTab,
+            swipeBindings.tmuxDetachClient,
+            swipeBindings.zellijDetach,
         ].compactMap { $0 }.count
         logger.info("Session discovery complete: \(count) sessions (\(typeNames)), \(bindingCount) resolved bindings")
 

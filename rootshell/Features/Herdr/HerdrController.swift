@@ -681,9 +681,19 @@ final class HerdrController {
 
     /// User-initiated detach: ends control mode, optionally closing the
     /// gateway tab too. The herdr session keeps running on the host.
-    func detach(closeGateway: Bool) {
+    func detach(closeGateway: Bool, announce: Bool = true) {
         let gatewayView = gateway
         let windowId = hostWindowId
+        // Same choke point as tmux `requestGracefulDetach`: menu, ESC, and
+        // Detach Session all show the reconnect banner.
+        if announce, isActive || !didEnd {
+            MuxSessionDetach.notifyControlModeDetached(
+                type: .herdr,
+                sessionName: sessionName,
+                windowId: windowId,
+                terminal: gatewayView
+            )
+        }
         stop()
         guard closeGateway, let gatewayView else { return }
         // Same routing a dying tab uses: the .closeSplit observer resolves
@@ -704,7 +714,7 @@ final class HerdrController {
         let gatewayView = gateway
         gatewayView?.herdrAutoAttachSuppressed = true
         Self.logger.info("herdr control mode detached after another client took control")
-        detach(closeGateway: false)
+        detach(closeGateway: false, announce: false)
         let message = String(localized: "Detached from herdr because another client took control. The session is still running.")
         gatewayView?.writeToGhostty(string: "\r\n\(message)\r\n")
     }
