@@ -80,6 +80,11 @@ final class HerdrController {
     private(set) var bootId: String?
     private(set) var serverVersion: String?
     private(set) var serverPid: Int?
+    /// Facts from the current stream's `control.open`; nil between streams.
+    private(set) var controlOpened: HerdrControl.ControlOpened?
+    private(set) var controlOpenedAt: Date?
+    /// Identifies this controller generation to Connection Info sheets.
+    let connectionInfoID = UUID()
     var pushRouteServerIdentity: String?
     var pushRouteServerIdentityTask: Task<Void, Never>?
     /// True while a control stream is open and the topology has been applied.
@@ -306,6 +311,32 @@ final class HerdrController {
         gateway?.session?.connectionInfo
     }
 
+    /// herdr layer over the gateway's transport for the Connection Info sheet.
+    func connectionInfo(tabID: String?, terminalID: String?) -> ConnectionInfo {
+        .herdr(HerdrConnectionInfo(
+            gatewayID: gatewayUUID,
+            controllerID: connectionInfoID,
+            tabID: tabID,
+            terminalID: terminalID,
+            openedAt: Date()
+        ), transport: gatewayConnectionInfo)
+    }
+
+    /// Resolves through the registry so a pending or ended gateway still yields
+    /// a request the sheet can retry against.
+    static func connectionInfo(gatewayUUID: UUID, tabID: String?, terminalID: String?) -> ConnectionInfo {
+        if let controller = controllers[gatewayUUID] {
+            return controller.connectionInfo(tabID: tabID, terminalID: terminalID)
+        }
+        return .herdr(HerdrConnectionInfo(
+            gatewayID: gatewayUUID,
+            controllerID: nil,
+            tabID: tabID,
+            terminalID: terminalID,
+            openedAt: Date()
+        ), transport: nil)
+    }
+
     /// Command the exec channel runs on the host.
     private var controlCommand: String {
         SSHConfig.herdrControlCommandLine(sessionName: sessionName, localAttachment: localControlAttachment)
@@ -411,6 +442,8 @@ final class HerdrController {
             bootId = opened.boot_id
             serverVersion = opened.version
             serverPid = opened.capabilities?.server_pid
+            controlOpened = opened
+            controlOpenedAt = Date()
             reconnectAttempt = 0
             Self.logger.info("herdr control open: \(opened.version) boot=\(opened.boot_id) pid=\(opened.capabilities?.server_pid ?? 0)")
 
@@ -577,6 +610,8 @@ final class HerdrController {
         healthTask?.cancel()
         channel = nil
         isActive = false
+        controlOpened = nil
+        controlOpenedAt = nil
         connectionError = error?.localizedDescription
         detachAllLocally()
         publishSessionState()

@@ -442,9 +442,19 @@ final class TabModel: Identifiable {
            !controller.didEnd {
             return tmuxConnectionInfo(owner: terminal.uuid, windowID: nil, paneID: nil)
         }
+        if let binding = terminal?.herdrPaneBinding {
+            return HerdrController.connectionInfo(gatewayUUID: binding.gatewayUUID,
+                                                  tabID: binding.tabId, terminalID: binding.terminalId)
+        }
+        if let terminal, let controller = terminal.herdrController, !controller.didEnd {
+            return controller.connectionInfo(tabID: nil, terminalID: nil)
+        }
         if let info = terminal?.session?.connectionInfo { return info }
         if isTmuxWindow, let owner = owningGatewayTerminalUUID {
             return tmuxConnectionInfo(owner: owner, windowID: tmuxWindowId, paneID: nil)
+        }
+        if isHerdrWindow, let owner = owningGatewayTerminalUUID {
+            return HerdrController.connectionInfo(gatewayUUID: owner, tabID: herdrTabId, terminalID: nil)
         }
         return nil
     }

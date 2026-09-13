@@ -425,7 +425,9 @@ final class HerdrPaneSession: TerminalSession {
     var onError: ((Error) -> Void)?
     var onDisconnect: ((ReconnectionManager.DisconnectReason) -> Void)?
 
-    var connectionInfo: ConnectionInfo? { controller?.gatewayConnectionInfo }
+    var connectionInfo: ConnectionInfo? {
+        controller?.connectionInfo(tabID: controller?.paneInfos[paneId]?.tab_id, terminalID: terminalId)
+    }
 
     init(controller: HerdrController, terminalId: String, paneId: String) {
         self.controller = controller

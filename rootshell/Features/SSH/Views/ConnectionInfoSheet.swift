@@ -24,6 +24,9 @@ struct ConnectionInfoSheet: View {
                 if case .tmux(let request, _) = info {
                     TmuxConnectionInfoSections(request: request)
                 }
+                if case .herdr(let request, _) = info {
+                    HerdrConnectionInfoSections(request: request)
+                }
                 if let transport = info.transportInfo {
                     switch transport {
                     case .ssh(let sshInfo):
@@ -40,7 +43,7 @@ struct ConnectionInfoSheet: View {
                         consoleContent(provider: provider, instance: instance)
                     case .vnc(let vncInfo):
                         vncContent(vncInfo)
-                    case .tmux:
+                    case .tmux, .herdr:
                         EmptyView() // transportInfo unwraps all multiplexer layers.
                     }
                 }
