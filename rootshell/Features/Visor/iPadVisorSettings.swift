@@ -87,7 +87,7 @@ struct iPadVisorSettingsView: View {
         .themedList()
         .navigationTitle("Visor")
         .sheet(isPresented: $editing, onDismiss: applyOutcome) {
-            KeybindEditorView(action: .toggle_visor) { outcome = $0 }
+            KeybindEditorView(action: .toggle_visor) { _, result in outcome = result }
                 .themedSubSheet(sheetThemeColors)
         }
     }

@@ -23,48 +23,67 @@ struct KeybindEditorView: View {
     @Environment(\.sheetThemeColors) private var sheetThemeColors
     @ObservedObject private var keybindManager = KeybindManager.shared
 
-    let action: KeybindAction
-    /// Optional parameter for parameterized actions (e.g. profile UUID for `open_profile`)
-    var actionParameter: String? = nil
-    /// Optional title override (e.g. profile name). Falls back to `action.displayName`.
-    var titleOverride: String? = nil
-    /// When false, hide "Restore Default" (used for profile shortcuts whose default is none).
-    var allowsRestoreDefault: Bool = true
-    /// When non-nil, display this sequence instead of looking up the live KeybindManager
-    /// binding. Lets parents (e.g. profile editor) keep a draft until Save.
-    var draftSequence: KeySequence?? = nil
     /// Reports the user's choice to the parent. All paths that mutate
     /// `KeybindManager` route through this callback so the actual write
-    /// happens in the parent's sheet-onDismiss closure.
-    var onOutcome: (KeybindEditorOutcome) -> Void = { _ in }
+    /// happens in the parent's sheet-onDismiss closure. Includes the action
+    /// currently on screen, which may have changed if the user jumped to a
+    /// conflicting shortcut without dismissing the sheet.
+    var onOutcome: (KeybindAction, KeybindEditorOutcome) -> Void = { _, _ in }
+    /// Optional: parent can follow an in-sheet jump to another action (e.g. to
+    /// keep the shortcuts list on the matching category). The sheet stays open.
+    var onSwitchAction: ((KeybindAction) -> Void)?
 
+    @State private var currentAction: KeybindAction
     @State private var isCapturing = false
     @State private var showSequenceCapture = false
     @State private var captureError: String?
+    @State private var pendingCapture: KeySequence?
+    @State private var conflictingBindings: [Keybind] = []
+
+    init(
+        action: KeybindAction,
+        onOutcome: @escaping (KeybindAction, KeybindEditorOutcome) -> Void = { _, _ in },
+        onSwitchAction: ((KeybindAction) -> Void)? = nil
+    ) {
+        self.onOutcome = onOutcome
+        self.onSwitchAction = onSwitchAction
+        _currentAction = State(initialValue: action)
+    }
 
     /// Current binding for this action (may be nil if displaced by external config)
-    private var managerBinding: Keybind? {
-        if let actionParameter {
-            keybindManager.keybind(for: action, parameter: actionParameter)
-        } else {
-            keybindManager.keybind(for: action)
+    private var binding: Keybind? {
+        keybindManager.keybind(for: currentAction)
+    }
+
+    /// Single conflicting action the user can jump to from the warning, if any.
+    private var editableConflictAction: KeybindAction? {
+        guard conflictingBindings.count == 1,
+              let conflict = conflictingBindings.first?.action,
+              conflict != currentAction,
+              KeybindAction.customizableActions.contains(conflict)
+        else { return nil }
+        return conflict
+    }
+
+    private var overrideButtonTitle: String {
+        if conflictingBindings.count == 1, let name = conflictingBindings.first?.action.displayName {
+            return "Unbind \(name)"
         }
+        return "Unbind Other Shortcuts"
     }
 
-    /// Sequence shown in the "Current Shortcut" section
-    private var displayedSequence: KeySequence? {
-        if let draftSequence {
-            return draftSequence
+    private var conflictMessage: String {
+        let chord = pendingCapture?.symbolDescription ?? "This shortcut"
+        if conflictingBindings.count == 1, let conflict = conflictingBindings.first {
+            if conflict.sequence == pendingCapture {
+                return "\(chord) is currently bound to \(conflict.action.displayName). Overriding will remove it from that action."
+            }
+            return "\(chord) conflicts with \(conflict.sequence.symbolDescription) (\(conflict.action.displayName)). Overriding will unbind that shortcut."
         }
-        return managerBinding?.sequence
-    }
-
-    private var showsCustomBadge: Bool {
-        draftSequence == nil && (managerBinding?.isUserOverride == true)
-    }
-
-    private var displayTitle: String {
-        titleOverride ?? action.displayName
+        let details = conflictingBindings
+            .map { "\($0.action.displayName) (\($0.sequence.symbolDescription))" }
+            .joined(separator: ", ")
+        return "\(chord) conflicts with: \(details). Overriding will unbind those shortcuts."
     }
 
     private var sheetBackground: Color {
@@ -80,11 +99,11 @@ struct KeybindEditorView: View {
             VStack(spacing: 24) {
                 // Action info
                 VStack(spacing: 8) {
-                    Text(displayTitle)
+                    Text(currentAction.displayName)
                         .font(.title2)
                         .fontWeight(.semibold)
 
-                    Text(action.category.displayName)
+                    Text(currentAction.category.displayName)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 12)
@@ -102,15 +121,15 @@ struct KeybindEditorView: View {
                         .font(.headline)
                         .foregroundColor(.secondary)
 
-                    if let displayedSequence {
-                        Text(displayedSequence.symbolDescription)
+                    if let binding {
+                        Text(binding.sequence.symbolDescription)
                             .font(.system(size: 28, weight: .medium, design: .monospaced))
                             .padding(.horizontal, 24)
                             .padding(.vertical, 16)
                             .background(rowBackground)
                             .cornerRadius(12)
 
-                        if showsCustomBadge {
+                        if binding.isUserOverride {
                             Label("Custom", systemImage: "star.fill")
                                 .font(.caption)
                                 .foregroundStyle(.tint)
@@ -124,6 +143,24 @@ struct KeybindEditorView: View {
                             .padding(.vertical, 16)
                             .background(rowBackground)
                             .cornerRadius(12)
+                    }
+
+                    if conflictingBindings.isEmpty {
+                        if (binding != nil && binding!.isUserOverride) || keybindManager.isActionUnbound(currentAction) {
+                            Button("Restore Default") {
+                                onOutcome(currentAction, .restoreDefault)
+                                dismiss()
+                            }
+                            .foregroundColor(.orange)
+                        }
+
+                        if binding != nil {
+                            Button("Unbind Shortcut") {
+                                onOutcome(currentAction, .unbind)
+                                dismiss()
+                            }
+                            .foregroundColor(.red)
+                        }
                     }
                 }
 
@@ -139,23 +176,22 @@ struct KeybindEditorView: View {
                         }
                     )
                     .frame(height: 120)
+                } else if pendingCapture != nil, !conflictingBindings.isEmpty {
+                    conflictWarningCard
+                        .padding(.horizontal)
                 } else {
                     VStack(spacing: 12) {
                         Button {
-                            captureError = nil
-                            isCapturing = true
-                            showSequenceCapture = false
+                            beginCapture(sequenceMode: false)
                         } label: {
                             Label("Record New Shortcut", systemImage: "keyboard")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
 
-                        if action != .toggle_visor {
+                        if currentAction != .toggle_visor {
                             Button {
-                                captureError = nil
-                                isCapturing = true
-                                showSequenceCapture = true
+                                beginCapture(sequenceMode: true)
                             } label: {
                                 Label("Record Key Sequence", systemImage: "keyboard.badge.ellipsis")
                                     .frame(maxWidth: .infinity)
@@ -175,29 +211,9 @@ struct KeybindEditorView: View {
                 }
 
                 Spacer()
-
-                // Action buttons
-                VStack(spacing: 8) {
-                    if allowsRestoreDefault,
-                       draftSequence == nil,
-                       (managerBinding != nil && managerBinding!.isUserOverride) || keybindManager.isActionUnbound(action) {
-                        Button("Restore Default") {
-                            onOutcome(.restoreDefault)
-                            dismiss()
-                        }
-                        .foregroundColor(.orange)
-                    }
-
-                    if displayedSequence != nil {
-                        Button(allowsRestoreDefault ? "Unbind Shortcut" : "Clear Shortcut") {
-                            onOutcome(.unbind)
-                            dismiss()
-                        }
-                        .foregroundColor(.red)
-                    }
-                }
-                .padding()
             }
+            .animation(.easeInOut(duration: 0.2), value: currentAction)
+            .animation(.easeInOut(duration: 0.2), value: conflictingBindings.isEmpty)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(sheetBackground.ignoresSafeArea())
             .navigationTitle("Edit Shortcut")
@@ -210,7 +226,69 @@ struct KeybindEditorView: View {
         }
     }
 
+    private var conflictWarningCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Shortcut Already in Use", systemImage: "exclamationmark.triangle.fill")
+                .font(.headline)
+                .foregroundStyle(.orange)
+
+            Text(conflictMessage)
+                .font(.subheadline)
+                .foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let pendingCapture {
+                Text(pendingCapture.symbolDescription)
+                    .font(.system(.title3, design: .monospaced).weight(.medium))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(rowBackground)
+                    .cornerRadius(8)
+            }
+
+            VStack(spacing: 8) {
+                Button(role: .destructive) {
+                    confirmOverride()
+                } label: {
+                    Text(overrideButtonTitle)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+
+                if let editableConflictAction {
+                    Button {
+                        openConflictingAction(editableConflictAction)
+                    } label: {
+                        Text("Edit \(editableConflictAction.displayName) Instead")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                Button {
+                    clearPendingConflict()
+                } label: {
+                    Text("Cancel")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.12))
+        .cornerRadius(12)
+    }
+
     // MARK: - Capture Handler
+
+    private func beginCapture(sequenceMode: Bool) {
+        captureError = nil
+        clearPendingConflict()
+        isCapturing = true
+        showSequenceCapture = sequenceMode
+    }
 
     private func handleCapture(_ sequence: KeySequence) {
         // Reject sequences whose first trigger is a default control-character
@@ -228,11 +306,49 @@ struct KeybindEditorView: View {
             showSequenceCapture = false
             return
         }
+
+        let conflicts = keybindManager.conflicts(for: sequence, excluding: currentAction)
+        isCapturing = false
+        showSequenceCapture = false
+
+        if !conflicts.isEmpty {
+            // Keep the sheet open and ask before stealing another action's chord.
+            pendingCapture = sequence
+            conflictingBindings = conflicts
+            return
+        }
+
+        commitCapture(sequence)
+    }
+
+    private func confirmOverride() {
+        guard let sequence = pendingCapture else { return }
+        clearPendingConflict()
+        commitCapture(sequence)
+    }
+
+    private func openConflictingAction(_ conflict: KeybindAction) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            clearPendingConflict()
+            captureError = nil
+            isCapturing = false
+            showSequenceCapture = false
+            currentAction = conflict
+        }
+        onSwitchAction?(conflict)
+    }
+
+    private func clearPendingConflict() {
+        pendingCapture = nil
+        conflictingBindings = []
+    }
+
+    private func commitCapture(_ sequence: KeySequence) {
         // Hand the outcome to the parent. The parent applies it in the sheet's
         // onDismiss closure — i.e. after the sheet has fully dismissed — so the
         // @Published cascade in setOverride runs in a quiescent view hierarchy
         // rather than mid-dismissal.
-        onOutcome(.captured(sequence))
+        onOutcome(currentAction, .captured(sequence))
         dismiss()
     }
 }
@@ -255,6 +371,7 @@ struct ShortcutCaptureView: UIViewRepresentable {
 
     func updateUIView(_ uiView: ShortcutCaptureUIView, context: Context) {
         uiView.configure(isSequenceMode: isSequenceMode, themeColors: themeColors)
+        uiView.claimFirstResponder()
     }
 }
 
@@ -382,8 +499,13 @@ class ShortcutCaptureUIView: UIView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if window != nil {
-            becomeFirstResponder()
+            claimFirstResponder()
         }
+    }
+
+    func claimFirstResponder() {
+        guard window != nil, !isFirstResponder else { return }
+        _ = becomeFirstResponder()
     }
 
     // MARK: - Key Commands for Capturing Shortcuts
@@ -510,12 +632,88 @@ class ShortcutCaptureUIView: UIView {
         onCancel?()
     }
 
-    /// Catalyst delivers the reserved Cmd+Period chord only through the menu
-    /// rail (nil-target menuSystemCancel action). The action reaches this view
-    /// first while it owns first responder, so recording wins over the
-    /// terminal handler.
+    /// Catalyst delivers reserved and menu-owned chords (⌘T, ⌘N, ⌘.) through
+    /// the menu rail as a nil-target `sendAction`. Those never reach
+    /// `keyCommands` or `pressesBegan`. The walk starts at first responder, so
+    /// implementing the same selectors here records the chord instead of
+    /// creating a tab / firing the bound action.
     @objc func menuSystemCancel(_ sender: Any?) {
         processCapture(trigger: .commandPeriod)
+    }
+
+    @objc func menuCreateLocalShell(_ sender: Any?) { captureMenuBinding(.new_local_shell) }
+    @objc func menuNewTab(_ sender: Any?) { captureMenuBinding(.new_tab) }
+    @objc func menuNewWindow(_ sender: Any?) { captureMenuBinding(.new_window) }
+    @objc func menuDuplicateTabWithSSH(_ sender: Any?) { captureMenuBinding(.duplicate_ssh_tab) }
+    @objc func menuClearScreen(_ sender: Any?) { captureMenuBinding(.clear_screen) }
+    @objc func findInTerminal(_ sender: Any?) { captureMenuBinding(.start_search) }
+    @objc func increaseFontSize(_ sender: Any?) { captureMenuBinding(.increase_font_size) }
+    @objc func decreaseFontSize(_ sender: Any?) { captureMenuBinding(.decrease_font_size) }
+    @objc func resetFontSizeToDefault(_ sender: Any?) { captureMenuBinding(.reset_font_size) }
+    @objc func menuSplitRight(_ sender: Any?) { captureMenuBinding(.split_right) }
+    @objc func menuSplitDown(_ sender: Any?) { captureMenuBinding(.split_down) }
+    @objc func menuNavigateSplitLeft(_ sender: Any?) { captureMenuBinding(.navigate_split_left) }
+    @objc func menuNavigateSplitRight(_ sender: Any?) { captureMenuBinding(.navigate_split_right) }
+    @objc func menuNavigateSplitUp(_ sender: Any?) { captureMenuBinding(.navigate_split_up) }
+    @objc func menuNavigateSplitDown(_ sender: Any?) { captureMenuBinding(.navigate_split_down) }
+    @objc func menuToggleSplitZoom(_ sender: Any?) { captureMenuBinding(.toggle_split_zoom) }
+    @objc func menuEqualizeSplits(_ sender: Any?) { captureMenuBinding(.equalize_splits) }
+    @objc func menuToggleTabBar(_ sender: Any?) { captureMenuBinding(.toggle_tab_bar) }
+    @objc func menuToggleGroupMode(_ sender: Any?) { captureMenuBinding(.toggle_group_mode) }
+    @objc func menuToggleTabSwitcher(_ sender: Any?) { captureMenuBinding(.toggle_tab_switcher) }
+    @objc func menuToggleTabExpose(_ sender: Any?) { captureMenuBinding(.toggle_tab_expose) }
+    @objc func menuPreviousTab(_ sender: Any?) { captureMenuBinding(.previous_tab) }
+    @objc func menuNextTab(_ sender: Any?) { captureMenuBinding(.next_tab) }
+    @objc func menuSelectTab1(_ sender: Any?) { captureMenuBinding(.select_tab_1) }
+    @objc func menuSelectTab2(_ sender: Any?) { captureMenuBinding(.select_tab_2) }
+    @objc func menuSelectTab3(_ sender: Any?) { captureMenuBinding(.select_tab_3) }
+    @objc func menuSelectTab4(_ sender: Any?) { captureMenuBinding(.select_tab_4) }
+    @objc func menuSelectTab5(_ sender: Any?) { captureMenuBinding(.select_tab_5) }
+    @objc func menuSelectTab6(_ sender: Any?) { captureMenuBinding(.select_tab_6) }
+    @objc func menuSelectTab7(_ sender: Any?) { captureMenuBinding(.select_tab_7) }
+    @objc func menuSelectTab8(_ sender: Any?) { captureMenuBinding(.select_tab_8) }
+    @objc func menuSelectTab9(_ sender: Any?) { captureMenuBinding(.select_tab_9) }
+    @objc func menuBrowseHosts(_ sender: Any?) { captureMenuBinding(.browse_hosts) }
+    @objc func menuBrowseProfiles(_ sender: Any?) { captureMenuBinding(.browse_profiles) }
+    @objc func menuToggleAIAgent(_ sender: Any?) { captureMenuBinding(.toggle_ai_agent) }
+    @objc func menuToggleVoiceAgent(_ sender: Any?) { captureMenuBinding(.toggle_voice_agent) }
+    @objc func menuOpenSettings(_ sender: Any?) { captureMenuBinding(.open_settings) }
+    @objc func menuShowTmuxSessions(_ sender: Any?) { captureMenuBinding(.show_tmux_sessions) }
+    @objc func menuDetachSession(_ sender: Any?) { captureMenuBinding(.detach_session) }
+    @objc func menuDetachAllSessions(_ sender: Any?) { captureMenuBinding(.detach_all_sessions) }
+    @objc func menuDetachOtherClients(_ sender: Any?) { captureMenuBinding(.detach_other_clients) }
+    @objc func menuToggleTransparency(_ sender: Any?) { captureMenuBinding(.toggle_transparency) }
+    @objc func menuToggleTitleBar(_ sender: Any?) { captureMenuBinding(.toggle_titlebar) }
+    @objc func menuToggleAutoRedact(_ sender: Any?) { captureMenuBinding(.toggle_auto_redact) }
+    @objc func menuToggleBackgroundEffect(_ sender: Any?) { captureMenuBinding(.toggle_background_effect) }
+    @objc func menuToggleFullScreen(_ sender: Any?) { captureMenuBinding(.toggle_full_screen) }
+    @objc func menuToggleCompose(_ sender: Any?) { captureMenuBinding(.toggle_compose) }
+    @objc func menuToggleMouseCapture(_ sender: Any?) { captureMenuBinding(.toggle_mouse_capture) }
+    @objc func menuToggleClipboardManager(_ sender: Any?) { captureMenuBinding(.toggle_clipboard_manager) }
+    @objc func menuToggleThemePicker(_ sender: Any?) { captureMenuBinding(.toggle_theme_picker) }
+    @objc func menuToggleQuickSettings(_ sender: Any?) { captureMenuBinding(.toggle_quick_settings) }
+    @objc func menuScrollPageUp(_ sender: Any?) { captureMenuBinding(.scroll_page_up) }
+    @objc func menuScrollPageDown(_ sender: Any?) { captureMenuBinding(.scroll_page_down) }
+    @objc func menuScrollToTop(_ sender: Any?) { captureMenuBinding(.scroll_to_top) }
+    @objc func menuScrollToBottom(_ sender: Any?) { captureMenuBinding(.scroll_to_bottom) }
+    @objc func menuBrightnessBoost(_ sender: Any?) { captureMenuBinding(.brightness_boost) }
+    @objc func menuCycleInputSource(_ sender: Any?) { captureMenuBinding(.cycle_input_source) }
+    @objc func menuPreviousGroup(_ sender: Any?) { captureMenuBinding(.previous_group) }
+    @objc func menuNextGroup(_ sender: Any?) { captureMenuBinding(.next_group) }
+
+    /// Record the chord that just fired a menu item. Use the bound key plus
+    /// modifiers that are physically held so Shift+⌘T records as Shift+⌘T
+    /// even when the menu item itself is ⌘T.
+    private func captureMenuBinding(_ action: KeybindAction) {
+        guard let binding = KeybindManager.shared.keybind(for: action),
+              let first = binding.sequence.first,
+              !binding.sequence.isSequence
+        else { return }
+
+        var modifiers = first.modifiers
+        let hardware = KeybindModifiers(uiModifierFlags: KeyboardTracker.shared.hardwareModifierFlags)
+        modifiers.formUnion(hardware)
+        processCapture(trigger: KeyTrigger(key: first.key, modifiers: modifiers))
     }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
@@ -535,8 +733,7 @@ class ShortcutCaptureUIView: UIView {
             // Command stripped or as a translated Escape. Normalize either
             // representation so the chord is recordable; the twin keyCommands
             // delivery dedups via duplicateDeliveryWindow since both produce
-            // the identical trigger. For stripped events, use the physical
-            // chord proven by GCKeyboard; layout text has lost Command too.
+            // the identical trigger.
             if (key.keyCode != .keyboardEscape && KeyCode.sentinelKey(for: key.characters) == .escape)
                 || ((key.keyCode == .keyboardPeriod || key.keyCode == .keyboardEscape)
                     && KeyboardTracker.isSystemCancelChordPhysicallyDown()) {

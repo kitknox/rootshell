@@ -89,9 +89,16 @@ struct KeyboardShortcutsSettingsView: View {
             item: $editingAction,
             onDismiss: applyPendingOutcome
         ) { action in
-            KeybindEditorView(action: action, onOutcome: { outcome in
-                pendingOutcome = (action, outcome)
-            })
+            KeybindEditorView(
+                action: action,
+                onOutcome: { editedAction, outcome in
+                    pendingOutcome = (editedAction, outcome)
+                },
+                onSwitchAction: { conflict in
+                    // Stay in the same sheet; just keep the list behind it in sync.
+                    selectedCategory = conflict.category
+                }
+            )
             .themedSubSheet(sheetThemeColors)
         }
         .sheet(isPresented: $showConfigEditor) {
