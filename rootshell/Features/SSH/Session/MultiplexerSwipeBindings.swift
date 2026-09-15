@@ -24,6 +24,8 @@ struct MultiplexerSwipeBindings: Sendable, Equatable {
     var tmuxPreviousSession: [SequenceStep]?
     var zellijNextTab: [SequenceStep]?
     var zellijPreviousTab: [SequenceStep]?
+    var tmuxDetachClient: [SequenceStep]?
+    var zellijDetach: [SequenceStep]?
 
     init(
         tmuxNextWindow: [SequenceStep]? = nil,
@@ -31,7 +33,9 @@ struct MultiplexerSwipeBindings: Sendable, Equatable {
         tmuxNextSession: [SequenceStep]? = nil,
         tmuxPreviousSession: [SequenceStep]? = nil,
         zellijNextTab: [SequenceStep]? = nil,
-        zellijPreviousTab: [SequenceStep]? = nil
+        zellijPreviousTab: [SequenceStep]? = nil,
+        tmuxDetachClient: [SequenceStep]? = nil,
+        zellijDetach: [SequenceStep]? = nil
     ) {
         self.tmuxNextWindow = tmuxNextWindow
         self.tmuxPreviousWindow = tmuxPreviousWindow
@@ -39,6 +43,8 @@ struct MultiplexerSwipeBindings: Sendable, Equatable {
         self.tmuxPreviousSession = tmuxPreviousSession
         self.zellijNextTab = zellijNextTab
         self.zellijPreviousTab = zellijPreviousTab
+        self.tmuxDetachClient = tmuxDetachClient
+        self.zellijDetach = zellijDetach
     }
 
     var hasResolvedBindings: Bool {
@@ -48,6 +54,8 @@ struct MultiplexerSwipeBindings: Sendable, Equatable {
             || tmuxPreviousSession != nil
             || zellijNextTab != nil
             || zellijPreviousTab != nil
+            || tmuxDetachClient != nil
+            || zellijDetach != nil
     }
 
     func sequence(for preset: SwipeGesturePreset) -> [SequenceStep]? {
@@ -76,7 +84,9 @@ struct MultiplexerSwipeBindings: Sendable, Equatable {
             tmuxNextSession: other.tmuxNextSession ?? tmuxNextSession,
             tmuxPreviousSession: other.tmuxPreviousSession ?? tmuxPreviousSession,
             zellijNextTab: other.zellijNextTab ?? zellijNextTab,
-            zellijPreviousTab: other.zellijPreviousTab ?? zellijPreviousTab
+            zellijPreviousTab: other.zellijPreviousTab ?? zellijPreviousTab,
+            tmuxDetachClient: other.tmuxDetachClient ?? tmuxDetachClient,
+            zellijDetach: other.zellijDetach ?? zellijDetach
         )
     }
 }
@@ -88,6 +98,7 @@ enum TmuxSwipeBindingParser {
         case previousWindow
         case nextSession
         case previousSession
+        case detachClient
     }
 
     private struct BindingLine {
@@ -151,6 +162,9 @@ enum TmuxSwipeBindingParser {
                 default:
                     return false
                 }
+            case .detachClient:
+                guard command == "detach-client" || command == "detach" else { return false }
+                return !tokens.dropFirst().contains("-a")
             }
         }
     }
@@ -217,7 +231,8 @@ enum TmuxSwipeBindingParser {
             tmuxNextWindow: resolve(action: .nextWindow, rootBindings: rootBindings, prefixBindings: prefixBindings, prefixes: prefixCombos),
             tmuxPreviousWindow: resolve(action: .previousWindow, rootBindings: rootBindings, prefixBindings: prefixBindings, prefixes: prefixCombos),
             tmuxNextSession: resolve(action: .nextSession, rootBindings: rootBindings, prefixBindings: prefixBindings, prefixes: prefixCombos),
-            tmuxPreviousSession: resolve(action: .previousSession, rootBindings: rootBindings, prefixBindings: prefixBindings, prefixes: prefixCombos)
+            tmuxPreviousSession: resolve(action: .previousSession, rootBindings: rootBindings, prefixBindings: prefixBindings, prefixes: prefixCombos),
+            tmuxDetachClient: resolve(action: .detachClient, rootBindings: rootBindings, prefixBindings: prefixBindings, prefixes: prefixCombos)
         )
     }
 
@@ -334,6 +349,7 @@ enum ZellijSwipeBindingParser {
     private enum Mode: String, CaseIterable {
         case normal
         case tab
+        case session
     }
 
     private struct Semantic {
@@ -341,9 +357,12 @@ enum ZellijSwipeBindingParser {
         var exitsToNormal = false
         var goesToNextTab = false
         var goesToPreviousTab = false
+        var entersSessionMode = false
+        var detaches = false
 
         var isRelevant: Bool {
             entersTabMode || exitsToNormal || goesToNextTab || goesToPreviousTab
+                || entersSessionMode || detaches
         }
     }
 
@@ -415,6 +434,8 @@ enum ZellijSwipeBindingParser {
             bind(keys: ["Ctrl t", "Enter", "Esc"], semantic: Semantic(exitsToNormal: true), to: [.tab])
             bind(keys: ["h", "Left", "Up", "k"], semantic: Semantic(goesToPreviousTab: true), to: [.tab])
             bind(keys: ["l", "Right", "Down", "j"], semantic: Semantic(goesToNextTab: true), to: [.tab])
+            bind(keys: ["Ctrl o"], semantic: Semantic(entersSessionMode: true), to: [.normal])
+            bind(keys: ["d"], semantic: Semantic(detaches: true), to: [.session])
         }
 
         mutating func clear(_ targetModes: Set<Mode>) {
@@ -456,10 +477,12 @@ enum ZellijSwipeBindingParser {
 
         let nextTab = resolveTabSequence(in: state, next: true)
         let previousTab = resolveTabSequence(in: state, next: false)
+        let detach = resolveDetachSequence(in: state)
 
         return MultiplexerSwipeBindings(
             zellijNextTab: nextTab,
-            zellijPreviousTab: previousTab
+            zellijPreviousTab: previousTab,
+            zellijDetach: detach
         )
     }
 
@@ -486,6 +509,21 @@ enum ZellijSwipeBindingParser {
             steps.append(.keyCombo(exit))
         }
         return steps
+    }
+
+    private static func resolveDetachSequence(in state: State) -> [SequenceStep]? {
+        let normalBindings = state.modes[.normal] ?? ModeBindings()
+        let sessionBindings = state.modes[.session] ?? ModeBindings()
+
+        if let direct = normalBindings.firstMatchingCombo(where: { $0.detaches }) {
+            return [.keyCombo(direct)]
+        }
+
+        guard let enterSession = normalBindings.firstMatchingCombo(where: { $0.entersSessionMode }),
+              let action = sessionBindings.firstMatchingCombo(where: { $0.detaches }) else {
+            return nil
+        }
+        return [.keyCombo(enterSession), .keyCombo(action)]
     }
 
     private static func preferredExitCombo(in bindings: ModeBindings) -> SequenceStep.KeyCombo? {
@@ -564,6 +602,8 @@ enum ZellijSwipeBindingParser {
             return [.normal]
         case Mode.tab.rawValue:
             return [.tab]
+        case Mode.session.rawValue:
+            return [.session]
         case "shared":
             return Set(Mode.allCases)
         case "shared_except":
@@ -587,7 +627,9 @@ enum ZellijSwipeBindingParser {
             entersTabMode: compact.contains("switchtomode\"tab\""),
             exitsToNormal: compact.contains("switchtomode\"normal\""),
             goesToNextTab: compact.contains("gotonexttab"),
-            goesToPreviousTab: compact.contains("gotoprevioustab")
+            goesToPreviousTab: compact.contains("gotoprevioustab"),
+            entersSessionMode: compact.contains("switchtomode\"session\""),
+            detaches: compact.contains("detach")
         )
     }
 
