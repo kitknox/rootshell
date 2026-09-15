@@ -10,9 +10,11 @@
 import ActivityKit
 import Foundation
 
-struct SessionActivityAttributes: ActivityAttributes {
+// Plain data shared by the app, the widget and the notification service
+// extension, which reads and updates it off the main actor.
+nonisolated struct SessionActivityAttributes: ActivityAttributes {
     /// Static context — empty since all data is dynamic
-    struct ContentState: Codable, Hashable {
+    nonisolated struct ContentState: Codable, Hashable {
         /// Total non-resilient session count
         var sessionCount: Int
 
@@ -78,8 +80,17 @@ struct SessionActivityAttributes: ActivityAttributes {
         /// state and must leave it untouched.
         var agentCountsFrozen: Bool = false
 
+        /// Set by the notification service extension when an agent hook push
+        /// moved a pane to "needs attention" while the counts were frozen.
+        /// Nil once the app publishes from live detection again.
+        var agentPushUpdatedAt: Date? = nil
+
         /// Total detected coding-agent sessions.
         var agentTotalCount: Int { agentWorkingCount + agentAttentionCount + agentIdleCount }
+
+        /// Frozen counts nobody has refreshed render muted; counts a push has
+        /// touched are current for what matters and keep their colors.
+        var agentCountsMuted: Bool { agentCountsFrozen && agentPushUpdatedAt == nil }
 
         // MARK: - App Icon
 
@@ -132,7 +143,7 @@ extension SessionActivityAttributes.ContentState {
     ///
     /// When adding a field: give it a default in the struct AND decode it
     /// here with `decodeIfPresent`.
-    init(from decoder: Decoder) throws {
+    nonisolated init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         sessionCount = try c.decode(Int.self, forKey: .sessionCount)
         sshCount = try c.decode(Int.self, forKey: .sshCount)
@@ -162,6 +173,7 @@ extension SessionActivityAttributes.ContentState {
         agentAttentionCount = try c.decodeIfPresent(Int.self, forKey: .agentAttentionCount) ?? 0
         agentIdleCount = try c.decodeIfPresent(Int.self, forKey: .agentIdleCount) ?? 0
         agentCountsFrozen = try c.decodeIfPresent(Bool.self, forKey: .agentCountsFrozen) ?? false
+        agentPushUpdatedAt = try c.decodeIfPresent(Date.self, forKey: .agentPushUpdatedAt)
         appIconVariant = try c.decodeIfPresent(String.self, forKey: .appIconVariant) ?? ""
     }
 }
