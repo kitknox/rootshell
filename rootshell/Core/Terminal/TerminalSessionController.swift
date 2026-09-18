@@ -1101,7 +1101,7 @@ final class TerminalSessionController {
     /// For resumable sessions (Trzsz/Mosh, and local sessions with an active
     /// embedded session) the `reason` drives whether we tell the server to
     /// close: `.sceneTeardown` keeps the server-side session alive so resume
-    /// can pick it back up; `.userClose`/`.transferOut` terminate it.
+    /// can pick it back up; `.userClose`/`.muxDetach`/`.transferOut` terminate it.
     func teardown(reason: Ghostty.TerminalView.CleanupReason) {
         localSessionCreateGeneration &+= 1
         responsePipeline.cancel()
@@ -1109,7 +1109,7 @@ final class TerminalSessionController {
 
         if let trzszSession = session as? TrzszSession {
             switch reason {
-            case .userClose:
+            case .userClose, .muxDetach:
                 trzszSession.terminate()
             case .sceneTeardown:
                 trzszSession.stopForReconnect()
@@ -1118,7 +1118,7 @@ final class TerminalSessionController {
             }
         } else if let moshSession = session as? MoshSession {
             switch reason {
-            case .userClose, .transferOut:
+            case .userClose, .muxDetach, .transferOut:
                 // Mosh has no peer-attach concept, so a transferOut on a
                 // mosh session would be a logic bug; treat it as a user
                 // close so we don't leave a zombie server session.

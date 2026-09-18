@@ -298,8 +298,8 @@ extension MainView {
         terminals[selectedTabIndex].splitTree = terminals[selectedTabIndex].splitTree.toggleZoom(for: currentNode)
     }
 
-    func closeSplit(targeting targetPane: SplitPaneView? = nil) {
-        Ghostty.logger.info("closeSplit() called (target=\(targetPane?.uuid.uuidString.prefix(8).description ?? "nil"))")
+    func closeSplit(targeting targetPane: SplitPaneView? = nil, leaveMuxSession: Bool = false) {
+        Ghostty.logger.info("closeSplit() called (target=\(targetPane?.uuid.uuidString.prefix(8).description ?? "nil"), leaveMux=\(leaveMuxSession))")
 
         // Resolve which tab + pane to close.
         // When a specific pane is provided (e.g. from `.closeSplit` posted by an
@@ -420,9 +420,12 @@ extension MainView {
         // keep their user-close semantics (plus withdrawing any pending
         // keyboard-interactive prompt so its auth future doesn't park until
         // the login timeout); other panes take the generic close funnel.
+        // Mux detach posts leaveMuxSession so cleanup uses `.muxDetach`.
+        // Close Tab also leaves a zmx session running (closing the client
+        // is zmx’s detach path).
         if let terminalToClose = paneToClose.asTerminal {
             withdrawKeyboardInteractive(for: terminalToClose)
-            terminalToClose.cleanup(reason: .userClose)
+            terminalToClose.cleanup(reason: leaveMuxSession ? .muxDetach : .userClose)
         } else {
             paneToClose.prepareForClose()
         }

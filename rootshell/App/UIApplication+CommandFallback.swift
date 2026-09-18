@@ -312,6 +312,10 @@ extension UIApplication {
         ghostty_postNotification(.discoverSessions)
     }
 
+    @objc func menuDetachSession(_ sender: Any?) {
+        ghostty_postNotification(.detachSession)
+    }
+
     @objc func menuDetachOtherClients(_ sender: Any?) {
         ghostty_postNotification(.detachOtherClients)
     }
