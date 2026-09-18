@@ -156,7 +156,7 @@ struct SessionActivityWidget: Widget {
                         if context.state.agentTotalCount > 0 {
                             Label("\(context.state.agentTotalCount)", systemImage: "sparkles")
                                 .font(.caption2)
-                                .foregroundStyle(context.state.agentCountsFrozen ? AnyShapeStyle(.secondary) : AnyShapeStyle(.mint))
+                                .foregroundStyle(context.state.agentCountsMuted ? AnyShapeStyle(.secondary) : AnyShapeStyle(.mint))
                         }
                     }
                 }
@@ -208,10 +208,10 @@ struct SessionActivityWidget: Widget {
                     if context.state.agentAttentionCount > 0 {
                         Image(systemName: "exclamationmark.bubble.fill")
                             .font(.caption2)
-                            .foregroundStyle(context.state.agentCountsFrozen ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+                            .foregroundStyle(context.state.agentCountsMuted ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
                         Text("\(context.state.agentAttentionCount)")
                             .font(.caption)
-                            .foregroundStyle(context.state.agentCountsFrozen ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+                            .foregroundStyle(context.state.agentCountsMuted ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
                     }
                     if context.state.wifiSSID != nil {
                         Image(systemName: "wifi")
