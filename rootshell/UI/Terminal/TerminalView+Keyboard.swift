@@ -2441,6 +2441,10 @@ extension Ghostty.TerminalView {
         NotificationCenter.default.post(name: .discoverSessions, object: self)
     }
 
+    @objc func menuDetachSession(_ sender: Any?) {
+        NotificationCenter.default.post(name: .detachSession, object: self)
+    }
+
     @objc func menuDetachOtherClients(_ sender: Any?) {
         noteModTapCommand(sender as? UIKeyCommand)
         NotificationCenter.default.post(name: .detachOtherClients, object: self)

@@ -584,6 +584,9 @@ struct TabBar: View {
             dialogs: tmuxDialogs
         )
         HerdrGatewayDetachMenuItem(tab: tab, dialogs: herdrDialogs)
+        MultiplexerDetachMenuItem(tab: tab) { tab in
+            _ = MuxSessionDetach.detach(tab: tab, tmuxController: tmuxController)
+        }
         Button(role: .destructive) {
             onCloseTab(index)
         } label: {

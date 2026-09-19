@@ -191,7 +191,8 @@ extension MainView {
             // events close the dying tab, not whichever tab the user has since
             // switched to. nil object → fall back to the focused split.
             let target = notification.object as? SplitPaneView
-            self.closeSplit(targeting: target)
+            let leaveMux = notification.userInfo?[MuxSessionDetach.leaveMuxSessionUserInfoKey] as? Bool ?? false
+            self.closeSplit(targeting: target, leaveMuxSession: leaveMux)
         }
 
         observerBag.observeOnMainActor(.vncToggleFullScreen) { [self] notification in
@@ -335,9 +336,38 @@ extension MainView {
             self.discoverSessionsForSelectedTab(origin: notification.object as? Ghostty.TerminalView)
         }
 
+        observerBag.observeOnMainActor(.detachSession) { [self] notification in
+            guard self.shouldHandleNotification(notification) else { return }
+            self.detachSessionForSelectedTab()
+        }
+
         observerBag.observeOnMainActor(.detachOtherClients) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
             self.detachOtherClientsForSelectedTab()
+        }
+
+        observerBag.observeOnMainActor(.muxSessionDidDetach) { [self] notification in
+            // Prefer windowId: tmux -CC prune can remove the notifying pane
+            // from the tab tree before (or as) this handler runs.
+            if let targetWindow = notification.userInfo?["windowId"] as? String {
+                guard targetWindow == self.windowId else { return }
+            } else if !self.shouldHandleNotification(notification) {
+                // No windowId and no pane object: only the focused window
+                // accepts the banner (Mac Catalyst often has >1 scene).
+                guard self.isWindowFocused || self.windowIsKeyWindow else { return }
+            }
+            let offer = notification.userInfo?["offer"] as? MuxSessionResume.ReconnectOffer
+            let name = offer?.displayName
+                ?? (notification.userInfo?["displayName"] as? String)
+                ?? String(localized: "session", comment: "Generic mux session label in detach banner")
+            self.muxDetachBanner = MuxDetachBannerState(
+                message: String(
+                    localized: "Detached from \(name). Session keeps running.",
+                    comment: "Post-detach banner message"
+                ),
+                offer: offer
+            )
+            self.scheduleMuxDetachBannerDismiss()
         }
 
         observerBag.observeOnMainActor(.increaseFontSize) { [self] notification in

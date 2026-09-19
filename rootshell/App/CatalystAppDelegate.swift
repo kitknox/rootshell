@@ -348,6 +348,10 @@ extension UIApplication {
         sendAction(#selector(Ghostty.TerminalView.menuDiscoverSessions(_:)), to: nil, from: sender, for: nil)
     }
 
+    @objc func ghostty_detachSession(_ sender: Any?) {
+        sendAction(#selector(Ghostty.TerminalView.menuDetachSession(_:)), to: nil, from: sender, for: nil)
+    }
+
     @objc func ghostty_detachOtherClients(_ sender: Any?) {
         sendAction(#selector(Ghostty.TerminalView.menuDetachOtherClients(_:)), to: nil, from: sender, for: nil)
     }
@@ -1495,6 +1499,11 @@ class CatalystAppDelegate: AppDelegate {
             modifierFlags: [.command, .control]
         )
 
+        let detachSession = UICommand(
+            title: String(localized: "Detach Session"),
+            action: #selector(UIApplication.ghostty_detachSession(_:))
+        )
+
         let detachOtherClients = UIKeyCommand(
             title: String(localized: "Detach Other Clients"),
             action: #selector(UIApplication.ghostty_detachOtherClients(_:)),
@@ -1525,7 +1534,7 @@ class CatalystAppDelegate: AppDelegate {
 
         let navGroup = UIMenu(title: "", options: .displayInline, children: [
             toggleTabSwitcher, toggleTabExpose, previousTab, nextTab, previousGroup, nextGroup, tmuxSessions,
-            discoverSessions, detachOtherClients
+            discoverSessions, detachSession, detachOtherClients
         ])
 
         // Tab selection (1-9), each with its own action (see ghostty_selectTabN).

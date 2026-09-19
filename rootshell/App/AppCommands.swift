@@ -675,6 +675,14 @@ struct WindowCommands: Commands {
             }
             .modifier(DynamicShortcut(action: .discover_sessions, shortcuts: shortcutState.shortcuts))
 
+            Button("Detach Session") {
+                UIApplication.shared.sendAction(
+                    #selector(Ghostty.TerminalView.menuDetachSession(_:)),
+                    to: nil, from: nil, for: nil
+                )
+            }
+            .modifier(DynamicShortcut(action: .detach_session, shortcuts: shortcutState.shortcuts))
+
             Button("Detach Other Clients") {
                 UIApplication.shared.sendMenuAction(
                     #selector(Ghostty.TerminalView.menuDetachOtherClients(_:)),
