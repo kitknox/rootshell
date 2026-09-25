@@ -139,11 +139,9 @@ final class MoshCryptoSession {
 
     /// Decrypts a received packet
     /// - Parameter packet: The received packet (8-byte nonce + ciphertext + tag)
-    /// - Returns: The decrypted plaintext (timestamps + payload), and whether the
-    ///   packet advances the incoming sequence. Reordered or duplicate packets
-    ///   within the window still decrypt, but must not update timestamp tracking.
+    /// - Returns: The decrypted plaintext (timestamps + payload)
     /// - Throws: MoshError.decryptionFailed if decryption or authentication fails
-    func decrypt(_ packet: Data) throws -> (plaintext: Data, nonce: MoshNonce, isInOrder: Bool) {
+    func decrypt(_ packet: Data) throws -> (plaintext: Data, nonce: MoshNonce) {
         // Minimum packet size: 8 (nonce) + 16 (tag) = 24 bytes
         guard packet.count >= 24 else {
             throw MoshError.decryptionFailed(
@@ -175,12 +173,11 @@ final class MoshCryptoSession {
             )
 
             // Update expected sequence
-            let isInOrder = nonce.sequenceNumber >= expectedIncomingSequence
-            if isInOrder {
+            if nonce.sequenceNumber >= expectedIncomingSequence {
                 expectedIncomingSequence = nonce.sequenceNumber + 1
             }
 
-            return (plaintext: Data(plaintext), nonce: nonce, isInOrder: isInOrder)
+            return (plaintext: Data(plaintext), nonce: nonce)
 
         } catch {
             throw MoshError.decryptionFailed(reason: error.localizedDescription)

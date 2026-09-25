@@ -161,8 +161,8 @@ final class MoshTransport {
     /// Fragment assembler for incoming packets
     private let fragmentAssembler = MoshFragmentAssembler()
 
-    /// The server timestamp the next outgoing packet echoes back
-    private var timestampEcho = MoshTimestampEcho()
+    /// Packet builder for outgoing packets
+    private var packetBuilder: MoshPacketBuilder?
 
     /// Connection timeout in seconds
     private let connectionTimeout: TimeInterval = 15.0
@@ -197,6 +197,7 @@ final class MoshTransport {
         self.port = port
         self.requestedLocalPort = localPort
         self.addressFamily = addressFamily
+        self.packetBuilder = MoshPacketBuilder(direction: .toServer)
     }
 
     // MARK: - Connection
@@ -336,15 +337,13 @@ final class MoshTransport {
 
         // Fragment the payload (mosh requires fragment header even for single fragments)
         let fragments = try MoshFragment.fragment(payload)
+        let replyTimestamp = packetBuilder?.currentReplyTimestamp ?? 0
 
         for (index, fragment) in fragments.enumerated() {
             let timestamp = MoshTimestamp.now
             if index == 0 {
                 rttEstimator.recordSent(timestamp: timestamp)
             }
-            // Consume the pending echo once, so only the first fragment can
-            // carry it, corrected for how long it was held.
-            let replyTimestamp = timestampEcho.takeReply(nowMs: ProtocolTiming.monotonicNowMs())
 
             // Build plaintext: timestamps (4 bytes) + fragment header (10 bytes) + payload
             var plaintext = MoshTimestamp.encode(
@@ -626,7 +625,6 @@ final class MoshTransport {
             // Capture timestamp immediately on the network queue, before MainActor hop.
             // This avoids inflating RTT due to scheduling delays.
             let receiveTimestamp = content == nil ? nil : MoshTimestamp.now
-            let receivedAtMs = ProtocolTiming.monotonicNowMs()
 
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
@@ -638,7 +636,7 @@ final class MoshTransport {
                 }
 
                 if let data = content, let receiveTimestamp = receiveTimestamp {
-                    self.handleReceivedData(data, receiveTimestamp: receiveTimestamp, receivedAtMs: receivedAtMs)
+                    self.handleReceivedData(data, receiveTimestamp: receiveTimestamp)
                 }
 
                 // Continue receiving as long as the connection exists
@@ -653,11 +651,9 @@ final class MoshTransport {
     private static let minimumPacketSize = 24
 
     /// Handles received data
-    /// - Parameters:
-    ///   - data: The received UDP packet data
-    ///   - receiveTimestamp: The local timestamp captured at packet arrival (before async hops)
-    ///   - receivedAtMs: Monotonic arrival time, so the echo can be corrected for hold time
-    private func handleReceivedData(_ data: Data, receiveTimestamp: UInt16, receivedAtMs: UInt64) {
+    /// - Parameter data: The received UDP packet data
+    /// - Parameter receiveTimestamp: The local timestamp captured at packet arrival (before async hops)
+    private func handleReceivedData(_ data: Data, receiveTimestamp: UInt16) {
         lastReceiveTime = ProtocolTiming.monotonicNowMs()
 
         // Silently drop packets that are too small to be valid mosh packets
@@ -671,7 +667,7 @@ final class MoshTransport {
 
         do {
             // Decrypt packet
-            let (plaintext, nonce, isInOrder) = try crypto.decrypt(data)
+            let (plaintext, nonce) = try crypto.decrypt(data)
 
             // Need at least 4 bytes timestamps + 10 bytes fragment header = 14 bytes
             guard plaintext.count >= 14 else {
@@ -683,19 +679,6 @@ final class MoshTransport {
             // Parse timestamps (first 4 bytes)
             guard let (timestamp, replyTimestamp) = MoshTimestamp.decode(plaintext) else {
                 throw MoshError.invalidPacketFormat(reason: "Failed to decode timestamps")
-            }
-
-            // Update timestamps for each packet that advances the incoming
-            // sequence, even before fragment assembly completes. Ignore older
-            // or duplicate packets so they cannot skew RTT or replace the echo.
-            if isInOrder {
-                // Skip the 0xFFFF sentinel. Use the pre-captured receiveTimestamp
-                // to avoid inflated RTT from async delays.
-                if replyTimestamp != UInt16.max {
-                    rttEstimator.recordReply(replyTimestamp: replyTimestamp, receiveTimestamp: receiveTimestamp)
-                }
-                // Save the server's timestamp for the next outgoing packet to echo
-                timestampEcho.save(timestamp, receivedAtMs: receivedAtMs)
             }
 
             // Parse fragment (everything after 4-byte timestamp)
@@ -717,8 +700,17 @@ final class MoshTransport {
                 payload: payload
             )
 
+            // Update RTT estimate from reply timestamp (skip sentinel 0xFFFF).
+            // Pass the pre-captured receiveTimestamp to avoid inflated RTT from async delays.
+            if packet.replyTimestamp != UInt16.max {
+                rttEstimator.recordReply(replyTimestamp: packet.replyTimestamp, receiveTimestamp: receiveTimestamp)
+            }
+
             // Get the updated RTT estimate to pass to delegate (for synchronous sendInterval update)
             let estimatedRTT = rttEstimator.estimatedRTT
+
+            // Update packet builder with received timestamp for echo
+            packetBuilder?.setReplyTimestamp(packet.timestamp)
 
             // Track packets received
             packetsReceived += 1

@@ -5,7 +5,8 @@
 
 import Foundation
 
-/// Actions emitted by the terminal parser.
+/// Terminal parser action type, replacing the C++-style class hierarchy
+/// with an idiomatic Swift enum.
 enum VTParserAction: Equatable, Sendable {
     case ignore
     case print

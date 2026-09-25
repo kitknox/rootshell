@@ -145,7 +145,6 @@
 		47AF04970000000000000C01 /* rootshell/Features/Tmux/TmuxPaneZoomCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF04970000000000000B01 /* rootshell/Features/Tmux/TmuxPaneZoomCommand.swift */; };
 		47AF04970000000000000C02 /* rootshell/Features/Multiplexer/PaneZoomSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF04970000000000000B02 /* rootshell/Features/Multiplexer/PaneZoomSelection.swift */; };
 		47AF04990000000000000A01 /* rootshell/Core/Keybinds/MenuKeyEquivalentPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF04990000000000000B01 /* rootshell/Core/Keybinds/MenuKeyEquivalentPolicy.swift */; };
-		47AF04A10000000000000A01 /* rootshell/Features/Mosh/Protocol/Transport/MoshTimestampEcho.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF04A10000000000000B01 /* rootshell/Features/Mosh/Protocol/Transport/MoshTimestampEcho.swift */; };
 		47AF0F1D0000000000000B01 /* rootshell/Core/Shell/InitialDirectoryCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF0F1D0000000000000A01 /* rootshell/Core/Shell/InitialDirectoryCommand.swift */; };
 		47AF0F1D0000000000000B02 /* rootshell/Core/Terminal/TerminalTargetKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF0F1D0000000000000A02 /* rootshell/Core/Terminal/TerminalTargetKey.swift */; };
 		47AF0F1D0000000000000B03 /* rootshell/Features/Tmux/TmuxCommandQuoting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF0F1D0000000000000A03 /* rootshell/Features/Tmux/TmuxCommandQuoting.swift */; };
@@ -623,7 +622,6 @@
 		47AF04970000000000000B02 /* rootshell/Features/Multiplexer/PaneZoomSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/Multiplexer/PaneZoomSelection.swift; sourceTree = SOURCE_ROOT; };
 		47AF04970000000000000B03 /* rootshell/UI/Terminal/PaneZoomPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/UI/Terminal/PaneZoomPickerView.swift; sourceTree = SOURCE_ROOT; };
 		47AF04990000000000000B01 /* rootshell/Core/Keybinds/MenuKeyEquivalentPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Keybinds/MenuKeyEquivalentPolicy.swift; sourceTree = SOURCE_ROOT; };
-		47AF04A10000000000000B01 /* rootshell/Features/Mosh/Protocol/Transport/MoshTimestampEcho.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/Mosh/Protocol/Transport/MoshTimestampEcho.swift; sourceTree = SOURCE_ROOT; };
 		47AF0F1D0000000000000A01 /* rootshell/Core/Shell/InitialDirectoryCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Shell/InitialDirectoryCommand.swift; sourceTree = SOURCE_ROOT; };
 		47AF0F1D0000000000000A02 /* rootshell/Core/Terminal/TerminalTargetKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Terminal/TerminalTargetKey.swift; sourceTree = SOURCE_ROOT; };
 		47AF0F1D0000000000000A03 /* rootshell/Features/Tmux/TmuxCommandQuoting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/Tmux/TmuxCommandQuoting.swift; sourceTree = SOURCE_ROOT; };
@@ -1252,7 +1250,6 @@
 				47AF04870000000000000B01 /* rootshell/Core/Terminal/PaneCloseConfirmationPolicy.swift */,
 				47AF04310000000000000B01 /* rootshell/Features/Tmux/TmuxWindowCloseState.swift */,
 				47AF04990000000000000B01 /* rootshell/Core/Keybinds/MenuKeyEquivalentPolicy.swift */,
-				47AF04A10000000000000B01 /* rootshell/Features/Mosh/Protocol/Transport/MoshTimestampEcho.swift */,
 				47AF04960000000000000B01 /* rootshell/Core/Terminal/RemoteSessionBackgroundGracePolicy.swift */,
 				47AF04850000000000000B01 /* rootshell/Core/Terminal/TerminalScrollbarAvailabilityPolicy.swift */,
 				47AF0F1D0000000000000A01 /* rootshell/Core/Shell/InitialDirectoryCommand.swift */,
@@ -2262,7 +2259,6 @@
 				47AF04870000000000000A01 /* rootshell/Core/Terminal/PaneCloseConfirmationPolicy.swift in Sources */,
 				47AF04310000000000000A01 /* rootshell/Features/Tmux/TmuxWindowCloseState.swift in Sources */,
 				47AF04990000000000000A01 /* rootshell/Core/Keybinds/MenuKeyEquivalentPolicy.swift in Sources */,
-				47AF04A10000000000000A01 /* rootshell/Features/Mosh/Protocol/Transport/MoshTimestampEcho.swift in Sources */,
 				47AF04960000000000000A01 /* rootshell/Core/Terminal/RemoteSessionBackgroundGracePolicy.swift in Sources */,
 				47AF04850000000000000A01 /* rootshell/Core/Terminal/TerminalScrollbarAvailabilityPolicy.swift in Sources */,
 				47AEC0020000000000000003 /* rootshell/Core/Shell/LoginShellCommand.swift in Sources */,

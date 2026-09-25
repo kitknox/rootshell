@@ -139,3 +139,46 @@ struct MoshPacket: Sendable {
         !payload.isEmpty
     }
 }
+
+// MARK: - Packet Builder
+
+/// Builder for creating outgoing mosh packets
+struct MoshPacketBuilder {
+    private let direction: MoshNonce.Direction
+    // 0xFFFF indicates "no timestamp reply" (sentinel).
+    private var replyTimestamp: UInt16 = UInt16.max
+
+    /// Creates a builder for the specified direction
+    init(direction: MoshNonce.Direction) {
+        self.direction = direction
+    }
+
+    /// Sets the echo reply timestamp (from last received packet)
+    mutating func setReplyTimestamp(_ timestamp: UInt16) {
+        self.replyTimestamp = timestamp
+    }
+
+    var currentReplyTimestamp: UInt16 {
+        replyTimestamp
+    }
+
+    /// Builds a packet with the given payload
+    /// - Parameters:
+    ///   - payload: The instruction payload
+    ///   - sequenceNumber: The sequence number (from nonce generator)
+    /// - Returns: The built packet
+    func build(payload: Data, sequenceNumber: UInt64) -> MoshPacket {
+        MoshPacket(
+            direction: direction,
+            sequenceNumber: sequenceNumber,
+            timestamp: MoshTimestamp.now,
+            replyTimestamp: replyTimestamp,
+            payload: payload
+        )
+    }
+
+    /// Builds a heartbeat packet (empty payload)
+    func buildHeartbeat(sequenceNumber: UInt64) -> MoshPacket {
+        build(payload: Data(), sequenceNumber: sequenceNumber)
+    }
+}
