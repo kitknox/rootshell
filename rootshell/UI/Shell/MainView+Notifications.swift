@@ -395,6 +395,20 @@ extension MainView {
             self.scheduleMuxDetachBannerDismiss()
         }
 
+        observerBag.observeOnMainActor(.muxAutoStartDidFallback) { [self] notification in
+            if let targetWindow = notification.userInfo?["windowId"] as? String {
+                guard targetWindow == self.windowId else { return }
+            } else if !self.shouldHandleNotification(notification) {
+                return
+            }
+            let wanted = notification.userInfo?["wanted"] as? String
+            self.muxDetachBanner = MuxDetachBannerState(
+                message: Self.muxMissingBinaryBannerMessage(wanted: wanted),
+                offer: nil
+            )
+            self.scheduleMuxDetachBannerDismiss()
+        }
+
         observerBag.observeOnMainActor(.increaseFontSize) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
             guard terminals.indices.contains(selectedTabIndex),
@@ -811,6 +825,17 @@ extension MainView {
         performWindowCleanup(reason: "sceneDisconnect")
     }
     #endif
+
+    private static func muxMissingBinaryBannerMessage(wanted: String?) -> String {
+        switch wanted {
+        case "herdr":
+            return String(localized: "herdr was not found on the remote host. Started a normal shell.", comment: "Banner when herdr auto-start falls back")
+        case "zmx":
+            return String(localized: "zmx was not found on the remote host. Started a normal shell.", comment: "Banner when zmx auto-start falls back")
+        default:
+            return String(localized: "tmux was not found on the remote host. Started a normal shell.", comment: "Banner when tmux auto-start falls back")
+        }
+    }
 }
 
 // MARK: - Window Filtering and Title Observation

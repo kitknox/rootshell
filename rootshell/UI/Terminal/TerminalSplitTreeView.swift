@@ -1720,6 +1720,7 @@ extension Notification.Name {
     static let detachSession = Notification.Name("com.rootshell.detachSession")
     static let detachOtherClients = Notification.Name("com.rootshell.detachOtherClients")
     static let muxSessionDidDetach = Notification.Name("com.rootshell.muxSessionDidDetach")
+    static let muxAutoStartDidFallback = Notification.Name("com.rootshell.muxAutoStartDidFallback")
     static let showToolbarSettings = Notification.Name("com.rootshell.showToolbarSettings")
     static let forceASCIIKeyboardChanged = Notification.Name("com.rootshell.forceASCIIKeyboardChanged")
     static let ghosttySessionDiscoveryChanged = Notification.Name("com.rootshell.sessionDiscoveryChanged")

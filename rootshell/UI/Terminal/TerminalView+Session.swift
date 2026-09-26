@@ -532,7 +532,27 @@ extension Ghostty.TerminalView {
     /// which bails early for resumed and exec sessions — a resumed session's
     /// multiplexer is still running, so the binding must survive those paths.
     /// (id=agent-attention-raw-mux)
+    /// Auto-start's remote binary was missing. Drop the optimistic mux binding
+    /// so this pane is a normal shell, and ask the window for the banner.
+    func noteMuxAutoStartFallback(wanted: String) {
+        guard !multiplexerAutoStartFellBack else { return }
+        guard connectionConfig.sshConfigForHistory?.muxAutoStartFallbackName == wanted else { return }
+        multiplexerAutoStartFellBack = true
+        rawMultiplexer = nil
+        passthroughMultiplexer = nil
+        AgentAttentionCenter.shared.topologyDidChange()
+        NotificationCenter.default.post(
+            name: .muxAutoStartDidFallback,
+            object: self,
+            userInfo: [
+                "wanted": wanted,
+                "windowId": windowId
+            ]
+        )
+    }
+
     func applyConfiguredMultiplexerBinding() {
+        guard !multiplexerAutoStartFellBack else { return }
         guard let sshConfig = connectionConfig.sshConfigForHistory else { return }
 
         if let target = sshConfig.muxResumeTarget {

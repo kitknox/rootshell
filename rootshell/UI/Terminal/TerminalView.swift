@@ -500,6 +500,9 @@ extension Ghostty {
         /// attention or depend on alternate-screen ownership.
         var passthroughMultiplexer: RawMultiplexerBinding?
 
+        /// Auto-start printed `muxAutoStartFallbackMarkerPrefix` and exec'd `$SHELL`.
+        var multiplexerAutoStartFellBack: Bool = false
+
         nonisolated(unsafe) var tmuxDetachInProgressAtomic: Bool = false
 
         var isTmuxDetachInProgress: Bool {

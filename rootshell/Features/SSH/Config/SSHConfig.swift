@@ -702,13 +702,34 @@ struct SSHConfig: Codable, Hashable {
         return "main"
     }
 
+    /// Printed on the pty when auto-start's `command -v` fails, before `$SHELL`
+    /// replaces the process. The session output sink matches this prefix.
+    static let muxAutoStartFallbackMarkerPrefix = "rootshell: mux-fallback "
+
+    /// `||` branch for an auto-start exec line. `wanted` is `tmux`, `herdr`, or
+    /// `zmx` — never user input. Safe to embed in the single-quoted `sh -c`.
+    static func muxAutoStartFallbackShellFragment(wanted: String) -> String {
+        "{ printf \"\\r\\n\(muxAutoStartFallbackMarkerPrefix)\(wanted)\\r\\n\"; exec \"${SHELL:-/bin/sh}\"; }"
+    }
+
+    /// Which auto-start command will emit `muxAutoStartFallbackMarkerPrefix`,
+    /// or nil when this connection will not (custom command, herdr control
+    /// mode, or a reconnect that attaches directly).
+    var muxAutoStartFallbackName: String? {
+        if muxResumeTarget != nil { return nil }
+        if tmuxAutoEnable, Self.tmuxGlobalCustomCommand == nil { return "tmux" }
+        if herdrAutoEnable, !herdrControlModeEnabled, Self.herdrGlobalCustomCommand == nil { return "herdr" }
+        if zmxAutoEnable, Self.zmxGlobalCustomCommand == nil { return "zmx" }
+        return nil
+    }
+
     /// Builds the `sh -c '...'` line that attaches to (or creates) a tmux
     /// session, optionally in control mode (`-CC`), falling back to `$SHELL`
     /// when tmux is missing. The session name must already be validated as
     /// embeddable in the single-quoted command (see TmuxGatewaySessionStore).
     static func tmuxExecCommandLine(sessionName: String, controlMode: Bool) -> String {
         let cc = controlMode ? "-CC " : ""
-        return "sh -c '\(remoteExecPathPrefix)command -v tmux >/dev/null && exec tmux \(cc)new-session -A -s \(sessionName) || exec $SHELL'"
+        return "sh -c '\(remoteExecPathPrefix)command -v tmux >/dev/null && exec tmux \(cc)new-session -A -s \(sessionName) || \(muxAutoStartFallbackShellFragment(wanted: "tmux"))'"
     }
 
     /// Session name to attach to for this connection. The profile's explicit
@@ -782,7 +803,7 @@ struct SSHConfig: Codable, Hashable {
     /// launch is attach-or-create, so no `-A` analogue is needed.
     static func herdrExecCommandLine(sessionName: String) -> String {
         let arg = isEmbeddableHerdrSessionName(sessionName) ? " --session \(sessionName)" : ""
-        return "sh -c '\(remoteExecPathPrefix)command -v herdr >/dev/null && exec herdr\(arg) || exec $SHELL'"
+        return "sh -c '\(remoteExecPathPrefix)command -v herdr >/dev/null && exec herdr\(arg) || \(muxAutoStartFallbackShellFragment(wanted: "herdr"))'"
     }
 
     /// Builds the `sh -c '...'` line a control-mode exec channel runs: the
@@ -893,7 +914,7 @@ struct SSHConfig: Codable, Hashable {
         // Listed names already contain any configured session prefix.
         return "sh -c '\(remoteExecPathPrefix)command -v zmx >/dev/null"
             + " && ZMX_SESSION_PREFIX= exec zmx attach \(name)"
-            + " || exec $SHELL'"
+            + " || \(muxAutoStartFallbackShellFragment(wanted: "zmx"))'"
     }
 
     /// Shared zmx exec command used by all session types.

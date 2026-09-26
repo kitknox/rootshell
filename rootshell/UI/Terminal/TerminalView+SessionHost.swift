@@ -28,7 +28,7 @@ extension Ghostty.TerminalView: TerminalSessionControllerHost {
     /// `outputHandler` did. Runs on the session's background queue — no main
     /// actor hop on the hot output path.
     func makeSessionOutputSink() -> @Sendable (Data) -> Void {
-        outputPipeline.makeSessionOutputSink(
+        let base = outputPipeline.makeSessionOutputSink(
             useOutputCoalescer: shouldUseOutputCoalescer,
             terminalUUID: uuid,
             noteGatewayInboundBytes: { [weak self] byteCount in
@@ -39,6 +39,20 @@ extension Ghostty.TerminalView: TerminalSessionControllerHost {
                 }
             }
         )
+        // Normal shells never look at the byte stream. Only an auto-start that
+        // can print the missing-binary marker pays for a scan.
+        guard let expected = connectionConfig.sshConfigForHistory?.muxAutoStartFallbackName else {
+            return base
+        }
+        let scanner = OSAllocatedUnfairLock(initialState: MuxAutoStartFallbackScanner())
+        return { [weak self] data in
+            let wanted = scanner.withLock { $0.consume(data) }
+            base(data)
+            guard let wanted, wanted == expected else { return }
+            Task { @MainActor [weak self] in
+                self?.noteMuxAutoStartFallback(wanted: wanted)
+            }
+        }
     }
 
     func sessionDidChangeTitle(_ title: String) {
