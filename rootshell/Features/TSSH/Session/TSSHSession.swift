@@ -2001,6 +2001,19 @@ final class TrzszSession: TerminalSession {
         goTransport?.flushBackgroundedOutput()
         goTransport?.settleBackgroundWriteThrough()
     }
+
+    /// After the foreground gate opens: if a full-screen app is showing, ask
+    /// it to repaint and drop the backlog tsshd queued while the app was
+    /// suspended, so the backlog is replaced by one fresh frame instead of a
+    /// replay. See `TrzszResumeRedrawPolicy`.
+    func redrawAfterResume(isAlternateScreen: Bool?) {
+        guard TrzszResumeRedrawPolicy.shouldRedraw(
+            isRunning: isRunning,
+            expectsControlGateway: expectsControlGateway,
+            isAlternateScreen: isAlternateScreen
+        ) else { return }
+        goTransport?.redrawScreenDiscardingBacklog()
+    }
 }
 
 // MARK: - TrzszGoTransport.Delegate

@@ -87,3 +87,30 @@ final class TSSHControlGatewayPolicyTests: XCTestCase {
             isLive: false, hasEnded: false, wasResumed: true, autoStartsControlMode: true))
     }
 }
+
+final class TSSHResumeRedrawPolicyTests: XCTestCase {
+    func testFullScreenAppIsRedrawn() {
+        XCTAssertTrue(TrzszResumeRedrawPolicy.shouldRedraw(
+            isRunning: true, expectsControlGateway: false, isAlternateScreen: true))
+    }
+
+    func testPrimaryScreenIsNotRedrawnSoScrollbackIsKept() {
+        XCTAssertFalse(TrzszResumeRedrawPolicy.shouldRedraw(
+            isRunning: true, expectsControlGateway: false, isAlternateScreen: false))
+    }
+
+    func testUnreadableScreenStateSkipsTheRedraw() {
+        XCTAssertFalse(TrzszResumeRedrawPolicy.shouldRedraw(
+            isRunning: true, expectsControlGateway: false, isAlternateScreen: nil))
+    }
+
+    func testControlGatewayIsNeverRedrawn() {
+        XCTAssertFalse(TrzszResumeRedrawPolicy.shouldRedraw(
+            isRunning: true, expectsControlGateway: true, isAlternateScreen: true))
+    }
+
+    func testStoppedSessionIsNeverRedrawn() {
+        XCTAssertFalse(TrzszResumeRedrawPolicy.shouldRedraw(
+            isRunning: false, expectsControlGateway: false, isAlternateScreen: true))
+    }
+}

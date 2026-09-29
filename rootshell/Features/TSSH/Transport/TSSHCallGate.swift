@@ -826,6 +826,15 @@ actor TSSHCallGate {
         try await runOnWorker { try s.windowChange(rows, cols: cols) }
     }
 
+    func redrawScreen(_ sessionRef: TSSHSessionRef, discardPreviousOutput: Bool) async throws {
+        let session = registry.withLock { $0.sessions[sessionRef] }
+        guard let session else {
+            throw TSSHCallGateError.unknownSession
+        }
+        nonisolated(unsafe) let s = session
+        try await runOnWorker { try s.redrawScreen(discardPreviousOutput) }
+    }
+
     func close(_ sessionRef: TSSHSessionRef) async throws {
         let session = registry.withLock { $0.sessions[sessionRef] }
         guard let session else { return }

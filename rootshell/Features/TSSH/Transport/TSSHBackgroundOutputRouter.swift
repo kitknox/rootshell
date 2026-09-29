@@ -85,3 +85,23 @@ nonisolated enum TrzszControlGatewayPolicy {
         return autoStartsControlMode
     }
 }
+
+/// Whether a tssh session asks the remote to repaint when the app resumes.
+///
+/// While the app is suspended, tsshd keeps queueing output, and on resume it
+/// arrives as a burst of stale frames. A repaint that discards everything
+/// before it replaces that with one fresh frame. Only a full-screen app
+/// (alternate screen) is asked: discarding a shell's primary-screen output
+/// would lose scrollback. A control gateway resyncs through its own reset.
+nonisolated enum TrzszResumeRedrawPolicy {
+    /// - Parameter isAlternateScreen: nil when the terminal state could not be
+    ///   read without blocking; the redraw is skipped rather than waited for.
+    static func shouldRedraw(
+        isRunning: Bool,
+        expectsControlGateway: Bool,
+        isAlternateScreen: Bool?
+    ) -> Bool {
+        guard isRunning, !expectsControlGateway else { return false }
+        return isAlternateScreen == true
+    }
+}

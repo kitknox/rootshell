@@ -1063,6 +1063,27 @@ final class TrzszGoTransport: NSObject {
         }
     }
 
+    /// Asks the remote application to repaint, dropping every byte produced
+    /// before the repaint, including bytes already in flight (tsshd marks the
+    /// cut with a marker the Go client filters). Used on resume: output tsshd
+    /// queued while the app was suspended arrives as one fresh frame instead
+    /// of a replay. Routes through the gate like `resize`.
+    func redrawScreenDiscardingBacklog() {
+        guard let sRef = sessionRef else { return }
+
+        let label = debugLabel
+        Task { [sRef] in
+            do {
+                try await TSSHCallGate.shared.redrawScreen(sRef, discardPreviousOutput: true)
+                LifecycleDebugLogger.shared.checkpoint("Trzsz.resume.redraw", ms: nil, [
+                    ("session", label),
+                ])
+            } catch {
+                Self.logger.error("Failed to redraw screen: \(error.localizedDescription)")
+            }
+        }
+    }
+
     /// Silently abandons the transport without sending "close" to the server.
     /// Use when preserving the server session for future Attach() after app restart.
     /// Routes through the gate's emergency-teardown path so a wedged write

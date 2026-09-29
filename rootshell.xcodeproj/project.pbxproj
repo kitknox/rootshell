@@ -6992,7 +6992,7 @@
 			repositoryURL = "https://github.com/kitknox/trzsz-ssh-rootshell.git";
 			requirement = {
 				kind = exactVersion;
-				version = 0.2.6;
+				version = 0.2.7;
 			};
 		};
 		47XZPKG02FF00000AABB0000 /* XCRemoteSwiftPackageReference "xz_ios-rootshell" */ = {

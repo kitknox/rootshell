@@ -1405,6 +1405,27 @@ extension MainView {
         }
     }
 
+    /// Ask each tssh session showing a full-screen app to repaint and drop the
+    /// output tsshd queued while the app was suspended. Runs after the gate
+    /// opens, so the repaint lands as live output. The alternate-screen read
+    /// never blocks: a terminal busy parsing is skipped rather than waited on.
+    @MainActor
+    private func requestTrzszResumeRedraws() {
+        var seen = Set<ObjectIdentifier>()
+        for leaf in terminals.flatMap({ $0.splitTree.terminalLeaves }) where leaf.tmuxPaneBinding == nil {
+            guard let session = TmuxController.gatewayTrzszSession(for: leaf.session),
+                  seen.insert(ObjectIdentifier(session)).inserted else { continue }
+            var isAlternateScreen: Bool?
+            if let surface = leaf.surface {
+                var altActive = false
+                if ghostty_surface_try_is_alternate_active(surface, &altActive) {
+                    isAlternateScreen = altActive
+                }
+            }
+            session.redrawAfterResume(isAlternateScreen: isAlternateScreen)
+        }
+    }
+
     /// Drain one tssh session per runloop tick, then flip the background
     /// atomic to unblock new Go-thread output. See call site in
     /// `performForegroundResume()` for rationale.
@@ -1495,6 +1516,10 @@ extension MainView {
             ) {
                 session.flushBackgroundedOutputFully()
             }
+
+            #if !targetEnvironment(macCatalyst)
+            self.requestTrzszResumeRedraws()
+            #endif
 
             // BISECT GATE 3: defer the appTick mailbox drain during the
             // resume quiet window. Toggle via BisectFlags.gate3_appTick.
