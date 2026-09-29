@@ -193,6 +193,16 @@ final class TrzszGoTransport: NSObject {
     private nonisolated let deferredCallbackEvents = OSAllocatedUnfairLock<[DeferredCallbackEvent]>(initialState: [])
     private nonisolated static let foregroundReplayChunkBytes = 64 * 1024
 
+    /// Backgrounded output goes straight to the terminal (write-through)
+    /// unless the session keeps it in `backgroundedOutputBuffer` for a control
+    /// gateway. The sink writes through the pty write queue and never touches
+    /// UIKit; main-actor side effects stay deferred to the foreground.
+    private nonisolated let backgroundOutputRouter = TrzszBackgroundOutputRouter()
+
+    nonisolated func setBackgroundWriteThrough(_ enabled: Bool) {
+        backgroundOutputRouter.setWriteThroughEnabled(enabled)
+    }
+
     /// Lifecycle observability: tracks whether the previous emit was buffered
     /// (background) so we can log a single line on the first foreground emit
     /// after the gate flips. Used only for diagnostic logging — does not
@@ -340,7 +350,18 @@ final class TrzszGoTransport: NSObject {
     nonisolated func emitOutputFromGoCallback(_ data: Data) {
         markRemoteActivityObserved()
 
-        if Ghostty.isAppBackgroundedAtomic {
+        let route = backgroundOutputRouter.route(
+            byteCount: data.count, isBackgrounded: Ghostty.isAppBackgroundedAtomic)
+
+        if route == .writeThrough {
+            // Bytes buffered before write-through was enabled (a control
+            // gateway ended while backgrounded) go first, to keep byte order.
+            flushBackgroundedOutput()
+            outputSink.emit(data)
+            return
+        }
+
+        if route == .buffer {
             let dropped = backgroundedOutputBuffer.append(data)
             if dropped > 0 {
                 Self.logger.warning("tssh output buffer dropped \(dropped) oldest bytes while backgrounded")
@@ -394,6 +415,7 @@ final class TrzszGoTransport: NSObject {
         }
 
         flushBackgroundedOutput()
+        settleBackgroundWriteThrough()
         outputSink.emit(data)
         notifyDataArrived()
     }
@@ -469,11 +491,31 @@ final class TrzszGoTransport: NSObject {
         flushBackgroundedOutput(maxBytes: Self.foregroundReplayChunkBytes)
     }
 
+    /// Foreground side of background write-through. The bytes are already in
+    /// the terminal; what is left is the treatment a backlog replay gets:
+    /// bells rung while away are stale, and the screen changed wholesale, so
+    /// agent detection must not read it as a fresh transition. Only the first
+    /// of the several resume paths that call this does any work. Call before
+    /// the deferred app tick delivers the actions queued while backgrounded.
+    nonisolated func settleBackgroundWriteThrough() {
+        let bytes = backgroundOutputRouter.takeWrittenThroughBytes()
+        guard bytes > 0 else { return }
+        if let terminalUUID {
+            TerminalBellSuppressor.suppress(
+                terminalUUID, for: TerminalBellSuppressor.forcedRedraw)
+            TerminalBellSuppressor.suppressRebuild(terminalUUID)
+        }
+        LifecycleDebugLogger.shared.checkpoint("Trzsz.bg.writeThrough", ms: nil, [
+            ("bytes", bytes),
+        ])
+    }
+
     func flushBackgroundedCallbacks() {
         // Reset-first: queue the tmux reset before emitting the buffered
         // (possibly gapped) bytes, so the resync drops them as pre-marker noise.
         deliverPendingDiscardIfAny()
         flushBackgroundedOutput()
+        settleBackgroundWriteThrough()
 
         let events = deferredCallbackEvents.withLock { events -> [DeferredCallbackEvent] in
             let captured = events

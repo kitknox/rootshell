@@ -255,9 +255,22 @@ final class TrzszSession: TerminalSession {
     /// covered by `controlModeKeepPendingInput` instead, which is set from the
     /// reconcile and so does not depend on any inference.
     private var effectiveKeepPendingInput: Bool {
-        if config.keepPendingInput || controlModeKeepPendingInput { return true }
-        guard !controlModeEnded, !wasResumed else { return false }
-        return config.sshConfig.tmuxAutoEnable && config.sshConfig.tmuxAutoMode == .control
+        config.keepPendingInput || expectsControlGateway
+    }
+
+    /// A `tmux -CC` or herdr control gateway is live on this session, or this
+    /// connect will launch one (the auto-start inference described above).
+    /// Such a session keeps background output buffered rather than written
+    /// through, because its control stream depends on the buffer's
+    /// discard→reset ordering.
+    private var expectsControlGateway: Bool {
+        TrzszControlGatewayPolicy.expectsGateway(
+            isLive: controlModeKeepPendingInput,
+            hasEnded: controlModeEnded,
+            wasResumed: wasResumed,
+            autoStartsControlMode: config.sshConfig.tmuxAutoEnable
+                && config.sshConfig.tmuxAutoMode == .control
+        )
     }
 
     /// Port forward manager for TSSH transport
@@ -1109,6 +1122,7 @@ final class TrzszSession: TerminalSession {
         // ROOTSHELL-TMUX (id=tmux-keep-pending-rebind)
         controlModeKeepPendingInput = true
         controlModeEnded = false
+        goTransport?.setBackgroundWriteThrough(!expectsControlGateway)
         pushKeepPendingInput()
     }
 
@@ -1121,6 +1135,7 @@ final class TrzszSession: TerminalSession {
     func disableControlModeKeepPendingInput() {
         controlModeKeepPendingInput = false
         controlModeEnded = true
+        goTransport?.setBackgroundWriteThrough(!expectsControlGateway)
         pushKeepPendingInput()
     }
 
@@ -1205,6 +1220,7 @@ final class TrzszSession: TerminalSession {
         // Wire the byte path before connect() so any output from a fast
         // session start lands in the session's existing callbacks.
         transport.outputSink.update(onOutput: onOutput, onOutputData: onOutputData)
+        transport.setBackgroundWriteThrough(!expectsControlGateway)
         self.goTransport = transport
         self.sessionDebugLabel = transport.debugLabel
 
@@ -1972,6 +1988,9 @@ final class TrzszSession: TerminalSession {
         // after the reset call returns (id=termio-tmux-reset-barrier), so the
         // gapped bytes are dropped as resync pre-marker noise, never parsed.
         goTransport?.deliverPendingDiscardIfAny()
+        // Before the gate flips, so bells written through while backgrounded
+        // are muted before the deferred app tick delivers them.
+        goTransport?.settleBackgroundWriteThrough()
         return goTransport?.flushBackgroundedOutputForForegroundReplay() ?? false
     }
 
@@ -1980,6 +1999,7 @@ final class TrzszSession: TerminalSession {
         // and the foreground gate flip. Take-and-clear makes repeats free.
         goTransport?.deliverPendingDiscardIfAny()
         goTransport?.flushBackgroundedOutput()
+        goTransport?.settleBackgroundWriteThrough()
     }
 }
 
