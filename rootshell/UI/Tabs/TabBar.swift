@@ -365,7 +365,7 @@ struct TabBar: View {
     /// Gates the attention dot on tabs. (id=agent-attention)
     @Setting(Settings.CodingAgents.attentionBadges) private var attentionBadgesEnabled
 
-    /// Logo for the tab's highest-priority agent, under the same gate as the dot.
+    /// Logo for the focused pane's agent, under the same gate as the dot.
     private func agentLogoAsset(for tab: TabModel) -> String? {
         attentionBadgesEnabled ? AgentBrandMark.assetName(for: tab.agentID) : nil
     }

@@ -296,8 +296,8 @@ final class TabModel: Identifiable {
     /// (id=agent-attention)
     var agentRow: AgentRowState?
 
-    /// `agentRow`'s agent id alone, so the top tab bar's logo doesn't
-    /// re-render the whole bar on every progress or timer change.
+    /// The focused pane's agent id, so the top tab logo matches the title.
+    /// Kept apart from `agentRow` so progress ticks don't re-render the bar.
     var agentID: String?
 
     /// Every agent pane in split-tree order, unlike `agentRow`.

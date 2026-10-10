@@ -2433,7 +2433,10 @@ final class AgentAttentionCenter {
             for tab in model.tabs {
                 var statuses: [AgentAttentionStatus] = []
                 var bestRow: AgentRowState?
+                var focusedAgentID: String?
                 var agentPaneIDs: [UUID] = []
+                // Same pane the tab title follows.
+                let titlePane = tab.focusedPane ?? tab.splitTree.first
                 for terminal in tab.splitTree.terminalLeaves {
                     let monitor = monitors[terminal.uuid]
                     let usesHerdrStatus = monitor?.externalAuthority == true && monitor?.agent != nil
@@ -2463,6 +2466,9 @@ final class AgentAttentionCenter {
                         statuses.append(status)
                     }
                     let agentRow = terminal.presentation.agentRow
+                    if terminal === titlePane {
+                        focusedAgentID = agentRow?.agentID
+                    }
                     if let agentRow {
                         agentPaneIDs.append(terminal.uuid)
                         if bestRow == nil
@@ -2486,8 +2492,8 @@ final class AgentAttentionCenter {
                     tab.agentRow = bestRow
                     changed = true
                 }
-                if tab.agentID != bestRow?.agentID {
-                    tab.agentID = bestRow?.agentID
+                if tab.agentID != focusedAgentID {
+                    tab.agentID = focusedAgentID
                     changed = true
                 }
             }
