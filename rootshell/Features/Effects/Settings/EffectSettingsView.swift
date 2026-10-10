@@ -672,8 +672,8 @@ struct EffectSettingsView: View {
                     AuroraSettingsSection(effect: auroraEffect)
                 }
 
-                if activeEffect.id == "themeGradient",
-                   let gradientEffect = activeEffect.asEffect(ThemeGradientEffect.self) {
+                // Both the area effect and the window backdrop
+                if let gradientEffect = activeEffect.asEffect(ThemeGradientEffect.self) {
                     ThemeGradientSettingsSection(effect: gradientEffect)
                 }
 
