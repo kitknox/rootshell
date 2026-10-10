@@ -38,6 +38,14 @@ final class HostFingerprintRegistry {
             ?? KnownHostsManager.shared.getHost(hostname: hostname, port: port)?.fingerprint
     }
 
+    /// The fingerprint a connection's background is tinted by, or nil when
+    /// Tint by Host is off or the connection is not SSH.
+    func tintFingerprint(for connection: ConnectionConfig) -> String? {
+        guard SettingsStore.shared.get(Settings.Theme.hostTint),
+              let ssh = connection.underlyingSSHConfig else { return nil }
+        return fingerprint(hostname: ssh.host, port: ssh.port)
+    }
+
     /// Yields whenever a host's recorded fingerprint changes.
     func changes() -> AsyncStream<Void> {
         let id = UUID()

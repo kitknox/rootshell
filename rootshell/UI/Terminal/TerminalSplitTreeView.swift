@@ -402,6 +402,11 @@ final class SplitTreeHostingView: UIView {
     /// keyboardAnimationTask for the single-pane path.
     private var keyboardAnimationTask: Task<Void, Never>?
 
+    #if !targetEnvironment(macCatalyst)
+    /// Refresh card fills when Tint by Host or a host's fingerprint changes.
+    private var hostTintTasks: [Task<Void, Never>] = []
+    #endif
+
     /// Frosted-glass cover for the dead margin when a smaller foreign tmux client
     /// has shrunk this window below the size we requested. nil until first needed;
     /// non-interactive; masked to `bounds − contentRect`. See `updateDeadMarginOverlay`.
@@ -439,6 +444,22 @@ final class SplitTreeHostingView: UIView {
         }
 
         armCardThemeObservation()
+        #if !targetEnvironment(macCatalyst)
+        let settingChanges = SettingsStore.shared.changes()
+        let fingerprintChanges = HostFingerprintRegistry.shared.changes()
+        hostTintTasks = [
+            Task { @MainActor [weak self] in
+                for await change in settingChanges where change.contains(Settings.Theme.hostTint.name) {
+                    self?.updateFocusAppearance()
+                }
+            },
+            Task { @MainActor [weak self] in
+                for await _ in fingerprintChanges where SettingsStore.shared.get(Settings.Theme.hostTint) {
+                    self?.updateFocusAppearance()
+                }
+            },
+        ]
+        #endif
 
         // Listen for layout invalidation notifications (tab bar toggle, titlebar tabs, AI sidebar)
         layoutInvalidationObserver = NotificationCenter.default.addObserver(
@@ -491,6 +512,9 @@ final class SplitTreeHostingView: UIView {
             NotificationCenter.default.removeObserver(observer)
         }
         keyboardAnimationTask?.cancel()
+        #if !targetEnvironment(macCatalyst)
+        hostTintTasks.forEach { $0.cancel() }
+        #endif
     }
 
     func update(tree: SplitTree<SplitPaneView>, focusedPane: SplitPaneView?) {
@@ -1596,10 +1620,13 @@ final class SplitTreeHostingView: UIView {
         container.clipsToBounds = rounded
         // A rubber-band pull moves the surface down inside the card; fill the
         // uncovered strip with the terminal background so the card keeps its shape.
-        // A translucent terminal skips it: the fill would stack beneath it.
+        // A translucent terminal fills just that strip, at its own opacity, so
+        // the fill never stacks beneath it.
         if let scrollView = container as? Ghostty.TerminalScrollView {
-            let opaque = TransparencyManager.shared.effectiveBackgroundOpacity >= 1
-            scrollView.backgroundColor = rounded && opaque ? cardSurfaceColor(for: scrollView.terminalView) : .clear
+            let opacity = TransparencyManager.shared.effectiveBackgroundOpacity
+            let surface = cardSurfaceColor(for: scrollView.terminalView)
+            scrollView.backgroundColor = rounded && opacity >= 1 ? surface : .clear
+            scrollView.overscrollFillColor = opacity < 1 ? surface.withAlphaComponent(opacity) : nil
         }
         #endif
     }
@@ -1614,7 +1641,8 @@ final class SplitTreeHostingView: UIView {
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if self.roundsPanes { self.updateFocusAppearance() }
+                // Square panes still need the overscroll fill refreshed.
+                self.updateFocusAppearance()
                 self.armCardThemeObservation()
             }
         }
@@ -1625,7 +1653,16 @@ final class SplitTreeHostingView: UIView {
             tabId: terminal.containingTabID, windowId: terminal.windowId)
         let hex = ThemeManager.shared.themeInfo(for: themeName)?.colors.background
             ?? ThemeManager.shared.currentThemeInfo?.colors.background
-        return hex.flatMap { UIColor(hex: $0) } ?? .clear
+        guard let base = hex.flatMap({ UIColor(hex: $0) }) else { return .clear }
+        // Match the surface's Tint by Host background.
+        guard let fingerprint = HostFingerprintRegistry.shared.tintFingerprint(for: terminal.connectionConfig)
+        else { return base }
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        base.getRed(&r, green: &g, blue: &b, alpha: &a)
+        let channel = { (value: CGFloat) in UInt8((min(max(value, 0), 1) * 255).rounded()) }
+        let tinted = HostTint.tintedBackground(
+            red: channel(r), green: channel(g), blue: channel(b), fingerprint: fingerprint)
+        return UIColor(hex: tinted) ?? base
     }
 
     private func updateCardBackdrop() {

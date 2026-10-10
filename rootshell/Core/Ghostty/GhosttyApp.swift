@@ -961,9 +961,9 @@ extension Ghostty {
 
         /// The remote host key fingerprint for a surface's connection when host tinting is on.
         private func hostTintFingerprint(for surface: ghostty_surface_t) -> String? {
-            guard SettingsStore.shared.get(Settings.Theme.hostTint),
-                  let ssh = surfaceView(for: surface)?.connectionConfig.underlyingSSHConfig else { return nil }
-            return HostFingerprintRegistry.shared.fingerprint(hostname: ssh.host, port: ssh.port)
+            surfaceView(for: surface).flatMap {
+                HostFingerprintRegistry.shared.tintFingerprint(for: $0.connectionConfig)
+            }
         }
 
         /// Owned config for a surface that is off the plain global config: its
