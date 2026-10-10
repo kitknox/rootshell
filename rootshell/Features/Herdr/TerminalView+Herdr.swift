@@ -68,6 +68,7 @@ extension Ghostty.TerminalView {
             herdrGatewayHost?.view.removeFromSuperview()
             herdrGatewayHost?.removeFromParent()
             herdrGatewayHost = nil
+            rendererLayer?.isHidden = false
             return
         }
         if herdrGatewayHost == nil {
@@ -107,6 +108,8 @@ extension Ghostty.TerminalView {
         )
         // Split-host and tab-switch animations may be in flight; the card
         // must snap into place, never slide or grow.
+        // The card is translucent like the terminal; the shell must not show through.
+        rendererLayer?.isHidden = true
         UIView.performWithoutAnimation {
             if let host = herdrGatewayHost {
                 host.rootView = content
