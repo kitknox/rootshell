@@ -1057,23 +1057,6 @@ struct ScrollEdgeEffectHiddenModifier: ViewModifier {
     }
 }
 
-/// Fades and blurs scroll content under bars instead of the platform's default edge.
-struct SoftScrollEdgeEffectModifier: ViewModifier {
-    @Setting(Settings.Theme.softScrollEdges) private var softScrollEdges
-
-    func body(content: Content) -> some View {
-        #if os(visionOS)
-        content
-        #else
-        if #available(iOS 26.0, macOS 26.0, *) {
-            content.scrollEdgeEffectStyle(softScrollEdges ? .soft : nil, for: .all)
-        } else {
-            content
-        }
-        #endif
-    }
-}
-
 /// Wraps content in GlassEffectContainer on iOS 26+, passthrough on older versions
 struct GlassEffectContainerModifier: ViewModifier {
     /// Glass-free tabs skip the container, whose group would also confine the

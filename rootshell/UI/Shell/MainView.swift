@@ -208,6 +208,8 @@ struct MainView: View {
 
     // Tab bar visibility
     @Setting(Settings.Tabs.barHidden) var tabBarHidden
+    @Setting(Settings.Theme.scrollEdgeEffect) var scrollEdgeEffect
+    @Setting(Settings.Theme.scrollEdgeOpacity) var scrollEdgeOpacity
     @Setting(Settings.Tabs.showShortcutIndicators) var showTabShortcutIndicators
     @Setting(Settings.Tabs.barAnimationsDisabled) var tabBarAnimationsDisabled
     @Setting(Settings.Tabs.topTabStyle) var topTabStyle
@@ -499,6 +501,7 @@ struct MainView: View {
                                     .allowsHitTesting(false)
                             }
                         }
+                        .zIndex(1)
                     }
                     
                     Color.clear.frame(height: workspace.cameraClearance)

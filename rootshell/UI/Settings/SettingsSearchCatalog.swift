@@ -596,8 +596,10 @@ struct SettingsSearchEntry: Identifiable, Hashable {
             // MARK: Appearance Mode
             row("theme-aware-ui", String(localized: "Theme-Aware UI"), in: .appearanceMode,
                 keywords: ["ui colors", "tinted", "chrome", "theme aware"]),
-            row("soft-scroll-edges", String(localized: "Soft Scroll Edges"), in: .appearanceMode,
-                keywords: ["scroll edge", "blur", "fade", "liquid glass", "toolbar"]),
+            row("scroll-edge-effect", String(localized: "Scroll Edge Effect"), in: .appearanceMode,
+                keywords: ["scroll edge", "soft", "hard", "hidden", "blur", "fade", "liquid glass", "status bar", "toolbar"]),
+            row("scroll-edge-opacity", String(localized: "Edge Opacity"), in: .appearanceMode,
+                keywords: ["scroll edge", "band", "transparency", "status bar"]),
             row("im-no-fun", String(localized: "I'm no fun"), in: .appearanceMode, icon: "face.smiling",
                 keywords: ["jokes", "quips", "ascii", "animations", "failure", "humor"]),
 
@@ -652,6 +654,8 @@ struct SettingsSearchEntry: Identifiable, Hashable {
                 keywords: ["rounded", "corners", "cards", "gap", "split panes", "sidebar"]),
             row("window-full-screen", String(localized: "Full Screen"), in: .window,
                 keywords: ["status bar", "immersive"], available: isTouch),
+            row("window-status-bar", String(localized: "Status Bar"), in: .window,
+                keywords: ["status bar", "clock", "scrolling", "auto hide", "scrollback"], available: isTouch),
             row("window-always-on", String(localized: "Always On Display"), in: .window,
                 keywords: ["idle timer", "sleep", "screen lock", "stay awake"], available: isTouch),
             row("window-home-indicator", String(localized: "Extend Under Home Indicator"), in: .window,

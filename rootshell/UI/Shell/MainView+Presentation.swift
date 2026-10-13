@@ -120,6 +120,11 @@ extension MainView {
 #elseif !os(visionOS)
         view
             .modifier(TitlebarTabsModifier(isEnabled: usesTitlebarTabs, fullScreenEnabled: fullScreenModeEnabled))
+            .modifier(ScrollbackStatusBarModifier(
+                focusedTerminal: terminals.indices.contains(selectedTabIndex)
+                    ? terminals[selectedTabIndex].focusedPane as? Ghostty.TerminalView
+                    : nil
+            ))
             .background(windowId == "visor" ? nil : CurrentWindowTitleAccessor(tabsModel: tabsModel))
 #else
         view
