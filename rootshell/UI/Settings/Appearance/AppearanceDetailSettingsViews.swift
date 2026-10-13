@@ -96,6 +96,8 @@ struct AIAgentFontSettingsView: View {
 
 struct AppearanceModeSettingsView: View {
     @StateObject private var appearanceManager = AppearanceManager.shared
+    @Setting(Settings.Theme.scrollEdgeEffect) private var scrollEdgeEffect
+    @Setting(Settings.Theme.scrollEdgeOpacity) private var scrollEdgeOpacity
 
     var body: some View {
         List {
@@ -132,10 +134,35 @@ struct AppearanceModeSettingsView: View {
             }
 
             Section {
-                SettingToggle(Settings.Theme.softScrollEdges, title: "Soft Scroll Edges")
+                Picker(selection: $scrollEdgeEffect) {
+                    ForEach(ScrollEdgeEffectMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                } label: {
+                    Text("Scroll Edge Effect")
+                        .settingRow(Settings.Theme.scrollEdgeEffect)
+                }
+                .pickerStyle(.menu)
+                .themedRow()
+
+                if scrollEdgeEffect == .hard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Edge Opacity")
+                                .settingRow(Settings.Theme.scrollEdgeOpacity)
+                            Spacer()
+                            Text(scrollEdgeOpacity, format: .percent.precision(.fractionLength(0)))
+                                .foregroundColor(.secondary)
+                                .monospacedDigit()
+                                .frame(width: 50, alignment: .trailing)
+                        }
+                        Slider(value: $scrollEdgeOpacity, in: 0.0...1.0, step: 0.01)
+                    }
+                    .padding(.vertical, 4)
                     .themedRow()
+                }
             } footer: {
-                Text("Fade and blur lists as they scroll under toolbars and the title bar.")
+                Text("How lists and the terminal meet the status bar, tab bar, and toolbars. Soft fades content out beneath them; Hidden lets it run under them. Below full opacity, Hard shows terminal scrollback through the band.")
                     .font(.caption)
             }
 
