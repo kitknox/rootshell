@@ -292,6 +292,8 @@ struct WindowSettingsView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Setting(Settings.Tabs.topTabStyle) private var topTabStyle
     @Setting(Settings.Tabs.duoFrontDisplayMode) private var duoFrontDisplayMode
+    @Setting(Settings.Window.fullScreenMode) private var fullScreenModeEnabled
+    @Setting(Settings.Window.statusBar) private var statusBarVisibility
     @Setting(Settings.Tabs.compactPillSpacing) private var compactPillTabSpacing
     @Setting(Settings.Tabs.hoverPreviews) private var tabHoverPreviewsEnabled
     @Setting(Settings.Tabs.hoverPreviewActivation) private var tabHoverPreviewActivation
@@ -677,6 +679,19 @@ struct WindowSettingsView: View {
                     description: "Hides the status bar and iPadOS window resize handle for a distraction-free terminal."
                 )
                 .themedRow()
+
+                if !fullScreenModeEnabled {
+                    Picker(selection: $statusBarVisibility) {
+                        ForEach(StatusBarVisibility.allCases) { visibility in
+                            Text(visibility.displayName).tag(visibility)
+                        }
+                    } label: {
+                        Text("Status Bar")
+                            .settingRow(Settings.Window.statusBar)
+                    }
+                    .pickerStyle(.menu)
+                    .themedRow()
+                }
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {

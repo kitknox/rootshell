@@ -226,6 +226,7 @@ enum QuickSettingsCatalog {
             integer(Settings.Sidebar.rowLines, 1...3),
         ]
         #if os(iOS) && !targetEnvironment(macCatalyst)
+        entries.append(choices(Settings.Window.statusBar, label: { $0.displayName }))
         if #available(iOS 27.1, *) {
             entries += [
                 choices(Settings.Tabs.duoFrontDisplayMode, label: { $0.displayName })

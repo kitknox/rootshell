@@ -654,6 +654,8 @@ struct SettingsSearchEntry: Identifiable, Hashable {
                 keywords: ["rounded", "corners", "cards", "gap", "split panes", "sidebar"]),
             row("window-full-screen", String(localized: "Full Screen"), in: .window,
                 keywords: ["status bar", "immersive"], available: isTouch),
+            row("window-status-bar", String(localized: "Status Bar"), in: .window,
+                keywords: ["status bar", "clock", "scrolling", "auto hide", "scrollback"], available: isTouch),
             row("window-always-on", String(localized: "Always On Display"), in: .window,
                 keywords: ["idle timer", "sleep", "screen lock", "stay awake"], available: isTouch),
             row("window-home-indicator", String(localized: "Extend Under Home Indicator"), in: .window,
