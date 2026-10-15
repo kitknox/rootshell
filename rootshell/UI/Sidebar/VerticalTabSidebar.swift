@@ -2208,18 +2208,13 @@ struct VerticalTabSidebar: View {
         ownerID: UUID,
         gatewayOwnerIDs: [UUID]
     ) -> SidebarGatewayHeaderItem {
-        let controller = tmuxController(row.tab)
         let isHerdr = row.tab.isHerdrGateway
         let familyID: TabGroupID = isHerdr ? .herdr(ownerID: ownerID) : .tmux(ownerID: ownerID)
         let isActive = tabsModel.effectiveGroupID(for: tabsModel.selectedTab) == familyID
-        let host: String? = isHerdr
-            ? tabsModel.groupHostLabel(for: row.tab)
-            // Not observable, so safe to resolve here and compare in `==`.
-            : controller?.connectionKey ?? controller?.gatewaySourceDisplayName
         return SidebarGatewayHeaderItem(
             tab: row.tab,
             tmuxBadge: TmuxTabBadgeResolver.badge(for: row.tab, gatewayOwnerIDs: gatewayOwnerIDs),
-            host: host,
+            naming: tabsModel.gatewayNaming(for: row.tab),
             collapsed: collapsed,
             windowCount: windowCount,
             isSelected: isSelected,
@@ -2229,6 +2224,7 @@ struct VerticalTabSidebar: View {
             metrics: metrics,
             accentTint: accentTint,
             showsDashboard: !isHerdr,
+            showsWindowButtons: !usesCompactLayout,
             isDocked: isDocked,
             staysOpenOnSelect: staysOpenOnSelect,
             onToggleCollapse: { toggleGatewayCollapse(ownerID) },
@@ -3178,7 +3174,7 @@ private struct SidebarAgentSummaryBar: View {
 private struct SidebarGatewayHeaderItem: View, Equatable {
     let tab: TabModel
     let tmuxBadge: TmuxTabBadge?
-    let host: String?
+    let naming: GatewayNaming
     let collapsed: Bool
     let windowCount: Int
     let isSelected: Bool
@@ -3190,6 +3186,8 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
     let accentTint: Color
     /// False for herdr, which has no sessions dashboard.
     var showsDashboard: Bool = true
+    /// Off in compact layouts so the machine name fits; the long-press menu has both.
+    var showsWindowButtons: Bool = true
     /// Compared because `onTap`'s focus routing captures them.
     let isDocked: Bool
     let staysOpenOnSelect: Bool
@@ -3208,7 +3206,7 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
     static func == (lhs: SidebarGatewayHeaderItem, rhs: SidebarGatewayHeaderItem) -> Bool {
         lhs.tab === rhs.tab
             && lhs.tmuxBadge == rhs.tmuxBadge
-            && lhs.host == rhs.host
+            && lhs.naming == rhs.naming
             && lhs.collapsed == rhs.collapsed
             && lhs.windowCount == rhs.windowCount
             && lhs.isSelected == rhs.isSelected
@@ -3218,6 +3216,7 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
             && lhs.metrics == rhs.metrics
             && lhs.accentTint == rhs.accentTint
             && lhs.showsDashboard == rhs.showsDashboard
+            && lhs.showsWindowButtons == rhs.showsWindowButtons
             && lhs.isDocked == rhs.isDocked
             && lhs.staysOpenOnSelect == rhs.staysOpenOnSelect
             && lhs.previewAnchors === rhs.previewAnchors
@@ -3226,12 +3225,9 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
 
     var body: some View {
         // The tab's observable mirror; TmuxController isn't observable.
-        let subtitle = Self.subtitle(
-            sessionName: tab.tmuxSessionName ?? tab.herdrSessionName,
-            host: host,
-            collapsedWindowCount: collapsed ? windowCount : nil
-        )
-        let title = subtitle.isEmpty ? tab.title : subtitle
+        let session = tab.tmuxSessionName ?? tab.herdrSessionName
+        let title = naming.machine ?? session ?? tab.title
+        let detail = Self.detail(session: naming.machine == nil ? nil : session, windowCount: windowCount)
         let isHidden = tab.isHiddenTmuxWindow
 
         HStack(spacing: 8) {
@@ -3245,38 +3241,45 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
             }
             .buttonStyle(.plain)
 
-            if isHidden {
-                Image(systemName: "eye.slash")
-                    .font(.system(size: metrics.rowIconSize - 1))
-                    .foregroundColor(.secondary)
-            }
-
             if let tmuxBadge {
                 TmuxTabBadgeView(badge: tmuxBadge, palette: .currentTheme)
             }
 
-            Text(title)
-                .font(.system(size: metrics.titleSize, weight: isSelected ? .semibold : .medium))
-                .foregroundColor(isActive ? .primary : .secondary)
-                .lineLimit(metrics.titleLineLimit)
+            // Machine on its own line so neither it nor the session truncates.
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    // Stands in for a machine name, matching the Local Shell group icon.
+                    if naming.isLocal {
+                        Image(systemName: "terminal")
+                            .font(.system(size: metrics.rowIconSize - 1))
+                            .foregroundColor(.secondary)
+                    }
+                    Text(title)
+                        .font(.system(size: metrics.titleSize, weight: isSelected ? .semibold : .medium))
+                        .foregroundColor(isActive ? .primary : .secondary)
+                        .lineLimit(metrics.titleLineLimit)
+                }
+                if !detail.isEmpty {
+                    Text(detail)
+                        .font(.system(size: metrics.subtitleSize))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel([
+                isHidden ? String(localized: "Hidden", comment: "Sidebar: accessibility prefix for a hidden gateway row") : nil,
+                naming.isLocal ? String(localized: "Local Shell", comment: "Connection type: local terminal shell") : nil,
+                title,
+                detail.isEmpty ? nil : detail,
+            ].compactMap { $0 }.joined(separator: ", "))
 
             Spacer(minLength: 4)
 
             HStack(spacing: 4) {
-                Button(action: onNewWindow) {
-                    Image(systemName: "plus.square.on.square")
-                        .font(.system(size: metrics.rowIconSize, weight: .medium))
-                        .foregroundColor(accentTint)
-                        .frame(width: metrics.rowButtonTarget, height: metrics.rowButtonTarget)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .frame(width: metrics.trailingAccessoryWidth, alignment: .center)
-                .help(showsDashboard ? "New tmux window" : "New herdr tab")
-
-                if showsDashboard {
-                    Button(action: onShowDashboard) {
-                        Image(systemName: "rectangle.stack")
+                if showsWindowButtons {
+                    Button(action: onNewWindow) {
+                        Image(systemName: "plus.square.on.square")
                             .font(.system(size: metrics.rowIconSize, weight: .medium))
                             .foregroundColor(accentTint)
                             .frame(width: metrics.rowButtonTarget, height: metrics.rowButtonTarget)
@@ -3284,7 +3287,20 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
                     }
                     .buttonStyle(.plain)
                     .frame(width: metrics.trailingAccessoryWidth, alignment: .center)
-                    .help("tmux sessions")
+                    .help(showsDashboard ? "New tmux window" : "New herdr tab")
+
+                    if showsDashboard {
+                        Button(action: onShowDashboard) {
+                            Image(systemName: "rectangle.stack")
+                                .font(.system(size: metrics.rowIconSize, weight: .medium))
+                                .foregroundColor(accentTint)
+                                .frame(width: metrics.rowButtonTarget, height: metrics.rowButtonTarget)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .frame(width: metrics.trailingAccessoryWidth, alignment: .center)
+                        .help("tmux sessions")
+                    }
                 }
 
                 SidebarRowCloseButton(
@@ -3329,18 +3345,13 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
         return Color.primary.opacity(0.04)
     }
 
-    static func subtitle(
-        sessionName: String?,
-        host: String?,
-        collapsedWindowCount: Int?
-    ) -> String {
-        var components: [String?] = [sessionName, host]
-        if let collapsedWindowCount {
-            components.append(collapsedWindowCount == 1
-                ? String(localized: "1 window")
-                : String(localized: "\(collapsedWindowCount) windows"))
+    static func detail(session: String?, windowCount: Int) -> String {
+        let windows: String? = switch windowCount {
+        case 0: nil
+        case 1: String(localized: "1 window")
+        default: String(localized: "\(windowCount) windows")
         }
-        return TabOrderRules.scopeTitle(components: components, fallback: "")
+        return TabOrderRules.scopeTitle(components: [session, windows], fallback: "")
     }
 }
 
