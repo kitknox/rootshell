@@ -1306,26 +1306,36 @@ extension MainView {
     func terminalContentZStack(
         geometry: GeometryProxy,
         width: CGFloat,
-        effectLeadingExtension: CGFloat
+        effectLeadingExtension: CGFloat,
+        theme: ResolvedTabBarTheme
     ) -> some View {
         let terminalOpacity: Double = fullPanelHidesTerminal ? 0 : 1
         let textAboveEffect = effectManager.isTextAboveEffectActive
+        let topChrome = topChromeHeight(above: geometry)
         ZStack {
             terminalBackgroundFill
                 .opacity(terminalOpacity)
+                .padding(.top, -topChrome)
             tabRevealBackdropFill
                 .opacity(terminalOpacity)
+                .padding(.top, -topChrome)
             // Text Above Effect: pane backgrounds and the exposé backdrop,
             // then the effect, then glyph-only terminals and exposé mirrors.
             if textAboveEffect {
                 terminalTabsView(geometry: geometry, width: width, layer: .underlay)
                     .opacity(terminalOpacity)
                     .allowsHitTesting(false)
+                    .padding(.top, -topChrome)
                 tabExposeBackdropHost(width: width)
                 effectOverlay(leadingExtension: effectLeadingExtension)
             }
             terminalTabsView(geometry: geometry, width: width)
                 .opacity(terminalOpacity)
+                .padding(.top, -topChrome)
+            if topChrome > 0 {
+                topChromeBand(height: topChrome, theme: theme)
+                    .padding(.top, -topChrome)
+            }
             tmuxReconnectingSwipeFallback
             if !textAboveEffect {
                 effectOverlay(leadingExtension: effectLeadingExtension)
@@ -1363,6 +1373,9 @@ extension MainView {
                 .modifier(DuoControlClearance())
         }
         .frame(width: width)
+        .onChange(of: topChrome, initial: true) { _, height in
+            TerminalTopChrome.setHeight(height, forWindow: windowId)
+        }
         // Disable SwiftUI's automatic keyboard avoidance - we handle it manually via terminalBottomPadding
         // which correctly distinguishes docked vs undocked keyboards.
         // A tabletop keyboard frame starts at the terminal's bottom edge, so
@@ -1506,7 +1519,8 @@ extension MainView {
                 effectLeadingExtension: backgroundEffectIncludesPinnedSidebar
                     && backgroundSidebarEffectID == BackgroundEffectSelection.followTerminalID
                     ? dockedWidth
-                    : 0
+                    : 0,
+                theme: theme
             )
 
             fileManagerSidebarColumn(width: fileManagerWidth, totalWidth: geometry.size.width)
