@@ -91,7 +91,7 @@ showing twice.
   "kind": "agent",
   "agent": "claude-code",
   "status": "done",
-  "title": "Claude Code · rootshell",
+  "title": "[build-mac] Claude Code · rootshell",
   "body": "Finished the refactor and ran the tests.",
   "thread": "3f1a9c0b2d4e5f60",
   "route": {
@@ -109,7 +109,7 @@ showing twice.
 |----------|----------|----------------------------------------------------------|
 | `v`      | yes      | `1`                                                      |
 | `kind`   | yes      | `agent` or `generic`                                     |
-| `agent`  | no       | `claude-code`, `codex`, ...                              |
+| `agent`  | no       | `claude-code`, `codex`, `pi`, `omp`, `hermes`, ...        |
 | `status` | no       | `done`, `blocked`, `failed`, `info`                      |
 | `title`  | yes      | at most 120 characters                                   |
 | `body`   | no       | at most 600 characters (senders use 200 for summaries)   |

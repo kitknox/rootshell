@@ -5,7 +5,7 @@ DIST    := dist/$(VERSION)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 TARGETS := linux/amd64 linux/arm64 linux/arm darwin/amd64 darwin/arm64
 
-.PHONY: build release test vet clean
+.PHONY: build release test test-extensions vet clean
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) $(PKG)
@@ -13,6 +13,11 @@ build:
 test:
 	go vet ./...
 	go test ./...
+	$(MAKE) test-extensions
+	python3 installer/hermes_test.py
+
+test-extensions:
+	node --test installer/adapter.test.mjs
 
 release:
 	@test "$(VERSION)" != "dev" || { echo "set VERSION=x.y.z"; exit 1; }

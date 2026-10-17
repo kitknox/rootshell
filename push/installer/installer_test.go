@@ -73,7 +73,11 @@ func TestInstallUninstallRoundTrip(t *testing.T) {
 				groups := after["hooks"].(map[string]any)[ev].([]any)
 				group := groups[len(groups)-1].(map[string]any)
 				last := group["hooks"].([]any)[0].(map[string]any)
-				if last["command"] != tc.tool.command() || last["async"] != true || last["timeout"] != float64(10) || last[TagKey] != Tag {
+				wantAsync, wantTimeout := true, float64(10)
+				if tc.tool == Codex {
+					wantAsync = false
+				}
+				if last["command"] != tc.tool.command() || last["async"] != wantAsync || last["timeout"] != wantTimeout || last[TagKey] != Tag {
 					t.Fatalf("%s: %+v", ev, last)
 				}
 				if m, _ := group["matcher"].(string); m != matchers[ev] {
@@ -133,6 +137,40 @@ func TestInstallUninstallRoundTrip(t *testing.T) {
 func TestCodexInstallsOnlyStopHook(t *testing.T) {
 	if got, want := Codex.events(), []string{"Stop"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("Codex events = %v, want %v", got, want)
+	}
+}
+
+func TestCodexRefreshesAsyncHookForOneShotExit(t *testing.T) {
+	path := setupHome(t, Codex, "")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"rootshell-notify hook --agent codex","async":true,"timeout":10,"_rootshell":"push"},{"type":"command","command":"other","async":true,"timeout":10}]}]}}`
+	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := GetStatus(Codex, false); err != nil || st.Installed || !st.Outdated {
+		t.Fatalf("async Codex hook status: %+v %v", st, err)
+	}
+	res, err := Install(Codex, false)
+	if err != nil || !res.Changed {
+		t.Fatalf("async Codex hook must be refreshed: %+v %v", res, err)
+	}
+	doc := parse(t, path)
+	hooks := doc["hooks"].(map[string]any)["Stop"].([]any)[0].(map[string]any)["hooks"].([]any)
+	ours := hooks[0].(map[string]any)
+	if ours["async"] != false || ours["timeout"] != float64(10) {
+		t.Fatalf("one-shot exit must wait for the sender to hand off: %+v", ours)
+	}
+	foreign := hooks[1].(map[string]any)
+	if foreign["async"] != true || foreign["timeout"] != float64(10) {
+		t.Fatalf("unrelated hook changed: %+v", foreign)
+	}
+	if st, err := GetStatus(Codex, false); err != nil || !st.Installed {
+		t.Fatalf("refreshed status: %+v %v", st, err)
+	}
+	if again, err := Install(Codex, false); err != nil || again.Changed {
+		t.Fatalf("second refresh is not idempotent: %+v %v", again, err)
 	}
 }
 

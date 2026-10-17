@@ -14,6 +14,8 @@ public enum PushAgentLogoAttachment {
     private static let assetNames = [
         "claude-code": "ClaudeLogo",
         "codex": "CodexLogo",
+        "pi": "PiLogo",
+        "omp": "OMPLogo",
     ]
 
     static func assetName(for agent: String?) -> String? {

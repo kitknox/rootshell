@@ -7,6 +7,8 @@ struct PushAgentLogoAttachmentTests {
     @Test("Known hook agents resolve to bundled PNGs", arguments: [
         (agent: "claude-code", assetName: "ClaudeLogo"),
         (agent: "codex", assetName: "CodexLogo"),
+        (agent: "pi", assetName: "PiLogo"),
+        (agent: "omp", assetName: "OMPLogo"),
     ])
     func knownAgent(agent: String, assetName: String) throws {
         #expect(PushAgentLogoAttachment.assetName(for: agent) == assetName)

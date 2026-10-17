@@ -1,5 +1,5 @@
-// Package installer merges the rootshell-notify hook into Claude Code and
-// Codex hook files, tagging its entries so uninstall removes exactly them.
+// Package installer installs rootshell-notify hooks and agent extensions,
+// preserving configuration and extensions belonging to the user.
 package installer
 
 import (
@@ -28,21 +28,31 @@ type Tool string
 const (
 	ClaudeCode Tool = "claude-code"
 	Codex      Tool = "codex"
+	Pi         Tool = "pi"
+	OMP        Tool = "omp"
+	Hermes     Tool = "hermes"
 )
 
-var Tools = []Tool{ClaudeCode, Codex}
+var Tools = []Tool{ClaudeCode, Codex, Pi, OMP, Hermes}
 
 func ParseTool(s string) (Tool, error) {
 	switch Tool(s) {
-	case ClaudeCode, Codex:
+	case ClaudeCode, Codex, Pi, OMP, Hermes:
 		return Tool(s), nil
 	}
-	return "", fmt.Errorf("unknown tool %q (want claude-code or codex)", s)
+	return "", fmt.Errorf("unknown tool %q (want claude-code, codex, pi, omp or hermes)", s)
 }
 
 func (t Tool) Name() string {
-	if t == Codex {
+	switch t {
+	case Codex:
 		return "Codex"
+	case Pi:
+		return "Pi"
+	case OMP:
+		return "OMP"
+	case Hermes:
+		return "Hermes"
 	}
 	return "Claude Code"
 }
@@ -58,22 +68,31 @@ func (t Tool) command() string {
 	return Command + " --agent " + string(t)
 }
 
+func (t Tool) hookAsync() bool {
+	// Codex exec tears down async hooks on exit. The synchronous sender only
+	// hands the payload to a detached child, so Codex barely waits.
+	return t != Codex
+}
+
 // matchers restricts an event to specific tools; PreToolUse only fires for questions.
 var matchers = map[string]string{"PreToolUse": "AskUserQuestion"}
 
 // Path returns the hook file for the tool, project-local when project is set.
 func Path(t Tool, project bool) (string, error) {
-	base := "."
-	if !project {
-		var err error
-		if base, err = os.UserHomeDir(); err != nil {
-			return "", err
-		}
+	dir, err := ConfigDir(t, project)
+	if err != nil {
+		return "", err
 	}
-	if t == Codex {
-		return filepath.Join(base, ".codex", "hooks.json"), nil
+	switch t {
+	case Hermes:
+		return filepath.Join(dir, "plugins", "rootshell-push", "__init__.py"), nil
+	case Pi, OMP:
+		return filepath.Join(dir, "extensions", "rootshell-push.ts"), nil
+	case Codex:
+		return filepath.Join(dir, "hooks.json"), nil
+	default:
+		return filepath.Join(dir, "settings.json"), nil
 	}
-	return filepath.Join(base, ".claude", "settings.json"), nil
 }
 
 type Result struct {
@@ -86,13 +105,27 @@ type Status struct {
 	Path      string
 	Exists    bool
 	Installed bool
+	// Outdated means a managed hook is present but differs from this version's.
+	Outdated bool
 }
 
 func Install(t Tool, project bool) (Result, error) {
+	if t == Hermes {
+		return applyHermes(project, false)
+	}
+	if isExtension(t) {
+		return applyExtension(t, project, false)
+	}
 	return apply(t, project, func(doc map[string]any) bool { return install(doc, t) })
 }
 
 func Uninstall(t Tool, project bool) (Result, error) {
+	if t == Hermes {
+		return applyHermes(project, true)
+	}
+	if isExtension(t) {
+		return applyExtension(t, project, true)
+	}
 	return apply(t, project, uninstall)
 }
 
@@ -102,12 +135,43 @@ func GetStatus(t Tool, project bool) (Status, error) {
 		return Status{}, err
 	}
 	st := Status{Tool: t, Path: path}
+	if t == Hermes {
+		if err := checkHermesPath(path); err != nil {
+			st.Exists = true
+			return st, err
+		}
+		current, owned := true, true
+		for _, file := range hermesFiles(path) {
+			raw, exists, err := readExtension(file.path)
+			if err != nil {
+				return st, err
+			}
+			st.Exists = st.Exists || exists
+			if !exists || !bytes.Equal(raw, file.source) {
+				current = false
+			}
+			if exists && !ownedHermesFile(file, raw) {
+				owned = false
+			}
+		}
+		st.Installed = current
+		st.Outdated = !current && st.Exists && owned
+		return st, nil
+	}
+	if isExtension(t) {
+		raw, exists, err := readExtension(path)
+		st.Exists = exists
+		st.Installed = exists && bytes.Equal(raw, extensionSource(t))
+		st.Outdated = exists && !st.Installed && ownedExtension(raw, t)
+		return st, err
+	}
 	doc, exists, err := load(path)
 	if err != nil {
 		return st, err
 	}
 	st.Exists = exists
 	st.Installed = installed(doc, t)
+	st.Outdated = !st.Installed && hasOurs(doc)
 	return st, nil
 }
 
@@ -177,7 +241,7 @@ func load(path string) (map[string]any, bool, error) {
 func ourEntry(event string, t Tool) map[string]any {
 	g := map[string]any{
 		"hooks": []any{map[string]any{
-			"type": "command", "command": t.command(), "async": true, "timeout": HookTimeout, TagKey: Tag,
+			"type": "command", "command": t.command(), "async": t.hookAsync(), "timeout": HookTimeout, TagKey: Tag,
 		}},
 	}
 	if m := matchers[event]; m != "" {
@@ -207,18 +271,18 @@ func groupHasOurs(g any) bool {
 
 func hookIsCurrent(h any, t Tool) bool {
 	m, ok := h.(map[string]any)
-	return ok && isOurs(m) && m["type"] == "command" && m["command"] == t.command() && m["async"] == true && timeoutIsCurrent(m["timeout"])
+	return ok && isOurs(m) && m["type"] == "command" && m["command"] == t.command() && m["async"] == t.hookAsync() && timeoutIsCurrent(m["timeout"], HookTimeout)
 }
 
-func timeoutIsCurrent(v any) bool {
+func timeoutIsCurrent(v any, want int) bool {
 	switch n := v.(type) {
 	case int:
-		return n == HookTimeout
+		return n == want
 	case float64:
-		return n == HookTimeout
+		return n == float64(want)
 	case json.Number:
 		i, err := n.Int64()
-		return err == nil && i == HookTimeout
+		return err == nil && i == int64(want)
 	default:
 		return false
 	}
@@ -261,6 +325,17 @@ func installed(doc map[string]any, t Tool) bool {
 	return true
 }
 
+func hasOurs(doc map[string]any) bool {
+	for _, v := range hooksMap(doc) {
+		for _, g := range asList(v) {
+			if groupHasOurs(g) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func asList(v any) []any {
 	l, _ := v.([]any)
 	return l
@@ -289,7 +364,7 @@ func install(doc map[string]any, t Tool) bool {
 				if !hookIsCurrent(hm, t) {
 					hm["type"] = "command"
 					hm["command"] = t.command()
-					hm["async"] = true
+					hm["async"] = t.hookAsync()
 					hm["timeout"] = HookTimeout
 					changed = true
 				}

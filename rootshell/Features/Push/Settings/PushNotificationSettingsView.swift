@@ -134,7 +134,7 @@ struct PushNotificationSettingsView: View {
                 PushCommandSection(
                     title: String(localized: "Install or Upgrade the Hook Client"),
                     command: PushCommandSection.upgradeCommand,
-                    footer: String(localized: "Updates rootshell-notify and refreshes Claude Code and Codex hooks. Existing pairings are kept."))
+                    footer: String(localized: "Updates rootshell-notify and refreshes Claude Code, Codex, Pi, OMP and Hermes integrations. Existing pairings are kept."))
             }
         }
         .themedList()
@@ -239,7 +239,7 @@ struct PushPairingView: View {
             title: String(localized: "Run on the computer"),
             command: setupCommand(bundle),
             previewCommand: setupCommand(Self.pairingCodePlaceholder),
-            footer: String(localized: "Installs or updates rootshell-notify, pairs this device, and configures available Claude Code and Codex hooks.")
+            footer: String(localized: "Installs or updates rootshell-notify, pairs this device, and configures available Claude Code, Codex, Pi, OMP and Hermes integrations.")
         )
         commandSection(
             title: String(localized: "Already installed?"),

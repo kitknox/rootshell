@@ -23,6 +23,8 @@ let package = Package(
             resources: [
                 .copy("Resources/ClaudeLogo.png"),
                 .copy("Resources/CodexLogo.png"),
+                .copy("Resources/PiLogo.png"),
+                .copy("Resources/OMPLogo.png"),
             ]
         ),
         .testTarget(

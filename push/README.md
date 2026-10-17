@@ -2,9 +2,9 @@
 
 End-to-end encrypted push notifications from your computers to the rootshell
 app. `rootshell-notify` is a small, dependency-free Go binary that AI coding
-agents (Claude Code, Codex) call from their hooks when a turn finishes, and
-Claude Code also calls when it is waiting on you. It works as a plain `send`
-command from scripts too.
+agents (Claude Code, Codex, Pi, Oh My Pi and Hermes) call from their hooks, extensions or plugins
+when a turn finishes. Supported input requests also notify when the agent is
+waiting on you. It works as a plain `send` command from scripts too.
 
 The relay at `push.rootshell.com` is stateless and only ever sees
 ciphertext. Titles, summaries and routing hints are sealed with a
@@ -23,16 +23,17 @@ curl -fsSL https://push.rootshell.com/install.sh | sh -s -- --pair 'rspair1....'
 
 This installs `rootshell-notify` into `~/.local/bin`, pairs with the device,
 sends a test notification, and installs the hook for every agent it finds
-(`~/.claude` for Claude Code, `~/.codex` for Codex). If the binary is already
-at the current version the download is skipped.
+(`~/.claude` for Claude Code, `~/.codex` for Codex, `~/.pi/agent` for Pi,
+`~/.omp/agent` for Oh My Pi, `~/.hermes` for Hermes). If the binary is already at the current version
+the download is skipped.
 
 Installer options:
 
 | Flag              | Effect                                                |
 |-------------------|-------------------------------------------------------|
 | `--pair <bundle>` | Run `rootshell-notify setup` after installing         |
-| `--hooks <spec>`  | `auto` (default), `claude-code,codex`, or `none`      |
-| `--project`       | Install hooks into `./.claude` / `./.codex`           |
+| `--hooks <spec>`  | `auto` (default), a comma-separated list of `claude-code,codex,pi,omp,hermes`, or `none` |
+| `--project`       | Install into `./.claude`, `./.codex`, `./.pi`, `./.omp` or `./.hermes` |
 | `--system`        | Install to `/usr/local/bin` (sudo if needed)          |
 
 The script downloads one binary, verifies its SHA-256 against a table
@@ -48,7 +49,7 @@ own:
 
 ```sh
 rootshell-notify setup --pair 'rspair1....'                # hooks: auto
-rootshell-notify setup --pair 'rspair1....' --hooks codex  # or claude-code,codex | none
+rootshell-notify setup --pair 'rspair1....' --hooks pi,omp # choose specific agents
 echo "$BUNDLE" | rootshell-notify setup --hooks none       # bundle on stdin
 ```
 
@@ -91,9 +92,8 @@ rootshell-notify devices toggle "Test iPhone"
 rootshell-notify devices on "Desk iPad"
 ```
 
-Turning a device off only suppresses automatic notifications from Claude Code
-and Codex hooks. It stays paired, and `test`, `send`, and `send --device` can
-still reach it.
+Turning a device off suppresses automatic notifications from all four agents.
+It stays paired, and `test`, `send`, and `send --device` can still reach it.
 
 Pairings are stored in `~/.config/rootshell-push/config.json` (mode 0600).
 Override the path with `ROOTSHELL_PUSH_CONFIG`.
@@ -109,18 +109,30 @@ credentials stop working and the relay answers `410`; the hook logs
 ```sh
 rootshell-notify install claude-code     # merges into ~/.claude/settings.json
 rootshell-notify install codex           # merges into ~/.codex/hooks.json
+rootshell-notify install pi              # ~/.pi/agent/extensions/rootshell-push.ts
+rootshell-notify install omp             # ~/.omp/agent/extensions/rootshell-push.ts
+rootshell-notify install hermes          # ~/.hermes/plugins/rootshell-push/
+hermes plugins enable rootshell-push     # Hermes plugins require explicit activation
 ```
 
-Add `--project` to install into `./.claude` or `./.codex` instead. The
-installer only appends its own tagged entries, keeps everything else in the
-file intact, writes a `.bak` of the original the first time it changes a
-file, and is idempotent. Installed commands identify their agent explicitly;
-hook payload fields are never used to guess whether an event came from Claude
-Code or Codex.
+Add `--project` for project-local installation. Claude Code and Codex use
+tagged JSON entries; Pi and OMP use an embedded extension installed into
+`.pi/extensions/rootshell-push.ts` or `.omp/extensions/rootshell-push.ts`.
+Installs are idempotent and preserve unrelated hooks and extensions. Managed
+files are backed up on their first update; an unrelated file at the extension's
+destination is never overwritten. Restart the agent or reload extensions
+after installation or an upgrade.
+
+Installed commands identify their agent explicitly; hook payload fields are
+never used to guess which agent produced an event.
 
 Codex requires you to trust new hooks: run `codex` then `/hooks`, review the
 rootshell entry and mark it trusted. The installer never writes
 `trusted_hash` or edits `config.toml`.
+
+Codex can cancel asynchronous hooks when a one-shot `exec` exits, so its Stop
+hook is synchronous. The sender only hands the payload to a detached child
+process and returns, so interactive turns do not wait for delivery.
 
 Plugin bundles for both tools live in [plugins/](plugins/).
 
@@ -133,8 +145,17 @@ Plugin bundles for both tools live in [plugins/](plugins/).
 | Claude Code | Notification: idle, agent completed               | done    |
 | Claude Code | PreToolUse: AskUserQuestion (first question text)| blocked |
 | Codex       | Stop (hooks) or legacy `notify` turn complete     | done    |
+| Pi          | `agent_settled`, final successful assistant response | done    |
+| OMP         | `agent_end`, no continuation or queued work, successful assistant response | done |
+| Pi / OMP    | Final assistant response with `stopReason=error` | failed  |
+| Pi          | Interactive UI prompt still pending after 2 seconds | blocked |
+| OMP         | Interactive `ask` still running after 2 seconds   | blocked |
+| OMP         | Tool approval request still pending after 2 seconds | blocked |
+| Hermes      | `on_session_end`, completed interactive turn       | done    |
+| Hermes      | Failed or incomplete interactive turn             | failed  |
+| Hermes      | Human input request (questions and approval)       | blocked |
 
-Subagent stops, re-entrant stop hooks, other PreToolUse tools and other
+Claude Code subagent stops, re-entrant stop hooks, other PreToolUse tools and other
 notification types are ignored. The hooks never answer or approve anything;
 they only report.
 
@@ -143,9 +164,96 @@ resolved the request, so rootshell does not treat it as a blocker. For Codex
 running in a rootshell terminal, the app's on-device screen detector sends the
 blocked notification only while an approval prompt is visibly waiting.
 
+### Pi and Oh My Pi extensions
+
+Requires **Earendil Pi 1.2.0 or later** (`@earendil-works/pi-coding-agent`)
+and **Oh My Pi 18.10.3 or later**. Pi uses its authoritative `agent_settled`
+notification boundary, introduced after the older Pi lifecycle API; this
+adapter is not a completion integration for legacy Pi versions.
+
+The extensions observe lifecycle events and pipe normalized JSON to
+`rootshell-notify hook --agent pi` or `--agent omp`. They produce native
+`kind=agent` notifications, so device hook toggles, encryption, foreground
+suppression, session grouping and terminal routing work the same way as
+Claude Code and Codex. They do not register tools, answer questions or approve
+commands. Delivery does not block model event handlers, uses a bounded queue
+and subprocess timeout, and never fails an agent turn. Normal shutdown may
+wait up to 30 seconds for an already-confirmed completion or failure, so
+one-shot commands do not discard their final notification. Reloads and
+session replacements do not flush old candidates. A process-wide owner per
+agent/session prevents duplicate pushes when both user and project copies
+are loaded.
+
+A completion means the assistant turn ended, not that a larger task succeeded.
+Aborted responses are silent. Pi waits for `agent_settled`; OMP's
+`willContinue`, idle state and pending queued messages suppress intermediate
+completions. OMP's boundary does not prove that unrelated background jobs or
+a larger goal have finished. OMP may still be busy during `agent_end`, so the
+extension retains a candidate and rechecks idle/pending state every 100 ms
+(for up to a minute) or during normal shutdown. Delayed and queued input
+reminders are cancelled when the request resolves, a new run starts or the
+session changes; already submitted pushes cannot be recalled by the
+extension. OMP ask-tool events are only an approximation of a visible
+dialog: headless calls and requests resolved within two seconds are ignored.
+Pi observes its real `ui_prompt_start` / `ui_prompt_end` events, not invented
+ask or approval events; these do not cover arbitrary third-party permission
+interfaces.
+
+User-level directory overrides follow the agents' settings:
+`PI_CODING_AGENT_DIR` for Pi, and OMP's `PI_CONFIG_DIR`, `OMP_PROFILE`
+(legacy `PI_PROFILE`) and `PI_CODING_AGENT_DIR`. Project-local installation
+ignores user overrides. Keep Pi and OMP in separate configuration directories.
+If both would load the same `rootshell-push.ts`, `setup` and `upgrade` reject
+the ambiguous destination before making changes; use separate directories or
+select only the intended runtime with `--hooks pi` or `--hooks omp`.
+
+The extensions use the running agent's session context and inherit the
+sender's existing pane/tmux/herdr environment. Without a matching terminal
+route the notification can still arrive, but a tap cannot recreate a session.
+Pi/OMP thumbnails require a rootshell app release bundling the new logo
+resources; older apps can still decrypt and display the notification text.
+
+### Hermes plugin
+
+The installer writes a dependency-free Python plugin and YAML manifest to
+`~/.hermes/plugins/rootshell-push/`, or under `HERMES_HOME` when set. Enable it
+with `hermes plugins enable rootshell-push` and restart Hermes. `status` reports
+whether the managed files are current; plugin activation is shown by
+`hermes plugins list`. The installer does not rewrite Hermes's YAML config.
+Project installation uses `./.hermes/plugins/rootshell-push/`; Hermes also
+requires `HERMES_ENABLE_PROJECT_PLUGINS=1` to discover project plugins.
+
+The plugin caches the final `post_llm_call` response, then waits for
+`on_session_end` to classify the turn as done or failed. Interrupted turns,
+session cleanup and messaging/gateway platforms do not notify. Only interactive
+`cli`, `tui`, `desktop` and `acp` turns are eligible. Newer Hermes versions use
+`on_human_input_request` and `on_human_input_resolved`; older versions fall
+back to `pre_approval_request` and `post_approval_response` (human surfaces
+only). Like the Pi and OMP extensions, a waiting notification is sent only
+if the request is still unanswered after 2 seconds. Clarify-question waiting notifications require the newer
+human-input observer; legacy pre-tool calls cannot establish that a human
+actually needs to respond. Automated smart approvals are silent. Plugins only
+observe these events; they never answer or approve them.
+
+Each turn or human request has a deduplication ID. One background thread runs
+the sender off the hook callback. At most 8 deliveries wait in its queue;
+waiting notifications are shed before completions. Resolving a request, a new
+turn or a completion drops matching waiting notifications, whether queued or
+already being sent. Normal interpreter exit drains the queue for up to 10
+seconds, so one-shot completions survive shutdown without a slow relay
+holding Hermes open. Each sender is bounded to 30 seconds;
+missing binaries and delivery errors cannot fail the Hermes turn.
+Managed Python and manifest files carry content hashes: installation and
+removal refuse foreign or edited files, preserve unrelated plugin files,
+and back up the first managed version before updates or removal.
+
 ## What is sent
 
-- Title: `Claude Code · <project dir>` or `Codex · <project dir>`.
+- Title: `[<hostname>] <agent> · <project dir>`, for example
+  `[build-mac] Pi · app`. The hostname comes from the existing sender route,
+  with the username omitted; it is visible without opening the notification.
+  Titles are limited to 120 characters. Presentation text is shortened further
+  if needed to fit the encrypted header's byte budget, without trimming the route.
 - Body: the first sentence or two (at most 200 characters) of the last
   assistant message with code blocks, links and URLs stripped, or the
   notification text, question, or pending command when the agent is blocked.
@@ -201,7 +309,7 @@ to GitHub releases), verifies its SHA-256, replaces the running binary in
 place, runs the new binary's `version` to confirm it works, and then
 refreshes the agent hooks the same way `setup --no-pair` does. Pairings are
 never touched. Options: `--version x.y.z` pins a release, `--hooks
-auto|claude-code,codex|none` controls the hook refresh, `--server URL`
+auto|claude-code,codex,pi,omp,hermes|none` controls the hook refresh, `--server URL`
 overrides the release server.
 
 If the binary lives in `/usr/local/bin` (installed with `--system`), the
@@ -219,12 +327,16 @@ curl -fsSL https://push.rootshell.com/install.sh | sh -s -- --hooks auto
 ```sh
 rootshell-notify uninstall claude-code
 rootshell-notify uninstall codex
+rootshell-notify uninstall pi
+rootshell-notify uninstall omp
+hermes plugins disable rootshell-push
+rootshell-notify uninstall hermes
 rootshell-notify uninstall claude-code --purge   # also deletes ~/.config/rootshell-push
 rm ~/.local/bin/rootshell-notify
 ```
 
-Uninstall removes only the tagged rootshell entries and leaves other hooks
-untouched. Revoke the sender on the device side from the same Settings
+Uninstall removes only tagged rootshell entries or its managed extension file
+and leaves other hooks and extensions untouched. Revoke the sender on the device side from the same Settings
 screen; the device then ignores pushes from that sender.
 
 ## Troubleshooting
@@ -243,13 +355,41 @@ screen; the device then ignores pushes from that sender.
 
 ## Building from source
 
-Requires Go 1.26 or later. Standard library only.
+Requires Go 1.26 or later. The sender uses the standard library only. Running
+the Pi/OMP extension behavior tests also requires Node.js 22 or later; the
+installed extensions run in their agent's own Node.js/Bun runtime and have no
+additional package dependencies.
+Hermes plugin behavior tests require Python 3.9 or later; the installed plugin
+uses Hermes's existing Python runtime and standard library only.
 
 ```sh
 cd push
 make build                 # ./rootshell-notify for the host
 make test
 make release VERSION=0.1.0 # dist/0.1.0/ with all platforms, SHA256SUMS, install.sh
+```
+
+An opt-in loader smoke check uses installed official Pi/OMP runtimes with an
+isolated HOME and no model request or push delivery:
+
+```sh
+ROOTSHELL_PI_PACKAGE=/path/to/@earendil-works/pi-coding-agent \
+ROOTSHELL_OMP_BIN="$(command -v omp)" node installer/loader-smoke.mjs
+```
+
+This checks extension loading and event registration, not a model turn or
+physical-device notification delivery.
+
+An opt-in Hermes smoke check uses the installed Hermes loader and runs a real
+agent turn against a local OpenAI-compatible fixture. It checks final response,
+completion classification, plugin registration and sender subprocess delivery,
+without accessing the real model or relay:
+
+```sh
+HERMES_AGENT_DIR="$HOME/.hermes/hermes-agent" \
+HERMES_DISABLE_LAZY_INSTALLS=1 \
+  "$HOME/.hermes/hermes-agent/venv/bin/python" \
+  installer/hermes-smoke.py ./rootshell-notify
 ```
 
 Build output under `dist/` is never committed. Releases are built locally
@@ -265,6 +405,6 @@ to a GitHub Release tagged `push/vx.y.z` (the installer's fallback source).
 | `config/`     | Paired device store and log file                       |
 | `client/`     | Relay HTTP client                                      |
 | `hook/`       | Agent payload parsing, summarization, redaction        |
-| `installer/`  | Claude Code / Codex hook file merging                  |
+| `installer/`  | Hook file merging, embedded Pi / OMP extensions and Hermes plugin |
 | `cmd/rootshell-notify/` | The CLI                                      |
 | `plugins/`    | Plugin bundles for Claude Code and Codex               |

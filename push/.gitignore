@@ -1,2 +1,3 @@
 dist/
 install.sh
+__pycache__/
