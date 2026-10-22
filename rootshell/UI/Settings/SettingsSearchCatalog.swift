@@ -596,8 +596,10 @@ struct SettingsSearchEntry: Identifiable, Hashable {
             // MARK: Appearance Mode
             row("theme-aware-ui", String(localized: "Theme-Aware UI"), in: .appearanceMode,
                 keywords: ["ui colors", "tinted", "chrome", "theme aware"]),
-            row("soft-scroll-edges", String(localized: "Soft Scroll Edges"), in: .appearanceMode,
-                keywords: ["scroll edge", "blur", "fade", "liquid glass", "toolbar"]),
+            row("scroll-edge-effect", String(localized: "Scroll Edge Effect"), in: .appearanceMode,
+                keywords: ["scroll edge", "soft", "hard", "hidden", "blur", "fade", "liquid glass", "status bar", "toolbar"]),
+            row("scroll-edge-opacity", String(localized: "Edge Opacity"), in: .appearanceMode,
+                keywords: ["scroll edge", "band", "transparency", "status bar"]),
             row("im-no-fun", String(localized: "I'm no fun"), in: .appearanceMode, icon: "face.smiling",
                 keywords: ["jokes", "quips", "ascii", "animations", "failure", "humor"]),
 

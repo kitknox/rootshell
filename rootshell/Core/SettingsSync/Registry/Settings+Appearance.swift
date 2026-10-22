@@ -16,6 +16,7 @@ extension SelectionAppearanceMode: SettingValue {}
 extension TransparencyManager.BlurStyle: SettingValue {}
 extension ShaderManager.AnimationMode: SettingValue {}
 extension TerminalTouchKeyboardModel.BackgroundEffectPlacement: SettingValue {}
+extension ScrollEdgeEffectMode: SettingValue {}
 
 nonisolated extension Settings {
     enum Theme {
@@ -35,9 +36,12 @@ nonisolated extension Settings {
         static let hostTint = SettingKey(
             "hostTint", default: false, group: .theme, configKey: "host-tint",
             title: String(localized: "Tint by Host", comment: "Setting title"))
-        static let softScrollEdges = SettingKey(
-            "softScrollEdges", default: false, group: .theme, configKey: "soft-scroll-edges",
-            title: String(localized: "Soft Scroll Edges", comment: "Setting title"))
+        static let scrollEdgeEffect = SettingKey(
+            "scrollEdgeEffect", default: ScrollEdgeEffectMode.hard, group: .theme, configKey: "scroll-edge-effect",
+            title: String(localized: "Scroll Edge Effect", comment: "Setting title"))
+        static let scrollEdgeOpacity = SettingKey(
+            "scrollEdgeOpacity", default: 1.0, group: .theme, configKey: "scroll-edge-opacity", range: 0...1,
+            title: String(localized: "Edge Opacity", comment: "Setting title"))
         static let uiOverrides = SettingKey<Data?>(
             "themeUIOverrides.v1", default: nil, group: .theme,
             title: String(localized: "Theme UI Color Overrides", comment: "Setting title"))
@@ -64,7 +68,8 @@ nonisolated extension Settings {
         static let all: [AnySettingDefinition] = [
             selected.erased, appearanceMode.erased, themedUI.erased, uiOverrides.erased, favoriteIds.erased,
             dayNightEnabled.erased, dayNightDay.erased, dayNightNight.erased, dayNightDefault.erased,
-            appIconVariant.erased, imNoFun.erased, hostTint.erased, softScrollEdges.erased,
+            appIconVariant.erased, imNoFun.erased, hostTint.erased,
+            scrollEdgeEffect.erased, scrollEdgeOpacity.erased,
         ]
     }
 
