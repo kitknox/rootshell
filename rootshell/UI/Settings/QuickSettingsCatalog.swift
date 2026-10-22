@@ -137,7 +137,8 @@ enum QuickSettingsCatalog {
             toggle(Settings.Theme.themedUI, set: { AppearanceManager.shared.themedUIEnabled = $0 }),
             toggle(Settings.Theme.imNoFun),
             toggle(Settings.Theme.hostTint),
-            toggle(Settings.Theme.softScrollEdges),
+            choices(Settings.Theme.scrollEdgeEffect, label: { $0.displayName }),
+            number(Settings.Theme.scrollEdgeOpacity, 0...1, step: 0.05),
             entry(Settings.Theme.selected, .choices {
                 ThemeManager.shared.availableThemes.map { .init(id: $0.name, title: $0.name, value: .string($0.name)) }
             }, keywords: "appearance colors colour scheme", set: { ThemeManager.shared.currentTheme = $0 })
@@ -226,6 +227,7 @@ enum QuickSettingsCatalog {
             integer(Settings.Sidebar.rowLines, 1...3),
         ]
         #if os(iOS) && !targetEnvironment(macCatalyst)
+        entries.append(choices(Settings.Window.statusBar, label: { $0.displayName }))
         if #available(iOS 27.1, *) {
             entries += [
                 choices(Settings.Tabs.duoFrontDisplayMode, label: { $0.displayName })

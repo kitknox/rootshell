@@ -37,6 +37,7 @@ protocol TerminalSurfaceHost: AnyObject {
     var surfaceLogFrequentLayout: Bool { get }
     var surfaceSuppressBottomInsetUpdatesForScrollRubberBand: Bool { get }
     var surfaceCurrentBottomInsetPixels: Double { get }
+    var surfaceCurrentTopInsetPixels: Double { get }
 
     func surfaceControllerDidSetSurface(_ surface: ghostty_surface_t?)
     func surfaceRegisterForScrollbackPersistence()
@@ -76,6 +77,7 @@ final class TerminalSurfaceController: NSObject {
     private var lastSentGridSize: (rows: UInt16, cols: UInt16)?
     private var lastSizedSessionID: ObjectIdentifier?
     private var lastBottomInsetPx: Double = -1
+    private var lastTopInsetPx: Double = -1
     private var suppressSizeUpdates = false
 
     init(host: TerminalSurfaceHost) {
@@ -512,8 +514,28 @@ final class TerminalSurfaceController: NSObject {
     }
 
     func updateBottomInset() {
-        guard let surface else { return }
         guard !host.surfaceSuppressBottomInsetUpdatesForScrollRubberBand else { return }
+        applyInset(
+            { host.surfaceCurrentBottomInsetPixels },
+            last: &lastBottomInsetPx,
+            set: ghostty_surface_set_bottom_inset
+        )
+    }
+
+    func updateTopInset() {
+        applyInset(
+            { host.surfaceCurrentTopInsetPixels },
+            last: &lastTopInsetPx,
+            set: ghostty_surface_set_top_inset
+        )
+    }
+
+    private func applyInset(
+        _ currentInsetPx: () -> Double,
+        last lastInsetPx: inout Double,
+        set setInset: @escaping (ghostty_surface_t?, Double) -> Void
+    ) {
+        guard let surface else { return }
         // Insets change the terminal's row count too. Keep them under the
         // same transition gates as the framebuffer size, otherwise a skipped
         // size update can still reflow the grid at the old dimensions.
@@ -528,9 +550,9 @@ final class TerminalSurfaceController: NSObject {
            KeyboardTracker.shared.isPreservingKeyboardForOverlay(in: host.surfaceView.window) {
             return
         }
-        let insetPx = host.surfaceCurrentBottomInsetPixels
-        if abs(insetPx - lastBottomInsetPx) < 0.5 { return }
-        lastBottomInsetPx = insetPx
+        let insetPx = currentInsetPx()
+        if abs(insetPx - lastInsetPx) < 0.5 { return }
+        lastInsetPx = insetPx
         // An inset can change rows without changing framebuffer bounds. The
         // size cache may then skip setSize, so notify the session here too;
         // updatePTYSize deduplicates an unchanged grid. A pipe-backed surface
@@ -538,14 +560,15 @@ final class TerminalSurfaceController: NSObject {
         // so sending here would race ahead of the grid.
         let sizesFromAction = sizesSessionFromPtyResizeAction
         #if targetEnvironment(macCatalyst)
-        ghostty_surface_set_bottom_inset(surface, insetPx)
+        setInset(surface, insetPx)
         if !sizesFromAction { host.surfaceUpdatePTYSize() }
         #else
         nonisolated(unsafe) let surfacePtr = surface
         nonisolated(unsafe) let hostRef = host
+        nonisolated(unsafe) let setInsetRef = setInset
         Ghostty.TerminalView.ghosttyAPIQueue.async { [weak self] in
             guard self != nil else { return }
-            ghostty_surface_set_bottom_inset(surfacePtr, insetPx)
+            setInsetRef(surfacePtr, insetPx)
             guard !sizesFromAction else { return }
             Task { @MainActor in
                 hostRef.surfaceUpdatePTYSize()
@@ -954,6 +977,7 @@ extension Ghostty.TerminalView: TerminalSurfaceHost {
         suppressBottomInsetUpdatesForScrollRubberBand
     }
     var surfaceCurrentBottomInsetPixels: Double { currentBottomInsetPixels() }
+    var surfaceCurrentTopInsetPixels: Double { currentTopInsetPixels() }
 
     func surfaceControllerDidSetSurface(_ surface: ghostty_surface_t?) {
         self.surface = surface
