@@ -665,24 +665,13 @@ struct VerticalTabSidebar: View {
 
     private var header: some View {
         VStack(spacing: 0) {
-            if usesCompactLayout && !isDocked {
-                // Button-free, so a 0pt threshold tracks instantly like a sheet grabber.
-                Capsule()
-                    .fill(Color.primary.opacity(0.25))
-                    .frame(width: 36, height: 5)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 28)
-                    .padding(.top, 4)
-                    .contentShape(Rectangle())
-                    .highPriorityGesture(dismissDragGesture(minimumDistance: 0))
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityLabel("Drag down to dismiss")
-            }
             headerRow
         }
         .contentShape(Rectangle())
-        // 10pt so the header's buttons still work; `.subviews` disables it when docked.
-        .gesture(dismissDragGesture(minimumDistance: 10), including: isDocked ? .subviews : .all)
+        // 10pt so the header's buttons still work. Compact drawers slide
+        // sideways, so a downward drag must not move them. `.subviews`
+        // disables the drag when docked too.
+        .gesture(dismissDragGesture(minimumDistance: 10), including: (isDocked || usesCompactLayout) ? .subviews : .all)
     }
 
     private func headerButton(
