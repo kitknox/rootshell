@@ -35,14 +35,14 @@ import SwiftUI
 import UIKit
 #endif
 
-#if !os(visionOS)
-
 /// Which screen edge a panel anchors to and slides in from. On phone, an
 /// adopter may opt into a bottom-sheet slide instead (see `allowPhoneBottom`).
 enum SidePanelEdge {
     case leading
     case trailing
 }
+
+#if !os(visionOS)
 
 // MARK: - Generic Representable (gesture-free panels)
 
@@ -124,9 +124,11 @@ class SidePanelOverlayViewController: UIViewController {
     // MARK: Config (set by the representable / subclass before the view loads)
 
     var edge: SidePanelEdge = .trailing
-    /// Phone slides up from the bottom instead of in from `edge` (the tab
-    /// sidebar's full-width bottom-sheet metaphor).
+    /// Phone slides up from the bottom instead of in from `edge`.
     var allowPhoneBottom = false
+    /// Width left visible on the other side of a compact drawer, so the
+    /// terminal peeks out beside the panel.
+    var compactPeek: CGFloat = 0
     /// Resign first responder at the UIKit layer the instant dismissal begins
     /// (a search field inside the still-mounted panel would otherwise keep the
     /// keyboard after the panel slides away).
@@ -202,7 +204,6 @@ class SidePanelOverlayViewController: UIViewController {
         view.addSubview(hostingController.view)
         hostingController.didMove(toParent: self)
 
-        let effectiveWidth = min(panelWidth, view.bounds.width)
         let widthConstraint = hostingController.view.widthAnchor.constraint(equalToConstant: effectiveWidth)
         self.widthConstraint = widthConstraint
 
@@ -272,6 +273,7 @@ class SidePanelOverlayViewController: UIViewController {
         }
 
         guard isPresented != currentPresented else { return }
+        if !isPresented { dismissAnimationActive = true }
         currentPresented = isPresented
         applyPresentationChange(isPresented)
     }
@@ -288,7 +290,9 @@ class SidePanelOverlayViewController: UIViewController {
         if clearsWindowControls {
             updateWindowControlsClearance()
         }
-        if !currentPresented {
+        // A dismiss slide starts from the finger. Snapping here would jump the
+        // panel to its hidden transform before that animation can run.
+        if !currentPresented && !dismissAnimationActive {
             applyHiddenState()
         }
     }
@@ -331,16 +335,17 @@ class SidePanelOverlayViewController: UIViewController {
     }
 
     var effectiveWidth: CGFloat {
-        max(0, min(panelWidth, view.bounds.width - oppositeSafeAreaInset))
+        let clearance = max(oppositeSafeAreaInset, usesCompactLayout ? compactPeek : 0)
+        return max(0, min(panelWidth, view.bounds.width - clearance))
     }
 
-    /// The panel stops at the safe area on its far side, so a tap on a toolbar
-    /// rail there (iPhone Duo's front display) lands on the dismissing backdrop.
+    /// Keep the opposite safe area available for the Duo's toolbar rail.
     private var oppositeSafeAreaInset: CGFloat {
         let rightToLeft = view.effectiveUserInterfaceLayoutDirection == .rightToLeft
         let farSideIsRight = (edge == .leading) != rightToLeft
         let insets = [view.safeAreaInsets, windowControlsClearanceSourceView?.safeAreaInsets ?? .zero]
         return insets.map { farSideIsRight ? $0.right : $0.left }.max() ?? 0
+
     }
 
     private func updateEffectiveWidth() {
@@ -426,6 +431,9 @@ class SidePanelOverlayViewController: UIViewController {
         return CGAffineTransform(translationX: hidden.tx * inverse, y: hidden.ty * inverse)
     }
 
+    /// True while a dismiss animation owns the panel transform.
+    private var dismissAnimationActive = false
+
     func animatePresentationChange(_ isPresented: Bool) {
         let hiddenTransform = self.hiddenTransform
 
@@ -457,6 +465,7 @@ class SidePanelOverlayViewController: UIViewController {
                 }
             }
         } else {
+            dismissAnimationActive = true
             if escapeDismisses && isFirstResponder {
                 // Release first responder so the host can reconcile it back to
                 // the terminal (restoreFirstResponderAfterSheetDismissal).
@@ -465,21 +474,40 @@ class SidePanelOverlayViewController: UIViewController {
             if resignFirstResponderOnDismiss {
                 hostingController.view.endEditing(true)
             }
-            UIView.animate(
-                withDuration: 0.25,
-                delay: 0,
-                options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseIn]
-            ) {
+            let continuingDrag = hostingController.view.transform != .identity
+            let animations = {
                 self.backdropView.alpha = 0
                 self.hostingController.view.transform = hiddenTransform
-            } completion: { _ in
+            }
+            let completion: (Bool) -> Void = { _ in
+                self.dismissAnimationActive = false
                 // A rapid re-open can land before the dismiss animation
                 // finishes; ignore that stale completion so the reopened panel
                 // does not become visually present but non-interactive.
                 if !self.currentPresented {
                     self.view.isUserInteractionEnabled = false
+                    self.applyHiddenState()
                     self.clearHostedContentIfUnmounting()
                 }
+            }
+            if continuingDrag {
+                UIView.animate(
+                    withDuration: 0.4,
+                    delay: 0,
+                    usingSpringWithDamping: 0.86,
+                    initialSpringVelocity: 0,
+                    options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut],
+                    animations: animations,
+                    completion: completion
+                )
+            } else {
+                UIView.animate(
+                    withDuration: 0.25,
+                    delay: 0,
+                    options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseIn],
+                    animations: animations,
+                    completion: completion
+                )
             }
         }
     }
