@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 /// A `Toggle` row that carries an always-visible secondary description line
 /// beneath its title, so per-control guidance lives with the control instead of
@@ -273,6 +274,7 @@ struct WindowSettingsView: View {
     @Setting(Settings.Tabs.hoverPreviewZoom) private var tabHoverPreviewZoom
     @Setting(Settings.Sidebar.translucent) private var tabSidebarTranslucent
     @Setting(Settings.Sidebar.rowLines) private var tabSidebarRowLines
+    @Setting(Settings.Sidebar.pageSides) private var edgeSidebarPageSides
     @Setting(Settings.Window.splitFocusBorderStyle) private var splitFocusBorderStyle
     @Setting(Settings.Window.splitFocusBorderColor) private var splitFocusBorderColor
     @Setting(Settings.Window.splitFocusBorderCustomColor) private var splitFocusBorderCustomHex
@@ -355,6 +357,32 @@ struct WindowSettingsView: View {
             .contains { $0.safeAreaInsets.bottom > 0 }
     }
     #endif
+
+    private var edgeSidebarAssignment: EdgeSidebarAssignment {
+        EdgeSidebarAssignment.decode(edgeSidebarPageSides)
+    }
+
+    @ViewBuilder
+    private func sidebarSidePicker(_ page: EdgeSidebarPage, title: LocalizedStringKey) -> some View {
+        Picker(selection: Binding(
+            get: { edgeSidebarAssignment.side(of: page) },
+            set: { side in
+                let next = edgeSidebarAssignment.setting(side, for: page)
+                edgeSidebarPageSides = next.storedTokens
+                Ghostty.logger.info("Edge sidebar assign page=\(page.rawValue, privacy: .public) side=\(side.rawValue, privacy: .public)")
+            }
+        )) {
+            ForEach(EdgeSidebarSide.allCases, id: \.self) { side in
+                Text(side.title).tag(side)
+            }
+        } label: {
+            Text(title)
+                .settingRow(Settings.Sidebar.pageSides)
+        }
+        .pickerStyle(.menu)
+        .disabled(SettingFileLock.isReadOnly(Settings.Sidebar.pageSides.name))
+        .themedRow()
+    }
 
     var body: some View {
         List {
@@ -477,6 +505,9 @@ struct WindowSettingsView: View {
                     .themedRow()
                 }
                 #endif
+
+                sidebarSidePicker(.tabSwitcher, title: "Tab Switcher")
+                sidebarSidePicker(.fileManager, title: "File Manager")
 
                 // Uniform for every row so the list stays symmetric; long
                 // titles wrap instead of truncating.

@@ -356,10 +356,16 @@ struct MainView: View {
     // Vertical tab sidebar state (toggled by the tab-switcher button/shortcut)
     @State var showingTabSwitcher = false
     @State var tabSidebarCollapsedGateways: Set<UUID> = TabSidebarCollapseStore.load()
-    /// When pinned, the sidebar renders as a docked left column that shrinks
-    /// the terminal (instead of a floating overlay over it). Routes
-    /// `showingTabSwitcher` to docked vs floating — see `tabSidebarIsDocked`.
+    /// When pinned, the sidebar renders as a docked column on the tab
+    /// switcher's side and shrinks the terminal (instead of a floating
+    /// overlay over it). Routes `showingTabSwitcher` to docked vs floating.
+    /// See `tabSidebarIsDocked`.
     @Setting(Settings.Sidebar.pinned) var tabSidebarPinned
+    /// `page:side` tokens. Stock is the tab switcher on the left and the
+    /// file manager on the right.
+    @Setting(Settings.Sidebar.pageSides) var edgeSidebarPageSides
+    /// Selected page raw value for each edge. Missing keys use the first page.
+    @State var edgeSidebarSelectedPage: [String: String] = [:]
     /// Draws panes and docked columns as rounded cards; see PaneCardStyle.
     @Setting(Settings.Window.roundedPanes) var roundedPanes
     @Setting(Settings.Window.showRemotePorts) var showRemotePorts
@@ -606,22 +612,29 @@ struct MainView: View {
                     #endif
                 }))
                 #if !os(visionOS)
-                // Pull the tab sidebar in from the left screen edge (iPad).
                 .background(TabSidebarEdgeSwipe(
-                    showingTabSwitcher: $showingTabSwitcher,
-                    canOpen: { !showingTabSwitcher && !isAnySheetPresented },
-                    opensDocked: tabSidebarUsesDockedPresentation,
-                    panelWidth: 420
+                    edge: .leading,
+                    canOpen: { canOpenEdgeSidebar(.leading) },
+                    tracksFinger: edgeTracksFinger(.leading),
+                    panelWidth: 420,
+                    onOpen: { openEdgeSidebar(.leading) },
+                    onCancel: { closeEdgeSidebar(.leading) }
                 ))
-                // Defer the iPad leading edge for the sidebar gesture. Also
-                // defer Home while an iPhone/iPad toolbar sits at the screen
-                // edge without a docked software keyboard. Gesture arbitration
-                // changes; keyboard geometry does not.
+                .background(TabSidebarEdgeSwipe(
+                    edge: .trailing,
+                    canOpen: { canOpenEdgeSidebar(.trailing) },
+                    tracksFinger: edgeTracksFinger(.trailing),
+                    panelWidth: 420,
+                    onOpen: { openEdgeSidebar(.trailing) },
+                    onCancel: { closeEdgeSidebar(.trailing) }
+                ))
+                // Defer an iPad edge while its drawer can open or is already
+                // floating. A docked column leaves the system edge alone.
+                // Also defer Home while an iPhone/iPad toolbar sits at the
+                // screen edge without a docked software keyboard.
                 .defersSystemGestures(
-                    on: ((UIDevice.current.userInterfaceIdiom == .pad
-                          && ((!showingTabSwitcher && !isAnySheetPresented)
-                              || (showingTabSwitcher && !tabSidebarIsDocked)))
-                        ? Edge.Set.leading : [])
+                    on: (defersEdgeSidebarGesture(.leading) ? Edge.Set.leading : [])
+                        .union(defersEdgeSidebarGesture(.trailing) ? Edge.Set.trailing : [])
                         .union(
                             (((UIDevice.current.userInterfaceIdiom == .phone
                                || UIDevice.current.userInterfaceIdiom == .pad)
@@ -659,9 +672,8 @@ struct MainView: View {
                     // Center over the terminal, not the window: the docked
                     // (pinned) tab sidebar consumes the leading edge and the
                     // AI agent sidebar the trailing edge.
-                    .padding(.leading, dockedTabSidebarWidth(windowWidth: geometry.size.width))
-                    .padding(.trailing, aiAgentSidebarCurrentWidth() + fileManagerSidebarCurrentWidth + httpCaptureDockedWidth
-                        + agentInboxSidebarCurrentWidth)
+                    .padding(.leading, leadingChromeWidth(windowWidth: geometry.size.width))
+                    .padding(.trailing, trailingChromeWidth(windowWidth: geometry.size.width) + agentInboxSidebarCurrentWidth)
                     .transition(.opacity)
                 }
             }

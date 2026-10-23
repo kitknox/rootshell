@@ -63,6 +63,12 @@ extension MainView {
     /// `isAnySheetPresented` without the floating tab sidebar, for things
     /// that work alongside it (its own rows' hover previews).
     var isSheetPresentedBesidesFloatingTabSidebar: Bool {
+        edgeSidebarModalPresented || fileManagerOwnsKeyboard
+    }
+
+    /// Sheets that block an edge swipe. The file manager drawer is not one:
+    /// on iPhone a swipe from the other edge closes it and opens that edge.
+    var edgeSidebarModalPresented: Bool {
         let baseFlags = showSettings ||
             showToolbarSettings ||
             showConnectionSidebar ||
@@ -74,7 +80,6 @@ extension MainView {
             showQuickSettingsOverlay ||
             showKeyboardChooser ||
             showOpenInFolderOverlay ||
-            fileManagerOwnsKeyboard ||
             httpCaptureHoldsKeyboard ||
             agentInboxOwnsKeyboard ||
             // The iPhone presentation is a sheet that owns the keyboard. On
@@ -168,25 +173,21 @@ extension MainView {
                 accentColor: sheetTheme.accentColor,
                 colorScheme: sheetTheme.colorScheme
             ))
+            #if os(visionOS)
             .modifier(TabSidebarModifier(
-                // The floating overlay is mounted only in floating mode; the
-                // instant the user pins, `tabSidebarIsDocked` flips true and the
-                // overlay animates out (the docked column takes over). Dismissing
-                // the overlay (backdrop/✕) clears `showingTabSwitcher`.
                 showSidebar: Binding(
                     get: { showingTabSwitcher && !tabSidebarIsDocked },
-                    set: { newValue in if !newValue { showingTabSwitcher = false } }
+                    set: { newValue in if !newValue { dismissTabSidebar() } }
                 ),
                 themeColors: sheetTheme.themeColors,
                 accentColor: sheetTheme.accentColor,
                 colorScheme: sheetTheme.colorScheme,
-                // The floating sidebar is re-hosted in a window-level
-                // UIHostingController (SidePanelOverlay), which does not inherit
-                // MainView's environment. Without this injection, the tmux
-                // session dashboard sheet presented from the sidebar crashes in
-                // TmuxPreviewContainer's @EnvironmentObject read.
                 sidebarContent: { verticalTabSidebarContent(sheetTheme: sheetTheme, isDocked: false).environmentObject(ghosttyApp) }
             ))
+            #else
+            .modifier(edgeSidebarModifier(side: .leading, sheetTheme: sheetTheme))
+            .modifier(edgeSidebarModifier(side: .trailing, sheetTheme: sheetTheme))
+            #endif
             .sheet(isPresented: $showToolbarSettings) {
                 NavigationStack {
                     KeyboardToolbarSettingsView()

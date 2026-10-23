@@ -1510,7 +1510,7 @@ extension MainView {
     @ViewBuilder
     func terminalAndSidebarContent(geometry: GeometryProxy, theme: ResolvedTabBarTheme) -> some View {
         let currentTabId = terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].id : UUID()
-        // Docked (pinned) tab sidebar: a left column that shrinks the terminal.
+        // Docked (pinned) tab sidebar: a column on the tab switcher's side.
         // Available on both China and non-China builds.
         let docked = tabSidebarIsDocked
         let dockedWidth = dockedTabSidebarWidth(windowWidth: geometry.size.width)
@@ -1532,6 +1532,8 @@ extension MainView {
         let cardBackdrop: Color? = nil
         #endif
         let columns = terminalRowColumns(width: geometry.size.width)
+        let tabSwitcherSide = edgeSidebarAssignment.side(of: .tabSwitcher)
+        let fileManagerSide = edgeSidebarAssignment.side(of: .fileManager)
         #if !CHINA_BUILD
         let shouldShowSidebar = shouldShowAISidebar(currentTabId: currentTabId)
         #endif
@@ -1552,7 +1554,7 @@ extension MainView {
         )
 
         HStack(spacing: 0) {
-            if let dockedSidebarTheme {
+            if tabSwitcherSide == .leading, let dockedSidebarTheme {
                 dockedTabSidebar(geometry: geometry, theme: dockedSidebarTheme)
                     .frame(width: dockedWidth)
                     .transition(.move(edge: .leading))
@@ -1562,11 +1564,16 @@ extension MainView {
                     .zIndex(1)
             }
 
+            if fileManagerSide == .leading {
+                fileManagerSidebarColumn(width: fileManagerWidth, totalWidth: geometry.size.width)
+            }
+
             terminalContentZStack(
                 geometry: geometry,
                 width: terminalWidth,
                 effectLeadingExtension: backgroundEffectIncludesPinnedSidebar
                     && backgroundSidebarEffectID == BackgroundEffectSelection.followTerminalID
+                    && tabSwitcherSide == .leading
                     ? dockedWidth
                     : 0
             )
@@ -1588,7 +1595,16 @@ extension MainView {
                 }
             }
 
-            fileManagerSidebarColumn(width: fileManagerWidth, totalWidth: geometry.size.width)
+            if fileManagerSide == .trailing {
+                fileManagerSidebarColumn(width: fileManagerWidth, totalWidth: geometry.size.width)
+            }
+
+            if tabSwitcherSide == .trailing, let dockedSidebarTheme {
+                dockedTabSidebar(geometry: geometry, theme: dockedSidebarTheme)
+                    .frame(width: dockedWidth)
+                    .transition(.move(edge: .trailing))
+                    .zIndex(1)
+            }
 
             agentInboxSidebarColumn(width: agentInboxWidth, totalWidth: geometry.size.width)
 
@@ -1607,6 +1623,7 @@ extension MainView {
                 // Exposé covers the terminal, and with it these HUDs.
                 .opacity(tabExpose.isActive ? 0 : 1)
                 .frame(width: dockedWidth + terminalWidth)
+                .padding(.leading, fileManagerSide == .leading ? fileManagerWidth : 0)
                 .ignoresSafeArea(.keyboard, edges: duoTabletopAvailable && !duoTabletopDisabled ? [] : .all)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1631,6 +1648,14 @@ extension MainView {
                         }
                     }
                     .frame(width: dockedWidth - cardGap)
+                    .padding(.leading, dockedSidebarCardX(
+                        tabSwitcherSide: tabSwitcherSide,
+                        fileManagerSide: fileManagerSide,
+                        columns: columns,
+                        terminalWidth: terminalWidth,
+                        fileManagerWidth: fileManagerWidth,
+                        cardGap: cardGap
+                    ))
                     .clipShape(PaneCardStyle.shape(rounded: roundedPanes))
                     .paneCardDepth(roundedPanes, shape: PaneCardStyle.shape(rounded: true),
                                    palette: IntegratedTabEdgePalette(cardSurface: dockedSidebarSurface))
@@ -1649,12 +1674,17 @@ extension MainView {
             if let cardBackdrop {
                 GeometryReader { proxy in
                     let height = max(0, proxy.size.height - cardTopGap - cardGap)
-                    PaneCardBackdropShape(holes: [
-                        .init(rect: CGRect(x: cardGap, y: cardTopGap, width: max(0, dockedWidth - cardGap), height: height),
-                              cornerRadius: PaneCardStyle.cornerRadius),
-                        .init(rect: CGRect(x: cardGap + dockedWidth, y: cardTopGap, width: terminalWidth, height: height),
-                              cornerRadius: 0),
-                    ])
+                    PaneCardBackdropShape(holes: paneCardBackdropHoles(
+                        tabSwitcherSide: tabSwitcherSide,
+                        fileManagerSide: fileManagerSide,
+                        columns: columns,
+                        terminalWidth: terminalWidth,
+                        fileManagerWidth: fileManagerWidth,
+                        dockedWidth: dockedWidth,
+                        cardGap: cardGap,
+                        cardTopGap: cardTopGap,
+                        height: height
+                    ))
                     .fill(cardBackdrop, style: FillStyle(eoFill: true))
                 }
                 .allowsHitTesting(false)
@@ -1685,42 +1715,82 @@ extension MainView {
         #endif
     }
 
-    /// The pinned tab sidebar rendered inline as a docked left column (square
-    /// edges + trailing separator). Reuses the same `VerticalTabSidebar`
-    /// content the floating overlay hosts. On Mac Catalyst the user can opt
-    /// into matching the terminal window's background opacity.
+    /// X of the docked tab card inside the content row. A trailing column
+    /// keeps the card gap on its terminal side.
+    private func dockedSidebarCardX(
+        tabSwitcherSide: EdgeSidebarSide,
+        fileManagerSide: EdgeSidebarSide,
+        columns: TerminalRowColumns,
+        terminalWidth: CGFloat,
+        fileManagerWidth: CGFloat,
+        cardGap: CGFloat
+    ) -> CGFloat {
+        if tabSwitcherSide == .leading { return 0 }
+        var x = leadingWidth(in: columns) + terminalWidth
+        if fileManagerSide == .trailing { x += fileManagerWidth }
+        return x + cardGap
+    }
+
+    private func paneCardBackdropHoles(
+        tabSwitcherSide: EdgeSidebarSide,
+        fileManagerSide: EdgeSidebarSide,
+        columns: TerminalRowColumns,
+        terminalWidth: CGFloat,
+        fileManagerWidth: CGFloat,
+        dockedWidth: CGFloat,
+        cardGap: CGFloat,
+        cardTopGap: CGFloat,
+        height: CGFloat
+    ) -> [PaneCardBackdropShape.Hole] {
+        let leading = leadingWidth(in: columns)
+        var holes = [
+            PaneCardBackdropShape.Hole(
+                rect: CGRect(x: cardGap + leading, y: cardTopGap, width: terminalWidth, height: height),
+                cornerRadius: 0
+            ),
+        ]
+        guard dockedWidth > cardGap else { return holes }
+        let dockedX: CGFloat
+        if tabSwitcherSide == .leading {
+            dockedX = cardGap
+        } else {
+            var x = cardGap + leading + terminalWidth
+            if fileManagerSide == .trailing { x += fileManagerWidth }
+            dockedX = x + cardGap
+        }
+        holes.insert(
+            PaneCardBackdropShape.Hole(
+                rect: CGRect(x: dockedX, y: cardTopGap, width: dockedWidth - cardGap, height: height),
+                cornerRadius: PaneCardStyle.cornerRadius
+            ),
+            at: 0
+        )
+        return holes
+    }
+
+    /// The pinned tab sidebar as a docked column on the tab switcher's side.
+    /// Reuses the same content the floating overlay hosts.
     @ViewBuilder
     private func dockedTabSidebar(
         geometry: GeometryProxy,
         theme: ResolvedSheetTheme
     ) -> some View {
+        let side = edgeSidebarAssignment.side(of: .tabSwitcher)
         HStack(spacing: 0) {
-            verticalTabSidebarContent(
+            if side == .trailing {
+                dockedTabSidebarDivider(side: .right, geometry: geometry)
+            }
+            edgeSidebarBody(
+                side: side,
                 sheetTheme: theme,
                 isDocked: true,
                 dockedBottomClearance: dockedSidebarBottomClearance()
             )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .paneCardClip(roundedPanes)
-
-            // Resize divider on the column's trailing edge (drag right widens).
-            // Its 1pt line replaces the old static trailing separator and lives
-            // INSIDE the column's width so the 16pt hit area never overhangs the
-            // terminal. Snaps to / double-taps back to the default width.
-            SidebarResizeDivider(
-                side: .left,
-                width: $tabSidebarDockedWidth,
-                isDragging: $tabSidebarIsDragging,
-                minWidth: TabSidebarLayout.dockedMinWidth(largeControls: tabSidebarLargeControls),
-                maxWidth: geometry.size.width * 0.5,
-                defaultWidth: TabSidebarLayout.defaultWidth,
-                cardGap: roundedPanes ? PaneCardStyle.gap : nil,
-                // The parent supplies the fill below the effect. Keeping the
-                // divider hit area clear leaves that canvas visible across its
-                // 16pt interaction strip.
-                backgroundColor: .clear,
-                onCommit: { TabSidebarLayout.saveDockedWidth($0) }
-            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .paneCardClip(roundedPanes)
+            if side == .leading {
+                dockedTabSidebarDivider(side: .left, geometry: geometry)
+            }
         }
         .frame(maxHeight: .infinity)
         // Match the floating panel's `.tint(...)` so standard controls and
@@ -1735,6 +1805,22 @@ extension MainView {
         // appearance, rendering black-on-dark (unreadable) under a dark theme
         // when the device is in Light mode. `nil` = no override.
         .optionalColorSchemeEnvironment(theme.colorScheme)
+    }
+
+    /// Resize divider on the column's inner edge. The 1pt line lives inside
+    /// the column width so the hit area never overhangs the terminal.
+    private func dockedTabSidebarDivider(side: SidebarResizeSide, geometry: GeometryProxy) -> some View {
+        SidebarResizeDivider(
+            side: side,
+            width: $tabSidebarDockedWidth,
+            isDragging: $tabSidebarIsDragging,
+            minWidth: TabSidebarLayout.dockedMinWidth(largeControls: tabSidebarLargeControls),
+            maxWidth: geometry.size.width * 0.5,
+            defaultWidth: TabSidebarLayout.defaultWidth,
+            cardGap: roundedPanes ? PaneCardStyle.gap : nil,
+            backgroundColor: .clear,
+            onCommit: { TabSidebarLayout.saveDockedWidth($0) }
+        )
     }
 
     /// Theme surface below the docked sidebar's share of the continuous effect
