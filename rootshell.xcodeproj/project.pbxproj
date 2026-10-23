@@ -147,6 +147,7 @@
 		47AF04710000000000000001 /* rootshell/Core/Keybinds/ModTapState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF04710000000000000002 /* rootshell/Core/Keybinds/ModTapState.swift */; };
 		47AF04710000000000000003 /* rootshell/Core/Keybinds/KeyTrigger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF04710000000000000004 /* rootshell/Core/Keybinds/KeyTrigger.swift */; platformFilter = ios; };
 		47AF04710000000000000005 /* rootshell/Core/Keybinds/HardwareKeyboardText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF04710000000000000006 /* rootshell/Core/Keybinds/HardwareKeyboardText.swift */; };
+		A52FFA3810574D98067392A1 /* rootshell/Core/Keybinds/HardwarePressRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A52FFA3810574D98067392B1 /* rootshell/Core/Keybinds/HardwarePressRouting.swift */; };
 		47AF04750000000000000A01 /* rootshell/Features/Tmux/TmuxLayoutNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF04750000000000000B01 /* rootshell/Features/Tmux/TmuxLayoutNode.swift */; };
 		47AF04750000000000000A02 /* rootshell/Features/Tmux/TmuxSplitEqualizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF04750000000000000B02 /* rootshell/Features/Tmux/TmuxSplitEqualizer.swift */; };
 		47AF04750000000000000C01 /* rootshell/Features/Tmux/TmuxLayoutNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF04750000000000000B01 /* rootshell/Features/Tmux/TmuxLayoutNode.swift */; };
@@ -664,6 +665,7 @@
 		47AF04710000000000000002 /* rootshell/Core/Keybinds/ModTapState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Keybinds/ModTapState.swift; sourceTree = SOURCE_ROOT; };
 		47AF04710000000000000004 /* rootshell/Core/Keybinds/KeyTrigger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Keybinds/KeyTrigger.swift; sourceTree = SOURCE_ROOT; };
 		47AF04710000000000000006 /* rootshell/Core/Keybinds/HardwareKeyboardText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Keybinds/HardwareKeyboardText.swift; sourceTree = SOURCE_ROOT; };
+		A52FFA3810574D98067392B1 /* rootshell/Core/Keybinds/HardwarePressRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Keybinds/HardwarePressRouting.swift; sourceTree = SOURCE_ROOT; };
 		47AF04750000000000000B01 /* rootshell/Features/Tmux/TmuxLayoutNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/Tmux/TmuxLayoutNode.swift; sourceTree = SOURCE_ROOT; };
 		47AF04750000000000000B02 /* rootshell/Features/Tmux/TmuxSplitEqualizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/Tmux/TmuxSplitEqualizer.swift; sourceTree = SOURCE_ROOT; };
 		47AF04850000000000000B01 /* rootshell/Core/Terminal/TerminalScrollbarAvailabilityPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Terminal/TerminalScrollbarAvailabilityPolicy.swift; sourceTree = SOURCE_ROOT; };
@@ -1311,6 +1313,7 @@
 				47AEC0010000000000000010 /* rootshell/Core/Persistence/LocalMultiplexerAttachment.swift */,
 				47AF04710000000000000004 /* rootshell/Core/Keybinds/KeyTrigger.swift */,
 				47AF04710000000000000006 /* rootshell/Core/Keybinds/HardwareKeyboardText.swift */,
+				A52FFA3810574D98067392B1 /* rootshell/Core/Keybinds/HardwarePressRouting.swift */,
 				47AF04710000000000000002 /* rootshell/Core/Keybinds/ModTapState.swift */,
 				47AC7E570000000000000010 /* rootshell/Core/Terminal/TerminalCorrectionContext.swift */,
 				47AC7E57000000000000DA02 /* rootshell/Features/Transfer/Attachments/PasteAttachment.swift */,
@@ -2354,6 +2357,7 @@
 				47AF04970000000000000A03 /* rootshell/UI/Terminal/PaneZoomPickerView.swift in Sources */,
 				47AF04710000000000000003 /* rootshell/Core/Keybinds/KeyTrigger.swift in Sources */,
 				47AF04710000000000000005 /* rootshell/Core/Keybinds/HardwareKeyboardText.swift in Sources */,
+				A52FFA3810574D98067392A1 /* rootshell/Core/Keybinds/HardwarePressRouting.swift in Sources */,
 				47AF04710000000000000001 /* rootshell/Core/Keybinds/ModTapState.swift in Sources */,
 				47AC7E570000000000000001 /* rootshell/Core/Terminal/TerminalCorrectionContext.swift in Sources */,
 				47AC7E57000000000000DA01 /* rootshell/Features/Transfer/Attachments/PasteAttachment.swift in Sources */,
