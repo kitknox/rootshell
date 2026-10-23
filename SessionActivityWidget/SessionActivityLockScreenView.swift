@@ -224,6 +224,11 @@ struct SessionActivityLockScreenView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            if state.showsInboxBadge {
+                AgentInboxBadgeLine(state: state)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             // VPN section — full width below
             if hasVPN {
                 if hasSessions || hasAgents {

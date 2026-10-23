@@ -128,6 +128,10 @@ enum PushNotificationRouter {
         if createdClaim { deliveryReconciler.ingest([record]) }
         deliveryReconciler.trackFresh(identifier: request.identifier, header: header, receivedAt: record.receivedAt)
         reconcileDeliveries()
+
+        // A backgrounded app gets no `willPresent` for this; the foreground
+        // path records it again under the same id, which merges.
+        recordInboxEvent(id: eid, header: header, at: record.receivedAt, isNew: true)
     }
 
     static func attentionStatus(_ status: String?) -> AgentAttentionStatus? {
@@ -257,6 +261,7 @@ enum PushNotificationRouter {
             return []
         }
         guard let (header, decryptedLocally) = decryptedHeader(from: content.userInfo) else { return [.banner, .list] }
+        recordInboxEvent(id: inboxEventID(for: notification.request), header: header, at: notification.date, isNew: true)
         // willPresent only runs while the app is foreground, so this is the "device can already alert" case.
         if header.kind == "agent", SettingsStore.shared.value(Settings.Notifications.pushAgentBackgroundOnly) {
             logger.info("suppressed: background-only and app is foreground")
@@ -306,6 +311,9 @@ enum PushNotificationRouter {
     /// Called from the attention router's seen pass: looking at the pane
     /// answers its push notifications too.
     static func paneViewed(_ pane: UUID) {
+        // Looking at the pane answers its inbox rows too, whether or not there
+        // is still a notification to withdraw.
+        markInboxRowsRead(surfaceID: pane)
         guard let ids = deliveredIdentifiers.removeValue(forKey: pane), !ids.isEmpty else { return }
         NotificationManager.shared.removeNotifications(identifiers: Array(ids))
     }
@@ -324,6 +332,7 @@ enum PushNotificationRouter {
         }
         if let resolved = resolve(header.route) {
             pending = nil
+            if header.kind == "agent" { markInboxRowsRead(surfaceID: resolved.surfaceID) }
             navigate(to: resolved)
         } else {
             // A notification response has already activated the process, but
@@ -335,8 +344,244 @@ enum PushNotificationRouter {
         }
     }
 
+    // MARK: - Agent inbox
+
+    /// `rootshell://pane/<uuid>` opens one pane, `rootshell://inbox` the inbox.
+    static func handleLiveActivityURL(_ url: URL) -> Bool {
+        guard url.scheme == "rootshell" else { return false }
+        switch url.host {
+        case "pane":
+            guard let raw = url.pathComponents.dropFirst().first,
+                  let surfaceID = UUID(uuidString: raw) else { return false }
+            openInboxPane(surfaceID: surfaceID)
+            return true
+        case "inbox":
+            let eventID = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first { $0.name == "event" }?.value
+            guard let eventID, let row = AgentInboxStore.shared.row(id: eventID) else {
+                AgentInboxRouter.shared.requestOpen(highlighting: eventID)
+                return true
+            }
+            Task { @MainActor in
+                if let resolved = await resolveInboxRowWhenReady(row) {
+                    AgentInboxStore.shared.markRead(id: eventID)
+                    navigate(to: resolved)
+                } else {
+                    AgentInboxRouter.shared.requestOpen(highlighting: eventID)
+                }
+            }
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Inbox id for a delivery. The decrypted local re-post carries no
+    /// envelope and is named `push-<eid>`; both copies must be one row.
+    static func inboxEventID(for request: UNNotificationRequest) -> String {
+        if let eid = PushEnvelope(userInfo: request.content.userInfo)?.eid { return eid }
+        let id = request.identifier
+        return id.hasPrefix("push-") ? String(id.dropFirst(5)) : id
+    }
+
+    /// Records an agent hook message. A route that does not resolve yet (tmux
+    /// or herdr still projecting) records without its tab and is retried from
+    /// `bindingsDidChange`. A pane already on screen needs no inbox row.
+    private static func recordInboxEvent(id: String, header: PushHeader, at date: Date, isNew: Bool) {
+        guard header.kind == "agent" else { return }
+        let resolved = resolve(header.route)
+        if let resolved, isViewed(resolved) {
+            pendingInboxEvents[id] = nil
+            return
+        }
+        let meta = resolved.map(inboxMetadata(for:))
+        let event = AgentInboxItem(
+            id: id,
+            agent: AgentInboxAgentID.manifestID(for: header.agent ?? ""),
+            status: header.status ?? "",
+            at: date,
+            deepLink: resolved.map { paneDeepLink(surfaceID: $0.surfaceID) } ?? AgentInboxLinks.inbox
+        )
+        let row = AgentInboxRow(
+            event: event,
+            summary: header.body.flatMap { $0.isEmpty ? nil : $0 } ?? header.title,
+            host: header.route?.host ?? meta?.host,
+            tab: meta?.title,
+            windowId: resolved?.windowId,
+            tabID: resolved?.tabID,
+            route: header.route
+        )
+        AgentInboxStore.shared.record(row, isNew: isNew)
+        if resolved == nil, header.route != nil {
+            pendingInboxEvents[id] = PendingInboxEvent(header: header, date: date,
+                                                       expires: Date().addingTimeInterval(10 * 60))
+        } else {
+            pendingInboxEvents[id] = nil
+        }
+    }
+
+    private struct PendingInboxEvent {
+        let header: PushHeader
+        let date: Date
+        let expires: Date
+    }
+
+    private static var pendingInboxEvents: [String: PendingInboxEvent] = [:]
+
+    private static func retryPendingInboxEvents() {
+        guard !pendingInboxEvents.isEmpty else { return }
+        let now = Date()
+        for (id, event) in pendingInboxEvents {
+            guard event.expires > now else {
+                pendingInboxEvents[id] = nil
+                continue
+            }
+            guard let resolved = resolve(event.header.route) else { continue }
+            if isViewed(resolved) {
+                pendingInboxEvents[id] = nil
+                AgentInboxStore.shared.markRead(id: id)
+            } else {
+                recordInboxEvent(id: id, header: event.header, at: event.date, isNew: false)
+            }
+        }
+    }
+
+    /// The pane an inbox row points at: its push route (regular, tmux and
+    /// herdr control-mode panes alike, as a notification tap resolves it),
+    /// else the pane it resolved to at delivery. With `allowsTabFallback`, the
+    /// tab that pane was in. Never a guess by host or title.
+    static func resolveInboxRow(_ row: AgentInboxRow, allowsTabFallback: Bool = true) -> Resolved? {
+        if let resolved = resolve(row.route) {
+            return resolved
+        }
+        if let surfaceID = paneSurfaceID(row.deepLink), let resolved = resolve(surfaceID: surfaceID) {
+            return resolved
+        }
+        if let route = row.route, let resolved = resolveWhileIdentityPending(route) {
+            return resolved
+        }
+        guard allowsTabFallback else { return nil }
+        return resolvedTab(windowId: row.windowId, tabID: row.tabID)
+    }
+
+    /// A tap can land while a control-mode client is still re-learning its
+    /// server identity after a reconnect, which a notification tap rides out
+    /// with its pending retry. Waits up to two seconds for the exact route.
+    static func resolveInboxRowWhenReady(_ row: AgentInboxRow) async -> Resolved? {
+        for attempt in 0..<8 {
+            if let resolved = resolveInboxRow(row, allowsTabFallback: false) { return resolved }
+            if attempt == 0 { refreshControlModeIdentities() }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        return resolveInboxRow(row)
+    }
+
+    private static func refreshControlModeIdentities() {
+        for (_, _, view) in TmuxWindowRegistry.terminalPanes() {
+            if let binding = view.herdrPaneBinding,
+               let controller = HerdrController.controller(forGateway: binding.gatewayUUID),
+               controller.pushRouteServerIdentity == nil {
+                controller.refreshPushRouteIdentity()
+            }
+            if let binding = view.tmuxPaneBinding,
+               let controller = TmuxController.controller(forOwnerSurface: binding.parentSurface),
+               controller.pushRouteServerIdentity == nil {
+                controller.refreshPushRouteServerIdentity()
+            }
+        }
+    }
+
+    /// The control-mode pane with the route's tmux pane or herdr terminal id,
+    /// accepted only while its client's server identity is still unknown and
+    /// only when exactly one pane qualifies. A known, different identity is a
+    /// different server and never matches.
+    private static func resolveWhileIdentityPending(_ route: PushRoute) -> Resolved? {
+        let herdrTerminal = route.herdrTerminal.flatMap { $0.isEmpty ? nil : $0 }
+        let tmuxPaneId = route.tmuxPane.flatMap { $0.hasPrefix("%") ? Int($0.dropFirst()) : nil }
+        guard herdrTerminal != nil || tmuxPaneId != nil else { return nil }
+        var matches: [Resolved] = []
+        for (windowId, tab, view) in TmuxWindowRegistry.terminalPanes() {
+            if let herdrTerminal, let binding = view.herdrPaneBinding, binding.terminalId == herdrTerminal,
+               let controller = HerdrController.controller(forGateway: binding.gatewayUUID),
+               controller.isActive, !controller.didEnd, controller.pushRouteServerIdentity == nil {
+                matches.append(Resolved(windowId: windowId, tabID: tab.id, surfaceID: view.uuid))
+            } else if herdrTerminal == nil, let tmuxPaneId, let binding = view.tmuxPaneBinding,
+                      binding.paneId == tmuxPaneId,
+                      let controller = TmuxController.controller(forOwnerSurface: binding.parentSurface),
+                      controller.pushRouteServerIdentity == nil {
+                matches.append(Resolved(windowId: windowId, tabID: tab.id, surfaceID: view.uuid))
+            }
+        }
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    /// Marks the rows of a pane read, by the pane link recorded at delivery or
+    /// by re-resolving the route (a re-projected pane has a new surface id).
+    private static func markInboxRowsRead(surfaceID: UUID) {
+        let link = paneDeepLink(surfaceID: surfaceID)
+        AgentInboxStore.shared.markRead { row in
+            row.deepLink == link || (row.route != nil && resolve(row.route)?.surfaceID == surfaceID)
+        }
+    }
+
+    private static func paneSurfaceID(_ link: URL) -> UUID? {
+        guard link.scheme == "rootshell", link.host == "pane",
+              let raw = link.pathComponents.dropFirst().first else { return nil }
+        return UUID(uuidString: raw)
+    }
+
+    private static func resolvedTab(windowId: String?, tabID: UUID?) -> Resolved? {
+        guard let windowId, let tabID,
+              let model = TerminalWindowRegistry.tabsModel(for: windowId),
+              let tab = model.tabs.first(where: { $0.id == tabID }),
+              let surfaceID = tab.focusedPane?.uuid ?? tab.splitTree.first?.uuid else { return nil }
+        return Resolved(windowId: windowId, tabID: tabID, surfaceID: surfaceID)
+    }
+
+    /// Host and title of the tab a resolved pane belongs to.
+    private static func inboxMetadata(for resolved: Resolved) -> (host: String?, title: String?) {
+        guard let model = TerminalWindowRegistry.tabsModel(for: resolved.windowId),
+              let tab = model.tabs.first(where: { $0.id == resolved.tabID }) else {
+            return (nil, nil)
+        }
+        return (model.groupHostLabel(for: tab), tab.title)
+    }
+
+    /// `rootshell://pane/<surface-uuid>`: the tap target of one island row.
+    static func paneDeepLink(surfaceID: UUID) -> URL {
+        URL(string: "rootshell://pane/\(surfaceID.uuidString)")!
+    }
+
+    private static func openInboxPane(surfaceID: UUID) {
+        if let resolved = resolve(surfaceID: surfaceID) {
+            pendingInboxPane = nil
+            markInboxRowsRead(surfaceID: surfaceID)
+            navigate(to: resolved)
+        } else {
+            // The pane may still be projecting or its window restoring.
+            pendingInboxPane = InboxPaneRetry(surfaceID: surfaceID, expires: Date().addingTimeInterval(60))
+        }
+    }
+
+    private struct InboxPaneRetry {
+        let surfaceID: UUID
+        let expires: Date
+    }
+
+    private static var pendingInboxPane: InboxPaneRetry?
+
+    private static func retryPendingInboxPane() {
+        guard let p = pendingInboxPane else { return }
+        guard p.expires > Date() else { pendingInboxPane = nil; return }
+        guard let resolved = resolve(surfaceID: p.surfaceID) else { return }
+        pendingInboxPane = nil
+        markInboxRowsRead(surfaceID: p.surfaceID)
+        navigate(to: resolved)
+    }
+
     /// Retried when tabs restore, multiplexer panes project, or a scene activates.
     static func retryPending() {
+        retryPendingInboxPane()
         guard let p = pending else { return }
         guard p.expires > Date() else { pending = nil; return }
         guard let resolved = resolve(p.route) else { return }
@@ -349,6 +594,7 @@ enum PushNotificationRouter {
     /// arriving before or during a snapshot cannot strand its records.
     static func bindingsDidChange() {
         reconcileDeliveries()
+        retryPendingInboxEvents()
         retryPending()
     }
 
@@ -542,6 +788,9 @@ enum PushNotificationRouter {
                 continue
             }
             guard let (header, decryptedLocally) = decryptedHeader(from: n.request.content.userInfo) else { continue }
+            if n.date > Date().addingTimeInterval(-12 * 60 * 60) {
+                recordInboxEvent(id: inboxEventID(for: n.request), header: header, at: n.date, isNew: false)
+            }
             if decryptedLocally {
                 // Delivered raw while the app was not running: replace it with the decrypted version.
                 let eid = PushEnvelope(userInfo: n.request.content.userInfo)?.eid ?? n.request.identifier

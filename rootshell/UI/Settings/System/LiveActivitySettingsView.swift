@@ -25,6 +25,25 @@ struct LiveActivitySettingsView: View {
         }
     }
 
+    private func agentMessagesTitle(_ layout: AgentInboxIslandLayout) -> String {
+        switch layout {
+        case .off: String(localized: "Off", comment: "Live Activity agent messages option")
+        case .badge: String(localized: "Unread Count", comment: "Live Activity agent messages option")
+        case .inbox: String(localized: "Inbox", comment: "Live Activity agent messages option")
+        }
+    }
+
+    private func agentMessagesDescription(_ layout: AgentInboxIslandLayout) -> String {
+        switch layout {
+        case .off:
+            String(localized: "Agent hook messages stay in the Agent Inbox and never change the Live Activity.", comment: "Live Activity agent messages description: off")
+        case .badge:
+            String(localized: "Adds an unread count to the Live Activity while it is showing. It never starts one on its own.", comment: "Live Activity agent messages description: badge")
+        case .inbox:
+            String(localized: "While messages are unread, the Live Activity lists them instead of your sessions. Message text is never shown.", comment: "Live Activity agent messages description: inbox")
+        }
+    }
+
     var body: some View {
         List {
             Section {
@@ -144,6 +163,23 @@ struct LiveActivitySettingsView: View {
                             Text("Agent counts come from on-device detection and update only while rootshell is in the foreground. The Lock Screen marks them as paused while rootshell is in the background.")
                         }
                     }
+                }
+
+                Section {
+                    Picker(selection: Bindable(liveActivityManager).agentInboxLayout) {
+                        ForEach(AgentInboxIslandLayout.allCases, id: \.self) { layout in
+                            Text(agentMessagesTitle(layout)).tag(layout)
+                        }
+                    } label: {
+                        HStack(spacing: 12) {
+                            SettingsIcon(systemName: "tray")
+                            Text("Agent Messages")
+                        }
+                        .settingRow(Settings.LiveActivity.agentMessages)
+                    }
+                    .themedRow()
+                } footer: {
+                    Text(agentMessagesDescription(liveActivityManager.agentInboxLayout))
                 }
 
                 if liveActivityManager.isActivityActive {

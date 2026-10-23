@@ -16,13 +16,33 @@ public enum PushAgentLogoAttachment {
         "codex": "CodexLogo",
         "pi": "PiLogo",
         "omp": "OMPLogo",
+        "dsh": "DeepSeekLogo",
+        "hermes": "HermesLogo",
     ]
 
+    /// Hooks identify agents with whatever their own CLI calls itself, so
+    /// `oh-my-pi`, `Oh My Pi`, `deepseek-harness` and `DSH` all arrive here.
+    /// Normalise before looking up instead of demanding one spelling upstream.
     static func assetName(for agent: String?) -> String? {
-        agent.flatMap { assetNames[$0] }
+        guard let agent else { return nil }
+        let key = agent
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "-")
+            .replacingOccurrences(of: " ", with: "-")
+        if let exact = assetNames[key] { return exact }
+        if key.contains("oh-my-pi") || key == "ohmy-pi" || key.contains("omp") { return "OMPLogo" }
+        if key.contains("hermes") { return "HermesLogo" }
+        if key.contains("deepseek") || key == "dsh" || key.contains("harness") { return "DeepSeekLogo" }
+        if key.contains("claude") { return "ClaudeLogo" }
+        if key.contains("codex") || key.contains("openai") { return "CodexLogo" }
+        if key.hasPrefix("pi") || key.contains("-pi") { return "PiLogo" }
+        return nil
     }
 
-    static func resourceURL(for agent: String?) -> URL? {
+    /// Public so the app can draw the same artwork in the inbox that a
+    /// notification shows as its attachment.
+    public static func resourceURL(for agent: String?) -> URL? {
         assetName(for: agent).flatMap { Bundle.module.url(forResource: $0, withExtension: "png") }
     }
 

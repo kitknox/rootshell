@@ -321,6 +321,12 @@ struct MainView: View {
     /// A Files-tab choice waiting for the connection sheet to finish dismissing.
     @State var pendingFileManagerOpen: (endpoint: FileEndpoint, presentation: PanelPresentation?)?
 
+    // Agent inbox panel: shares the trailing docked slot with the file manager.
+    @State var showAgentInbox = false
+    @State var agentInboxPresentation: PanelPresentation = SettingsStore.shared.value(Settings.AgentInbox.presentation)
+    @State var agentInboxSidebarWidth: CGFloat = CGFloat(SettingsStore.shared.value(Settings.AgentInbox.sidebarWidth))
+    @State var agentInboxSidebarIsDragging = false
+
     #if !CHINA_BUILD
     // HTTP capture panel: shares the trailing docked slot with the file manager.
     @State var showHTTPCapture = false
@@ -653,7 +659,8 @@ struct MainView: View {
                     // (pinned) tab sidebar consumes the leading edge and the
                     // AI agent sidebar the trailing edge.
                     .padding(.leading, dockedTabSidebarWidth(windowWidth: geometry.size.width))
-                    .padding(.trailing, aiAgentSidebarCurrentWidth() + fileManagerSidebarCurrentWidth + httpCaptureDockedWidth)
+                    .padding(.trailing, aiAgentSidebarCurrentWidth() + fileManagerSidebarCurrentWidth + httpCaptureDockedWidth
+                        + agentInboxSidebarCurrentWidth)
                     .transition(.opacity)
                 }
             }

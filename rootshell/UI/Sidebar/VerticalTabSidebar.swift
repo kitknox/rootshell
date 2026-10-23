@@ -236,6 +236,7 @@ struct VerticalTabSidebar: View {
     let sheetAccentColor: Color?
     let sheetColorScheme: ColorScheme?
     var onExposeRequested: () -> Void = {}
+    var onOpenAgentInbox: () -> Void = {}
     var onTabHover: ((UUID, Bool) -> Void)? = nil
     /// Nil disables hover previews.
     var previewAnchors: TabHoverPreviewAnchorRegistry? = nil
@@ -750,31 +751,30 @@ struct VerticalTabSidebar: View {
 
     // MARK: Agent Summary
 
-    /// Shown for project shells even with badges off. (id=agent-attention)
-    @ViewBuilder
+    /// Shown for project shells even with badges off, and while the agent
+    /// inbox has unread messages. (id=agent-attention)
     private var agentSummaryBar: some View {
-        if attentionBadgesEnabled || hasAnyProject {
-            SidebarAgentSummaryBar(
-                metrics: metrics,
-                accentTint: accentTint,
-                hasProjects: hasAnyProject,
-                showsAttention: attentionBadgesEnabled,
-                sortIconName: agentInboxSortIcon,
-                sortHelp: agentInboxSortHelp,
-                sortIsActive: attentionSortActive || projectGroupingActive,
-                onCycleSort: {
-                    // Cycles tab order -> attention -> project.
-                    switch agentSortRaw {
-                    case "priority":
-                        agentSortRaw = "project"
-                    case "project":
-                        agentSortRaw = "static"
-                    default:
-                        agentSortRaw = attentionBadgesEnabled ? "priority" : "project"
-                    }
+        SidebarAgentSummaryBar(
+            metrics: metrics,
+            accentTint: accentTint,
+            hasProjects: hasAnyProject,
+            showsAttention: attentionBadgesEnabled,
+            sortIconName: agentInboxSortIcon,
+            sortHelp: agentInboxSortHelp,
+            sortIsActive: attentionSortActive || projectGroupingActive,
+            onCycleSort: {
+                // Cycles tab order -> attention -> project.
+                switch agentSortRaw {
+                case "priority":
+                    agentSortRaw = "project"
+                case "project":
+                    agentSortRaw = "static"
+                default:
+                    agentSortRaw = attentionBadgesEnabled ? "priority" : "project"
                 }
-            )
-        }
+            },
+            onOpenInbox: onOpenAgentInbox
+        )
     }
 
     // MARK: Search
@@ -3116,31 +3116,55 @@ private struct SidebarAgentSummaryBar: View {
     let sortHelp: String
     let sortIsActive: Bool
     let onCycleSort: () -> Void
+    let onOpenInbox: () -> Void
 
     var body: some View {
         // Registers the Observation dependency; the value itself is meaningless.
         let _ = AgentAttentionCenter.shared.revision
         let hasAgents = showsAttention && !AgentAttentionCenter.shared.globalAgentCounts().isEmpty
-        if hasAgents || hasProjects {
+        let unread = AgentInboxStore.shared.unreadActions.count
+        if hasAgents || hasProjects || unread > 0 {
             HStack(spacing: 6) {
                 if hasAgents {
-                    AttentionRollupSummary(fontSize: metrics.subtitleSize + 1)
-                } else {
+                    Button(action: onOpenInbox) {
+                        AttentionRollupSummary(fontSize: metrics.subtitleSize + 1)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open Agent Inbox")
+                } else if hasProjects {
                     Text("Projects")
                         .font(.system(size: metrics.subtitleSize + 1))
                         .foregroundColor(.secondary)
                 }
                 Spacer(minLength: 8)
-                Button(action: onCycleSort) {
-                    Image(systemName: sortIconName)
-                        .font(.system(size: metrics.headerIconSize, weight: .medium))
-                        .foregroundColor(sortIsActive ? accentTint : .secondary)
-                        .frame(width: metrics.headerButtonTarget, height: metrics.headerButtonTarget)
+                if unread > 0 {
+                    Button(action: onOpenInbox) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "tray.full")
+                            Text("\(unread)").monospacedDigit()
+                        }
+                        .font(.system(size: metrics.subtitleSize + 1, weight: .medium))
+                        .foregroundColor(accentTint)
+                        .frame(height: metrics.headerButtonTarget)
                         .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open Agent Inbox")
+                    .accessibilityLabel(Text("Agent Inbox, \(unread) unread"))
                 }
-                .buttonStyle(.plain)
-                .help(sortHelp)
-                .accessibilityLabel(sortHelp)
+                if hasAgents || hasProjects {
+                    Button(action: onCycleSort) {
+                        Image(systemName: sortIconName)
+                            .font(.system(size: metrics.headerIconSize, weight: .medium))
+                            .foregroundColor(sortIsActive ? accentTint : .secondary)
+                            .frame(width: metrics.headerButtonTarget, height: metrics.headerButtonTarget)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(sortHelp)
+                    .accessibilityLabel(sortHelp)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 4)

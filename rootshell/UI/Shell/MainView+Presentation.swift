@@ -76,6 +76,7 @@ extension MainView {
             showOpenInFolderOverlay ||
             fileManagerOwnsKeyboard ||
             httpCaptureHoldsKeyboard ||
+            agentInboxOwnsKeyboard ||
             // The iPhone presentation is a sheet that owns the keyboard. On
             // regular width the clipboard manager is a passthrough glass HUD (like
             // the Find HUD, which is intentionally absent here) and must NOT count
@@ -212,6 +213,7 @@ extension MainView {
             #if !CHINA_BUILD
             .modifier(httpCapturePhoneSheetModifier(sheetTheme: sheetTheme))
             #endif
+            .modifier(agentInboxPhoneSheetModifier(sheetTheme: sheetTheme))
             .sheet(item: $connectionInfoToShow) { info in
                 ConnectionInfoSheet(info: info)
                     .themedSheet(themeColors: sheetTheme.themeColors, accentColor: sheetTheme.accentColor, colorScheme: sheetTheme.colorScheme)
@@ -325,6 +327,10 @@ extension MainView {
                       let tabId = info["tabId"] as? UUID,
                       let leafId = info["leafId"] as? UUID else { return }
                 handleTrzszTransferLeafRemoval(tabId: tabId, leafId: leafId)
+            }
+            // The island's deep link can land before this window exists.
+            .onChange(of: AgentInboxRouter.shared.pendingOpen, initial: true) { _, pending in
+                if pending { consumePendingAgentInboxOpen() }
             }
             .modifier(ConnectionSidebarModifier(
                 showSidebar: $showConnectionSidebar,

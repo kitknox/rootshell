@@ -115,6 +115,7 @@ extension MainView {
         #if !CHINA_BUILD
         if httpCaptureShowsOverlay && httpCapturePresentation == .full { return true }
         #endif
+        if agentInboxShowsOverlay && agentInboxPresentation == .full { return true }
         return fileManagerShowsOverlay && fileManagerPresentation == .full
     }
 

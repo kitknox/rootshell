@@ -2757,6 +2757,14 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
         })
         #endif
 
+        menuItems.append(UIAction(
+            title: String(localized: "Agent Inbox"),
+            image: UIImage(systemName: "tray")
+        ) { [weak self] _ in
+            guard let self else { return }
+            NotificationCenter.default.post(name: .toggleAgentInbox, object: self)
+        })
+
         // Split actions menu
         let splitRight = UIAction(
             title: String(localized: "Split Right"),

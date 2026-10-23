@@ -25,6 +25,8 @@ let package = Package(
                 .copy("Resources/CodexLogo.png"),
                 .copy("Resources/PiLogo.png"),
                 .copy("Resources/OMPLogo.png"),
+                .copy("Resources/DeepSeekLogo.png"),
+                .copy("Resources/HermesLogo.png"),
             ]
         ),
         .testTarget(

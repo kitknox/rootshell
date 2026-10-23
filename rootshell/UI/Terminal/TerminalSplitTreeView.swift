@@ -2299,6 +2299,7 @@ extension Notification.Name {
     static let toggleFileManager = Notification.Name("com.rootshell.toggleFileManager")
     static let toggleIPLookup = Notification.Name("com.rootshell.toggleIPLookup")
     static let toggleHTTPCapture = Notification.Name("com.rootshell.toggleHTTPCapture")
+    static let toggleAgentInbox = Notification.Name("com.rootshell.toggleAgentInbox")
     static let toggleThemePicker = Notification.Name("com.rootshell.toggleThemePicker")
     static let toggleClipboardManager = Notification.Name("com.rootshell.toggleClipboardManager")
     static let toggleBackgroundEffect = Notification.Name("com.rootshell.toggleBackgroundEffect")

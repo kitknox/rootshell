@@ -1233,6 +1233,22 @@
         }
       }
     },
+    "%lld more" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还有 %lld 条"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "還有 %lld 條"
+          }
+        }
+      }
+    },
     "%lld need attention" : {
       "localizations" : {
         "ar" : {
@@ -1845,6 +1861,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 個工作"
+          }
+        }
+      }
+    },
+    "%lld unread" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 条未读"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 條未讀"
           }
         }
       }
@@ -2619,6 +2651,22 @@
         }
       }
     },
+    "1 more" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还有 1 条"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "還有 1 條"
+          }
+        }
+      }
+    },
     "1 needs attention" : {
       "localizations" : {
         "ar" : {
@@ -2927,6 +2975,22 @@
         }
       }
     },
+    "1 unread" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 条未读"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 條未讀"
+          }
+        }
+      }
+    },
     "1 working" : {
       "localizations" : {
         "ar" : {
@@ -3077,6 +3141,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "1 個執行中"
+          }
+        }
+      }
+    },
+    "Agent" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理"
           }
         }
       }
@@ -5861,6 +5941,38 @@
         }
       }
     },
+    "Failed" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失败"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失敗"
+          }
+        }
+      }
+    },
+    "Finished" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已完成"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已完成"
+          }
+        }
+      }
+    },
     "Hold to choose a profile" : {
       "localizations" : {
         "ar" : {
@@ -6166,6 +6278,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本機擷取"
+          }
+        }
+      }
+    },
+    "Mark All as Read" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部标记已读"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部標記為已讀"
+          }
+        }
+      }
+    },
+    "Needs your input" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待你的输入"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待你的輸入"
           }
         }
       }

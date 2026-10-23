@@ -1246,6 +1246,11 @@ class CatalystAppDelegate: AppDelegate {
             keybind: .toggle_http_capture
         ))
         #endif
+        sceneItems.append(keybindMenuCommand(
+            title: String(localized: "Agent Inbox"),
+            action: #selector(UIApplication.menuToggleAgentInbox(_:)),
+            keybind: .toggle_agent_inbox
+        ))
         builder.replaceChildren(ofMenu: .newScene) { _ in sceneItems }
     }
 

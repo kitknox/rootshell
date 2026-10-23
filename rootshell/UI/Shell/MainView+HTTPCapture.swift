@@ -99,6 +99,7 @@ extension MainView {
         showOpenInFolderOverlay = false
         showIPLookup = false
         yieldSlotToHTTPCapture(httpCapturePresentation)
+        yieldAgentInboxSlot(to: httpCapturePresentation)
 
         if isPhone {
             resignFirstResponderForSheetPresentation()
@@ -134,6 +135,7 @@ extension MainView {
     func switchHTTPCapturePresentation(_ presentation: PanelPresentation) {
         guard presentation != httpCapturePresentation else { return }
         yieldSlotToHTTPCapture(presentation)
+        yieldAgentInboxSlot(to: presentation)
         httpCapturePresentation = presentation
         SettingsStore.shared.set(Settings.HTTPCapture.presentation, presentation)
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented || httpCaptureOwnsKeyboard || fileManagerOwnsKeyboard)
