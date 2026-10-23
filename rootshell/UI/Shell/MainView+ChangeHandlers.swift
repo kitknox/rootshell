@@ -140,7 +140,7 @@ extension MainView {
                     } else {
                         resignFirstResponderForSheetPresentation()
                     }
-                } else if oldValue {
+                } else if oldValue, !isAnySheetPresented {
                     restoreFirstResponderAfterSheetDismissal()
                 }
             }

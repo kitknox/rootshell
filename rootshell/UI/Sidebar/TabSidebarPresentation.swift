@@ -2,19 +2,19 @@
 //  TabSidebarPresentation.swift
 //  rootshell
 //
-//  Presents the vertical tab sidebar:
-//  - iPhone: standard .sheet() (full screen, terminal not visible behind)
-//  - iPad/Catalyst: LEFT-side UIKit overlay, mirroring the connection
-//    sidebar's pattern (ConnectionSidebarModifier). Deliberately NOT a
-//    fullScreenCover: covers share UIKit's one-presentation slot with the
-//    settings panel, and a present-while-dismissing race wedges the binding
-//    true with no presenter mounted — the toggle then appears dead and
-//    first-responder restoration (gated on isAnySheetPresented) never runs.
-//    The connection sidebar hit the same class of deadlock and moved to
-//    this overlay; the tab sidebar follows it.
+//  Presents an edge sidebar:
+//  - iPhone and iPad/Catalyst: UIKit overlay on the leading or trailing
+//    edge. The phone drawer leaves a peek of the terminal. Deliberately
+//    NOT a fullScreenCover: covers share UIKit's one-presentation slot with
+//    the settings panel, and a present-while-dismissing race wedges the
+//    binding true with no presenter mounted — the toggle then appears dead
+//    and first-responder restoration (gated on isAnySheetPresented) never
+//    runs. The connection sidebar hit the same class of deadlock and moved
+//    to this overlay; the tab sidebar follows it.
 //  - visionOS: standard .sheet()
 //
 
+import os
 import SwiftUI
 
 #if canImport(UIKit)
@@ -44,6 +44,7 @@ extension Notification.Name {
 }
 
 struct TabSidebarModifier<SidebarContent: View>: ViewModifier {
+    var edge: SidePanelEdge = .leading
     @Binding var showSidebar: Bool
 
     let themeColors: SheetThemeColors?
@@ -69,6 +70,7 @@ struct TabSidebarModifier<SidebarContent: View>: ViewModifier {
         content
             .overlay {
                 TabSidebarUIKitOverlay(
+                    edge: edge,
                     showSidebar: $showSidebar,
                     themeColors: themeColors,
                     accentColor: accentColor,
@@ -87,6 +89,7 @@ struct TabSidebarModifier<SidebarContent: View>: ViewModifier {
 // MARK: - UIKit Overlay
 
 private struct TabSidebarUIKitOverlay<SidebarContent: View>: UIViewControllerRepresentable {
+    var edge: SidePanelEdge
     @Binding var showSidebar: Bool
     let themeColors: SheetThemeColors?
     let accentColor: Color?
@@ -107,11 +110,12 @@ private struct TabSidebarUIKitOverlay<SidebarContent: View>: UIViewControllerRep
 
     func makeUIViewController(context: Context) -> TabSidebarOverlayInstallerViewController {
         let overlayController = TabSidebarOverlayViewController()
-        // Leading panel; phone slides up from the bottom; clear the top-leading
-        // window controls; resign the search field on dismiss.
-        overlayController.edge = .leading
-        overlayController.allowPhoneBottom = true
-        overlayController.clearsWindowControls = true
+        // Slide in from this edge. Compact width keeps a peek of the terminal.
+        // Only a leading panel clears the top-leading window controls.
+        overlayController.edge = edge
+        overlayController.allowPhoneBottom = false
+        overlayController.compactPeek = 48
+        overlayController.clearsWindowControls = edge == .leading
         overlayController.resignFirstResponderOnDismiss = true
         // NOTE: do NOT set escapeDismisses here. The tab sidebar's search field
         // (SidebarSearchField) auto-focuses on open and owns first responder so
@@ -136,6 +140,7 @@ private struct TabSidebarUIKitOverlay<SidebarContent: View>: UIViewControllerRep
             backdropAlpha: tabSidebarTranslucent ? 0.12 : (themeColors != nil ? 0.4 : 0.5),
             panelWidth: 420,
             rootView: AnyView(TabSidebarPanelView(
+                edge: edge,
                 themeColors: themeColors,
                 accentColor: accentColor,
                 colorScheme: colorScheme,
@@ -230,13 +235,15 @@ private final class TabSidebarOverlayViewController: SidePanelOverlayViewControl
     /// True while a left-edge swipe is interactively dragging the panel in.
     /// Suppresses the auto-spring in `applyPresentationChange`.
     private var interactiveOpenActive = false
-    /// Swipe the open panel back toward the left edge to dismiss (iPad).
+    /// Drag the open panel back off its edge. The recognizer sits on the
+    /// overlay, not the panel, so the panel transform does not move the
+    /// gesture's coordinate space.
     private var closePanGesture: UIPanGestureRecognizer?
 
     override func viewDidLoad() {
-        // The shared core mounts the backdrop + hosting view (leading edge,
-        // phone-bottom transform), wires the backdrop tap, and applies the
-        // hidden state. Layer this panel's interactive gestures on top.
+        // The shared core mounts the backdrop + hosting view, wires the
+        // backdrop tap, and applies the hidden state. Layer this panel's
+        // interactive gestures on top.
         super.viewDidLoad()
 
         // Keep the recognizer installed through resizes; its delegate gates
@@ -244,7 +251,7 @@ private final class TabSidebarOverlayViewController: SidePanelOverlayViewControl
         let closePan = UIPanGestureRecognizer(target: self, action: #selector(handleClosePan(_:)))
         closePan.delegate = self
         closePan.maximumNumberOfTouches = 1
-        hostingController.view.addGestureRecognizer(closePan)
+        view.addGestureRecognizer(closePan)
         self.closePanGesture = closePan
 
         // Header swipe-down: translate the WHOLE panel (chrome + content)
@@ -277,13 +284,13 @@ private final class TabSidebarOverlayViewController: SidePanelOverlayViewControl
         )
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(handleOpenDragCommit),
+            selector: #selector(handleOpenDragCommit(_:)),
             name: .tabSidebarOpenDragCommit,
             object: nil
         )
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(handleOpenDragCancel),
+            selector: #selector(handleOpenDragCancel(_:)),
             name: .tabSidebarOpenDragCancel,
             object: nil
         )
@@ -334,9 +341,19 @@ private final class TabSidebarOverlayViewController: SidePanelOverlayViewControl
         return noteWindow === view.window
     }
 
+    /// A drag with no edge is the leading drawer. Each overlay ignores the other edge.
+    private func matchesEdge(_ note: Notification) -> Bool {
+        guard isForThisWindow(note) else { return false }
+        guard let raw = note.userInfo?["edge"] as? String else { return edge == .leading }
+        switch edge {
+        case .leading: return raw == "leading"
+        case .trailing: return raw == "trailing"
+        }
+    }
+
     @objc
     private func handleBeginInteractiveOpen(_ note: Notification) {
-        guard isForThisWindow(note) else { return }
+        guard matchesEdge(note) else { return }
         elevateAboveWindowContent()
         interactiveOpenActive = true
         // Sit fully hidden; the drag notifications drive the panel in. Content
@@ -358,7 +375,7 @@ private final class TabSidebarOverlayViewController: SidePanelOverlayViewControl
 
     @objc
     private func handleOpenDragChanged(_ note: Notification) {
-        guard interactiveOpenActive,
+        guard interactiveOpenActive, matchesEdge(note),
               let progress = note.userInfo?["progress"] as? CGFloat else { return }
         let p = max(0, min(1, progress))
         hostingController.view.transform = panelTransform(progress: p)
@@ -366,8 +383,8 @@ private final class TabSidebarOverlayViewController: SidePanelOverlayViewControl
     }
 
     @objc
-    private func handleOpenDragCommit() {
-        guard interactiveOpenActive else { return }
+    private func handleOpenDragCommit(_ note: Notification) {
+        guard interactiveOpenActive, matchesEdge(note) else { return }
         interactiveOpenActive = false
         currentPresented = true
         view.isUserInteractionEnabled = true
@@ -384,8 +401,8 @@ private final class TabSidebarOverlayViewController: SidePanelOverlayViewControl
     }
 
     @objc
-    private func handleOpenDragCancel() {
-        guard interactiveOpenActive else { return }
+    private func handleOpenDragCancel(_ note: Notification) {
+        guard interactiveOpenActive, matchesEdge(note) else { return }
         interactiveOpenActive = false
         // Settle currentPresented false BEFORE the coordinator's binding write
         // lands, so the resulting update(isPresented:false) early-returns
@@ -416,15 +433,16 @@ private final class TabSidebarOverlayViewController: SidePanelOverlayViewControl
 
         switch gesture.state {
         case .changed:
-            // Leftward drag (negative x) slides the panel back out.
-            let progress = max(0, min(1, -translation.x / width))
+            let progress = max(0, min(1, closingDistance(translation.x) / width))
             hostingController.view.transform = panelTransform(progress: 1 - progress)
             backdropView.alpha = 1 - progress
 
         case .ended:
             let velocity = gesture.velocity(in: view)
-            let shouldDismiss = -translation.x > width / 3 || velocity.x < -800
+            let shouldDismiss = closingDistance(translation.x) > width / 3 || closingDistance(velocity.x) > 800
             if shouldDismiss {
+                let edgeName = edge == .leading ? "leading" : "trailing"
+                Ghostty.logger.info("Edge sidebar drag close edge=\(edgeName, privacy: .public)")
                 // Hand off to the canonical dismiss (binding → update →
                 // animatePresentationChange) which slides the panel the rest
                 // of the way from its current position (.beginFromCurrentState).
@@ -456,29 +474,39 @@ private final class TabSidebarOverlayViewController: SidePanelOverlayViewControl
 
     // MARK: - UIGestureRecognizerDelegate
 
+    /// Positive when the drag moves the panel back off its edge.
+    private func closingDistance(_ x: CGFloat) -> CGFloat {
+        edge == .leading ? -x : x
+    }
+
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard gestureRecognizer === closePanGesture,
               let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
-        // Claim only a clearly horizontal, leftward (closing) drag so the tab
-        // list's vertical scroll, taps, and drag-to-reorder stay untouched.
-        guard currentPresented, !interactiveOpenActive,
-              view.traitCollection.horizontalSizeClass == .regular else { return false }
+        // Claim only a clearly horizontal closing drag so the tab list's
+        // vertical scroll, taps, and drag-to-reorder stay untouched.
+        guard currentPresented, !interactiveOpenActive else { return false }
         let translation = pan.translation(in: view)
         let velocity = pan.velocity(in: view)
         let horizontalIntent = abs(translation.x) > abs(translation.y)
             || abs(velocity.x) > abs(velocity.y)
-        let leftward = translation.x < 0 || velocity.x < 0
-        return horizontalIntent && leftward
+        let closing = closingDistance(translation.x) > 0 || closingDistance(velocity.x) > 0
+        return horizontalIntent && closing
     }
 
     func gestureRecognizer(
         _ gestureRecognizer: UIGestureRecognizer,
         shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
     ) -> Bool {
-        // Let the close pan track alongside the panel's inner scroll; once the
-        // direction gate in shouldBegin lets it begin, cancelsTouchesInView
-        // (default) stops the scroll. Without this the inner scroll would win.
-        return true
+        true
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        guard gestureRecognizer === closePanGesture else { return false }
+        return otherGestureRecognizer is UIPanGestureRecognizer
+            && otherGestureRecognizer.view is UIScrollView
     }
 }
 
@@ -486,6 +514,7 @@ private final class TabSidebarOverlayViewController: SidePanelOverlayViewControl
 
 private struct TabSidebarPanelView<SidebarContent: View>: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    let edge: SidePanelEdge
     let themeColors: SheetThemeColors?
     let accentColor: Color?
     let colorScheme: ColorScheme?
@@ -497,9 +526,6 @@ private struct TabSidebarPanelView<SidebarContent: View>: View {
     private let sidebarMaxWidth: CGFloat = 420
     private let sidebarCornerRadius: CGFloat = 20
     private let sidebarVerticalContentPadding: CGFloat = 6
-    // The sidebar's list/footer supplies another 6pt, leaving interactive
-    // content 16pt above the physical bottom after reclaiming the safe area.
-    private let sidebarPhoneBottomContentPadding: CGFloat = 10
 
     /// Liquid-glass look (Settings > Appearance > Window > Tab Bar): a
     /// material panel with a light theme tint, so the terminal shows
@@ -527,24 +553,23 @@ private struct TabSidebarPanelView<SidebarContent: View>: View {
         horizontalSizeClass != .regular
     }
 
-    /// Phone: full-screen panel rising from the bottom — round the top
-    /// corners like a bottom sheet. Larger screens: a left sidebar with
-    /// the trailing edge rounded (the settings panel's mirror image).
+    /// Round the corners on the terminal side. The screen edge stays square.
     private var panelShape: UnevenRoundedRectangle {
-        if usesCompactLayout {
+        let outer = sidebarCornerRadius
+        if edge == .leading {
             return UnevenRoundedRectangle(
-                topLeadingRadius: sidebarCornerRadius,
+                topLeadingRadius: 0,
                 bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0,
-                topTrailingRadius: sidebarCornerRadius,
+                bottomTrailingRadius: outer,
+                topTrailingRadius: outer,
                 style: .continuous
             )
         }
         return UnevenRoundedRectangle(
-            topLeadingRadius: 0,
-            bottomLeadingRadius: 0,
-            bottomTrailingRadius: sidebarCornerRadius,
-            topTrailingRadius: sidebarCornerRadius,
+            topLeadingRadius: outer,
+            bottomLeadingRadius: outer,
+            bottomTrailingRadius: 0,
+            topTrailingRadius: 0,
             style: .continuous
         )
     }
@@ -564,11 +589,7 @@ private struct TabSidebarPanelView<SidebarContent: View>: View {
             sidebarContent()
                 .environment(\.sheetThemeColors, themeColors)
                 .padding(.top, sidebarVerticalContentPadding)
-                .padding(
-                    .bottom,
-                    usesCompactLayout ? sidebarPhoneBottomContentPadding : sidebarVerticalContentPadding
-                )
-                .ignoresSafeArea(.container, edges: usesCompactLayout ? .bottom : [])
+                .padding(.bottom, sidebarVerticalContentPadding)
 
             Button("") {
                 onClose()
@@ -579,12 +600,7 @@ private struct TabSidebarPanelView<SidebarContent: View>: View {
         }
         .frame(maxWidth: sidebarMaxWidth)
         .frame(maxHeight: .infinity)
-        // The phone's content extends into the bottom safe area. Clipping this
-        // container would cut that extension off (starting with the second
-        // usage-provider row). Phone has square bottom corners and its padded
-        // content clears the rounded top corners, so only side panels need the
-        // outer content clip.
-        .modifier(TabSidebarPanelClip(shape: panelShape, isEnabled: !usesCompactLayout))
+        .modifier(TabSidebarPanelClip(shape: panelShape, isEnabled: true))
         // Keep the fill behind the content so it can bleed under the home
         // indicator independently of the side-panel content clip above.
         .background {
@@ -592,7 +608,7 @@ private struct TabSidebarPanelView<SidebarContent: View>: View {
                 .ignoresSafeArea(.container, edges: usesCompactLayout ? .bottom : [])
         }
         .optionalColorSchemeEnvironment(colorScheme)
-        .shadow(color: .black.opacity(0.3), radius: 20, x: usesCompactLayout ? 0 : 5, y: usesCompactLayout ? -5 : 0)
+        .shadow(color: .black.opacity(0.3), radius: 20, x: edge == .leading ? 5 : -5, y: 0)
         .tint(accentColor)
         .ignoresSafeArea(.keyboard)
         .ignoresSafeArea(.container, edges: hiddenTitlebarTopEdges)

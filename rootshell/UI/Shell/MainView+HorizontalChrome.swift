@@ -7,6 +7,10 @@ extension MainView {
         return HStack(spacing: 0) {
             tabBarLeadingSpacer(geometry: geometry, theme: resolvedTheme)
 
+            if !edgeSidebarAssignment.pages(on: .leading).isEmpty {
+                tabBarEdgeSidebarButton(side: .leading, theme: resolvedTheme)
+            }
+
             // Tab bar - switches between display modes
             //
             // The previous design carried a `tabBarVersion`
@@ -46,6 +50,9 @@ extension MainView {
                 integratedTabBarDragRegion()
                     .layoutPriority(-1)
                 if showsTabBarActions { tabBarSettingsButton(theme: resolvedTheme) }
+                if !edgeSidebarAssignment.pages(on: .trailing).isEmpty {
+                    tabBarEdgeSidebarButton(side: .trailing, theme: resolvedTheme)
+                }
             } else {
                 TabStyleContextMenuRegion(
                     selectedStyleRawValue: topTabStyleRawValueBinding

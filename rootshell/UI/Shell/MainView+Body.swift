@@ -238,6 +238,47 @@ extension MainView {
     func tabBarActionButtons(theme: ResolvedTabBarTheme) -> some View {
         tabBarAddButton(theme: theme)
         tabBarSettingsButton(theme: theme)
+        if !edgeSidebarAssignment.pages(on: .trailing).isEmpty {
+            tabBarEdgeSidebarButton(side: .trailing, theme: theme)
+        }
+    }
+
+    @ViewBuilder
+    func tabBarEdgeSidebarButton(side: EdgeSidebarSide, theme: ResolvedTabBarTheme) -> some View {
+        let open = edgeSidebarSideIsOpen(side)
+        ZStack {
+            Image(systemName: side == .leading ? "sidebar.left" : "sidebar.right")
+                .font(.system(size: 18, weight: open ? .semibold : .medium))
+                .foregroundColor(theme.tabText)
+                .frame(width: TabMetrics.tabBarHeight, height: TabMetrics.tabBarHeight)
+                .accessibilityHidden(true)
+
+            TabStyleContextMenuRegion(
+                selectedStyleRawValue: topTabStyleRawValueBinding,
+                primaryAction: { toggleEdgeSidebarSide(side) },
+                accessibilityLabel: edgeSidebarButtonAccessibilityLabel(side: side, open: open)
+            )
+        }
+        .background {
+            if open {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(theme.tabText.opacity(0.14))
+                    .padding(6)
+            }
+        }
+        .frame(width: TabMetrics.tabBarHeight, height: TabMetrics.tabBarHeight)
+        .fixedSize()
+        .layoutPriority(1)
+        .accessibilityAddTraits(open ? .isSelected : [])
+    }
+
+    func edgeSidebarButtonAccessibilityLabel(side: EdgeSidebarSide, open: Bool) -> String {
+        switch (side, open) {
+        case (.leading, true): String(localized: "Close Left Sidebar")
+        case (.leading, false): String(localized: "Open Left Sidebar")
+        case (.trailing, true): String(localized: "Close Right Sidebar")
+        case (.trailing, false): String(localized: "Open Right Sidebar")
+        }
     }
 
     @ViewBuilder

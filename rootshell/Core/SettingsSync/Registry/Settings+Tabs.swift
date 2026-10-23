@@ -174,10 +174,15 @@ nonisolated extension Settings {
         static let collapsedGroups = SettingKey(
             "tabSidebarCollapsedGroups", default: [String](), group: .sidebar, policy: .deviceOnly,
             title: String(localized: "Collapsed Tab Groups", comment: "Setting title"))
+        /// `page:side` tokens. See `EdgeSidebarAssignment`.
+        static let pageSides = SettingKey(
+            "edgeSidebarPageSides", default: EdgeSidebarAssignment.stock.storedTokens, group: .sidebar,
+            configKey: "edge-sidebar-page-sides",
+            title: String(localized: "Sidebar Pages", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
             autoHideOnSelect.erased, rowLines.erased, largeControls.erased, pinned.erased, translucent.erased,
-            dockedWidth.erased, collapsedGateways.erased, collapsedGroups.erased,
+            dockedWidth.erased, collapsedGateways.erased, collapsedGroups.erased, pageSides.erased,
         ]
     }
 
