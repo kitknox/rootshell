@@ -688,15 +688,7 @@ extension MainView {
         observerBag.observeOnMainActor(.showTabSwitcher) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
             if self.routeReservedVNCKeyboardShortcut(from: notification) { return }
-            if self.showingTabSwitcher {
-                self.dismissTabSidebar()
-            } else {
-                // The sidebar is a plain overlay (not a cover), so this
-                // cannot race the settings teardown; just close settings so
-                // the sidebar isn't hidden underneath it.
-                if self.showSettings { self.showSettings = false }
-                self.showingTabSwitcher = true
-            }
+            self.toggleEdgeSidebarPage(.tabSwitcher)
         }
 
         observerBag.observeOnMainActor(.toggleTabExpose) { [self] notification in

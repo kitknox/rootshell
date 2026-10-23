@@ -3,8 +3,9 @@
 //  rootshell
 //
 //  Presents the file manager: a resizable column beside the terminal, a HUD
-//  over it (floating or covering it), or a sheet on iPhone. The window's model is created on first use
-//  and kept while hidden, so reopening restores panes, selection and focus.
+//  over it (floating or covering it), or an edge drawer on iPhone. visionOS
+//  compact width still uses a sheet. The window's model is created on first
+//  use and kept while hidden, so reopening restores panes, selection and focus.
 //
 
 import SwiftUI
@@ -12,6 +13,7 @@ import SwiftUI
 extension MainView {
     var fileManagerShowsSidebar: Bool {
         showFileManager && !isPhone && fileManagerPresentation == .sidebar && fileManagerModel != nil
+            && !edgeSidebarAssignment.sharesOneSide
     }
 
     /// The floating or full-size HUD.
@@ -19,9 +21,16 @@ extension MainView {
         showFileManager && !isPhone && fileManagerPresentation != .sidebar && fileManagerModel != nil
     }
 
-    /// The HUD and the iPhone sheet own the keyboard; the sidebar shares the window with the terminal.
+    /// The HUD and the iPhone drawer own the keyboard. A docked column shares
+    /// the window with the terminal. On a shared edge, only the file manager
+    /// tab of a floating drawer owns it, so switching tabs does not flap the gate.
     var fileManagerOwnsKeyboard: Bool {
-        showFileManager && (isPhone || fileManagerPresentation.ownsKeyboard)
+        guard showFileManager else { return false }
+        if edgeSidebarAssignment.sharesOneSide && fileManagerUsesEdgeSidebar {
+            return selectedEdgePage(on: edgeSidebarAssignment.side(of: .fileManager)) == .fileManager
+                && !tabSidebarIsDocked
+        }
+        return isPhone || fileManagerPresentation.ownsKeyboard
     }
 
     var fileManagerSidebarCurrentWidth: CGFloat {
@@ -33,13 +42,20 @@ extension MainView {
     /// First press opens; with the sidebar open but the terminal typing, a press
     /// moves focus into the manager; otherwise it closes.
     func toggleFileManager() {
-        if showFileManager {
-            if fileManagerShowsSidebar, KeyboardTracker.shared.isHardwareKeyboard, !fileManagerFieldFocused {
+        if fileManagerUsesEdgeSidebar {
+            if showFileManager,
+               fileManagerShowsSidebar,
+               KeyboardTracker.shared.isHardwareKeyboard,
+               !fileManagerFieldFocused {
                 focusedTerminalForFileManager?.resignFirstResponder()
                 fileManagerModel?.requestFocus()
-            } else {
-                closeFileManager()
+                return
             }
+            toggleEdgeSidebarPage(.fileManager)
+            return
+        }
+        if showFileManager {
+            closeFileManager()
             return
         }
         openFileManager()
@@ -87,6 +103,7 @@ extension MainView {
             SettingsStore.shared.set(Settings.Transfer.fileManagerPresentation, presentation)
         }
         if showFileManager {
+            adoptFileManagerEdge()
             model.requestFocus()
         } else {
             revealFileManager(model)
@@ -103,6 +120,7 @@ extension MainView {
         #if !CHINA_BUILD
         yieldSlotToFileManager(fileManagerPresentation)
         #endif
+        adoptFileManagerEdge()
 
         if isPhone {
             resignFirstResponderForSheetPresentation()
@@ -136,6 +154,10 @@ extension MainView {
         #endif
         fileManagerPresentation = presentation
         SettingsStore.shared.set(Settings.Transfer.fileManagerPresentation, presentation)
+        if presentation != .sidebar && edgeSidebarAssignment.sharesOneSide {
+            let side = edgeSidebarAssignment.side(of: .tabSwitcher)
+            edgeSidebarSelectedPage[side.rawValue] = EdgeSidebarPage.tabSwitcher.rawValue
+        }
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented || fileManagerOwnsKeyboard)
         scheduleTerminalRelayout()
         fileManagerModel?.requestFocus()
@@ -191,10 +213,10 @@ extension MainView {
 
     // MARK: - Views
 
-    /// The docked column, placed beside the AI sidebar when both are open.
     @ViewBuilder
     func fileManagerSidebarColumn(width: CGFloat, totalWidth: CGFloat) -> some View {
         if fileManagerShowsSidebar, let model = fileManagerModel {
+            let side = edgeSidebarAssignment.side(of: .fileManager)
             FileManagerSidebarView(
                 manager: model,
                 width: $fileManagerSidebarWidth,
@@ -202,11 +224,17 @@ extension MainView {
                 totalWidth: totalWidth,
                 canFocus: showFileManager,
                 theme: resolvedSheetTheme(),
+                side: side,
                 onClose: { closeFileManager() },
-                onSwitchPresentation: { switchFileManagerPresentation($0) }
+                onSwitchPresentation: { switchFileManagerPresentation($0) },
+                footer: AnyView(EdgeSidebarTabBar(
+                    pages: edgeSidebarAssignment.pages(on: side),
+                    selection: .fileManager,
+                    onSelect: selectEdgeSidebarPage
+                ))
             )
             .frame(width: width)
-            .transition(.move(edge: .trailing))
+            .transition(.move(edge: side == .leading ? .leading : .trailing))
         }
     }
 
@@ -241,7 +269,7 @@ extension MainView {
     func fileManagerPhoneSheetModifier(sheetTheme: ResolvedSheetTheme) -> FileManagerPhoneSheetModifier {
         FileManagerPhoneSheetModifier(
             isPresented: Binding(
-                get: { showFileManager && isPhone },
+                get: { showFileManager && isPhone && !fileManagerUsesEdgeSidebar },
                 set: { if !$0 { closeFileManager() } }
             ),
             model: fileManagerModel,

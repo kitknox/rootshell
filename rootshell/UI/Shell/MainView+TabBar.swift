@@ -35,7 +35,7 @@ extension MainView {
     /// `TabBar`, where reading title/badge/health metadata does not invalidate
     /// `MainView.body`.
     func availableTabBarWidth(in geometry: GeometryProxy) -> CGFloat {
-        max(0, geometry.size.width - Self.actionButtonsWidth - tabBarLeadingPadding)
+        max(0, geometry.size.width - Self.actionButtonsWidth - edgeSidebarHeaderButtonWidth - tabBarLeadingPadding)
     }
 
     /// Width of the compact tab viewport. Capped tabs leave real flexible
@@ -53,6 +53,7 @@ extension MainView {
             geometry.size.width
                 - tabBarLeadingPadding
                 - Self.actionButtonsWidth
+                - edgeSidebarHeaderButtonWidth
                 - integratedMinimumDragWidth
         )
         if topTabStyle == .integrated {
@@ -62,7 +63,7 @@ extension MainView {
             let columns = terminalRowColumns(width: geometry.size.width)
             let cardGap: CGFloat = roundedPanes ? PaneCardStyle.gap : 0
             let corner: CGFloat = roundedPanes ? PaneCardStyle.cornerRadius : 0
-            let cardMaxX = cardGap + columns.docked + columns.terminal
+            let cardMaxX = cardGap + self.leadingWidth(in: columns) + columns.terminal
             capacity = min(capacity, max(0, cardMaxX - corner - tabBarLeadingPadding))
         }
         return min(preferred, capacity)
@@ -78,7 +79,7 @@ extension MainView {
     /// pinned sidebar and, under Rounded Panes, the card's corner.
     func integratedCardLeadingInset(windowWidth: CGFloat) -> CGFloat {
         guard topTabStyle == .integrated else { return 0 }
-        let cardMinX = (roundedPanes ? PaneCardStyle.gap : 0) + dockedTabSidebarWidth(windowWidth: windowWidth)
+        let cardMinX = (roundedPanes ? PaneCardStyle.gap : 0) + leadingChromeWidth(windowWidth: windowWidth)
         guard cardMinX > 0 else { return 0 }
         let corner: CGFloat = roundedPanes ? PaneCardStyle.cornerRadius : 0
         return max(0, cardMinX + corner - tabBarLeadingPadding)

@@ -24,8 +24,7 @@ extension MainView {
     /// directly: the iOS/Catalyst UIKit overlay animates its own slide-out
     /// on the change, and the visionOS sheet animates natively.
     func dismissTabSidebar() {
-        guard showingTabSwitcher else { return }
-        showingTabSwitcher = false
+        closeEdgeSidebar(edgeSidebarAssignment.side(of: .tabSwitcher))
     }
 
     /// Selecting a tab keeps the sidebar open on iPad/Catalyst
@@ -74,10 +73,9 @@ extension MainView {
                 selectTab(id: id)
                 // Dismiss the floating sidebar on select when it shouldn't stay
                 // open: phone/visionOS always, or iPad/Catalyst floating with
-                // auto-hide enabled. The docked column is a persistent left
-                // pane, so never auto-hide it.
+                // auto-hide enabled. The docked column stays open.
                 if !tabSidebarStaysOpenOnSelect && !tabSidebarIsDocked {
-                    showingTabSwitcher = false
+                    dismissTabSidebar()
                 }
                 // While the sidebar stays open, handleSelectedTabChange
                 // skips the terminal's becomeFirstResponder, so the panel
@@ -89,7 +87,7 @@ extension MainView {
                 }
                 navigateToTerminal(tabID: tabID, surfaceID: paneID)
                 if !tabSidebarStaysOpenOnSelect && !tabSidebarIsDocked {
-                    showingTabSwitcher = false
+                    dismissTabSidebar()
                 }
             },
             onCloseTab: { id in
@@ -98,7 +96,7 @@ extension MainView {
                 if terminals.isEmpty {
                     // Last tab closed: get out of the way before the
                     // connection sidebar takes over.
-                    showingTabSwitcher = false
+                    dismissTabSidebar()
                 }
             },
             onReorderClass: { orderedIDs, draggedID in
