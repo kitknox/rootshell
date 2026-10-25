@@ -35,7 +35,7 @@ extension MainView {
         }
 
         // Return focus to terminal when overlay is dismissed
-        if !isPresented {
+        if !isPresented && !isAnySheetPresented {
             if let terminal = tab.focusedTerminal {
                 _ = terminal.becomeFirstResponder()
             }
@@ -53,7 +53,7 @@ extension MainView {
             }
 
             // Return focus to terminal when sidebar is dismissed for the current tab
-            if !isActive,
+            if !isActive, !isAnySheetPresented,
                terminals.indices.contains(selectedTabIndex),
                tab.id == terminals[selectedTabIndex].id {
                 if let terminal = tab.focusedTerminal {
@@ -77,7 +77,7 @@ extension MainView {
         }
 
         // Return focus to terminal when theme overlay is dismissed
-        if !isPresented {
+        if !isPresented && !isAnySheetPresented {
             if let terminal = tab.focusedTerminal {
                 _ = terminal.becomeFirstResponder()
             }
@@ -93,7 +93,7 @@ extension MainView {
         // The docked instance does not auto-focus its search field
         // (VerticalTabSidebar.isDocked), so this never steals the keyboard.
         if tabSidebarPinned && canPinTabSidebar && !showingTabSwitcher {
-            showingTabSwitcher = true
+            openEdgeSidebarPage(.tabSwitcher)
         }
         // Register with WindowStateManager for state persistence
         WindowStateManager.shared.registerWindow(windowId: windowId) { [self] in
@@ -605,6 +605,7 @@ extension MainView {
         #endif
         // Resign first responder when sheet opens to prevent keyboard from appearing
         if newValue {
+            adoptEdgeSidebarPage(.connections)
             resignFirstResponderForSheetPresentation()
         }
         // When connection sheet dismisses, clear pending browse selection and grant UIKit focus
@@ -619,7 +620,7 @@ extension MainView {
             // Safety net: if no terminals exist and the tab bar is hidden,
             // re-show the sheet immediately. Without this, the user lands on an
             // empty state with no way to connect (no tab bar + button to tap).
-            if terminals.isEmpty && tabBarHidden {
+            if terminals.isEmpty && tabBarHidden && !floatingEdgeSidebarPresented(.leading) && !floatingEdgeSidebarPresented(.trailing) {
                 Ghostty.logger.info("Sheet dismissed with no terminals (tab bar hidden) - re-showing")
                 pendingFileManagerOpen = nil
                 showConnectionSidebar = true

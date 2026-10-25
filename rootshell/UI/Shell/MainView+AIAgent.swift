@@ -22,6 +22,7 @@ extension MainView {
 
         switch request.targetMode {
         case .sidebar:
+            adoptEdgeSidebarPage(.aiAgent)
             // Switching from window to sidebar - move ALL sessions
             // Get all tab IDs first, then move each to sidebar
             let windowTabIDs = Array(aiAgentWindowState.windowSessions.keys)
@@ -231,6 +232,9 @@ extension MainView {
             session.workingDirectoryProvider = nil
         }
         #endif
+
+        if (isPhone || AICredentialsManager.shared.aiAgentPresentationMode == .sidebar),
+           !edgeSidebarPageIsOpen(.aiAgent) { adoptEdgeSidebarPage(.aiAgent) }
 
         // Different behavior based on device type
         if isPhone {

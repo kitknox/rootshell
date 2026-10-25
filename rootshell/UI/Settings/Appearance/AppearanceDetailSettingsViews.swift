@@ -362,25 +362,45 @@ struct WindowSettingsView: View {
         EdgeSidebarAssignment.decode(edgeSidebarPageSides)
     }
 
-    @ViewBuilder
-    private func sidebarSidePicker(_ page: EdgeSidebarPage, title: LocalizedStringKey) -> some View {
-        Picker(selection: Binding(
-            get: { edgeSidebarAssignment.side(of: page) },
-            set: { side in
-                let next = edgeSidebarAssignment.setting(side, for: page)
-                edgeSidebarPageSides = next.storedTokens
-                Ghostty.logger.info("Edge sidebar assign page=\(page.rawValue, privacy: .public) side=\(side.rawValue, privacy: .public)")
+    private func sidebarToolsPicker(_ side: EdgeSidebarSide) -> some View {
+        let title = side == .leading ? String(localized: "Left Sidebar") : String(localized: "Right Sidebar")
+        let pages = edgeSidebarAssignment.pages(on: side)
+        return NavigationLink {
+            List {
+                Section {
+                    ForEach(EdgeSidebarPage.availableCases, id: \.self) { page in
+                        Toggle(isOn: Binding(
+                            get: { edgeSidebarAssignment.side(of: page) == side },
+                            set: { selected in
+                                let destination = selected ? side : side.opposite
+                                edgeSidebarPageSides = edgeSidebarAssignment.setting(destination, for: page).storedTokens
+                                Ghostty.logger.info("Edge sidebar assign page=\(page.rawValue, privacy: .public) side=\(destination.rawValue, privacy: .public)")
+                            }
+                        )) {
+                            Label(page.title, systemImage: page.systemImage)
+                        }
+                        .disabled(SettingFileLock.isReadOnly(Settings.Sidebar.pageSides.name))
+                        .themedRow()
+                    }
+                } footer: {
+                    Text(side == .leading
+                        ? String(localized: "Tools not selected here appear in the right sidebar.")
+                        : String(localized: "Tools not selected here appear in the left sidebar."))
+                }
             }
-        )) {
-            ForEach(EdgeSidebarSide.allCases, id: \.self) { side in
-                Text(side.title).tag(side)
-            }
+            .themedList()
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
         } label: {
-            Text(title)
-                .settingRow(Settings.Sidebar.pageSides)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .settingRow(Settings.Sidebar.pageSides)
+                Text(pages.isEmpty ? String(localized: "None") : pages.map(\.title).joined(separator: ", "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
         }
-        .pickerStyle(.menu)
-        .disabled(SettingFileLock.isReadOnly(Settings.Sidebar.pageSides.name))
         .themedRow()
     }
 
@@ -506,9 +526,6 @@ struct WindowSettingsView: View {
                 }
                 #endif
 
-                sidebarSidePicker(.tabSwitcher, title: "Tab Switcher")
-                sidebarSidePicker(.fileManager, title: "File Manager")
-
                 // Uniform for every row so the list stays symmetric; long
                 // titles wrap instead of truncating.
                 Stepper(value: $tabSidebarRowLines, in: 1...3) {
@@ -526,6 +543,13 @@ struct WindowSettingsView: View {
                 .themedRow()
             } header: {
                 Text("Tab Bar")
+            }
+
+            Section {
+                sidebarToolsPicker(.leading)
+                sidebarToolsPicker(.trailing)
+            } header: {
+                Text("Sidebars")
             }
 
             #if os(iOS) && !targetEnvironment(macCatalyst)

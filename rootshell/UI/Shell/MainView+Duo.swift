@@ -101,12 +101,12 @@ extension MainView {
                     onClose: {
                         if let position = tabsModel.index(of: tab.id) { requestUserCloseTab(at: position) }
                     },
-                    onManage: { showingTabSwitcher = true },
+                    onManage: { openEdgeSidebarPage(.tabSwitcher) },
                     onMountChange: noteDuoTabButtonMounted
                 )
             } else {
                 Button("Tabs", systemImage: "square.on.square") {
-                    showingTabSwitcher = true
+                    openEdgeSidebarPage(.tabSwitcher)
                 }
                 .labelStyle(.iconOnly)
                 .disabled(true)

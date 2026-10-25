@@ -181,7 +181,7 @@ extension MainView {
     /// Returns the theme picker overlay.
     @ViewBuilder
     func themePickerOverlayView(isPresented: Binding<Bool>) -> some View {
-        if showThemePickerOverlay {
+        if showThemePickerOverlay && !edgeSidebarUsesDrawer(.themePicker) {
             // Hosted so glass + keyboard dismissal work on macOS (a plain SwiftUI
             // overlay let .onKeyPress steal the X-button click and got preempted by
             // the app's Cmd-Shift-T menu shortcut). Draggable by its chrome; the pan
@@ -209,7 +209,7 @@ extension MainView {
     /// On iPhone the manager is presented as a sheet instead (MainViewPresentation).
     @ViewBuilder
     func clipboardManagerOverlayView(isPresented: Binding<Bool>, keyboardMode: Binding<Bool>) -> some View {
-        if showClipboardManager && UIDevice.current.userInterfaceIdiom != .phone {
+        if showClipboardManager && !edgeSidebarUsesDrawer(.clipboardManager) && UIDevice.current.userInterfaceIdiom != .phone {
             DraggableHUDContainer(
                 dismissShortcuts: [.escape],
                 // Answer the app's toggle_clipboard_manager menu action while the
@@ -345,12 +345,12 @@ extension MainView {
             // Search overlay for focused terminal
             searchOverlay(searchStateVersion: searchStateVersion)
 
-            if showQuickSettingsOverlay {
+            if showQuickSettingsOverlay && !edgeSidebarUsesDrawer(.quickSettings) {
                 QuickSettingsHUD(isPresented: $showQuickSettingsOverlay)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            if showOpenInFolderOverlay, let model = openInFolderModel {
+            if showOpenInFolderOverlay && !edgeSidebarUsesDrawer(.openInFolder), let model = openInFolderModel {
                 OpenInFolderHUD(isPresented: $showOpenInFolderOverlay, model: model, shortcut: openInFolderShortcut) { directory, placement in
                     openInFolder(model.target, directory: directory, placement: placement)
                 }
@@ -375,13 +375,13 @@ extension MainView {
                 keyboardMode: $clipboardManagerKeyboardMode
             )
 
-            if showIPLookup, let model = ipLookupModel {
+            if showIPLookup && !edgeSidebarUsesDrawer(.ipLookup), let model = ipLookupModel {
                 IPLookupHUD(isPresented: $showIPLookup, model: model)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             #if canImport(FluidAudio) && !CHINA_BUILD
-            if showDictationHUD {
+            if showDictationHUD && !edgeSidebarUsesDrawer(.dictation) {
                 DictationHUD(isPresented: $showDictationHUD) { dictationTarget }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -1439,20 +1439,6 @@ extension MainView {
         return min(max(tabSidebarDockedWidth, dockedMin), windowWidth * 0.5)
     }
 
-    /// The width the AI agent sidebar occupies on the trailing edge; 0 when
-    /// hidden (and on China builds, which ship without the AI sidebar).
-    /// Counterpart to `dockedTabSidebarWidth(windowWidth:)` for overlays that
-    /// center over the terminal.
-    func aiAgentSidebarCurrentWidth() -> CGFloat {
-        #if !CHINA_BUILD
-        guard terminals.indices.contains(selectedTabIndex),
-              shouldShowAISidebar(currentTabId: terminals[selectedTabIndex].id) else { return 0 }
-        return aiAgentSidebarWidth
-        #else
-        return 0
-        #endif
-    }
-
     var paneCardsEnterHomeIndicatorStrip: Bool {
         #if os(iOS) && !targetEnvironment(macCatalyst)
         return roundedPanes && !isPhone
@@ -1483,20 +1469,25 @@ extension MainView {
         let sidebarWidth: CGFloat = 0
         #endif
         // The file manager column never squeezes the terminal below 320pt.
-        let fileManagerWidth = fileManagerShowsSidebar
+        let desiredFileManagerWidth = fileManagerShowsSidebar
             ? min(fileManagerSidebarWidth, max(FileManagerSidebarView.minWidth, rowWidth - dockedWidth - sidebarWidth - 320))
             : 0
-        // HTTP capture shares the file manager's slot; at most one is docked.
         #if !CHINA_BUILD
-        let httpCaptureWidth = httpCaptureShowsSidebar
+        let desiredHTTPCaptureWidth = httpCaptureShowsSidebar
             ? min(httpCaptureSidebarWidth, max(HTTPCaptureSidebarView.minWidth, rowWidth - dockedWidth - sidebarWidth - 320))
             : 0
         #else
-        let httpCaptureWidth: CGFloat = 0
+        let desiredHTTPCaptureWidth: CGFloat = 0
         #endif
         let agentInboxWidth = agentInboxShowsSidebar
             ? min(agentInboxSidebarWidth, max(AgentInboxSidebarView.minWidth, rowWidth - dockedWidth - sidebarWidth - 320))
             : 0
+        // Opposite edges can both hold tools. Clamp their live widths together
+        // without overwriting the user's saved resize preferences.
+        let panelBudget = max(0, rowWidth - dockedWidth - sidebarWidth - agentInboxWidth - 320)
+        let panelScale = min(1, panelBudget / max(desiredFileManagerWidth + desiredHTTPCaptureWidth, 1))
+        let fileManagerWidth = desiredFileManagerWidth * panelScale
+        let httpCaptureWidth = desiredHTTPCaptureWidth * panelScale
         return TerminalRowColumns(
             docked: dockedWidth,
             aiSidebar: sidebarWidth,
@@ -1534,6 +1525,7 @@ extension MainView {
         let columns = terminalRowColumns(width: geometry.size.width)
         let tabSwitcherSide = edgeSidebarAssignment.side(of: .tabSwitcher)
         let fileManagerSide = edgeSidebarAssignment.side(of: .fileManager)
+        let httpCaptureSide = edgeSidebarAssignment.side(of: .httpCapture)
         #if !CHINA_BUILD
         let shouldShowSidebar = shouldShowAISidebar(currentTabId: currentTabId)
         #endif
@@ -1567,6 +1559,17 @@ extension MainView {
             if fileManagerSide == .leading {
                 fileManagerSidebarColumn(width: fileManagerWidth, totalWidth: geometry.size.width)
             }
+            #if !CHINA_BUILD
+            if httpCaptureSide == .leading {
+                httpCaptureSidebarColumn(width: httpCaptureWidth, totalWidth: geometry.size.width)
+            }
+            #endif
+
+            #if !CHINA_BUILD
+            if edgeSidebarAssignment.side(of: .aiAgent) == .leading, shouldShowSidebar, let session = aiAgentSessions[currentTabId] {
+                aiSidebarView(currentTabId: currentTabId, session: session, sidebarWidth: sidebarWidth, totalWidth: geometry.size.width)
+            }
+            #endif
 
             terminalContentZStack(
                 geometry: geometry,
@@ -1609,9 +1612,11 @@ extension MainView {
             agentInboxSidebarColumn(width: agentInboxWidth, totalWidth: geometry.size.width)
 
             #if !CHINA_BUILD
-            httpCaptureSidebarColumn(width: httpCaptureWidth, totalWidth: geometry.size.width)
+            if httpCaptureSide == .trailing {
+                httpCaptureSidebarColumn(width: httpCaptureWidth, totalWidth: geometry.size.width)
+            }
 
-            if shouldShowSidebar, let session = aiAgentSessions[currentTabId] {
+            if edgeSidebarAssignment.side(of: .aiAgent) == .trailing, shouldShowSidebar, let session = aiAgentSessions[currentTabId] {
                 aiSidebarView(currentTabId: currentTabId, session: session, sidebarWidth: sidebarWidth, totalWidth: geometry.size.width)
             }
             #endif
@@ -1623,7 +1628,8 @@ extension MainView {
                 // Exposé covers the terminal, and with it these HUDs.
                 .opacity(tabExpose.isActive ? 0 : 1)
                 .frame(width: dockedWidth + terminalWidth)
-                .padding(.leading, fileManagerSide == .leading ? fileManagerWidth : 0)
+                .padding(.leading, (fileManagerSide == .leading ? fileManagerWidth : 0)
+                    + (httpCaptureSide == .leading ? httpCaptureWidth : 0))
                 .ignoresSafeArea(.keyboard, edges: duoTabletopAvailable && !duoTabletopDisabled ? [] : .all)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1890,7 +1896,7 @@ extension MainView {
     /// The AI Agent sidebar view.
     @ViewBuilder
     func aiSidebarView(currentTabId: UUID, session: AIAgentSession, sidebarWidth: CGFloat, totalWidth: CGFloat) -> some View {
-        AIAgentSidebarContainer(
+        AIAgentSidebarView(
             isPresented: Binding(
                 get: { aiAgentSidebarVisibleTabs.contains(currentTabId) },
                 set: { newValue in
@@ -1905,8 +1911,12 @@ extension MainView {
             tabID: currentTabId,
             isDragging: $aiAgentSidebarIsDragging,
             sidebarWidth: $aiAgentSidebarWidth,
-            totalWidth: totalWidth
+            totalWidth: totalWidth,
+            side: edgeSidebarAssignment.side(of: .aiAgent)
         )
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            EdgeSidebarTabBar(pages: edgeSidebarAssignment.pages(on: edgeSidebarAssignment.side(of: .aiAgent)), selection: .aiAgent, onSelect: selectEdgeSidebarPage)
+        }
         .frame(width: sidebarWidth)
         .transition(AnyTransition.move(edge: .trailing).combined(with: .opacity))
         .tint(sheetAccentColor)
@@ -2016,17 +2026,12 @@ private struct TmuxReconnectSwipeFallbackView: UIViewRepresentable {
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
             guard touch.type == .direct else { return false }
-            guard let view = gestureRecognizer.view else { return false }
-
-            // Preserve the window-level tab-sidebar edge pan. A left-edge
-            // rightward swipe should open the drawer, not switch to the previous
-            // tab. This mirrors TabSidebarEdgeSwipe's activation band.
-            if let fallbackView = view as? SwipeFallbackUIView,
-               gestureRecognizer === fallbackView.rightSwipe,
-               touch.location(in: view).x <= 32 {
-                return false
-            }
-            return true
+            guard let window = gestureRecognizer.view?.window,
+                  let swipe = gestureRecognizer as? UISwipeGestureRecognizer else { return false }
+            return !InteractiveEdgePanRecognizer.claimsHorizontalSwipe(
+                in: window, startingAt: touch.location(in: window),
+                translation: CGPoint(x: swipe.direction == .left ? -1 : 1, y: 0)
+            )
         }
 
         func gestureRecognizer(

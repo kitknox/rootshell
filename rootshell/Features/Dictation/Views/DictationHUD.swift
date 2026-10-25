@@ -28,7 +28,7 @@ struct DictationHUD: View {
     }
 }
 
-private struct DictationPanel: View {
+struct DictationPanel: View {
     @Binding var isPresented: Bool
     let target: () -> DictationTarget?
     let width: CGFloat

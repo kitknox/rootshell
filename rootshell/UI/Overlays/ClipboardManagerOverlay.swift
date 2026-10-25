@@ -12,7 +12,7 @@ import LocalAuthentication
 import SwiftUI
 
 struct ClipboardManagerOverlay: View {
-    enum Style { case hud, sheet }
+    enum Style { case hud, sheet, sidebar }
 
     let style: Style
     @Binding var isPresented: Bool
@@ -48,7 +48,7 @@ struct ClipboardManagerOverlay: View {
     var body: some View {
         Group {
             switch style {
-            case .hud: hudBody
+            case .hud, .sidebar: hudBody
             case .sheet: sheetBody
             }
         }
@@ -337,9 +337,10 @@ struct ClipboardManagerOverlay: View {
             hudHeader
 
             hudContent
-                .frame(width: 380, height: Self.hudContentHeight)
+                .frame(width: style == .sidebar ? nil : 380, height: style == .sidebar ? nil : Self.hudContentHeight)
+                .frame(maxWidth: .infinity, maxHeight: style == .sidebar ? .infinity : nil)
         }
-        .frame(width: 380)
+        .frame(width: style == .sidebar ? nil : 380)
         .floatingHUDPanelBackground()
         // Normally the HUD opens in passthrough and keyboard mode arrives via
         // onChange; onAppear covers a re-mount while the mode is already on.

@@ -20,6 +20,8 @@ struct AIAgentSidebarView: View {
     @Binding var sidebarWidth: CGFloat  // Binding to parent's local state for smooth updates
     let totalWidth: CGFloat  // Total available width from parent for max calculation
 
+    var side: EdgeSidebarSide = .trailing
+
     var themeManager = ThemeManager.shared
     @Setting(Settings.Window.roundedPanes) private var roundedPanes
 
@@ -31,19 +33,7 @@ struct AIAgentSidebarView: View {
         let maxWidth = totalWidth * maxWidthFraction
 
         HStack(spacing: 0) {
-            // Divider handle (on the leading edge of this right-side column;
-            // dragging left widens it). Snaps to / double-taps back to 400.
-            SidebarResizeDivider(
-                side: .right,
-                width: $sidebarWidth,
-                isDragging: $isDragging,
-                minWidth: minWidth,
-                maxWidth: maxWidth,
-                defaultWidth: 400,
-                cardGap: roundedPanes ? PaneCardStyle.gap : nil,
-                backgroundColor: roundedPanes ? .clear : dividerBackgroundColor,
-                onCommit: { AICredentialsManager.shared.aiAgentSidebarWidth = $0 }
-            )
+            if side == .trailing { resizeDivider(maxWidth: maxWidth) }
 
             // AI Agent content - fills available width
             AIAgentOverlayView(
@@ -54,10 +44,11 @@ struct AIAgentSidebarView: View {
             )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(uiColor: .systemBackground))
-                .clipShape(PaneCardStyle.trailingColumnShape(rounded: roundedPanes))
-                .shadow(color: .black.opacity(roundedPanes ? 0 : 0.15), radius: 8, x: -2, y: 0)
-                .paneCardDepth(roundedPanes, shape: PaneCardStyle.trailingColumnShape(rounded: true),
+                .clipShape((side == .leading ? PaneCardStyle.leadingColumnShape(rounded: roundedPanes) : PaneCardStyle.trailingColumnShape(rounded: roundedPanes)))
+                .shadow(color: .black.opacity(roundedPanes ? 0 : 0.15), radius: 8, x: side == .leading ? 2 : -2, y: 0)
+                .paneCardDepth(roundedPanes, shape: (side == .leading ? PaneCardStyle.leadingColumnShape(rounded: true) : PaneCardStyle.trailingColumnShape(rounded: true)),
                                palette: IntegratedTabEdgePalette(cardSurface: Color(uiColor: .systemBackground)))
+            if side == .leading { resizeDivider(maxWidth: maxWidth) }
         }
         // Bleed the opaque column fill into the bottom safe area (home-indicator
         // strip) without moving the chat content, mirroring the docked tab
@@ -69,6 +60,20 @@ struct AIAgentSidebarView: View {
         // content, so the opaque fill hides the overflow. No-op on Catalyst
         // (no bottom safe area).
         .background((roundedPanes ? .clear : dividerBackgroundColor).ignoresSafeArea(.container, edges: .bottom))
+    }
+
+    private func resizeDivider(maxWidth: CGFloat) -> some View {
+        SidebarResizeDivider(
+            side: side == .leading ? .left : .right,
+            width: $sidebarWidth,
+            isDragging: $isDragging,
+            minWidth: minWidth,
+            maxWidth: maxWidth,
+            defaultWidth: 400,
+            cardGap: roundedPanes ? PaneCardStyle.gap : nil,
+            backgroundColor: roundedPanes ? .clear : dividerBackgroundColor,
+            onCommit: { AICredentialsManager.shared.aiAgentSidebarWidth = $0 }
+        )
     }
 
     /// Opaque, so it takes the color the translucent terminal beside it shows.

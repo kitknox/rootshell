@@ -142,24 +142,34 @@ final class QuickSettingsModel {
 
 struct QuickSettingsHUD: View {
     @Binding var isPresented: Bool
+    var inSidebar = false
     @State private var model = QuickSettingsModel()
 
+    @ViewBuilder
     var body: some View {
-        DraggableHUDContainer(
-            resizing: .quickSettings,
-            dismissShortcuts: [.escape],
-            forwardsQuickSettingsToggle: true,
-            forwardsFindToggle: true,
-            onForwardedToggle: { isPresented = false },
-            onFind: { model.focusSearch() },
-            onDismiss: {
-                if model.editing != nil { model.cancelEditor() } else { isPresented = false }
+        if inSidebar {
+            panelContent
+        } else {
+            DraggableHUDContainer(
+                resizing: .quickSettings,
+                dismissShortcuts: [.escape],
+                forwardsQuickSettingsToggle: true,
+                forwardsFindToggle: true,
+                onForwardedToggle: { isPresented = false },
+                onFind: { model.focusSearch() },
+                onDismiss: {
+                    if model.editing != nil { model.cancelEditor() } else { isPresented = false }
+                }
+            ) {
+                panelContent
             }
-        ) {
-            GeometryReader { geometry in
-                QuickSettingsOverlay(model: model, isPresented: $isPresented,
-                    width: geometry.size.width, height: geometry.size.height)
-            }
+        }
+    }
+
+    private var panelContent: some View {
+        GeometryReader { geometry in
+            QuickSettingsOverlay(model: model, isPresented: $isPresented,
+                width: geometry.size.width, height: geometry.size.height)
         }
     }
 }
