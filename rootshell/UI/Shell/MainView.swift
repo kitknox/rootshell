@@ -365,10 +365,10 @@ struct MainView: View {
     /// See `tabSidebarIsDocked`.
     @Setting(Settings.Sidebar.pinned) var tabSidebarPinned
     /// `page:side` tokens. Stock is the tab switcher on the left and the
-    /// file manager on the right.
+    /// other tools on the right.
     @Setting(Settings.Sidebar.pageSides) var edgeSidebarPageSides
-    /// Selected page raw value for each edge. Missing keys use the first page.
-    @State var edgeSidebarSelectedPage: [String: String] = [:]
+    /// Selected tool for each edge. Missing keys use the first available tool.
+    @State var edgeSidebarSelectedPage: [EdgeSidebarSide: EdgeSidebarPage] = [:]
     /// Draws panes and docked columns as rounded cards; see PaneCardStyle.
     @Setting(Settings.Window.roundedPanes) var roundedPanes
     @Setting(Settings.Window.showRemotePorts) var showRemotePorts
@@ -631,7 +631,7 @@ struct MainView: View {
                     onOpen: { openEdgeSidebar(.trailing) },
                     onCancel: { closeEdgeSidebar(.trailing) }
                 ))
-                // Defer an iPad edge while its drawer can open or is already
+                // Defer an iPhone or iPad edge while its drawer can open or is already
                 // floating. A docked column leaves the system edge alone.
                 // Also defer Home while an iPhone/iPad toolbar sits at the
                 // screen edge without a docked software keyboard.
@@ -676,7 +676,7 @@ struct MainView: View {
                     // (pinned) tab sidebar consumes the leading edge and the
                     // AI agent sidebar the trailing edge.
                     .padding(.leading, leadingChromeWidth(windowWidth: geometry.size.width))
-                    .padding(.trailing, trailingChromeWidth(windowWidth: geometry.size.width) + agentInboxSidebarCurrentWidth)
+                    .padding(.trailing, trailingChromeWidth(windowWidth: geometry.size.width))
                     .transition(.opacity)
                 }
             }

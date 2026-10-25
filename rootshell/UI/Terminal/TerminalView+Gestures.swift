@@ -3108,6 +3108,18 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
            touchView === hud || touchView.isDescendant(of: hud) {
             return false
         }
+        #if !targetEnvironment(macCatalyst)
+        if touch.type == .direct, let window,
+           let swipe = gestureRecognizer as? UISwipeGestureRecognizer,
+           gestureRecognizer === tabSwipeLeftGesture || gestureRecognizer === tabSwipeRightGesture {
+            let translation = CGPoint(x: swipe.direction == .left ? -1 : 1, y: 0)
+            if InteractiveEdgePanRecognizer.claimsHorizontalSwipe(
+                in: window, startingAt: touch.location(in: window), translation: translation
+            ) {
+                return false
+            }
+        }
+        #endif
         return true
     }
 
@@ -3246,10 +3258,16 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
                 return false
             }
 
-            // Preserve the window-level tab-sidebar edge pan. A left-edge
-            // rightward drag should open the drawer, not switch app tabs.
-            if direction == .right, panGesture.location(in: self).x <= 32 {
-                return false
+            if let window {
+                let moved = panGesture.translation(in: window)
+                let location = panGesture.location(in: window)
+                let start = CGPoint(x: location.x - moved.x, y: location.y - moved.y)
+                if InteractiveEdgePanRecognizer.claimsHorizontalSwipe(
+                    in: window, startingAt: start,
+                    translation: CGPoint(x: direction == .left ? -1 : 1, y: 0)
+                ) {
+                    return false
+                }
             }
 
             guard requestAppTabSwipeBegin(direction: direction, velocityX: velocity.x) else {

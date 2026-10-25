@@ -3,13 +3,14 @@
 //  rootshell
 //
 //  Presents HTTP capture like the file manager: a resizable column beside the
-//  terminal, a HUD over it (floating or covering it), or a sheet on iPhone.
-//  The two panels share the trailing docked slot (and the overlay layer):
+//  terminal, a HUD over it (floating or covering it), or an edge drawer on iPhone.
+//  The two panels share their assigned edge (and the overlay layer):
 //  opening one in a spot the other occupies hides the other, keeping its
 //  state for next time. Full size occupies every spot.
 //
 
 import SwiftUI
+import os
 
 /// Build-agnostic accessors for shared layout and keyboard code (China builds have no HTTP capture).
 extension MainView {
@@ -18,14 +19,6 @@ extension MainView {
         httpCaptureOwnsKeyboard
         #else
         false
-        #endif
-    }
-
-    var httpCaptureDockedWidth: CGFloat {
-        #if !CHINA_BUILD
-        httpCaptureSidebarCurrentWidth
-        #else
-        0
         #endif
     }
 
@@ -38,7 +31,7 @@ extension MainView {
         #endif
     }
 
-    /// The iPhone Settings sheet is still sliding away; the capture sheet takes focus after it.
+    /// The iPhone Settings sheet is still sliding away; the drawer waits for it.
     var httpCaptureWaitsForSettingsSheet: Bool {
         #if !CHINA_BUILD
         pendingHTTPCaptureOpen && isPhone
@@ -69,23 +62,15 @@ extension MainView {
         showHTTPCapture && !isPhone && httpCapturePresentation != .sidebar && httpCaptureModel != nil
     }
 
-    /// The HUD and the iPhone sheet own the keyboard; the sidebar shares the window with the terminal.
+    /// The HUD and the iPhone drawer own the keyboard; the sidebar shares it.
     var httpCaptureOwnsKeyboard: Bool {
         showHTTPCapture && (isPhone || httpCapturePresentation.ownsKeyboard)
-    }
-
-    var httpCaptureSidebarCurrentWidth: CGFloat {
-        httpCaptureShowsSidebar ? httpCaptureSidebarWidth : 0
     }
 
     // MARK: - Toggle
 
     func toggleHTTPCapture() {
-        if showHTTPCapture {
-            closeHTTPCapture()
-        } else {
-            openHTTPCapture()
-        }
+        toggleEdgeSidebarPage(.httpCapture)
     }
 
     func openHTTPCapture() {
@@ -100,6 +85,7 @@ extension MainView {
         showIPLookup = false
         yieldSlotToHTTPCapture(httpCapturePresentation)
         yieldAgentInboxSlot(to: httpCapturePresentation)
+        adoptEdgeSidebarPage(.httpCapture)
 
         if isPhone {
             resignFirstResponderForSheetPresentation()
@@ -138,6 +124,8 @@ extension MainView {
         yieldAgentInboxSlot(to: presentation)
         httpCapturePresentation = presentation
         SettingsStore.shared.set(Settings.HTTPCapture.presentation, presentation)
+        if showHTTPCapture { adoptEdgeSidebarPage(.httpCapture) }
+        Ghostty.logger.info("Edge sidebar presentation page=httpCapture mode=\(presentation.rawValue, privacy: .public) window=\(windowId, privacy: .public)")
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented || httpCaptureOwnsKeyboard || fileManagerOwnsKeyboard)
         scheduleTerminalRelayout()
     }
@@ -146,6 +134,8 @@ extension MainView {
     /// if it holds that spot (docked column or overlay), or either covers the terminal.
     private func yieldSlotToHTTPCapture(_ presentation: PanelPresentation) {
         guard !isPhone, showFileManager, fileManagerPresentation.sharesSlot(with: presentation) else { return }
+        if presentation == .sidebar, fileManagerPresentation == .sidebar,
+           edgeSidebarAssignment.side(of: .fileManager) != edgeSidebarAssignment.side(of: .httpCapture) { return }
         closeFileManager()
     }
 
@@ -153,6 +143,8 @@ extension MainView {
     /// if it holds that spot.
     func yieldSlotToFileManager(_ presentation: PanelPresentation) {
         guard !isPhone, showHTTPCapture, httpCapturePresentation.sharesSlot(with: presentation) else { return }
+        if presentation == .sidebar, httpCapturePresentation == .sidebar,
+           edgeSidebarAssignment.side(of: .fileManager) != edgeSidebarAssignment.side(of: .httpCapture) { return }
         closeHTTPCapture()
     }
 
@@ -161,17 +153,24 @@ extension MainView {
     @ViewBuilder
     func httpCaptureSidebarColumn(width: CGFloat, totalWidth: CGFloat) -> some View {
         if httpCaptureShowsSidebar, let model = httpCaptureModel {
+            let side = edgeSidebarAssignment.side(of: .httpCapture)
             HTTPCaptureSidebarView(
                 model: model,
                 width: $httpCaptureSidebarWidth,
                 isDragging: $httpCaptureSidebarIsDragging,
                 totalWidth: totalWidth,
                 theme: resolvedSheetTheme(),
+                side: side,
                 onClose: { closeHTTPCapture() },
-                onSwitchPresentation: { switchHTTPCapturePresentation($0) }
+                onSwitchPresentation: { switchHTTPCapturePresentation($0) },
+                footer: AnyView(EdgeSidebarTabBar(
+                    pages: edgeSidebarAssignment.pages(on: side),
+                    selection: .httpCapture,
+                    onSelect: selectEdgeSidebarPage
+                ))
             )
             .frame(width: width)
-            .transition(.move(edge: .trailing))
+            .transition(.move(edge: side == .leading ? .leading : .trailing))
         }
     }
 
@@ -193,34 +192,6 @@ extension MainView {
         }
     }
 
-    func httpCapturePhoneSheetModifier(sheetTheme: ResolvedSheetTheme) -> HTTPCapturePhoneSheetModifier {
-        HTTPCapturePhoneSheetModifier(
-            isPresented: Binding(
-                get: { showHTTPCapture && isPhone },
-                set: { if !$0 { closeHTTPCapture() } }
-            ),
-            model: httpCaptureModel,
-            sheetTheme: sheetTheme,
-            onClose: { closeHTTPCapture() }
-        )
-    }
-}
-
-struct HTTPCapturePhoneSheetModifier: ViewModifier {
-    @Binding var isPresented: Bool
-    let model: HTTPCaptureModel?
-    let sheetTheme: ResolvedSheetTheme
-    let onClose: () -> Void
-
-    func body(content: Content) -> some View {
-        content.sheet(isPresented: $isPresented) {
-            if let model {
-                HTTPCaptureView(model: model, style: .sheet, onClose: onClose, onSwitchPresentation: nil)
-                    .presentationDetents([.large])
-                    .themedSheet(themeColors: sheetTheme.themeColors, accentColor: sheetTheme.accentColor, colorScheme: sheetTheme.colorScheme)
-            }
-        }
-    }
 }
 
 #endif

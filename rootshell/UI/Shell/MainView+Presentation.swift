@@ -57,13 +57,13 @@ extension MainView {
         // keyboard (the user types in the terminal beside it), so it must
         // not count as a presented sheet — otherwise the overlay-owns-
         // keyboard gate would refuse the terminal first responder.
-        (showingTabSwitcher && !tabSidebarIsDocked) || isSheetPresentedBesidesFloatingTabSidebar
+        floatingEdgeSidebarPresented(.leading) || floatingEdgeSidebarPresented(.trailing) || isSheetPresentedBesidesFloatingTabSidebar
     }
 
     /// `isAnySheetPresented` without the floating tab sidebar, for things
     /// that work alongside it (its own rows' hover previews).
     var isSheetPresentedBesidesFloatingTabSidebar: Bool {
-        edgeSidebarModalPresented || fileManagerOwnsKeyboard
+        edgeSidebarModalPresented || fileManagerOwnsKeyboard || httpCaptureHoldsKeyboard
     }
 
     /// Sheets that block an edge swipe. The file manager drawer is not one:
@@ -71,16 +71,17 @@ extension MainView {
     var edgeSidebarModalPresented: Bool {
         let baseFlags = showSettings ||
             showToolbarSettings ||
-            showConnectionSidebar ||
+            (showConnectionSidebar && !edgeSidebarUsesDrawer(.connections)) ||
             showPasswordPromptSheet ||
             showKeyboardInteractivePrompt ||
             showKeyResolutionSheet ||
             showYubiKeyPINPrompt ||
-            showThemePickerOverlay ||
-            showQuickSettingsOverlay ||
+            (showThemePickerOverlay && !edgeSidebarUsesDrawer(.themePicker)) ||
+            (showQuickSettingsOverlay && !edgeSidebarUsesDrawer(.quickSettings)) ||
             showKeyboardChooser ||
-            showOpenInFolderOverlay ||
-            httpCaptureHoldsKeyboard ||
+            (showOpenInFolderOverlay && !edgeSidebarUsesDrawer(.openInFolder)) ||
+            (httpCaptureHoldsKeyboard && !isPhone) ||
+            (fileManagerOwnsKeyboard && !fileManagerUsesEdgeSidebar) ||
             agentInboxOwnsKeyboard ||
             // The iPhone presentation is a sheet that owns the keyboard. On
             // regular width the clipboard manager is a passthrough glass HUD (like
@@ -89,7 +90,7 @@ extension MainView {
             // it, i.e. steal focus. The exception is keyboard mode, where the
             // HUD's search field is guaranteed to take focus (the toggle cycle
             // refuses keyboard mode while the disabled/locked pane is showing).
-            (showClipboardManager &&
+            (showClipboardManager && !edgeSidebarUsesDrawer(.clipboardManager) &&
                 (UIDevice.current.userInterfaceIdiom == .phone || clipboardManagerKeyboardMode)) ||
             connectionInfoToShow != nil ||
             tmuxDashboardRequest != nil ||
@@ -99,7 +100,7 @@ extension MainView {
             trzszTransferOriginRequest != nil ||
             trzszTransferIncomingOffer != nil
         #if !CHINA_BUILD
-        return baseFlags || showAIAgentOverlay
+        return baseFlags || (showAIAgentOverlay && !edgeSidebarUsesDrawer(.aiAgent))
         #else
         return baseFlags
         #endif
@@ -197,7 +198,7 @@ extension MainView {
             // Clipboard manager: compact-width presentation (iPhone). Regular
             // width mounts the draggable glass HUD in floatingHUDOverlays() instead.
             .sheet(isPresented: Binding(
-                get: { showClipboardManager && UIDevice.current.userInterfaceIdiom == .phone },
+                get: { showClipboardManager && !edgeSidebarUsesDrawer(.clipboardManager) && UIDevice.current.userInterfaceIdiom == .phone },
                 set: { if !$0 { showClipboardManager = false } }
             )) {
                 ClipboardManagerOverlay(
@@ -211,9 +212,6 @@ extension MainView {
             }
             // File manager: iPhone presentation. Larger screens use the sidebar or HUD.
             .modifier(fileManagerPhoneSheetModifier(sheetTheme: sheetTheme))
-            #if !CHINA_BUILD
-            .modifier(httpCapturePhoneSheetModifier(sheetTheme: sheetTheme))
-            #endif
             .modifier(agentInboxPhoneSheetModifier(sheetTheme: sheetTheme))
             .sheet(item: $connectionInfoToShow) { info in
                 ConnectionInfoSheet(info: info)
@@ -334,7 +332,7 @@ extension MainView {
                 if pending { consumePendingAgentInboxOpen() }
             }
             .modifier(ConnectionSidebarModifier(
-                showSidebar: $showConnectionSidebar,
+                showSidebar: Binding(get: { showConnectionSidebar && !edgeSidebarUsesDrawer(.connections) }, set: { showConnectionSidebar = $0 }),
                 contentID: AnyHashable(connectionSidebarInitialTab),
                 preventDismissal: terminals.isEmpty,
                 themeColors: sheetTheme.themeColors,
@@ -403,7 +401,7 @@ extension MainView {
             }
             #if !CHINA_BUILD
             .modifier(AIAgentSheetModifier(
-                showOverlay: $showAIAgentOverlay,
+                showOverlay: Binding(get: { showAIAgentOverlay && !edgeSidebarUsesDrawer(.aiAgent) }, set: { showAIAgentOverlay = $0 }),
                 session: currentAIAgentSession(),
                 tabID: terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].id : UUID()
             ))
