@@ -12,11 +12,55 @@ import Foundation
 nonisolated enum EdgeSidebarPage: String, CaseIterable, Sendable {
     case tabSwitcher
     case fileManager
+    case httpCapture
+    case aiAgent
+    case clipboardManager
+    case connections
+    case themePicker
+    case quickSettings
+    case openInFolder
+    case ipLookup
+    case dictation
+
+    static var availableCases: [Self] {
+        allCases.filter { page in
+            switch page {
+            case .httpCapture:
+                #if !CHINA_BUILD && (!targetEnvironment(macCatalyst) || STANDALONE)
+                true
+                #else
+                false
+                #endif
+            case .aiAgent:
+                #if !CHINA_BUILD
+                true
+                #else
+                false
+                #endif
+            case .dictation:
+                #if canImport(FluidAudio) && !CHINA_BUILD
+                true
+                #else
+                false
+                #endif
+            default: true
+            }
+        }
+    }
 
     var title: String {
         switch self {
-        case .tabSwitcher: String(localized: "Tabs", comment: "Sidebar page name")
-        case .fileManager: String(localized: "Files", comment: "Sidebar page name")
+        case .tabSwitcher: String(localized: "Tab Switcher", comment: "Sidebar page name")
+        case .fileManager: String(localized: "File Manager", comment: "Sidebar page name")
+        case .httpCapture: String(localized: "HTTP Capture", comment: "Sidebar page name")
+        case .aiAgent: String(localized: "AI Agent")
+        case .clipboardManager: String(localized: "Clipboard")
+        case .connections: String(localized: "Connections")
+        case .themePicker: String(localized: "Themes")
+        case .quickSettings: String(localized: "Quick Settings")
+        case .openInFolder: String(localized: "Open in Folder")
+        case .ipLookup: String(localized: "IP Lookup")
+        case .dictation: String(localized: "Dictation")
         }
     }
 
@@ -24,6 +68,15 @@ nonisolated enum EdgeSidebarPage: String, CaseIterable, Sendable {
         switch self {
         case .tabSwitcher: "rectangle.stack"
         case .fileManager: "folder"
+        case .httpCapture: "network.badge.shield.half.filled"
+        case .aiAgent: "sparkles"
+        case .clipboardManager: "clipboard"
+        case .connections: "network"
+        case .themePicker: "paintpalette"
+        case .quickSettings: "slider.horizontal.3"
+        case .openInFolder: "folder.badge.plus"
+        case .ipLookup: "globe"
+        case .dictation: "mic"
         }
     }
 }
@@ -50,22 +103,17 @@ nonisolated enum EdgeSidebarSide: String, CaseIterable, Sendable {
 nonisolated struct EdgeSidebarAssignment: Equatable, Sendable {
     var sides: [EdgeSidebarPage: EdgeSidebarSide]
 
-    static let stock = EdgeSidebarAssignment(sides: [
-        .tabSwitcher: .leading,
-        .fileManager: .trailing,
-    ])
+    static let stock = EdgeSidebarAssignment(sides: Dictionary(uniqueKeysWithValues:
+        EdgeSidebarPage.allCases.map { ($0, $0 == .tabSwitcher ? .leading : .trailing) }
+    ))
 
     func side(of page: EdgeSidebarPage) -> EdgeSidebarSide {
         sides[page] ?? Self.stock.sides[page] ?? .leading
     }
 
-    /// Stable order: tab switcher, then file manager.
+    /// Uses the tool catalog's stable order.
     func pages(on side: EdgeSidebarSide) -> [EdgeSidebarPage] {
-        EdgeSidebarPage.allCases.filter { self.side(of: $0) == side }
-    }
-
-    var sharesOneSide: Bool {
-        side(of: .tabSwitcher) == side(of: .fileManager)
+        EdgeSidebarPage.availableCases.filter { self.side(of: $0) == side }
     }
 
     func setting(_ side: EdgeSidebarSide, for page: EdgeSidebarPage) -> EdgeSidebarAssignment {

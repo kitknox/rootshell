@@ -9,11 +9,11 @@
 //
 
 import SwiftUI
+import os
 
 extension MainView {
     var fileManagerShowsSidebar: Bool {
         showFileManager && !isPhone && fileManagerPresentation == .sidebar && fileManagerModel != nil
-            && !edgeSidebarAssignment.sharesOneSide
     }
 
     /// The floating or full-size HUD.
@@ -21,20 +21,9 @@ extension MainView {
         showFileManager && !isPhone && fileManagerPresentation != .sidebar && fileManagerModel != nil
     }
 
-    /// The HUD and the iPhone drawer own the keyboard. A docked column shares
-    /// the window with the terminal. On a shared edge, only the file manager
-    /// tab of a floating drawer owns it, so switching tabs does not flap the gate.
+    /// The HUD and the iPhone drawer own the keyboard; a docked column shares it.
     var fileManagerOwnsKeyboard: Bool {
-        guard showFileManager else { return false }
-        if edgeSidebarAssignment.sharesOneSide && fileManagerUsesEdgeSidebar {
-            return selectedEdgePage(on: edgeSidebarAssignment.side(of: .fileManager)) == .fileManager
-                && !tabSidebarIsDocked
-        }
-        return isPhone || fileManagerPresentation.ownsKeyboard
-    }
-
-    var fileManagerSidebarCurrentWidth: CGFloat {
-        fileManagerShowsSidebar ? fileManagerSidebarWidth : 0
+        showFileManager && (isPhone || fileManagerPresentation.ownsKeyboard)
     }
 
     // MARK: - Toggle
@@ -42,23 +31,14 @@ extension MainView {
     /// First press opens; with the sidebar open but the terminal typing, a press
     /// moves focus into the manager; otherwise it closes.
     func toggleFileManager() {
-        if fileManagerUsesEdgeSidebar {
-            if showFileManager,
-               fileManagerShowsSidebar,
-               KeyboardTracker.shared.isHardwareKeyboard,
-               !fileManagerFieldFocused {
-                focusedTerminalForFileManager?.resignFirstResponder()
-                fileManagerModel?.requestFocus()
-                return
-            }
-            toggleEdgeSidebarPage(.fileManager)
+        if fileManagerShowsSidebar,
+           KeyboardTracker.shared.isHardwareKeyboard,
+           !fileManagerFieldFocused {
+            focusedTerminalForFileManager?.resignFirstResponder()
+            fileManagerModel?.requestFocus()
             return
         }
-        if showFileManager {
-            closeFileManager()
-            return
-        }
-        openFileManager()
+        toggleEdgeSidebarPage(.fileManager)
     }
 
     private var fileManagerFieldFocused: Bool {
@@ -103,7 +83,7 @@ extension MainView {
             SettingsStore.shared.set(Settings.Transfer.fileManagerPresentation, presentation)
         }
         if showFileManager {
-            adoptFileManagerEdge()
+            adoptEdgeSidebarPage(.fileManager)
             model.requestFocus()
         } else {
             revealFileManager(model)
@@ -121,7 +101,7 @@ extension MainView {
         yieldSlotToFileManager(fileManagerPresentation)
         #endif
         yieldAgentInboxSlot(to: fileManagerPresentation)
-        adoptFileManagerEdge()
+        adoptEdgeSidebarPage(.fileManager)
 
         if isPhone {
             resignFirstResponderForSheetPresentation()
@@ -156,10 +136,8 @@ extension MainView {
         yieldAgentInboxSlot(to: presentation)
         fileManagerPresentation = presentation
         SettingsStore.shared.set(Settings.Transfer.fileManagerPresentation, presentation)
-        if presentation != .sidebar && edgeSidebarAssignment.sharesOneSide {
-            let side = edgeSidebarAssignment.side(of: .tabSwitcher)
-            edgeSidebarSelectedPage[side.rawValue] = EdgeSidebarPage.tabSwitcher.rawValue
-        }
+        if showFileManager { adoptEdgeSidebarPage(.fileManager) }
+        Ghostty.logger.info("Edge sidebar presentation page=fileManager mode=\(presentation.rawValue, privacy: .public) window=\(windowId, privacy: .public)")
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented || fileManagerOwnsKeyboard)
         scheduleTerminalRelayout()
         fileManagerModel?.requestFocus()

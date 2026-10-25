@@ -45,6 +45,7 @@ extension Notification.Name {
 
 struct TabSidebarModifier<SidebarContent: View>: ViewModifier {
     var edge: SidePanelEdge = .leading
+    var preventDismissal = false
     @Binding var showSidebar: Bool
 
     let themeColors: SheetThemeColors?
@@ -71,6 +72,7 @@ struct TabSidebarModifier<SidebarContent: View>: ViewModifier {
             .overlay {
                 TabSidebarUIKitOverlay(
                     edge: edge,
+                    preventDismissal: preventDismissal,
                     showSidebar: $showSidebar,
                     themeColors: themeColors,
                     accentColor: accentColor,
@@ -90,6 +92,7 @@ struct TabSidebarModifier<SidebarContent: View>: ViewModifier {
 
 private struct TabSidebarUIKitOverlay<SidebarContent: View>: UIViewControllerRepresentable {
     var edge: SidePanelEdge
+    var preventDismissal: Bool
     @Binding var showSidebar: Bool
     let themeColors: SheetThemeColors?
     let accentColor: Color?
@@ -136,7 +139,7 @@ private struct TabSidebarUIKitOverlay<SidebarContent: View>: UIViewControllerRep
         controller.update(
             isPresented: showSidebar,
             contentID: 0,
-            preventDismissal: false,
+            preventDismissal: preventDismissal,
             backdropAlpha: tabSidebarTranslucent ? 0.12 : (themeColors != nil ? 0.4 : 0.5),
             panelWidth: 420,
             rootView: AnyView(TabSidebarPanelView(
@@ -477,6 +480,13 @@ private final class TabSidebarOverlayViewController: SidePanelOverlayViewControl
         edge == .leading ? -x : x
     }
 
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard gestureRecognizer === closePanGesture else { return true }
+        let insideHostedPanel = touch.view?.isDescendant(of: hostingController.view) == true
+        Ghostty.logger.debug("Edge sidebar close touch edge=\(self.edge == .leading ? "leading" : "trailing", privacy: .public) insidePanel=\(insideHostedPanel)")
+        return !insideHostedPanel
+    }
+
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard gestureRecognizer === closePanGesture,
               let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
@@ -489,22 +499,6 @@ private final class TabSidebarOverlayViewController: SidePanelOverlayViewControl
             || abs(velocity.x) > abs(velocity.y)
         let closing = closingDistance(translation.x) > 0 || closingDistance(velocity.x) > 0
         return horizontalIntent && closing
-    }
-
-    func gestureRecognizer(
-        _ gestureRecognizer: UIGestureRecognizer,
-        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
-    ) -> Bool {
-        true
-    }
-
-    func gestureRecognizer(
-        _ gestureRecognizer: UIGestureRecognizer,
-        shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
-    ) -> Bool {
-        guard gestureRecognizer === closePanGesture else { return false }
-        return otherGestureRecognizer is UIPanGestureRecognizer
-            && otherGestureRecognizer.view is UIScrollView
     }
 }
 
@@ -603,10 +597,11 @@ private struct TabSidebarPanelView<SidebarContent: View>: View {
         // indicator independently of the side-panel content clip above.
         .background {
             panelBackground
+                .compositingGroup()
+                .shadow(color: .black.opacity(0.3), radius: 20, x: edge == .leading ? 5 : -5, y: 0)
                 .ignoresSafeArea(.container, edges: usesCompactLayout ? .bottom : [])
         }
         .optionalColorSchemeEnvironment(colorScheme)
-        .shadow(color: .black.opacity(0.3), radius: 20, x: edge == .leading ? 5 : -5, y: 0)
         .tint(accentColor)
         .ignoresSafeArea(.keyboard)
         .ignoresSafeArea(.container, edges: hiddenTitlebarTopEdges)

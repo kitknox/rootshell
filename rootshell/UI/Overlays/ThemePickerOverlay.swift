@@ -14,6 +14,8 @@ struct ThemePickerOverlay: View {
     let currentTabId: UUID?
     let onThemeSelected: (String, ThemePickerScope) -> Void
 
+    var fillsSidebar = false
+
     var themeManager = ThemeManager.shared
     @ObservedObject private var favoriteManager = FavoriteThemesManager.shared
     var overrideManager = ThemeOverrideManager.shared
@@ -176,9 +178,9 @@ struct ThemePickerOverlay: View {
             }
             // Fixed (not max) height: hosted in a UIHostingController, a ScrollView
             // with only a max height collapses under intrinsic sizing.
-            .frame(height: 350)
+            .frame(height: fillsSidebar ? nil : 350)
         }
-        .frame(width: 340)
+        .frame(width: fillsSidebar ? nil : 340)
         .floatingHUDPanelBackground()
         // Cmd-Shift-T / Escape dismissal is handled by host-level UIKeyCommands in
         // DraggableHUDContainer — a SwiftUI .onKeyPress here is preempted on macOS by

@@ -5,7 +5,7 @@
 //  Pull a sidebar in from a screen edge on iPhone and iPad. Built on
 //  `InteractiveEdgePanRecognizer` (a window-level pan, since the overlay is
 //  `isUserInteractionEnabled = false` while closed and cannot catch the edge
-//  touch itself). iPad yields the system edge via `.defersSystemGestures`.
+//  touch itself). iPhone and iPad defer the system edge via `.defersSystemGestures`.
 //
 //  A floating drawer tracks the finger through the `tabSidebarOpenDrag*`
 //  notifications. A docked column, and a file manager that is not a drawer,
@@ -13,6 +13,7 @@
 //
 
 import SwiftUI
+import os
 
 #if canImport(UIKit)
 import UIKit
@@ -159,6 +160,7 @@ struct TabSidebarEdgeSwipe: UIViewRepresentable {
                 interactiveOpenInProgress = false
                 return
             }
+            Ghostty.logger.debug("Edge sidebar gesture begin edge=\(String(describing: self.edge), privacy: .public) tracksFinger=\(self.tracksFinger) window=\(String(describing: ObjectIdentifier(window)), privacy: .public)")
             if tracksFinger {
                 interactiveOpenInProgress = true
                 post(.tabSidebarBeginInteractiveOpen)
@@ -175,17 +177,21 @@ struct TabSidebarEdgeSwipe: UIViewRepresentable {
         }
 
         private func end(progress: CGFloat, velocity: CGFloat) {
+            Ghostty.logger.debug("Edge sidebar gesture end edge=\(String(describing: self.edge), privacy: .public) progress=\(self.openAmount(progress)) velocity=\(self.openAmount(velocity))")
             guard interactiveOpenInProgress else { return }
             interactiveOpenInProgress = false
             if openAmount(progress) > 1 / 3 || openAmount(velocity) > 800 {
+                Ghostty.logger.debug("Edge sidebar gesture commit")
                 post(.tabSidebarOpenDragCommit)
             } else {
+                Ghostty.logger.debug("Edge sidebar gesture cancel")
                 post(.tabSidebarOpenDragCancel)
                 onCancel()
             }
         }
 
         private func cancel() {
+            Ghostty.logger.debug("Edge sidebar gesture interrupted edge=\(String(describing: self.edge), privacy: .public)")
             guard interactiveOpenInProgress else { return }
             interactiveOpenInProgress = false
             post(.tabSidebarOpenDragCancel)
