@@ -22,6 +22,8 @@ extension ScreenSharingPanningDefault: SettingValue {}
 extension ScreenSharingPointerModeDefault: SettingValue {}
 extension ScreenSharingCursorRenderingDefault: SettingValue {}
 extension ScreenSharingCursorSizeDefault: SettingValue {}
+extension ScreenSharingExternalDisplayMode: SettingValue {}
+extension ScreenSharingExternalDisplayScale: SettingValue {}
 extension PasteInsertFormat: SettingValue {}
 
 nonisolated extension Settings {
@@ -309,12 +311,21 @@ nonisolated extension Settings {
             "screenSharingCursorSizeDefault", default: ScreenSharingCursorSizeDefault.medium, group: .screenSharing,
             configKey: "screen-sharing-cursor-size-default",
             title: String(localized: "Cursor Size", comment: "Setting title"))
+        static let externalDisplayMode = SettingKey(
+            "screenSharingExternalDisplayMode", default: ScreenSharingExternalDisplayMode.remoteDesktop, group: .screenSharing,
+            configKey: "screen-sharing-external-display-mode",
+            title: String(localized: "External Display", comment: "Setting title"))
+        static let externalDisplayScale = SettingKey(
+            "screenSharingExternalDisplayScale", default: ScreenSharingExternalDisplayScale.standard, group: .screenSharing,
+            configKey: "screen-sharing-external-display-scale",
+            title: String(localized: "External Display Scale", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
             clipboardSyncDefault.erased, panningDefault.erased,
             pointerModeDefault.erased, pointerSpeed.erased,
             cursorRenderingDefault.erased, cursorSizeDefault.erased,
             controlOptionAsCommandDefault.erased, routeReservedShortcutsToVNCDefault.erased,
+            externalDisplayMode.erased, externalDisplayScale.erased,
         ]
     }
 

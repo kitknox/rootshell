@@ -106,6 +106,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             // whenever the first surface reads the frame-rate range. Inside
             // the gate because init reads the persisted refresh settings.
             _ = PowerManager.shared
+            #if os(iOS) && !targetEnvironment(macCatalyst)
+            ExternalDisplayCoordinator.shared.start()
+            #endif
             Task { @MainActor in
                 await CloudKitSyncManager.shared.logDiagnostics()
                 await CloudKitSyncManager.shared.revalidateSubscriptionsIfNeeded()
@@ -153,6 +156,26 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             completionHandler(.newData)
         }
     }
+
+    #if os(iOS) && !targetEnvironment(macCatalyst)
+    /// Claims external displays so a Screen Sharing session can fill them
+    /// (see ExternalDisplayCoordinator). Every other role keeps a delegate-less
+    /// configuration, which leaves the SwiftUI scenes to SwiftUI.
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        if connectingSceneSession.role == .windowExternalDisplayNonInteractive {
+            let configuration = UISceneConfiguration(
+                name: "External Display",
+                sessionRole: connectingSceneSession.role)
+            configuration.delegateClass = ExternalDisplaySceneDelegate.self
+            return configuration
+        }
+        return UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+    }
+    #endif
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Self.logger.info("Registered for remote notifications")

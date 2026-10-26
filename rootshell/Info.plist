@@ -107,6 +107,23 @@
 	<integer>86400</integer>
 	<key>SUShowReleaseNotes</key>
 	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleExternalDisplayNonInteractive</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>External Display</string>
+					<key>UISceneDelegateClassName</key>
+					<string>RootshellExternalDisplaySceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
