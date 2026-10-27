@@ -50,8 +50,10 @@ extension MainView {
     @ViewBuilder
     func applyDuoChrome<Content: View>(_ content: Content) -> some View {
         #if !targetEnvironment(macCatalyst) && !os(visionOS)
-        if #available(iOS 27.1, *) {
-            content
+        if #available(iOS 27.1, *), isPhone {
+            // Sidebar presentations must remain outside the terminal's navigation stack.
+            NavigationStack {
+                content
                 .toolbarVisibility(showsDuoSideRail ? .visible : .hidden, for: .navigationBar)
                 .toolbar {
                     if showsDuoSideRail {
@@ -81,6 +83,7 @@ extension MainView {
                         }
                     }
                 }
+            }
         } else {
             content
         }
