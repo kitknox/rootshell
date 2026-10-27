@@ -49,6 +49,7 @@ enum TabScopeMenuSize: String, CaseIterable, Sendable {
 }
 
 extension DuoFrontDisplayMode: SettingValue {}
+extension StatusBarVisibility: SettingValue {}
 extension NewTabAction: SettingValue {}
 extension TabHoverPreviewActivation: SettingValue {}
 extension TabScopeMenuSize: SettingValue {}
@@ -194,6 +195,10 @@ nonisolated extension Settings {
             "fullScreenModeEnabled", default: false, group: .window, policy: .localByDefault,
             configKey: "full-screen-mode-enabled",
             title: String(localized: "Full Screen Mode", comment: "Setting title"))
+        static let statusBar = SettingKey(
+            "statusBarVisibility", default: StatusBarVisibility.always, group: .window, policy: .localByDefault,
+            configKey: "status-bar",
+            title: String(localized: "Status Bar", comment: "Setting title"))
         static let fullScreenLaunchNoticeDismissed = SettingKey(
             "fullScreenLaunchNoticeDismissed", default: false, group: .window, policy: .deviceOnly,
             title: String(localized: "Full Screen Reminder Dismissed", comment: "Setting title"))
@@ -259,7 +264,7 @@ nonisolated extension Settings {
             title: String(localized: "Quick Settings Overlay Height", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
-            hideTitleBar.erased, tabsInTitlebar.erased, fullScreenMode.erased,
+            hideTitleBar.erased, tabsInTitlebar.erased, fullScreenMode.erased, statusBar.erased,
             fullScreenLaunchNoticeDismissed.erased, extendUnderHomeIndicator.erased,
             splitFocusBorderStyle.erased, splitFocusBorderColor.erased, splitFocusBorderCustomColor.erased,
             roundedPanes.erased,

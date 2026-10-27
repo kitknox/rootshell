@@ -2072,6 +2072,7 @@ extension Ghostty {
             // Re-evaluate the home-indicator bottom inset live when the
             // "Extend Under Home Indicator" setting changes.
             setupBottomInsetObserver()
+            setupTopInsetObserver()
             #endif
 
             #if STANDALONE && targetEnvironment(macCatalyst)
@@ -2234,6 +2235,22 @@ extension Ghostty {
             cancellables.insert(AnyCancellable { NotificationCenter.default.removeObserver(observer) })
         }
 
+        private func setupTopInsetObserver() {
+            let observer = NotificationCenter.default.addObserver(
+                forName: .terminalTopChromeChanged,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                MainActor.assumeIsolated {
+                    guard let self, notification.object as? String == self.windowId else { return }
+                    self.surfaceController.invalidateCachedSize()
+                    self.updateTopInset()
+                    self.sizeDidChange(self.bounds.size)
+                }
+            }
+            cancellables.insert(AnyCancellable { NotificationCenter.default.removeObserver(observer) })
+        }
+
         /// The reserved home-indicator bottom inset changed ("Extend Under Home
         /// Indicator" toggled). Clear the size dedupe so the grid recomputes against
         /// the new inset even when the view bounds are unchanged.
@@ -2277,6 +2294,7 @@ extension Ghostty {
             // together.
             guard !surfaceController.sizeUpdatesSuppressed else { return }
             updateBottomInset()
+            updateTopInset()
             sizeDidChange(bounds.size)
         }
 
@@ -2844,6 +2862,25 @@ extension Ghostty {
             let scale = contentScaleFactor
             guard scale > 0 else { return 0 }
             return Double(overlap * scale)
+        }
+
+        func currentTopInsetPoints() -> CGFloat {
+            #if targetEnvironment(macCatalyst) || os(visionOS)
+            return 0
+            #else
+            let chromeBottom = TerminalTopChrome.height(forWindow: windowId)
+            guard chromeBottom > 0, let window else { return 0 }
+            let frameInWindow = convert(bounds, to: window)
+            return min(max(0, chromeBottom - frameInWindow.minY), frameInWindow.height)
+            #endif
+        }
+
+        func currentTopInsetPixels() -> Double {
+            Double(currentTopInsetPoints() * contentScaleFactor)
+        }
+
+        func updateTopInset() {
+            surfaceController.updateTopInset()
         }
 
         /// Push the current bottom inset to the core so the grid reserves the
@@ -3798,6 +3835,8 @@ extension Ghostty {
             // computed at its final row count in one step instead of briefly
             // growing into the strip and snapping back. Deduped internally.
             updateBottomInset()
+            updateTopInset()
+            enclosingScrollView?.verticalScrollIndicatorInsets.top = currentTopInsetPoints()
 
             // sizeDidChange itself gates on KeyboardTracker.isKeyboardAnimating
             // so interpolated bounds during keyboard show/hide are skipped here
