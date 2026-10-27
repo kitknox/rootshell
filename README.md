@@ -313,8 +313,12 @@ Use the `rootshell-AppStore` scheme for sandboxed App Store builds or `rootshell
 xcodebuild -project rootshell.xcodeproj \
   -scheme rootshell-AppStore \
   -configuration DebugAppStore \
-  -sdk iphonesimulator -arch arm64 build
+  -destination 'id=<simulator-udid>' build
 ```
+
+Get a device ID with `xcrun simctl list devices available`. Use a specific
+simulator rather than the generic iOS Simulator destination, which also builds
+the unsupported x86_64 simulator architecture.
 
 ### macOS Local Shells
 

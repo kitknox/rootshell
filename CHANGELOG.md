@@ -3,6 +3,17 @@
 All notable changes to the rootshell app for iPhone, iPad, Vision Pro, and Mac, newest first.
 Versions are listed as `release-build`, matching the version shown in Settings, About.
 
+## Unreleased
+
+### Notifications
+
+- **Herdr Pane Focus:** Local terminal notification taps resolve a pane's current tab rather than relying on the tab captured when the notification was scheduled. Taps wait for app activation before focusing the terminal, matching push-notification navigation. Dismissing a notification does not navigate.
+
+### Terminal Performance
+
+- **Herdr Typing:** Avoid rebuilding the retained endpoint screen on every key press when no text selection needs clearing.
+- **Development Builds:** Split the oversized connection-view expression to avoid Swift type-checker timeouts.
+
 ## 1.0.15-172 - October 25, 2026
 
 ### Detached Terminal Keyboard

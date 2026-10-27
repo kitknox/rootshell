@@ -216,6 +216,9 @@ final class HerdrEndpointPane {
 
     func clearSelection() {
         endDrag()
+        // Key presses also clear selection. With nothing selected there is
+        // no overlay to erase, so don't rebuild the retained screen first.
+        guard selection != nil else { return }
         selection = nil
         if pending == nil { paint() }
         syncSelectionUI()
