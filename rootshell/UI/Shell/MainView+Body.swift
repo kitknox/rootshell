@@ -236,8 +236,10 @@ extension MainView {
     /// The add and settings buttons for the legacy pill tab bar.
     @ViewBuilder
     func tabBarActionButtons(theme: ResolvedTabBarTheme) -> some View {
-        tabBarAddButton(theme: theme)
-        tabBarSettingsButton(theme: theme)
+        if showsTabBarActions {
+            tabBarAddButton(theme: theme)
+            tabBarSettingsButton(theme: theme)
+        }
         if !edgeSidebarAssignment.pages(on: .trailing).isEmpty {
             tabBarEdgeSidebarButton(side: .trailing, theme: theme)
         }
