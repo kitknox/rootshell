@@ -482,6 +482,34 @@ struct SSHConnectionView: View {
     }
     
     private var navigationStackContent: some View {
+        connectionContentWithOptionObservers
+            .onChange(of: connectionType) { oldType, newType in
+                if newType != .profiles {
+                    inlineProfilesPath = []
+                }
+                if newType == .kubernetes && selectedCluster == nil && clusterManager.clusters.count == 1 {
+                    selectedCluster = clusterManager.clusters.first
+                }
+                carryEndpointBetweenTabs(from: oldType, to: newType)
+            }
+            .onAppear(perform: handleConnectionViewAppear)
+            .task { await handleConnectionViewTask() }
+            .onChange(of: cloudAccountManager.accounts) { _, _ in
+                cachedConsoleCapableAccounts = computeConsoleCapableAccounts()
+            }
+#if targetEnvironment(macCatalyst)
+            .onChange(of: helperAvailable) { _, isAvailable in
+                if !isAvailable && connectionType == .local {
+                    connectionType = .ssh
+                }
+            }
+#endif
+            .navigationDestination(isPresented: $showProfileEditorSheet) {
+                ProfileEditorSheet(historyEntry: buildHistoryEntryFromForm(), embedded: true)
+            }
+    }
+
+    private var connectionContentWithOptionObservers: some View {
         connectionContent
             .background(sheetThemeColors?.background ?? Color(.systemGroupedBackground))
             .onChange(of: quickConnectText) { _, newValue in
@@ -523,30 +551,6 @@ struct SSHConnectionView: View {
                 if !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     isTerminalOptionsExpanded = true
                 }
-            }
-            .onChange(of: connectionType) { oldType, newType in
-                if newType != .profiles {
-                    inlineProfilesPath = []
-                }
-                if newType == .kubernetes && selectedCluster == nil && clusterManager.clusters.count == 1 {
-                    selectedCluster = clusterManager.clusters.first
-                }
-                carryEndpointBetweenTabs(from: oldType, to: newType)
-            }
-            .onAppear(perform: handleConnectionViewAppear)
-            .task { await handleConnectionViewTask() }
-            .onChange(of: cloudAccountManager.accounts) { _, _ in
-                cachedConsoleCapableAccounts = computeConsoleCapableAccounts()
-            }
-#if targetEnvironment(macCatalyst)
-            .onChange(of: helperAvailable) { _, isAvailable in
-                if !isAvailable && connectionType == .local {
-                    connectionType = .ssh
-                }
-            }
-#endif
-            .navigationDestination(isPresented: $showProfileEditorSheet) {
-                ProfileEditorSheet(historyEntry: buildHistoryEntryFromForm(), embedded: true)
             }
     }
     

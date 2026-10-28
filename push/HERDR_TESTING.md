@@ -50,6 +50,26 @@ forced fallback enabled, and stock herdr using automatic fallback:
 
 ## Agent alerts and regressions
 
+Also exercise rootshell's local agent-status notifications (not only the
+encrypted pushes below): schedule an alert from a Herdr pane, move that pane
+to another tab before tapping, and confirm the tap selects its new tab and
+split. Repeat with rootshell backgrounded to check focus after activation.
+Dismiss the notification without tapping and confirm it does not navigate.
+
+For a repeatable check of the same local-notification tap path without an
+agent or push pairing, enable **Settings > General > Terminal Notifications**
+and allow notifications in macOS settings. In a plain local or SSH terminal:
+
+```sh
+(sleep 5; printf '\033]9;Rootshell local tap test\007') &
+```
+
+Switch to another tab or app before the five seconds elapse (the focused
+terminal suppresses its own alerts), then click the banner and type into the
+returned terminal. Repeat and dismiss the banner instead; the current tab
+must not change. This checks the local category and activation path, not
+Herdr's internal pane routing; use the moved-Herdr-pane scenario above too.
+
 Use the candidate directly to exercise a hook without changing installed hooks:
 
 ```sh

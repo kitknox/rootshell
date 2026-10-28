@@ -459,20 +459,19 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
             }
         }
 
-        // Handle terminal notification taps
-        if categoryId == Self.terminalNotificationCategory {
+        // Handle terminal notification taps. The tab ID is a schedule-time
+        // hint (the pane may have moved tabs since), and a backgrounded app
+        // must finish activating before focus is touched, so route through
+        // the push router's activation-aware navigation like push taps.
+        // Dismissing never navigates.
+        if categoryId == Self.terminalNotificationCategory,
+           response.actionIdentifier != UNNotificationDismissActionIdentifier {
             if let tabIDString = userInfo["tabID"] as? String,
                let surfaceIDString = userInfo["surfaceID"] as? String,
                let tabID = UUID(uuidString: tabIDString),
                let surfaceID = UUID(uuidString: surfaceIDString) {
-
-                // Post notification to navigate to the terminal
                 Task { @MainActor in
-                    NotificationCenter.default.post(
-                        name: .navigateToTerminal,
-                        object: nil,
-                        userInfo: ["tabID": tabID, "surfaceID": surfaceID]
-                    )
+                    PushNotificationRouter.navigateToLocalPane(tabID: tabID, surfaceID: surfaceID)
                 }
             }
         }

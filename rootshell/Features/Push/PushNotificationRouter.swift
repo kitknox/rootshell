@@ -335,6 +335,31 @@ enum PushNotificationRouter {
         }
     }
 
+    /// Local agent-notification tap (terminal category). The tab ID is a
+    /// schedule-time hint — the pane may have moved tabs since — so the
+    /// surface's current tab is resolved across windows after activation.
+    /// If the surface has not projected yet, the owning window uses the hint.
+    static func navigateToLocalPane(tabID: UUID, surfaceID: UUID) {
+        if let resolved = resolve(surfaceID: surfaceID) {
+            navigate(to: resolved)
+            return
+        }
+        Task { @MainActor in
+            if UIApplication.shared.applicationState != .active {
+                await Self.waitForApplicationActivation()
+            }
+            if let resolved = resolve(surfaceID: surfaceID) {
+                navigate(to: resolved)
+            } else {
+                #if targetEnvironment(macCatalyst)
+                CatalystSceneDelegate.activateMainWindowForExternalEvent()
+                #endif
+                NotificationCenter.default.post(name: .navigateToTerminal, object: nil,
+                                                userInfo: ["tabID": tabID, "surfaceID": surfaceID])
+            }
+        }
+    }
+
     /// Retried when tabs restore, multiplexer panes project, or a scene activates.
     static func retryPending() {
         guard let p = pending else { return }
@@ -400,9 +425,12 @@ enum PushNotificationRouter {
             if UIApplication.shared.applicationState != .active {
                 await Self.waitForApplicationActivation()
             }
+            // Re-resolve the surface after the wait: topology may have moved
+            // the pane to another tab/window while the app was activating.
+            let fresh = resolve(surfaceID: resolved.surfaceID) ?? resolved
             // Only bring a different window forward; re-activating the key window
             // resets first responder under the terminal's feet.
-            let targetScene = windowScene(forWindowId: resolved.windowId)
+            let targetScene = windowScene(forWindowId: fresh.windowId)
             var requestedUIKitActivation = false
             if let targetScene,
                targetScene.activationState != .foregroundActive {
@@ -416,7 +444,7 @@ enum PushNotificationRouter {
             )
             #endif
             NotificationCenter.default.post(name: .navigateToTerminal, object: nil,
-                                            userInfo: ["tabID": resolved.tabID, "surfaceID": resolved.surfaceID])
+                                            userInfo: ["tabID": fresh.tabID, "surfaceID": fresh.surfaceID])
         }
     }
 

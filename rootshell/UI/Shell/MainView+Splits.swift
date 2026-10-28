@@ -237,10 +237,22 @@ extension MainView {
         }
     }
 
-    /// Navigate to a specific terminal from a notification click
+    /// Navigate to a specific terminal from a notification click.
+    /// The tab ID is only a hint: local notifications capture it at schedule
+    /// time, but a herdr topology update can move the surface to another tab
+    /// before the tap. Always prefer the tab actually containing the surface;
+    /// falling back to the hinted tab's first pane is what stranded taps on
+    /// the old pane.
     func navigateToTerminal(tabID: UUID, surfaceID: UUID) {
-        // Find the tab index
-        guard let tabIndex = terminals.firstIndex(where: { $0.id == tabID }) else {
+        let surfaceTabIndex = terminals.firstIndex(where: {
+            $0.splitTree.contains(where: { $0.uuid == surfaceID })
+        })
+        let tabIndex: Int
+        if let surfaceTabIndex {
+            tabIndex = surfaceTabIndex
+        } else if let hinted = terminals.firstIndex(where: { $0.id == tabID }) {
+            tabIndex = hinted
+        } else {
             Ghostty.logger.warning("Cannot navigate to terminal: tab \(tabID) not found")
             return
         }
@@ -268,7 +280,8 @@ extension MainView {
             }
         }
 
-        // If specific surface not found, just focus the first pane in the tab
+        // The surface is gone (closed since the notification was scheduled);
+        // only then fall back to the first pane in the tab.
         if let firstPane = terminals[tabIndex].splitTree.first {
             setFocusedPane(firstPane, inTab: tabIndex)
             Ghostty.logger.info("Surface not found, focused first terminal in tab \(tabIndex)")
