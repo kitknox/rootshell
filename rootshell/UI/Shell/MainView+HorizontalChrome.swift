@@ -59,7 +59,7 @@ extension MainView {
                 )
                 .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
                 .layoutPriority(-1)
-                if showsTabBarActions { tabBarActionButtons(theme: resolvedTheme) }
+                tabBarActionButtons(theme: resolvedTheme)
             }
         }
         .frame(height: TabMetrics.tabBarHeight)
