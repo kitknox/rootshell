@@ -52,6 +52,7 @@ extension HUDResizing {
 struct OpenInFolderOverlay: View {
     @Bindable var model: OpenInFolderModel
     @Binding var isPresented: Bool
+    @Environment(\.edgeSidebarTitleContext) private var edgeSidebarTitleContext
     let shortcut: OpenInFolderShortcut?
     let onOpen: (String, OpenInFolderPlacement) -> Bool
     let width: CGFloat
@@ -127,18 +128,30 @@ struct OpenInFolderOverlay: View {
 
     // MARK: Header
 
+    @ViewBuilder
     private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Open in Folder").font(.headline)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+        if edgeSidebarTitleContext != nil {
+            EdgeSidebarHeader(
+                title: String(localized: "Open in Folder"),
+                systemImage: "folder.badge.plus",
+                status: subtitle,
+                onClose: { isPresented = false }
+            ) {
+                EmptyView()
             }
-            Spacer()
-            Button { isPresented = false } label: { Image(systemName: "xmark.circle.fill").font(.title2) }
-                .accessibilityLabel(String(localized: "Close Open in Folder"))
+        } else {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Open in Folder").font(.headline)
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                }
+                Spacer()
+                Button { isPresented = false } label: { Image(systemName: "xmark.circle.fill").font(.title2) }
+                    .accessibilityLabel(String(localized: "Close Open in Folder"))
+            }
+            .buttonStyle(.plain)
+            .padding(16)
         }
-        .buttonStyle(.plain)
-        .padding(16)
     }
 
     private var subtitle: String {

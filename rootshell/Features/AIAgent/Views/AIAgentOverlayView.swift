@@ -44,6 +44,8 @@ private struct CachedModelData: Equatable {
 
 /// AI Agent interface view
 struct AIAgentOverlayView: View {
+    @Environment(\.edgeSidebarTitleContext) private var edgeSidebarTitleContext
+    @Environment(\.sheetThemeColors) private var sidebarThemeColors
     @Binding var isPresented: Bool
     var session: AIAgentSession
     let showCloseButton: Bool
@@ -99,128 +101,99 @@ struct AIAgentOverlayView: View {
 
     var body: some View {
         NavigationStack {
-            GeometryReader { proxy in
-                VStack(spacing: 0) {
-                    // Connection status bar
-                    if !session.isConnected {
-                        connectionStatusBar
+            VStack(spacing: 0) {
+                if let context = edgeSidebarTitleContext {
+                    EdgeSidebarHeader(
+                        title: context.selection.title,
+                        systemImage: context.selection.systemImage,
+                        showsClose: showCloseButton,
+                        onClose: dismiss
+                    ) {
+                        if shouldShowNewChatButton {
+                            newChatButton.edgeSidebarHeaderActionTarget()
+                        }
+                        overflowMenu.edgeSidebarHeaderActionTarget()
                     }
 
-                                // Chat content
-                                if session.isConnected {
-                                    AIAgentChatView(session: session, scrollToBottomTrigger: $scrollToBottomTrigger)
-                                } else {
-                                    connectingView
-                                }
-                    
-                                // Input area at bottom
-                                if session.isConnected {
-                                    inputArea
-                                }
-                    
-                                // Hidden button for Escape shortcut - helps Mac Catalyst focus handling
-                                Button("") {
-                                    dismiss()
-                                }
-                                .keyboardShortcut(.escape, modifiers: [])
-                                .opacity(0)
-                                .accessibilityHidden(true)
-
-                            }                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                // Keyboard avoidance: Some iPhone sheet presentations don't update keyboard safe-area in time,
-                // leaving the input covered. Add only the missing inset (keyboardHeight - current safe-area).
-                // EffectManager can retain the terminal's keyboard height while this sheet owns focus, so only
-                // treat that process-wide value as this view's keyboard while the composer is first responder.
-                .padding(.bottom, keyboardAvoidancePadding(safeAreaBottom: proxy.safeAreaInsets.bottom))
-                .animation(.easeOut(duration: 0.25), value: effectManager.keyboardHeight)
-                .animation(.easeOut(duration: 0.25), value: isInputFocused)
-                .onChange(of: effectManager.keyboardHeight) { oldHeight, newHeight in
-                    // Keyboard appeared - trigger scroll to bottom after layout settles
-                    if newHeight > oldHeight && newHeight > 0 {
-                        Task { @MainActor in
-                            try? await Task.sleep(for: .milliseconds(100))
-                            scrollToBottomTrigger.toggle()
-                        }
+                    if session.isConnected {
+                        modelPickerAndEffortControls
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 4)
                     }
                 }
-                .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea(.container))
-                .onAppear { availableWidth = proxy.size.width }
-                .onChange(of: proxy.size.width) { _, newWidth in availableWidth = newWidth }
-            }
-            .navigationTitle("AI Agent")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if showCloseButton {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Close") {
+
+                GeometryReader { proxy in
+                    VStack(spacing: 0) {
+                        if !session.isConnected {
+                            connectionStatusBar
+                        }
+
+                        if session.isConnected {
+                            AIAgentChatView(session: session, scrollToBottomTrigger: $scrollToBottomTrigger)
+                        } else {
+                            connectingView
+                        }
+
+                        if session.isConnected {
+                            inputArea
+                        }
+
+                        Button("") {
                             dismiss()
                         }
                         .keyboardShortcut(.escape, modifiers: [])
+                        .opacity(0)
+                        .accessibilityHidden(true)
                     }
-                }
-
-                ToolbarItem(placement: .principal) {
-                    if session.isConnected {
-                        HStack(spacing: 6) {
-                            AIAgentModelPickerToolbar(
-                                sessionID: session.id,
-                                selectedModelID: $selectedModelID,
-                                cachedModels: cachedModels,
-                                // The standalone effort capsule shares the principal slot.
-                                availableWidth: availableWidth - (showsStandaloneEffortCapsule ? 70 : 0),
-                                useWindowThemeColors: useWindowThemeColors,
-                                themeBackgroundHex: themeColors?.background,
-                                // On narrow layouts the effort switcher lives inside
-                                // this menu instead of its own capsule.
-                                effortContext: chatGPTEffortContext,
-                                selectedEffort: selectedEffort,
-                                showsEmbeddedEffort: chatGPTEffortContext != nil && !showsStandaloneEffortCapsule,
-                                onSelectionChange: handleModelSelectionChange,
-                                onEffortChange: handleEffortChange
-                            )
-                            .equatable()
-
-                            if showsStandaloneEffortCapsule, let effortContext = chatGPTEffortContext {
-                                AIAgentReasoningEffortToolbar(
-                                    sessionID: session.id,
-                                    modelID: effortContext.modelID,
-                                    ladder: effortContext.ladder,
-                                    defaultEffort: effortContext.defaultEffort,
-                                    selectedEffort: selectedEffort,
-                                    useWindowThemeColors: useWindowThemeColors,
-                                    themeBackgroundHex: themeColors?.background,
-                                    onChange: handleEffortChange
-                                )
-                                .equatable()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    // Keyboard avoidance only uses the terminal keyboard height while this composer owns focus.
+                    .padding(.bottom, keyboardAvoidancePadding(safeAreaBottom: proxy.safeAreaInsets.bottom))
+                    .animation(.easeOut(duration: 0.25), value: effectManager.keyboardHeight)
+                    .animation(.easeOut(duration: 0.25), value: isInputFocused)
+                    .onChange(of: effectManager.keyboardHeight) { oldHeight, newHeight in
+                        if newHeight > oldHeight && newHeight > 0 {
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(100))
+                                scrollToBottomTrigger.toggle()
                             }
                         }
                     }
+                    .onAppear { availableWidth = proxy.size.width }
+                    .onChange(of: proxy.size.width) { _, newWidth in availableWidth = newWidth }
                 }
-
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    if session.isConnected && !session.messages.isEmpty {
-                        // New Chat button - only show when there are messages
-                        Button(action: {
-                            Task { await session.resetToNewChat() }
-                        }) {
-                            Image(systemName: "square.and.pencil")
+            }
+            .background(
+                ((edgeSidebarTitleContext == nil ? nil : sidebarThemeColors?.background)
+                    ?? Color(uiColor: .systemGroupedBackground)).ignoresSafeArea(.container)
+            )
+            .navigationTitle("AI Agent")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(edgeSidebarTitleContext == nil ? .visible : .hidden, for: .navigationBar)
+            .toolbar {
+                if edgeSidebarTitleContext == nil {
+                    if showCloseButton {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Close") {
+                                dismiss()
+                            }
+                            .keyboardShortcut(.escape, modifiers: [])
                         }
-                        .disabled(session.state.isBusy)
                     }
 
-                    AIAgentOverflowMenu(
-                        sessionID: session.id,
-                        approvalMode: $approvalMode,
-                        isConnected: session.isConnected,
-                        presentationMode: AICredentialsManager.shared.aiAgentPresentationMode,
-                        onSettings: { showSettings = true },
-                        onRefreshFingerprint: {
-                            Task { await session.collectFingerprint(forceRefresh: true) }
-                        },
-                        onDisconnect: { Task { await session.disconnect() } },
-                        onSwitchPresentationMode: switchPresentationMode
-                    )
-                    .equatable()
+                    if session.isConnected {
+                        ToolbarItem(placement: .principal) {
+                            modelPickerAndEffortControls
+                        }
+                    }
+
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        if shouldShowNewChatButton {
+                            newChatButton
+                        }
+
+                        overflowMenu
+                    }
                 }
             }
             .sheet(isPresented: $showSettings) {
@@ -262,6 +235,68 @@ struct AIAgentOverlayView: View {
                 return .handled
             }
             return .ignored
+        }
+    }
+
+    private var shouldShowNewChatButton: Bool {
+        session.isConnected && !session.messages.isEmpty
+    }
+
+    private var newChatButton: some View {
+        Button(action: {
+            Task { await session.resetToNewChat() }
+        }) {
+            Image(systemName: "square.and.pencil")
+        }
+        .disabled(session.state.isBusy)
+    }
+
+    private var overflowMenu: some View {
+        AIAgentOverflowMenu(
+            sessionID: session.id,
+            approvalMode: $approvalMode,
+            isConnected: session.isConnected,
+            presentationMode: AICredentialsManager.shared.aiAgentPresentationMode,
+            onSettings: { showSettings = true },
+            onRefreshFingerprint: {
+                Task { await session.collectFingerprint(forceRefresh: true) }
+            },
+            onDisconnect: { Task { await session.disconnect() } },
+            onSwitchPresentationMode: switchPresentationMode
+        )
+        .equatable()
+    }
+
+    private var modelPickerAndEffortControls: some View {
+        HStack(spacing: 6) {
+            AIAgentModelPickerToolbar(
+                sessionID: session.id,
+                selectedModelID: $selectedModelID,
+                cachedModels: cachedModels,
+                availableWidth: max(120, availableWidth - (showsStandaloneEffortCapsule ? 70 : 0)),
+                useWindowThemeColors: useWindowThemeColors,
+                themeBackgroundHex: themeColors?.background,
+                effortContext: chatGPTEffortContext,
+                selectedEffort: selectedEffort,
+                showsEmbeddedEffort: chatGPTEffortContext != nil && !showsStandaloneEffortCapsule,
+                onSelectionChange: handleModelSelectionChange,
+                onEffortChange: handleEffortChange
+            )
+            .equatable()
+
+            if showsStandaloneEffortCapsule, let effortContext = chatGPTEffortContext {
+                AIAgentReasoningEffortToolbar(
+                    sessionID: session.id,
+                    modelID: effortContext.modelID,
+                    ladder: effortContext.ladder,
+                    defaultEffort: effortContext.defaultEffort,
+                    selectedEffort: selectedEffort,
+                    useWindowThemeColors: useWindowThemeColors,
+                    themeBackgroundHex: themeColors?.background,
+                    onChange: handleEffortChange
+                )
+                .equatable()
+            }
         }
     }
 

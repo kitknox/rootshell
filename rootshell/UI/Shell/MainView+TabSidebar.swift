@@ -58,7 +58,7 @@ extension MainView {
             staysOpenOnSelect: tabSidebarStaysOpenOnSelect,
             isDocked: isDocked,
             dockedBottomClearance: dockedBottomClearance,
-            canPin: canPinTabSidebar,
+            canPin: canPinTabSidebar && !usesPinnedWideEdgeSidebarLayout,
             isPinned: tabSidebarIsDocked,
             onTogglePin: { tabSidebarPinned.toggle() },
             onSelectTab: { id in

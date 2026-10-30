@@ -605,7 +605,9 @@ extension MainView {
         // Resign first responder when sheet opens to prevent keyboard from appearing
         if newValue {
             adoptEdgeSidebarPage(.connections)
-            resignFirstResponderForSheetPresentation()
+            if !edgeSidebarColumnOwns(.connections) {
+                resignFirstResponderForSheetPresentation()
+            }
         }
         // When connection sheet dismisses, clear pending browse selection and grant UIKit focus
         // Ghostty focus was already set when the tab was created

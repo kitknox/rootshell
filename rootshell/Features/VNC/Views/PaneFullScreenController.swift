@@ -355,6 +355,15 @@ final class PaneFullScreenContainerView: UIView {
         fatalError("init(coder:) is not supported for this view")
     }
 
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        #if !targetEnvironment(macCatalyst) && !os(visionOS)
+        if let window {
+            TabSidebarOverlayViewController.includeWindowContent(self, in: window)
+        }
+        #endif
+    }
+
     override var keyCommands: [UIKeyCommand]? {
         let command = UIKeyCommand(
             title: String(localized: "Exit Full Screen"),

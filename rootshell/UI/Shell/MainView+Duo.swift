@@ -48,9 +48,10 @@ extension MainView {
     }
 
     @ViewBuilder
-    func applyDuoChrome<Content: View>(_ content: Content) -> some View {
+    func applyDuoChrome<Content: View>(_ content: Content, inTerminalColumn: Bool = false) -> some View {
         #if !targetEnvironment(macCatalyst) && !os(visionOS)
-        if #available(iOS 27.1, *), isPhone {
+        if #available(iOS 27.1, *), isPhone,
+           usesPinnedWideEdgeSidebarLayout == inTerminalColumn {
             // Sidebar presentations must remain outside the terminal's navigation stack.
             NavigationStack {
                 content

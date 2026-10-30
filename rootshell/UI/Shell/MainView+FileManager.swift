@@ -3,7 +3,7 @@
 //  rootshell
 //
 //  Presents the file manager: a resizable column beside the terminal, a HUD
-//  over it (floating or covering it), or an edge drawer on iPhone. visionOS
+//  over it (floating or covering it), or an edge drawer. visionOS
 //  compact width still uses a sheet. The window's model is created on first
 //  use and kept while hidden, so reopening restores panes, selection and focus.
 //
@@ -19,11 +19,13 @@ extension MainView {
     /// The floating or full-size HUD.
     var fileManagerShowsOverlay: Bool {
         showFileManager && !isPhone && fileManagerPresentation != .sidebar && fileManagerModel != nil
+            && !edgeSidebarColumnOwns(.fileManager)
     }
 
-    /// The HUD and the iPhone drawer own the keyboard; a docked column shares it.
+    /// The HUD and drawer own the keyboard; a pinned column shares it.
     var fileManagerOwnsKeyboard: Bool {
-        showFileManager && (isPhone || fileManagerPresentation.ownsKeyboard)
+        showFileManager && !edgeSidebarColumnOwns(.fileManager)
+            && (isPhone || fileManagerPresentation.ownsKeyboard)
     }
 
     // MARK: - Toggle
@@ -31,7 +33,7 @@ extension MainView {
     /// First press opens; with the sidebar open but the terminal typing, a press
     /// moves focus into the manager; otherwise it closes.
     func toggleFileManager() {
-        if fileManagerShowsSidebar,
+        if (fileManagerShowsSidebar || edgeSidebarColumnOwns(.fileManager)),
            KeyboardTracker.shared.isHardwareKeyboard,
            !fileManagerFieldFocused {
             focusedTerminalForFileManager?.resignFirstResponder()
@@ -103,7 +105,12 @@ extension MainView {
         yieldAgentInboxSlot(to: fileManagerPresentation)
         adoptEdgeSidebarPage(.fileManager)
 
-        if isPhone {
+        if usesPinnedWideEdgeSidebarLayout {
+            if KeyboardTracker.shared.isHardwareKeyboard {
+                focusedTerminalForFileManager?.resignFirstResponder()
+            }
+            scheduleTerminalRelayout()
+        } else if isPhone {
             resignFirstResponderForSheetPresentation()
         } else if fileManagerPresentation == .sidebar {
             if KeyboardTracker.shared.isHardwareKeyboard { focusedTerminalForFileManager?.resignFirstResponder() }
@@ -116,7 +123,7 @@ extension MainView {
 
     func closeFileManager() {
         guard showFileManager else { return }
-        let wasSidebar = fileManagerShowsSidebar
+        let wasSidebar = fileManagerShowsSidebar || edgeSidebarColumnOwns(.fileManager)
         showFileManager = false
         fileManagerModel?.save()
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented)
@@ -195,7 +202,7 @@ extension MainView {
 
     @ViewBuilder
     func fileManagerSidebarColumn(width: CGFloat, totalWidth: CGFloat) -> some View {
-        if fileManagerShowsSidebar, let model = fileManagerModel {
+        if fileManagerShowsSidebar, !edgeSidebarColumnOwns(.fileManager), let model = fileManagerModel {
             let side = edgeSidebarAssignment.side(of: .fileManager)
             FileManagerSidebarView(
                 manager: model,
@@ -206,13 +213,13 @@ extension MainView {
                 theme: resolvedSheetTheme(),
                 side: side,
                 onClose: { closeFileManager() },
-                onSwitchPresentation: { switchFileManagerPresentation($0) },
-                footer: AnyView(EdgeSidebarTabBar(
-                    pages: edgeSidebarAssignment.pages(on: side),
-                    selection: .fileManager,
-                    onSelect: selectEdgeSidebarPage
-                ))
+                onSwitchPresentation: { switchFileManagerPresentation($0) }
             )
+            .environment(\.edgeSidebarTitleContext, EdgeSidebarTitleContext(
+                pages: edgeSidebarAssignment.pages(on: side),
+                selection: .fileManager,
+                onSelect: selectEdgeSidebarPage
+            ))
             .frame(width: width)
             .transition(.move(edge: side == .leading ? .leading : .trailing))
         }

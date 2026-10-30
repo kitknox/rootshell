@@ -3,7 +3,7 @@
 //  rootshell
 //
 //  Presents HTTP capture like the file manager: a resizable column beside the
-//  terminal, a HUD over it (floating or covering it), or an edge drawer on iPhone.
+//  terminal, a HUD over it (floating or covering it), or an edge drawer.
 //  The two panels share their assigned edge (and the overlay layer):
 //  opening one in a spot the other occupies hides the other, keeping its
 //  state for next time. Full size occupies every spot.
@@ -60,11 +60,13 @@ extension MainView {
     /// The floating or full-size HUD.
     var httpCaptureShowsOverlay: Bool {
         showHTTPCapture && !isPhone && httpCapturePresentation != .sidebar && httpCaptureModel != nil
+            && !edgeSidebarColumnOwns(.httpCapture)
     }
 
-    /// The HUD and the iPhone drawer own the keyboard; the sidebar shares it.
+    /// The HUD and drawer own the keyboard; a pinned column shares it.
     var httpCaptureOwnsKeyboard: Bool {
-        showHTTPCapture && (isPhone || httpCapturePresentation.ownsKeyboard)
+        showHTTPCapture && !edgeSidebarColumnOwns(.httpCapture)
+            && (isPhone || httpCapturePresentation.ownsKeyboard)
     }
 
     // MARK: - Toggle
@@ -87,7 +89,9 @@ extension MainView {
         yieldAgentInboxSlot(to: httpCapturePresentation)
         adoptEdgeSidebarPage(.httpCapture)
 
-        if isPhone {
+        if usesPinnedWideEdgeSidebarLayout {
+            scheduleTerminalRelayout()
+        } else if isPhone {
             resignFirstResponderForSheetPresentation()
         } else if httpCapturePresentation == .sidebar {
             scheduleTerminalRelayout()
@@ -105,7 +109,7 @@ extension MainView {
 
     func closeHTTPCapture() {
         guard showHTTPCapture else { return }
-        let wasSidebar = httpCaptureShowsSidebar
+        let wasSidebar = httpCaptureShowsSidebar || edgeSidebarColumnOwns(.httpCapture)
         showHTTPCapture = false
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented)
         if wasSidebar {
@@ -152,7 +156,7 @@ extension MainView {
 
     @ViewBuilder
     func httpCaptureSidebarColumn(width: CGFloat, totalWidth: CGFloat) -> some View {
-        if httpCaptureShowsSidebar, let model = httpCaptureModel {
+        if httpCaptureShowsSidebar, !edgeSidebarColumnOwns(.httpCapture), let model = httpCaptureModel {
             let side = edgeSidebarAssignment.side(of: .httpCapture)
             HTTPCaptureSidebarView(
                 model: model,
@@ -162,13 +166,13 @@ extension MainView {
                 theme: resolvedSheetTheme(),
                 side: side,
                 onClose: { closeHTTPCapture() },
-                onSwitchPresentation: { switchHTTPCapturePresentation($0) },
-                footer: AnyView(EdgeSidebarTabBar(
-                    pages: edgeSidebarAssignment.pages(on: side),
-                    selection: .httpCapture,
-                    onSelect: selectEdgeSidebarPage
-                ))
+                onSwitchPresentation: { switchHTTPCapturePresentation($0) }
             )
+            .environment(\.edgeSidebarTitleContext, EdgeSidebarTitleContext(
+                pages: edgeSidebarAssignment.pages(on: side),
+                selection: .httpCapture,
+                onSelect: selectEdgeSidebarPage
+            ))
             .frame(width: width)
             .transition(.move(edge: side == .leading ? .leading : .trailing))
         }

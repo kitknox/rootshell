@@ -53,7 +53,7 @@ extension MainView {
     /// Returns true if any sheet or overlay is currently presented
     /// Used to prevent focus restoration from showing keyboard over sheets
     var isAnySheetPresented: Bool {
-        // The docked sidebar does NOT cover the terminal or own the
+        // A pinned edge column does NOT cover the terminal or own the
         // keyboard (the user types in the terminal beside it), so it must
         // not count as a presented sheet — otherwise the overlay-owns-
         // keyboard gate would refuse the terminal first responder.
@@ -71,15 +71,15 @@ extension MainView {
     var edgeSidebarModalPresented: Bool {
         let baseFlags = showSettings ||
             showToolbarSettings ||
-            (showConnectionSidebar && !edgeSidebarUsesDrawer(.connections)) ||
+            (showConnectionSidebar && edgeSidebarUsesExternalPresentation(.connections)) ||
             showPasswordPromptSheet ||
             showKeyboardInteractivePrompt ||
             showKeyResolutionSheet ||
             showYubiKeyPINPrompt ||
-            (showThemePickerOverlay && !edgeSidebarUsesDrawer(.themePicker)) ||
-            (showQuickSettingsOverlay && !edgeSidebarUsesDrawer(.quickSettings)) ||
+            (showThemePickerOverlay && edgeSidebarUsesExternalPresentation(.themePicker)) ||
+            (showQuickSettingsOverlay && edgeSidebarUsesExternalPresentation(.quickSettings)) ||
             showKeyboardChooser ||
-            (showOpenInFolderOverlay && !edgeSidebarUsesDrawer(.openInFolder)) ||
+            (showOpenInFolderOverlay && edgeSidebarUsesExternalPresentation(.openInFolder)) ||
             (httpCaptureHoldsKeyboard && !isPhone) ||
             (fileManagerOwnsKeyboard && !fileManagerUsesEdgeSidebar) ||
             agentInboxOwnsKeyboard ||
@@ -90,8 +90,9 @@ extension MainView {
             // it, i.e. steal focus. The exception is keyboard mode, where the
             // HUD's search field is guaranteed to take focus (the toggle cycle
             // refuses keyboard mode while the disabled/locked pane is showing).
-            (showClipboardManager && !edgeSidebarUsesDrawer(.clipboardManager) &&
+            (showClipboardManager && edgeSidebarUsesExternalPresentation(.clipboardManager) &&
                 (UIDevice.current.userInterfaceIdiom == .phone || clipboardManagerKeyboardMode)) ||
+            (edgeSidebarColumnOwns(.clipboardManager) && clipboardManagerKeyboardMode) ||
             connectionInfoToShow != nil ||
             tmuxDashboardRequest != nil ||
             herdrDashboardRequest != nil ||
@@ -100,7 +101,7 @@ extension MainView {
             trzszTransferOriginRequest != nil ||
             trzszTransferIncomingOffer != nil
         #if !CHINA_BUILD
-        return baseFlags || (showAIAgentOverlay && !edgeSidebarUsesDrawer(.aiAgent))
+        return baseFlags || (showAIAgentOverlay && edgeSidebarUsesExternalPresentation(.aiAgent))
         #else
         return baseFlags
         #endif
@@ -198,7 +199,7 @@ extension MainView {
             // Clipboard manager: compact-width presentation (iPhone). Regular
             // width mounts the draggable glass HUD in floatingHUDOverlays() instead.
             .sheet(isPresented: Binding(
-                get: { showClipboardManager && !edgeSidebarUsesDrawer(.clipboardManager) && UIDevice.current.userInterfaceIdiom == .phone },
+                get: { showClipboardManager && edgeSidebarUsesExternalPresentation(.clipboardManager) && UIDevice.current.userInterfaceIdiom == .phone },
                 set: { if !$0 { showClipboardManager = false } }
             )) {
                 ClipboardManagerOverlay(
@@ -332,7 +333,7 @@ extension MainView {
                 if pending { consumePendingAgentInboxOpen() }
             }
             .modifier(ConnectionSidebarModifier(
-                showSidebar: Binding(get: { showConnectionSidebar && !edgeSidebarUsesDrawer(.connections) }, set: { showConnectionSidebar = $0 }),
+                showSidebar: Binding(get: { showConnectionSidebar && edgeSidebarUsesExternalPresentation(.connections) }, set: { showConnectionSidebar = $0 }),
                 contentID: AnyHashable(connectionSidebarInitialTab),
                 preventDismissal: terminals.isEmpty,
                 themeColors: sheetTheme.themeColors,
@@ -401,7 +402,7 @@ extension MainView {
             }
             #if !CHINA_BUILD
             .modifier(AIAgentSheetModifier(
-                showOverlay: Binding(get: { showAIAgentOverlay && !edgeSidebarUsesDrawer(.aiAgent) }, set: { showAIAgentOverlay = $0 }),
+                showOverlay: Binding(get: { showAIAgentOverlay && edgeSidebarUsesExternalPresentation(.aiAgent) }, set: { showAIAgentOverlay = $0 }),
                 session: currentAIAgentSession(),
                 tabID: terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].id : UUID()
             ))
