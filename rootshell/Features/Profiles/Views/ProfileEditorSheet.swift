@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 struct ProfileShortcutEditorRequest: Identifiable {
     let id = UUID()
@@ -82,6 +83,7 @@ extension View {
 
 /// Sheet for creating or editing a connection profile
 struct ProfileEditorSheet: View {
+    private static let logger = Logger(subsystem: "com.rootshell", category: "ProfileEditor")
     @Environment(\.dismiss) private var dismiss
     @Environment(\.sheetThemeColors) private var sheetThemeColors
     @Environment(\.profileShortcutEditorPresenter) private var shortcutEditorPresenter
@@ -103,6 +105,7 @@ struct ProfileEditorSheet: View {
     // Connection protocol state
     @State private var localConfig = LocalProfileConfig()
     @State private var profileThemeName: String = ""
+    @State private var showingThemePicker = false
     @State private var connectionProtocol: ConnectionProtocol = .ssh
 
     // Keeps the host/username/jump fields when the picker flips between the
@@ -382,6 +385,21 @@ struct ProfileEditorSheet: View {
         .navigationDestination(isPresented: $showingIconPicker) {
             ProfileIconPicker(selectedIcon: $iconName, host: iconHost)
         }
+        .navigationDestination(isPresented: $showingThemePicker) {
+            ThemePickerOverlay(
+                isPresented: $showingThemePicker,
+                windowId: "",
+                currentTabId: nil,
+                onThemeSelected: { themeName, _ in
+                    Self.logger.debug("Profile theme selected: \(themeName, privacy: .public)")
+                    profileThemeName = themeName
+                },
+                fillsSidebar: true,
+                profileSelection: profileThemeName
+            )
+            .navigationTitle("Theme")
+            .navigationBarTitleDisplayMode(.inline)
+        }
         .sheet(isPresented: $showingFolderPicker) {
             FolderPickerSheet(selectedPath: $folderPath)
                 .themedSubSheet(sheetThemeColors)
@@ -621,16 +639,23 @@ struct ProfileEditorSheet: View {
 
     private var appearanceSection: some View {
         Section("Appearance") {
-            Picker("Theme", selection: $profileThemeName) {
-                Text("Use Default").tag("")
-                if !profileThemeName.isEmpty,
-                   !ThemeManager.shared.availableThemes.contains(where: { $0.name == profileThemeName }) {
-                    Text("\(profileThemeName) (Unavailable)").tag(profileThemeName)
+            Button {
+                Self.logger.debug("Open profile theme picker")
+                showingThemePicker = true
+            } label: {
+                HStack {
+                    Text("Theme")
+                    Spacer()
+                    Text(profileThemeName.isEmpty ? String(localized: "Use Default") : profileThemeName)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
                 }
-                ForEach(ThemeManager.shared.availableThemes, id: \.name) { theme in
-                    Text(theme.name).tag(theme.name)
-                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .themedRow()
             Text("Applied to the entire tab when this profile opens, including split panes.")
                 .font(.caption)
