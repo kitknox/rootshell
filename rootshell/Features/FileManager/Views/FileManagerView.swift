@@ -56,12 +56,16 @@ struct FileManagerView: View {
                         paneView(.right, width: paneWidth)
                     }
                 } else {
-                    paneSwitcher
-                    Divider()
-                    paneView(manager.activeSide, width: paneWidth)
+                    if style != .sidebar {
+                        paneSwitcher
+                        Divider()
+                    }
+                    paneView(manager.activeSide, width: paneWidth, embedsPaneSwitcher: style == .sidebar)
                 }
                 TransferQueueView(manager: manager)
-                hintBar
+                if style != .sidebar {
+                    hintBar
+                }
             }
         }
         // The sidebar paints its own themed fill; the iPhone sheet needs one here.
@@ -104,7 +108,7 @@ struct FileManagerView: View {
         }
     }
 
-    private func paneView(_ side: FilePaneModel.Side, width: CGFloat) -> some View {
+    private func paneView(_ side: FilePaneModel.Side, width: CGFloat, embedsPaneSwitcher: Bool = false) -> some View {
         FilePaneView(
             pane: manager.pane(side),
             manager: manager,
@@ -112,7 +116,8 @@ struct FileManagerView: View {
             canFocus: canFocus && manager.sheet == nil,
             columns: width >= Self.detailedColumnsMinPaneWidth ? .detailed : .compact,
             otherPaneName: manager.pane(side.other).endpoint.displayName,
-            onClose: onClose
+            onClose: onClose,
+            embedsPaneSwitcher: embedsPaneSwitcher
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())

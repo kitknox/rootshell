@@ -19,6 +19,7 @@ struct FilePaneView: View {
     let columns: FileRowView.Columns
     let otherPaneName: String
     let onClose: () -> Void
+    var embedsPaneSwitcher = false
 
     @State private var arrowRepeat = ArrowKeyRepeatManager()
     @State private var isSelecting = false
@@ -69,22 +70,8 @@ struct FilePaneView: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            Button { manager.sheet = .connect(pane.id) } label: {
-                HStack(spacing: 6) {
-                    if let domain = pane.endpoint.faviconDomain {
-                        FaviconIcon(domain: domain, fallbackSymbol: pane.endpoint.symbol, size: 15, tint: nil)
-                    } else {
-                        Image(systemName: pane.endpoint.symbol)
-                    }
-                    Text(pane.endpoint.displayName).fontWeight(.semibold).lineLimit(1)
-                    if pane.status == .connecting {
-                        ProgressView().controlSize(.mini)
-                    }
-                    Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
-                }
-            }
-            .help(FileManagerShortcut.shortcut(for: .connect).helpText)
-            .accessibilityLabel(String(localized: "Location: \(pane.endpoint.displayName)", comment: "File manager endpoint button"))
+            locationControl
+                .fixedSize(horizontal: embedsPaneSwitcher, vertical: false)
 
             Spacer(minLength: 4)
 
@@ -93,17 +80,67 @@ struct FilePaneView: View {
             navButton("arrow.up", command: .parent, enabled: !pane.path.isEmpty && pane.path != "/") { pane.goUp() }
             navButton("arrow.clockwise", command: .refresh, enabled: !pane.isBusy) { pane.refresh() }
             if !usesPointerSemantics {
-                Button(isSelecting ? String(localized: "Done", comment: "File manager: leave selection mode") : String(localized: "Select", comment: "File manager: enter selection mode")) {
+                Button {
                     isSelecting.toggle()
                     if !isSelecting { pane.selection.clear() }
+                } label: {
+                    if embedsPaneSwitcher {
+                        Image(systemName: isSelecting ? "checkmark.circle.fill" : "checkmark.circle")
+                    } else {
+                        Text(isSelecting ? String(localized: "Done", comment: "File manager: leave selection mode") : String(localized: "Select", comment: "File manager: enter selection mode"))
+                    }
                 }
                 .font(.callout)
+                .accessibilityLabel(isSelecting ? Text("Done") : Text("Select"))
             }
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, 10)
         .padding(.top, 8)
         .padding(.bottom, 4)
+    }
+
+    private var locationControl: some View {
+        Group {
+            if embedsPaneSwitcher {
+                Menu {
+                    Picker("Location", selection: Binding(get: { manager.activeSide }, set: { side in
+                        if manager.activeSide != side { manager.perform(.switchPane) }
+                    })) {
+                        ForEach(FilePaneModel.Side.allCases, id: \.self) { side in
+                            Text("\(side == .left ? "A" : "B") · \(manager.pane(side).endpoint.displayName)").tag(side)
+                        }
+                    }
+                    Divider()
+                    Button("Connect", systemImage: "network") { manager.perform(.connect) }
+                } label: {
+                    locationLabel
+                }
+            } else {
+                Button {
+                    manager.activeSide = pane.id
+                    manager.perform(.connect)
+                } label: {
+                    locationLabel
+                }
+            }
+        }
+        .help(FileManagerShortcut.shortcut(for: .connect).helpText)
+        .accessibilityLabel(String(localized: "Location: \(pane.endpoint.displayName)", comment: "File manager endpoint button"))
+    }
+
+    private var locationLabel: some View {
+        HStack(spacing: 6) {
+            if let domain = pane.endpoint.faviconDomain {
+                FaviconIcon(domain: domain, fallbackSymbol: pane.endpoint.symbol, size: 15, tint: nil)
+            } else {
+                Image(systemName: pane.endpoint.symbol)
+            }
+            Text(embedsPaneSwitcher ? (pane.id == .left ? "A" : "B") : pane.endpoint.displayName)
+                .fontWeight(.semibold).lineLimit(1)
+            if pane.status == .connecting { ProgressView().controlSize(.mini) }
+            Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
+        }
     }
 
     private func navButton(_ symbol: String, command: FileManagerCommand, enabled: Bool, action: @escaping () -> Void) -> some View {
