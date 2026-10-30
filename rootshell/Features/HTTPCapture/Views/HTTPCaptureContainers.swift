@@ -19,7 +19,6 @@ struct HTTPCaptureSidebarView: View {
     let side: EdgeSidebarSide
     let onClose: () -> Void
     let onSwitchPresentation: (PanelPresentation) -> Void
-    let footer: AnyView
 
     static let minWidth: CGFloat = 320
     static let defaultWidth: CGFloat = 480
@@ -54,11 +53,8 @@ struct HTTPCaptureSidebarView: View {
     var body: some View {
         HStack(spacing: 0) {
             if side == .trailing { resizeDivider }
-            VStack(spacing: 0) {
                 HTTPCaptureView(model: model, style: .sidebar, onClose: onClose, onSwitchPresentation: onSwitchPresentation)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                footer
-            }
             .background(background)
             .clipShape(columnShape)
             .shadow(color: .black.opacity(roundedPanes ? 0 : 0.15), radius: 8, x: side == .leading ? 2 : -2, y: 0)

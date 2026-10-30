@@ -181,7 +181,7 @@ extension MainView {
     /// Returns the theme picker overlay.
     @ViewBuilder
     func themePickerOverlayView(isPresented: Binding<Bool>) -> some View {
-        if showThemePickerOverlay && !edgeSidebarUsesDrawer(.themePicker) {
+        if showThemePickerOverlay && edgeSidebarUsesExternalPresentation(.themePicker) {
             // Hosted so glass + keyboard dismissal work on macOS (a plain SwiftUI
             // overlay let .onKeyPress steal the X-button click and got preempted by
             // the app's Cmd-Shift-T menu shortcut). Draggable by its chrome; the pan
@@ -209,7 +209,7 @@ extension MainView {
     /// On iPhone the manager is presented as a sheet instead (MainViewPresentation).
     @ViewBuilder
     func clipboardManagerOverlayView(isPresented: Binding<Bool>, keyboardMode: Binding<Bool>) -> some View {
-        if showClipboardManager && !edgeSidebarUsesDrawer(.clipboardManager) && UIDevice.current.userInterfaceIdiom != .phone {
+        if showClipboardManager && edgeSidebarUsesExternalPresentation(.clipboardManager) && UIDevice.current.userInterfaceIdiom != .phone {
             DraggableHUDContainer(
                 dismissShortcuts: [.escape],
                 // Answer the app's toggle_clipboard_manager menu action while the
@@ -345,12 +345,12 @@ extension MainView {
             // Search overlay for focused terminal
             searchOverlay(searchStateVersion: searchStateVersion)
 
-            if showQuickSettingsOverlay && !edgeSidebarUsesDrawer(.quickSettings) {
+            if showQuickSettingsOverlay && edgeSidebarUsesExternalPresentation(.quickSettings) {
                 QuickSettingsHUD(isPresented: $showQuickSettingsOverlay)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            if showOpenInFolderOverlay && !edgeSidebarUsesDrawer(.openInFolder), let model = openInFolderModel {
+            if showOpenInFolderOverlay && edgeSidebarUsesExternalPresentation(.openInFolder), let model = openInFolderModel {
                 OpenInFolderHUD(isPresented: $showOpenInFolderOverlay, model: model, shortcut: openInFolderShortcut) { directory, placement in
                     openInFolder(model.target, directory: directory, placement: placement)
                 }
@@ -375,13 +375,13 @@ extension MainView {
                 keyboardMode: $clipboardManagerKeyboardMode
             )
 
-            if showIPLookup && !edgeSidebarUsesDrawer(.ipLookup), let model = ipLookupModel {
+            if showIPLookup && edgeSidebarUsesExternalPresentation(.ipLookup), let model = ipLookupModel {
                 IPLookupHUD(isPresented: $showIPLookup, model: model)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             #if canImport(FluidAudio) && !CHINA_BUILD
-            if showDictationHUD && !edgeSidebarUsesDrawer(.dictation) {
+            if showDictationHUD && edgeSidebarUsesExternalPresentation(.dictation) {
                 DictationHUD(isPresented: $showDictationHUD) { dictationTarget }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -1361,52 +1361,57 @@ extension MainView {
                 .opacity(terminalOpacity)
             tabRevealBackdropFill
                 .opacity(terminalOpacity)
-            // Text Above Effect: pane backgrounds and the exposé backdrop,
-            // then the effect, then glyph-only terminals and exposé mirrors.
-            if textAboveEffect {
-                terminalTabsView(geometry: geometry, width: width, layer: .underlay)
+            if terminals.isEmpty {
+                EmptyStateResponder(onNewTab: addNewTab, onNewLocalShell: handleNewTabCommand)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                // Text Above Effect: pane backgrounds and the exposé backdrop,
+                // then the effect, then glyph-only terminals and exposé mirrors.
+                if textAboveEffect {
+                    terminalTabsView(geometry: geometry, width: width, layer: .underlay)
+                        .opacity(terminalOpacity)
+                        .allowsHitTesting(false)
+                    tabExposeBackdropHost(width: width)
+                    effectOverlay(leadingExtension: effectLeadingExtension)
+                }
+                terminalTabsView(geometry: geometry, width: width)
                     .opacity(terminalOpacity)
-                    .allowsHitTesting(false)
-                tabExposeBackdropHost(width: width)
-                effectOverlay(leadingExtension: effectLeadingExtension)
-            }
-            terminalTabsView(geometry: geometry, width: width)
-                .opacity(terminalOpacity)
-            tmuxReconnectingSwipeFallback
-            if !textAboveEffect {
-                effectOverlay(leadingExtension: effectLeadingExtension)
-            }
-            terminalOverlays()
-                .modifier(DuoControlClearance())
-                // A see-through exposé backdrop would show them.
-                .opacity(tabExpose.isActive ? 0 : 1)
-            if tabTransferDropOverlayVisible {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onDrop(
-                        of: [TabTransferCoordinator.dragUTType],
-                        delegate: WindowTabTransferDropDelegate(
-                            windowId: windowId,
-                            insertionIndex: {
-                                tabsModel.selectedTabID
-                                    .flatMap { tabsModel.index(of: $0) }
-                                    .map { $0 + 1 }
-                            },
-                            groupOverride: {
-                                tabsModel.isGroupedModeEnabled ? tabsModel.activeGroupID : nil
-                            },
-                            isWindowFocused: {
-                                isWindowFocused
-                            }
+                tmuxReconnectingSwipeFallback
+                if !textAboveEffect {
+                    effectOverlay(leadingExtension: effectLeadingExtension)
+                }
+                terminalOverlays()
+                    .modifier(DuoControlClearance())
+                    // A see-through exposé backdrop would show them.
+                    .opacity(tabExpose.isActive ? 0 : 1)
+                if tabTransferDropOverlayVisible {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onDrop(
+                            of: [TabTransferCoordinator.dragUTType],
+                            delegate: WindowTabTransferDropDelegate(
+                                windowId: windowId,
+                                insertionIndex: {
+                                    tabsModel.selectedTabID
+                                        .flatMap { tabsModel.index(of: $0) }
+                                        .map { $0 + 1 }
+                                },
+                                groupOverride: {
+                                    tabsModel.isGroupedModeEnabled ? tabsModel.activeGroupID : nil
+                                },
+                                isWindowFocused: {
+                                    isWindowFocused
+                                }
+                            )
                         )
-                    )
+                }
+                // Tab exposé: live previews pulled down over the terminal. Last so it
+                // covers the HUD overlays; inert (hit-test nil) while hidden. The
+                // already-mounted background effect temporarily rises above it while
+                // active so its animation remains continuous through the transition.
+                tabExposeHost(geometry: geometry, width: width)
+                    .modifier(DuoControlClearance())
             }
-            // Tab exposé: live previews pulled down over the terminal. Last so it
-            // covers the HUD overlays; inert (hit-test nil) while hidden. The
-            // already-mounted background effect temporarily rises above it while
-            // active so its animation remains continuous through the transition.
-            tabExposeHost(geometry: geometry, width: width)
-                .modifier(DuoControlClearance())
         }
         .frame(width: width)
         // Disable SwiftUI's automatic keyboard avoidance - we handle it manually via terminalBottomPadding
@@ -1448,12 +1453,17 @@ extension MainView {
     }
 
     struct TerminalRowColumns {
+        /// Existing header offset. Wide pinned mode maps this to the leading column.
         let docked: CGFloat
+        let leadingEdgeSidebar: CGFloat
+        let trailingEdgeSidebar: CGFloat
         let aiSidebar: CGFloat
         let fileManager: CGFloat
         let httpCapture: CGFloat
         let agentInbox: CGFloat
         let terminal: CGFloat
+
+        static let minimumTerminalWidth: CGFloat = 320
     }
 
     /// Column widths for a content row `width` wide, after Rounded Panes' outer
@@ -1461,7 +1471,69 @@ extension MainView {
     func terminalRowColumns(width: CGFloat) -> TerminalRowColumns {
         let cardGap: CGFloat = roundedPanes ? PaneCardStyle.gap : 0
         let rowWidth = width - cardGap * 2
+        let leadingEdgePresented = edgeSidebarColumnIsPresented(.leading)
+        let trailingEdgePresented = edgeSidebarColumnIsPresented(.trailing)
+        let minimumTerminalWidth = TerminalRowColumns.minimumTerminalWidth
+
+        if usesPinnedWideEdgeSidebarLayout && (leadingEdgePresented || trailingEdgePresented) {
+            let edgeCount = CGFloat((leadingEdgePresented ? 1 : 0) + (trailingEdgePresented ? 1 : 0))
+            let edgeCardGap: CGFloat = roundedPanes ? PaneCardStyle.gap : 0
+            let edgeMinimum = TabSidebarLayout.minWidth
+            let terminalWidthFloor = min(minimumTerminalWidth, max(0, rowWidth - (edgeMinimum + edgeCardGap) * edgeCount))
+            let preferredEdgeWidth = min(max(tabSidebarDockedWidth, edgeMinimum), rowWidth * 0.5)
+            let edgeBudget = max(0, rowWidth - terminalWidthFloor)
+            let preferredEdgeSlotWidth = preferredEdgeWidth + edgeCardGap
+            let edgeScale = min(1, edgeBudget / max(preferredEdgeSlotWidth * edgeCount, 1))
+            let leadingEdgeWidth = leadingEdgePresented ? preferredEdgeSlotWidth * edgeScale : 0
+            let trailingEdgeWidth = trailingEdgePresented ? preferredEdgeSlotWidth * edgeScale : 0
+
+            #if !CHINA_BUILD
+            let currentTabId = terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].id : UUID()
+            let desiredAISidebarWidth = shouldShowAISidebar(currentTabId: currentTabId)
+                && !edgeSidebarColumnOwns(.aiAgent) ? aiAgentSidebarWidth : 0
+            #else
+            let desiredAISidebarWidth: CGFloat = 0
+            #endif
+            let desiredFileManagerWidth = fileManagerShowsSidebar && !edgeSidebarColumnOwns(.fileManager)
+                ? min(fileManagerSidebarWidth, max(FileManagerSidebarView.minWidth, rowWidth - minimumTerminalWidth))
+                : 0
+            #if !CHINA_BUILD
+            let desiredHTTPCaptureWidth = httpCaptureShowsSidebar && !edgeSidebarColumnOwns(.httpCapture)
+                ? min(httpCaptureSidebarWidth, max(HTTPCaptureSidebarView.minWidth, rowWidth - minimumTerminalWidth))
+                : 0
+            #else
+            let desiredHTTPCaptureWidth: CGFloat = 0
+            #endif
+            let desiredAgentInboxWidth = agentInboxShowsSidebar
+                ? min(agentInboxSidebarWidth, max(AgentInboxSidebarView.minWidth, rowWidth - minimumTerminalWidth))
+                : 0
+            let legacyWidthDemand = desiredAISidebarWidth + desiredFileManagerWidth
+                + desiredHTTPCaptureWidth + desiredAgentInboxWidth
+            let legacyWidthBudget = max(0, rowWidth - terminalWidthFloor - leadingEdgeWidth - trailingEdgeWidth)
+            let legacyScale = min(1, legacyWidthBudget / max(legacyWidthDemand, 1))
+            let aiSidebarWidth = desiredAISidebarWidth * legacyScale
+            let fileManagerWidth = desiredFileManagerWidth * legacyScale
+            let httpCaptureWidth = desiredHTTPCaptureWidth * legacyScale
+            let agentInboxWidth = desiredAgentInboxWidth * legacyScale
+            let terminalWidth = max(0, rowWidth - leadingEdgeWidth - trailingEdgeWidth
+                - aiSidebarWidth - fileManagerWidth - httpCaptureWidth - agentInboxWidth)
+
+            return TerminalRowColumns(
+                docked: leadingEdgeWidth,
+                leadingEdgeSidebar: leadingEdgeWidth,
+                trailingEdgeSidebar: trailingEdgeWidth,
+                aiSidebar: aiSidebarWidth,
+                fileManager: fileManagerWidth,
+                httpCapture: httpCaptureWidth,
+                agentInbox: agentInboxWidth,
+                terminal: terminalWidth
+            )
+        }
+
         let dockedWidth = dockedTabSidebarWidth(windowWidth: width)
+        let tabSwitcherSide = edgeSidebarAssignment.side(of: .tabSwitcher)
+        let leadingEdgeWidth = tabSidebarIsDocked && tabSwitcherSide == .leading ? dockedWidth : 0
+        let trailingEdgeWidth = tabSidebarIsDocked && tabSwitcherSide == .trailing ? dockedWidth : 0
         #if !CHINA_BUILD
         let currentTabId = terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].id : UUID()
         let sidebarWidth = shouldShowAISidebar(currentTabId: currentTabId) ? aiAgentSidebarWidth : 0
@@ -1470,26 +1542,28 @@ extension MainView {
         #endif
         // The file manager column never squeezes the terminal below 320pt.
         let desiredFileManagerWidth = fileManagerShowsSidebar
-            ? min(fileManagerSidebarWidth, max(FileManagerSidebarView.minWidth, rowWidth - dockedWidth - sidebarWidth - 320))
+            ? min(fileManagerSidebarWidth, max(FileManagerSidebarView.minWidth, rowWidth - dockedWidth - sidebarWidth - minimumTerminalWidth))
             : 0
         #if !CHINA_BUILD
         let desiredHTTPCaptureWidth = httpCaptureShowsSidebar
-            ? min(httpCaptureSidebarWidth, max(HTTPCaptureSidebarView.minWidth, rowWidth - dockedWidth - sidebarWidth - 320))
+            ? min(httpCaptureSidebarWidth, max(HTTPCaptureSidebarView.minWidth, rowWidth - dockedWidth - sidebarWidth - minimumTerminalWidth))
             : 0
         #else
         let desiredHTTPCaptureWidth: CGFloat = 0
         #endif
         let agentInboxWidth = agentInboxShowsSidebar
-            ? min(agentInboxSidebarWidth, max(AgentInboxSidebarView.minWidth, rowWidth - dockedWidth - sidebarWidth - 320))
+            ? min(agentInboxSidebarWidth, max(AgentInboxSidebarView.minWidth, rowWidth - dockedWidth - sidebarWidth - minimumTerminalWidth))
             : 0
         // Opposite edges can both hold tools. Clamp their live widths together
         // without overwriting the user's saved resize preferences.
-        let panelBudget = max(0, rowWidth - dockedWidth - sidebarWidth - agentInboxWidth - 320)
+        let panelBudget = max(0, rowWidth - dockedWidth - sidebarWidth - agentInboxWidth - minimumTerminalWidth)
         let panelScale = min(1, panelBudget / max(desiredFileManagerWidth + desiredHTTPCaptureWidth, 1))
         let fileManagerWidth = desiredFileManagerWidth * panelScale
         let httpCaptureWidth = desiredHTTPCaptureWidth * panelScale
         return TerminalRowColumns(
             docked: dockedWidth,
+            leadingEdgeSidebar: leadingEdgeWidth,
+            trailingEdgeSidebar: trailingEdgeWidth,
             aiSidebar: sidebarWidth,
             fileManager: fileManagerWidth,
             httpCapture: httpCaptureWidth,
@@ -1501,11 +1575,12 @@ extension MainView {
     @ViewBuilder
     func terminalAndSidebarContent(geometry: GeometryProxy, theme: ResolvedTabBarTheme) -> some View {
         let currentTabId = terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].id : UUID()
-        // Docked (pinned) tab sidebar: a column on the tab switcher's side.
-        // Available on both China and non-China builds.
-        let docked = tabSidebarIsDocked
-        let dockedWidth = dockedTabSidebarWidth(windowWidth: geometry.size.width)
-        let dockedSidebarTheme: ResolvedSheetTheme? = docked ? resolvedSheetTheme() : nil
+        let columns = terminalRowColumns(width: geometry.size.width)
+        let hasPinnedEdgeColumns = columns.leadingEdgeSidebar > 0 || columns.trailingEdgeSidebar > 0
+        let dockedWidth = columns.docked
+        let pinnedSidebarTheme: ResolvedSheetTheme? = hasPinnedEdgeColumns ? resolvedSheetTheme() : nil
+        let dockedSidebarTheme: ResolvedSheetTheme? = tabSidebarIsDocked && !usesPinnedWideEdgeSidebarLayout
+            ? pinnedSidebarTheme : nil
         // Rounded panes inset the whole row; columns divide what remains.
         let cardGap: CGFloat = roundedPanes ? PaneCardStyle.gap : 0
         // Floating tabs leave slack under them in the header row, which already
@@ -1522,7 +1597,6 @@ extension MainView {
         #else
         let cardBackdrop: Color? = nil
         #endif
-        let columns = terminalRowColumns(width: geometry.size.width)
         let tabSwitcherSide = edgeSidebarAssignment.side(of: .tabSwitcher)
         let fileManagerSide = edgeSidebarAssignment.side(of: .fileManager)
         let httpCaptureSide = edgeSidebarAssignment.side(of: .httpCapture)
@@ -1546,13 +1620,10 @@ extension MainView {
         )
 
         HStack(spacing: 0) {
-            if tabSwitcherSide == .leading, let dockedSidebarTheme {
-                dockedTabSidebar(geometry: geometry, theme: dockedSidebarTheme)
-                    .frame(width: dockedWidth)
+            if columns.leadingEdgeSidebar > 0, let pinnedSidebarTheme {
+                pinnedEdgeSidebar(side: .leading, geometry: geometry, theme: pinnedSidebarTheme)
+                    .frame(width: columns.leadingEdgeSidebar)
                     .transition(.move(edge: .leading))
-                    // Paint the docked column above the terminal content so an
-                    // effect spanning in from the terminal stays behind its
-                    // controls and resize divider.
                     .zIndex(1)
             }
 
@@ -1566,20 +1637,22 @@ extension MainView {
             #endif
 
             #if !CHINA_BUILD
-            if edgeSidebarAssignment.side(of: .aiAgent) == .leading, shouldShowSidebar, let session = aiAgentSessions[currentTabId] {
+            if edgeSidebarAssignment.side(of: .aiAgent) == .leading, shouldShowSidebar,
+               !edgeSidebarColumnOwns(.aiAgent), let session = aiAgentSessions[currentTabId] {
                 aiSidebarView(currentTabId: currentTabId, session: session, sidebarWidth: sidebarWidth, totalWidth: geometry.size.width)
             }
             #endif
 
-            terminalContentZStack(
+            applyDuoChrome(terminalContentZStack(
                 geometry: geometry,
                 width: terminalWidth,
                 effectLeadingExtension: backgroundEffectIncludesPinnedSidebar
                     && backgroundSidebarEffectID == BackgroundEffectSelection.followTerminalID
-                    && tabSwitcherSide == .leading
-                    ? dockedWidth
+                    && columns.leadingEdgeSidebar > 0
+                    ? columns.leadingEdgeSidebar
                     : 0
-            )
+            ), inTerminalColumn: true)
+            .frame(width: terminalWidth)
             .overlay(alignment: .bottomTrailing) {
                 if showRemotePorts, let portsTerminal {
                     ListeningPortsPill(
@@ -1602,9 +1675,9 @@ extension MainView {
                 fileManagerSidebarColumn(width: fileManagerWidth, totalWidth: geometry.size.width)
             }
 
-            if tabSwitcherSide == .trailing, let dockedSidebarTheme {
-                dockedTabSidebar(geometry: geometry, theme: dockedSidebarTheme)
-                    .frame(width: dockedWidth)
+            if columns.trailingEdgeSidebar > 0, let pinnedSidebarTheme {
+                pinnedEdgeSidebar(side: .trailing, geometry: geometry, theme: pinnedSidebarTheme)
+                    .frame(width: columns.trailingEdgeSidebar)
                     .transition(.move(edge: .trailing))
                     .zIndex(1)
             }
@@ -1616,7 +1689,8 @@ extension MainView {
                 httpCaptureSidebarColumn(width: httpCaptureWidth, totalWidth: geometry.size.width)
             }
 
-            if edgeSidebarAssignment.side(of: .aiAgent) == .trailing, shouldShowSidebar, let session = aiAgentSessions[currentTabId] {
+            if edgeSidebarAssignment.side(of: .aiAgent) == .trailing, shouldShowSidebar,
+               !edgeSidebarColumnOwns(.aiAgent), let session = aiAgentSessions[currentTabId] {
                 aiSidebarView(currentTabId: currentTabId, session: session, sidebarWidth: sidebarWidth, totalWidth: geometry.size.width)
             }
             #endif
@@ -1701,11 +1775,12 @@ extension MainView {
         // Keyboard too: a floating keyboard reports a strip-sized keyboard
         // region that would lift the cards out of the strip.
         .ignoresSafeArea([.container, .keyboard], edges: paneCardsEnterHomeIndicatorStrip ? .bottom : [])
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: docked)
-        // Animate width changes when the docked column toggles/snaps, but never
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: hasPinnedEdgeColumns)
+        // Animate width changes when a pinned edge column toggles/snaps, but never
         // during the live drag (the gesture drives width directly). Outside the
-        // CHINA gate — the docked path ships on China builds too.
+        // CHINA gate — the legacy tab-sidebar path ships on China builds too.
         .animation(tabSidebarIsDragging ? .none : .interactiveSpring(), value: dockedWidth)
+        .animation(tabSidebarIsDragging ? .none : .interactiveSpring(), value: columns.trailingEdgeSidebar)
         .animation(fileManagerSidebarIsDragging ? .none : .spring(response: 0.3, dampingFraction: 0.85), value: fileManagerWidth)
         .animation(agentInboxSidebarIsDragging ? .none : .spring(response: 0.3, dampingFraction: 0.85), value: agentInboxWidth)
         #if !CHINA_BUILD
@@ -1774,15 +1849,15 @@ extension MainView {
         return holes
     }
 
-    /// The pinned tab sidebar as a docked column on the tab switcher's side.
-    /// Reuses the same content the floating overlay hosts.
+    /// A pinned edge column. Reuses the same content the floating drawer hosts.
     @ViewBuilder
-    private func dockedTabSidebar(
+    private func pinnedEdgeSidebar(
+        side: EdgeSidebarSide,
         geometry: GeometryProxy,
         theme: ResolvedSheetTheme
     ) -> some View {
-        let side = edgeSidebarAssignment.side(of: .tabSwitcher)
-        HStack(spacing: 0) {
+        let innerGap: CGFloat = usesPinnedWideEdgeSidebarLayout && roundedPanes ? PaneCardStyle.gap : 0
+        let card = HStack(spacing: 0) {
             if side == .trailing {
                 dockedTabSidebarDivider(side: .right, geometry: geometry)
             }
@@ -1799,18 +1874,35 @@ extension MainView {
             }
         }
         .frame(maxHeight: .infinity)
+        .background {
+            if usesPinnedWideEdgeSidebarLayout {
+                dockedTabSidebarBackground(theme: theme)
+            }
+        }
+        .clipShape(PaneCardStyle.shape(rounded: roundedPanes))
         // Match the floating panel's `.tint(...)` so standard controls and
-        // context menus in the docked column carry the theme accent too (and the
+        // context menus in the edge column carry the theme accent too (and the
         // divider's drag-accent resolves to the theme color). The sidebar's own
         // glyphs use the explicit `accentTint`, since `.tint` doesn't reach
         // `Color.accentColor` inside its hosting controller — see
         // VerticalTabSidebar.accentTint. `nil` = no override.
         .tint(theme.accentColor)
         // Match the floating panel (TabSidebarPresentation): without this the
-        // docked column's `.primary`/`.secondary` content follows the *device*
+        // edge column's `.primary`/`.secondary` content follows the *device*
         // appearance, rendering black-on-dark (unreadable) under a dark theme
         // when the device is in Light mode. `nil` = no override.
         .optionalColorSchemeEnvironment(theme.colorScheme)
+
+        if usesPinnedWideEdgeSidebarLayout {
+            card
+                .paneCardDepth(roundedPanes, shape: PaneCardStyle.shape(rounded: true),
+                               palette: IntegratedTabEdgePalette(
+                                cardSurface: theme.themeColors?.background ?? Color(uiColor: .systemBackground)
+                               ))
+                .padding(side == .leading ? .trailing : .leading, innerGap)
+        } else {
+            card
+        }
     }
 
     /// Resize divider on the column's inner edge. The 1pt line lives inside
@@ -1820,7 +1912,9 @@ extension MainView {
             side: side,
             width: $tabSidebarDockedWidth,
             isDragging: $tabSidebarIsDragging,
-            minWidth: TabSidebarLayout.dockedMinWidth(largeControls: tabSidebarLargeControls),
+            minWidth: usesPinnedWideEdgeSidebarLayout
+                ? TabSidebarLayout.minWidth
+                : TabSidebarLayout.dockedMinWidth(largeControls: tabSidebarLargeControls),
             maxWidth: geometry.size.width * 0.5,
             defaultWidth: TabSidebarLayout.defaultWidth,
             cardGap: roundedPanes ? PaneCardStyle.gap : nil,
@@ -1829,7 +1923,7 @@ extension MainView {
         )
     }
 
-    /// Theme surface below the docked sidebar's share of the continuous effect
+    /// Theme surface below the legacy docked sidebar's share of the continuous effect
     /// canvas. Kept separate from `dockedTabSidebar` so the effect can composite
     /// over the fill while tab rows and controls remain crisp above it.
     private func dockedTabSidebarBackground(theme: ResolvedSheetTheme) -> Color {
@@ -1838,7 +1932,7 @@ extension MainView {
         return (theme.translucentBackground ?? opaque).opacity(transparencyManager.effectiveBackgroundOpacity)
     }
 
-    /// Bottom clearance for the docked tab sidebar's content so it stays
+    /// Bottom clearance for pinned edge content so it stays
     /// clear of whatever occupies the window's bottom edge. Two cases,
     /// mirroring the terminal's own `terminalBottomPadding`:
     ///
@@ -1914,9 +2008,11 @@ extension MainView {
             totalWidth: totalWidth,
             side: edgeSidebarAssignment.side(of: .aiAgent)
         )
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            EdgeSidebarTabBar(pages: edgeSidebarAssignment.pages(on: edgeSidebarAssignment.side(of: .aiAgent)), selection: .aiAgent, onSelect: selectEdgeSidebarPage)
-        }
+        .environment(\.edgeSidebarTitleContext, EdgeSidebarTitleContext(
+            pages: edgeSidebarAssignment.pages(on: edgeSidebarAssignment.side(of: .aiAgent)),
+            selection: .aiAgent,
+            onSelect: selectEdgeSidebarPage
+        ))
         .frame(width: sidebarWidth)
         .transition(AnyTransition.move(edge: .trailing).combined(with: .opacity))
         .tint(sheetAccentColor)

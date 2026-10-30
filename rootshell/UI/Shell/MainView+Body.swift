@@ -240,7 +240,7 @@ extension MainView {
             tabBarAddButton(theme: theme)
             tabBarSettingsButton(theme: theme)
         }
-        if !edgeSidebarAssignment.pages(on: .trailing).isEmpty {
+        if edgeSidebarButtonsEnabled, !edgeSidebarAssignment.pages(on: .trailing).isEmpty {
             tabBarEdgeSidebarButton(side: .trailing, theme: theme)
         }
     }

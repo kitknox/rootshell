@@ -117,7 +117,7 @@ class SidePanelOverlayViewController: UIViewController {
     /// The VC's own notion of presented-ness, distinct from the binding. Only
     /// a genuine transition animates (`guard isPresented != currentPresented`).
     var currentPresented = false
-    private var panelWidth: CGFloat = 420
+    var panelWidth: CGFloat = 420
     private var presentationVersion = 0
     private var lastContentID: AnyHashable?
 

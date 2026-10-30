@@ -275,6 +275,9 @@ struct WindowSettingsView: View {
     @Setting(Settings.Sidebar.translucent) private var tabSidebarTranslucent
     @Setting(Settings.Sidebar.rowLines) private var tabSidebarRowLines
     @Setting(Settings.Sidebar.pageSides) private var edgeSidebarPageSides
+    @Setting(Settings.Sidebar.edgeSidebarButtons) private var edgeSidebarButtonsEnabled
+    @Setting(Settings.Sidebar.pinInWideLayout) private var edgeSidebarsPinnedInWideLayout
+    @Setting(Settings.Sidebar.openRightInWideLayout) private var edgeSidebarOpensRightInWideLayout
     @Setting(Settings.Window.splitFocusBorderStyle) private var splitFocusBorderStyle
     @Setting(Settings.Window.splitFocusBorderColor) private var splitFocusBorderColor
     @Setting(Settings.Window.splitFocusBorderCustomColor) private var splitFocusBorderCustomHex
@@ -546,10 +549,34 @@ struct WindowSettingsView: View {
             }
 
             Section {
+                SettingDescribedToggle(
+                    Settings.Sidebar.pinInWideLayout,
+                    title: "Pin Sidebars in Wide Layout",
+                    description: "Show open sidebars beside the terminal in landscape and on unfolded Duo. Portrait keeps the floating drawer."
+                )
+                .themedRow()
+                SettingDescribedToggle(
+                    Settings.Sidebar.openRightInWideLayout,
+                    title: "Open Right Sidebar Automatically",
+                    description: "Also open the right sidebar when entering a wide layout. The left sidebar opens by default."
+                )
+                .themedRow()
+                .disabled(!edgeSidebarsPinnedInWideLayout)
+                SettingToggle(Settings.Sidebar.edgeSidebarButtons, title: "Show Sidebar Buttons")
+                    .themedRow()
                 sidebarToolsPicker(.leading)
                 sidebarToolsPicker(.trailing)
             } header: {
                 Text("Sidebars")
+            }
+            .onChange(of: edgeSidebarButtonsEnabled) { _, enabled in
+                Ghostty.logger.info("Edge sidebar buttons enabled=\(enabled, privacy: .public)")
+            }
+            .onChange(of: edgeSidebarsPinnedInWideLayout) { _, enabled in
+                Ghostty.logger.info("Edge sidebar wide pinning enabled=\(enabled, privacy: .public)")
+            }
+            .onChange(of: edgeSidebarOpensRightInWideLayout) { _, enabled in
+                Ghostty.logger.info("Right edge sidebar auto-open enabled=\(enabled, privacy: .public)")
             }
 
             #if os(iOS) && !targetEnvironment(macCatalyst)

@@ -2,8 +2,8 @@
 //  MainView+EdgeSidebar.swift
 //  rootshell
 //
-//  Opens each tool from its assigned edge. One tool per edge is visible;
-//  the bottom selector switches between the tools assigned to that edge.
+//  Opens each assigned tool from its edge. One tool per edge is visible;
+//  the sidebar title switches between tools assigned to that edge.
 //
 
 import SwiftUI
@@ -22,12 +22,47 @@ extension MainView {
         return pages.first
     }
 
+    func edgeSidebarUsesPinnedColumn(_ page: EdgeSidebarPage) -> Bool {
+        guard usesPinnedWideEdgeSidebarLayout else { return false }
+        if !isPhone {
+            if page == .fileManager, fileManagerPresentation != .sidebar { return false }
+            #if !CHINA_BUILD
+            if page == .httpCapture, httpCapturePresentation != .sidebar { return false }
+            #endif
+        }
+        return selectedEdgePage(on: edgeSidebarAssignment.side(of: page)) == page
+    }
+
+    func edgeSidebarColumnOwns(_ page: EdgeSidebarPage) -> Bool {
+        edgeSidebarUsesPinnedColumn(page) && edgeSidebarPageIsOpen(page)
+    }
+
+    func edgeSidebarUsesExternalPresentation(_ page: EdgeSidebarPage) -> Bool {
+        !edgeSidebarUsesDrawer(page) && !edgeSidebarUsesPinnedColumn(page)
+    }
+
+    func edgeSidebarColumnIsPresented(_ side: EdgeSidebarSide) -> Bool {
+        if usesPinnedWideEdgeSidebarLayout {
+            guard let page = selectedEdgePage(on: side) else { return false }
+            return edgeSidebarColumnOwns(page)
+        }
+        return tabSidebarIsDocked && edgeSidebarAssignment.side(of: .tabSwitcher) == side
+    }
+
+    var canFitBothPinnedEdgeSidebars: Bool {
+        let outerGaps = roundedPanes ? PaneCardStyle.gap * 2 : 0
+        let cardGap = roundedPanes ? PaneCardStyle.gap : 0
+        let availableWidth = terminalRowViewportWidth - outerGaps
+        let sidebarMinimum = TabSidebarLayout.minWidth
+        return availableWidth >= (sidebarMinimum + cardGap) * 2 + TerminalRowColumns.minimumTerminalWidth
+    }
+
     /// The file manager is inside an edge sidebar, not the overlay or the full-size panel.
     var fileManagerUsesEdgeSidebar: Bool {
         #if os(visionOS)
         return false
         #else
-        return isPhone || fileManagerPresentation == .sidebar
+        return isPhone || fileManagerPresentation == .sidebar || edgeSidebarUsesPinnedColumn(.fileManager)
         #endif
     }
 
@@ -64,6 +99,7 @@ extension MainView {
         #if os(visionOS)
         return false
         #else
+        if edgeSidebarUsesPinnedColumn(page) { return false }
         switch page {
         case .tabSwitcher: return !tabSidebarUsesDockedPresentation
         case .fileManager, .httpCapture, .aiAgent: return isPhone
@@ -108,10 +144,39 @@ extension MainView {
         #endif
     }
 
-    func openEdgeSidebar(_ side: EdgeSidebarSide) {
+    func openEdgeSidebar(_ side: EdgeSidebarSide, source: String = "gesture") {
         guard let page = selectedEdgePage(on: side) else { return }
-        Ghostty.logger.info("Edge sidebar swipe side=\(side.rawValue, privacy: .public) page=\(page.rawValue, privacy: .public)")
+        Ghostty.logger.info("Edge sidebar open source=\(source, privacy: .public) side=\(side.rawValue, privacy: .public) page=\(page.rawValue, privacy: .public)")
         openEdgeSidebarPage(page)
+    }
+
+    func openConfiguredWideEdgeSidebars() {
+        guard usesPinnedWideEdgeSidebarLayout else { return }
+        let previousActiveEdge = lastActiveEdgeSidebar
+
+        if edgeSidebarSideIsOpen(.leading), edgeSidebarSideIsOpen(.trailing),
+           !canFitBothPinnedEdgeSidebars {
+            closeEdgeSidebar(lastActiveEdgeSidebar.opposite)
+        }
+
+        if !edgeSidebarSideIsOpen(.leading),
+           (!edgeSidebarSideIsOpen(.trailing) || canFitBothPinnedEdgeSidebars) {
+            openEdgeSidebar(.leading, source: "wide-layout")
+        }
+        if edgeSidebarOpensRightInWideLayout,
+           !edgeSidebarSideIsOpen(.trailing),
+           (!edgeSidebarSideIsOpen(.leading) || canFitBothPinnedEdgeSidebars) {
+            openEdgeSidebar(.trailing, source: "wide-layout")
+        }
+
+        lastActiveEdgeSidebar = previousActiveEdge
+    }
+
+    func applyPendingWideSidebarAutoOpen() {
+        guard pendingWideSidebarAutoOpen, !showSettings,
+              terminalRowViewportWidth > 0, usesPinnedWideEdgeSidebarLayout else { return }
+        pendingWideSidebarAutoOpen = false
+        openConfiguredWideEdgeSidebars()
     }
 
     func toggleEdgeSidebarSide(_ side: EdgeSidebarSide) {
@@ -126,6 +191,7 @@ extension MainView {
     }
 
     var edgeSidebarHeaderButtonWidth: CGFloat {
+        guard edgeSidebarButtonsEnabled else { return 0 }
         var count = 0
         if !edgeSidebarAssignment.pages(on: .leading).isEmpty { count += 1 }
         if !edgeSidebarAssignment.pages(on: .trailing).isEmpty { count += 1 }
@@ -145,14 +211,23 @@ extension MainView {
 
     func adoptEdgeSidebarPage(_ page: EdgeSidebarPage) {
         let side = edgeSidebarAssignment.side(of: page)
-        if isPhone || floatingEdgeSidebarPresented(side.opposite) {
+        let oppositeWasOpen = edgeSidebarSideIsOpen(side.opposite)
+        if usesPinnedWideEdgeSidebarLayout {
+            if !edgeSidebarSideIsOpen(side), oppositeWasOpen, !canFitBothPinnedEdgeSidebars {
+                closeEdgeSidebar(side.opposite)
+            }
+        } else if isPhone || floatingEdgeSidebarPresented(side.opposite) {
             closeEdgeSidebar(side.opposite)
         }
         for other in edgeSidebarAssignment.pages(on: side) where other != page {
             closeEdgeSidebarPage(other)
         }
         edgeSidebarSelectedPage[side] = page
-        if edgeSidebarUsesDrawer(page) { resignFirstResponderForSheetPresentation() }
+        lastActiveEdgeSidebar = side
+        if edgeSidebarUsesDrawer(page) {
+            setOverlayOwnsKeyboardForAllTerminals(true)
+            resignFirstResponderForSheetPresentation()
+        }
         Ghostty.logger.info("Edge sidebar adopt window=\(windowId, privacy: .public) side=\(side.rawValue, privacy: .public) page=\(page.rawValue, privacy: .public)")
     }
 
@@ -255,12 +330,12 @@ extension MainView {
 
     func trailingChromeWidth(windowWidth: CGFloat) -> CGFloat {
         let columns = terminalRowColumns(width: windowWidth)
-        return columns.aiSidebar + columns.docked + columns.fileManager + columns.httpCapture + columns.agentInbox - leadingWidth(in: columns)
+        return columns.leadingEdgeSidebar + columns.trailingEdgeSidebar + columns.aiSidebar
+            + columns.fileManager + columns.httpCapture + columns.agentInbox - leadingWidth(in: columns)
     }
 
     func leadingWidth(in columns: TerminalRowColumns) -> CGFloat {
-        var width: CGFloat = 0
-        if edgeSidebarAssignment.side(of: .tabSwitcher) == .leading { width += columns.docked }
+        var width = columns.leadingEdgeSidebar
         if edgeSidebarAssignment.side(of: .fileManager) == .leading { width += columns.fileManager }
         if edgeSidebarAssignment.side(of: .httpCapture) == .leading { width += columns.httpCapture }
         if edgeSidebarAssignment.side(of: .aiAgent) == .leading { width += columns.aiSidebar }
@@ -276,17 +351,17 @@ extension MainView {
     ) -> some View {
         let pages = edgeSidebarAssignment.pages(on: side)
         let selected = selectedEdgePage(on: side) ?? pages.first
-        VStack(spacing: 0) {
-            Group {
-                if let selected {
-                    edgeSidebarPage(selected, sheetTheme: sheetTheme, isDocked: isDocked, side: side)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        Group {
             if let selected {
-                EdgeSidebarTabBar(pages: pages, selection: selected, onSelect: selectEdgeSidebarPage)
+                edgeSidebarPage(selected, sheetTheme: sheetTheme, isDocked: isDocked, side: side)
+                    .environment(\.edgeSidebarTitleContext, EdgeSidebarTitleContext(
+                        pages: pages,
+                        selection: selected,
+                        onSelect: selectEdgeSidebarPage
+                    ))
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.bottom, dockedBottomClearance)
         .environmentObject(ghosttyApp)
         .fileManagerTheme(sheetTheme)
@@ -306,7 +381,7 @@ extension MainView {
                 dockedBottomClearance: 0
             ))
         case .fileManager:
-            if isPhone, let model = fileManagerModel {
+            if (isPhone || isDocked), let model = fileManagerModel {
                 return AnyView(FileManagerView(
                     manager: model,
                     style: .sidebar,
@@ -319,12 +394,12 @@ extension MainView {
             return AnyView(EmptyView())
         case .httpCapture:
             #if !CHINA_BUILD
-            if isPhone, let model = httpCaptureModel {
+            if (isPhone || isDocked), let model = httpCaptureModel {
                 return AnyView(HTTPCaptureView(
                     model: model,
                     style: .sidebar,
                     onClose: { closeEdgeSidebar(side) },
-                    onSwitchPresentation: nil
+                    onSwitchPresentation: isPhone ? nil : { switchHTTPCapturePresentation($0) }
                 )
                 .fileManagerTheme(sheetTheme))
             }
@@ -332,7 +407,7 @@ extension MainView {
             return AnyView(EmptyView())
         case .aiAgent:
             #if !CHINA_BUILD
-            if isPhone, let session = currentAIAgentSession(), terminals.indices.contains(selectedTabIndex) {
+            if (isPhone || isDocked), let session = currentAIAgentSession(), terminals.indices.contains(selectedTabIndex) {
                 return AnyView(AIAgentOverlayView(
                     isPresented: edgeSidebarPageBinding(page), session: session,
                     tabID: terminals[selectedTabIndex].id
@@ -396,12 +471,14 @@ extension MainView {
             accentColor: sheetTheme.accentColor,
             colorScheme: sheetTheme.colorScheme,
             sidebarContent: {
-                edgeSidebarBody(
-                    side: side,
-                    sheetTheme: sheetTheme,
-                    isDocked: false,
-                    dockedBottomClearance: 0
-                )
+                if !usesPinnedWideEdgeSidebarLayout {
+                    edgeSidebarBody(
+                        side: side,
+                        sheetTheme: sheetTheme,
+                        isDocked: false,
+                        dockedBottomClearance: 0
+                    )
+                }
             }
         )
     }

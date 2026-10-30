@@ -19,7 +19,6 @@ struct FileManagerSidebarView: View {
     let side: EdgeSidebarSide
     let onClose: () -> Void
     let onSwitchPresentation: (PanelPresentation) -> Void
-    let footer: AnyView?
 
     static let minWidth: CGFloat = 300
     static let defaultWidth: CGFloat = 460
@@ -55,7 +54,6 @@ struct FileManagerSidebarView: View {
     var body: some View {
         HStack(spacing: 0) {
             if side == .trailing { resizeDivider }
-            VStack(spacing: 0) {
                 FileManagerView(
                     manager: manager,
                     style: .sidebar,
@@ -64,8 +62,6 @@ struct FileManagerSidebarView: View {
                     onSwitchPresentation: onSwitchPresentation
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if let footer { footer }
-            }
             .background(background)
             .clipShape(columnShape)
             .shadow(color: .black.opacity(roundedPanes ? 0 : 0.15), radius: 8, x: side == .leading ? 2 : -2, y: 0)

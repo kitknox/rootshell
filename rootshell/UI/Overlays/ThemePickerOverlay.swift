@@ -10,6 +10,7 @@ import SwiftUI
 /// Floating theme picker overlay that can be opened via keyboard shortcut (Cmd+Shift+T)
 struct ThemePickerOverlay: View {
     @Binding var isPresented: Bool
+    @Environment(\.edgeSidebarTitleContext) private var edgeSidebarTitleContext
     let windowId: String
     let currentTabId: UUID?
     let onThemeSelected: (String, ThemePickerScope) -> Void
@@ -71,24 +72,32 @@ struct ThemePickerOverlay: View {
     private var pickerContent: some View {
         VStack(spacing: 0) {
             // Header with scope picker and close button
-            HStack {
-                Text("Theme")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-
-                Spacer()
-
-                Button(action: { isPresented = false }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
+            if edgeSidebarTitleContext != nil {
+                EdgeSidebarHeader(
+                    title: String(localized: "Theme"),
+                    systemImage: "paintpalette",
+                    onClose: { isPresented = false }
+                ) {
+                    EmptyView()
                 }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.escape, modifiers: [])
+            } else {
+                HStack {
+                    Text("Theme").font(.headline).fontWeight(.semibold)
+
+                    Spacer()
+
+                    Button(action: { isPresented = false }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.escape, modifiers: [])
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
 
             // Scope picker
             Picker("Scope", selection: $scope) {
