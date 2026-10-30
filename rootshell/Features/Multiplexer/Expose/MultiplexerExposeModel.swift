@@ -40,6 +40,7 @@ nonisolated struct MuxPane: Equatable, Sendable {
     let isPreviewable: Bool
     let title: String?
     var workingDirectory: String? = nil
+    var programName: String? = nil
 }
 
 nonisolated struct MuxTab: Equatable, Sendable {

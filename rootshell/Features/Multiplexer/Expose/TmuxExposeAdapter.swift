@@ -24,7 +24,7 @@ nonisolated struct TmuxExposeAdapter: MultiplexerExposeAdapter {
         "window_id", "window_index", "window_active", "window_width", "window_height",
         "window_activity", "window_raw_flags", "pane_id", "pane_active", "pane_left", "pane_top",
         "pane_width", "pane_height", "history_size", "cursor_x", "cursor_y", "cursor_flag",
-        "pane_current_path", "window_name", "pane_title",
+        "pane_current_path", "pane_current_command", "window_name", "pane_title",
     ]
     private static let format = fields.map { $0 == "pane_current_path" ? "#{q:pane_current_path}" : "#{\($0)}" }
         .joined(separator: separator)
@@ -67,6 +67,7 @@ nonisolated struct TmuxExposeAdapter: MultiplexerExposeAdapter {
         let historySize: String
         let cursor: MuxCursor
         let workingDirectory: String?
+        let command: String
         let windowName: String
         let paneTitle: String
     }
@@ -89,8 +90,9 @@ nonisolated struct TmuxExposeAdapter: MultiplexerExposeAdapter {
             historySize: parts[13],
             cursor: MuxCursor(x: int(14), y: int(15), visible: parts[16] != "0"),
             workingDirectory: Self.unescapePath(parts[17]),
-            windowName: parts[18],
-            paneTitle: parts[19...].joined(separator: Self.separator)
+            command: parts[18],
+            windowName: parts[19],
+            paneTitle: parts[20...].joined(separator: Self.separator)
         )
     }
 
@@ -139,7 +141,8 @@ nonisolated struct TmuxExposeAdapter: MultiplexerExposeAdapter {
                     : r.rect
                 panes.append(MuxPane(id: r.paneID, rect: rect, isActive: r.paneActive,
                                      isPreviewable: !hiddenByZoom, title: r.paneTitle,
-                                     workingDirectory: r.workingDirectory))
+                                     workingDirectory: r.workingDirectory,
+                                     programName: ProgramNameNormalizer.normalize(name: r.command)))
             }
             let badgeFlags = first.flags.filter { "#!~Z".contains($0) }
             tabs.append(MuxTab(
