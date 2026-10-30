@@ -13,6 +13,9 @@ import Foundation
 
 nonisolated struct TmuxExposeAdapter: MultiplexerExposeAdapter {
     let type = MultiplexerType.tmux
+    var socket: TmuxSocketIdentity = .defaultServer
+
+    private var tmuxCommand: String { "tmux \(socket.arguments)" }
 
     /// Printable separator: control characters don't survive every transport.
     static let separator = "<|>"
@@ -21,9 +24,10 @@ nonisolated struct TmuxExposeAdapter: MultiplexerExposeAdapter {
         "window_id", "window_index", "window_active", "window_width", "window_height",
         "window_activity", "window_raw_flags", "pane_id", "pane_active", "pane_left", "pane_top",
         "pane_width", "pane_height", "history_size", "cursor_x", "cursor_y", "cursor_flag",
-        "window_name", "pane_title",
+        "pane_current_path", "window_name", "pane_title",
     ]
-    private static let format = fields.map { "#{\($0)}" }.joined(separator: separator)
+    private static let format = fields.map { $0 == "pane_current_path" ? "#{q:pane_current_path}" : "#{\($0)}" }
+        .joined(separator: separator)
 
     private func target(_ session: String?) -> String {
         session.map { " -t \(MuxScript.dq("=\($0)"))" } ?? ""
@@ -31,7 +35,7 @@ nonisolated struct TmuxExposeAdapter: MultiplexerExposeAdapter {
 
     func resolveSessionScript(nonce: String) -> String {
         MuxScript.wrap(
-            "echo \(MuxScript.dq(MuxScript.topology(nonce))); tmux list-sessions -F \"#{session_name}\" 2>/dev/null",
+            "echo \(MuxScript.dq(MuxScript.topology(nonce))); \(tmuxCommand)list-sessions -F \"#{session_name}\" 2>/dev/null",
             nonce: nonce
         )
     }
@@ -39,12 +43,12 @@ nonisolated struct TmuxExposeAdapter: MultiplexerExposeAdapter {
     func tickScript(session: String?, request: MuxTickRequest, nonce: String) -> String {
         var body = "command -v tmux >/dev/null 2>&1 || echo \(MuxScript.dq(MuxScript.unsupportedMarker))"
         body += "; echo \(MuxScript.dq(MuxScript.topology(nonce)))"
-        body += "; tmux list-panes -s\(target(session)) -F \(MuxScript.dq(Self.format)) 2>/dev/null"
+        body += "; \(tmuxCommand)list-panes -s\(target(session)) -F \(MuxScript.dq(Self.format)) 2>/dev/null"
         for paneID in request.fetch {
             let id = MuxScript.dq(paneID)
             body += "; \(MuxScript.paneMarker(nonce: nonce, id: paneID))"
             // -N (keep trailing spaces, 3.1+) so colored bars keep their width; older tmux falls back.
-            body += "; tmux capture-pane -p -e -N -t \(id) 2>/dev/null || tmux capture-pane -p -e -t \(id) 2>/dev/null"
+            body += "; \(tmuxCommand)capture-pane -p -e -N -t \(id) 2>/dev/null || \(tmuxCommand)capture-pane -p -e -t \(id) 2>/dev/null"
         }
         return MuxScript.wrap(body, nonce: nonce)
     }
@@ -62,6 +66,7 @@ nonisolated struct TmuxExposeAdapter: MultiplexerExposeAdapter {
         let rect: MuxCellRect
         let historySize: String
         let cursor: MuxCursor
+        let workingDirectory: String?
         let windowName: String
         let paneTitle: String
     }
@@ -83,9 +88,21 @@ nonisolated struct TmuxExposeAdapter: MultiplexerExposeAdapter {
             rect: MuxCellRect(x: int(9), y: int(10), width: int(11), height: int(12)),
             historySize: parts[13],
             cursor: MuxCursor(x: int(14), y: int(15), visible: parts[16] != "0"),
-            windowName: parts[17],
-            paneTitle: parts[18...].joined(separator: Self.separator)
+            workingDirectory: Self.unescapePath(parts[17]),
+            windowName: parts[18],
+            paneTitle: parts[19...].joined(separator: Self.separator)
         )
+    }
+
+    private static func unescapePath(_ word: String) -> String? {
+        var result = ""
+        var escaped = false
+        for character in word {
+            if escaped { result.append(character); escaped = false }
+            else if character == "\\" { escaped = true }
+            else { result.append(character) }
+        }
+        return !escaped && result.hasPrefix("/") ? result : nil
     }
 
     func parseTick(output: String, session _: String?, nonce: String) -> MuxTickResult? {
@@ -112,13 +129,17 @@ nonisolated struct TmuxExposeAdapter: MultiplexerExposeAdapter {
             for r in group {
                 cursors[r.paneID] = r.cursor
                 hints[r.paneID] = "\(r.activity)|\(r.historySize)|\(r.cursor.x)|\(r.cursor.y)|\(r.rect.width)x\(r.rect.height)"
-                // A zoomed window shows only its active pane, full size.
-                if zoomed, !r.paneActive { continue }
-                let rect = zoomed
+                // A zoomed window previews only its active pane, but its other
+                // panes remain in topology for the sidebar.
+                let hiddenByZoom = zoomed && !r.paneActive
+                let rect = hiddenByZoom
+                    ? MuxCellRect(x: 0, y: 0, width: 0, height: 0)
+                    : zoomed
                     ? MuxCellRect(x: 0, y: 0, width: first.windowWidth, height: first.windowHeight)
                     : r.rect
                 panes.append(MuxPane(id: r.paneID, rect: rect, isActive: r.paneActive,
-                                     isPreviewable: true, title: r.paneTitle))
+                                     isPreviewable: !hiddenByZoom, title: r.paneTitle,
+                                     workingDirectory: r.workingDirectory))
             }
             let badgeFlags = first.flags.filter { "#!~Z".contains($0) }
             tabs.append(MuxTab(
@@ -155,6 +176,14 @@ nonisolated struct TmuxExposeAdapter: MultiplexerExposeAdapter {
 
     func focusScript(session: String?, tabID: String) -> String {
         let spec = session.map { "=\($0):\(tabID)" } ?? tabID
-        return MuxScript.wrap("tmux select-window -t \(MuxScript.dq(spec))", nonce: "focus")
+        return MuxScript.wrap("\(tmuxCommand)select-window -t \(MuxScript.dq(spec))", nonce: "focus")
+    }
+
+    func focusPaneScript(session: String?, tabID: String, paneID: String) -> String? {
+        let window = session.map { "=\($0):\(tabID)" } ?? tabID
+        return MuxScript.wrap(
+            "\(tmuxCommand)select-window -t \(MuxScript.dq(window)) && \(tmuxCommand)select-pane -t \(MuxScript.dq(paneID))",
+            nonce: "focus-pane"
+        )
     }
 }

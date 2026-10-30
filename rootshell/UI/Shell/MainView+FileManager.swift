@@ -48,15 +48,97 @@ extension MainView {
         return DraggableHUDHostView.ownsFirstResponder(in: window)
     }
 
-    private var focusedTerminalForFileManager: Ghostty.TerminalView? {
+    var focusedTerminalForFileManager: Ghostty.TerminalView? {
         guard terminals.indices.contains(selectedTabIndex) else { return nil }
         return terminals[selectedTabIndex].focusedTerminal
+    }
+
+    var panelMultiplexerTerminalID: UUID? {
+        guard lifecycleScenePhase == .active, showingTabSwitcher || showFileManager,
+              let terminal = focusedTerminalForFileManager,
+              MultiplexerExposeFeed.canDetect(terminal) else { return nil }
+        return terminal.uuid
+    }
+
+    func updatePanelMultiplexerFeed() {
+        if panelMultiplexerTerminalID != nil, let terminal = focusedTerminalForFileManager {
+            muxExposeFeed.start(terminal: terminal, consumer: .panels)
+        } else {
+            muxExposeFeed.stopNow(consumer: .panels)
+        }
+        followFileManagerDirectory()
+    }
+
+    func followFileManagerDirectory() {
+        guard showFileManager, fileManagerModel != nil,
+              let terminal = focusedTerminalForFileManager else { return }
+        let directory: String?
+        let paneID: String
+        if muxExposeFeed.terminal === terminal,
+           let snapshot = muxExposeFeed.snapshot,
+           let tab = snapshot.tabs.first(where: { $0.id == snapshot.activeTabID }),
+           let pane = tab.panes.first(where: \.isActive) {
+            directory = pane.workingDirectory
+            paneID = pane.id
+        } else if muxExposeFeed.terminal === terminal, muxExposeFeed.state == .unsupported,
+                  terminal.rawMultiplexer == nil, terminal.passthroughMultiplexer == nil {
+            let source = FileEndpoint.PaneSource(terminal: terminal, openInFolderTarget: captureOpenInFolderTarget())
+            fileManagerModel?.present(from: source, directory: terminal.pwd)
+            return
+        } else {
+            return
+        }
+        retargetFileManager(terminal: terminal, paneID: paneID, directory: directory)
+    }
+
+    var fileManagerControlTerminalID: UUID? {
+        guard lifecycleScenePhase == .active, showFileManager,
+              let terminal = focusedTerminalForFileManager, terminal.isMultiplexerPane else { return nil }
+        return terminal.uuid
+    }
+
+    func followControlFileManagerDirectory() async {
+        guard fileManagerControlTerminalID != nil, let terminal = focusedTerminalForFileManager else { return }
+        while !Task.isCancelled {
+            var directory: String?
+            var paneID: String?
+            if let binding = terminal.herdrPaneBinding,
+               let controller = HerdrController.controller(for: terminal) {
+                paneID = binding.paneId
+                directory = controller.paneInfos[binding.paneId]?.projectPath
+            } else if let binding = terminal.tmuxPaneBinding,
+                      let tab = tabsModel.selectedTab,
+                      let controller = TmuxController.controller(forWindowTab: tab) {
+                paneID = "%\(binding.paneId)"
+                do {
+                    directory = try await controller.paneWorkingDirectories()[binding.paneId]
+                } catch {
+                    Ghostty.logger.debug("File Manager pane directory query failed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            guard !Task.isCancelled, showFileManager, focusedTerminalForFileManager === terminal else { return }
+            if let paneID { retargetFileManager(terminal: terminal, paneID: paneID, directory: directory) }
+            do { try await Task.sleep(for: .seconds(1)) }
+            catch { return }
+        }
+    }
+
+    private func retargetFileManager(terminal: Ghostty.TerminalView, paneID: String, directory: String?) {
+        guard let model = fileManagerModel else { return }
+        guard let directory, directory.hasPrefix("/") else { return }
+        let location = "\(terminal.uuid)|\(paneID)|\(directory)"
+        guard location != followedFileManagerLocation else { return }
+        followedFileManagerLocation = location
+        let source = FileEndpoint.PaneSource(terminal: terminal, openInFolderTarget: captureOpenInFolderTarget())
+        model.present(from: source, directory: directory, followDirectory: true)
+        Ghostty.logger.info("File Manager follows multiplexer pane=\(paneID, privacy: .public) cwd=\(directory, privacy: .public)")
     }
 
     func openFileManager() {
         let model = fileManagerModel ?? makeFileManagerModel()
         fileManagerModel = model
-        if let terminal = focusedTerminalForFileManager {
+        if let terminal = focusedTerminalForFileManager,
+           !terminal.isMultiplexerPane, !MultiplexerExposeFeed.canDetect(terminal) {
             let source = FileEndpoint.PaneSource(terminal: terminal, openInFolderTarget: captureOpenInFolderTarget())
             let directory = terminal.pwd.flatMap { $0.hasPrefix("/") ? $0 : nil }
             model.present(from: source, directory: directory)

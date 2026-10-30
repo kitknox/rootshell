@@ -39,6 +39,7 @@ nonisolated struct MuxPane: Equatable, Sendable {
     /// False for panes whose content cannot be read (zellij plugins).
     let isPreviewable: Bool
     let title: String?
+    var workingDirectory: String? = nil
 }
 
 nonisolated struct MuxTab: Equatable, Sendable {
@@ -54,11 +55,18 @@ nonisolated struct MuxTab: Equatable, Sendable {
     let panes: [MuxPane]
     /// Short trailing note for the caption (tmux flags, herdr agent status).
     let badge: String?
+    var workspaceID: String? = nil
 
     /// Exposé cells are keyed by UUID; this one is stable per session + tab.
     func uuid(sessionKey: String) -> UUID {
         MuxExposeIdentity.uuid(for: "\(sessionKey)|\(id)")
     }
+}
+
+nonisolated struct MuxWorkspace: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let parentID: String?
 }
 
 nonisolated struct MuxCursor: Equatable, Sendable {
@@ -78,6 +86,7 @@ nonisolated struct MuxPaneFrame: Equatable, Sendable {
 nonisolated struct MuxExposeSnapshot: Equatable, Sendable {
     let tabs: [MuxTab]
     let activeTabID: String?
+    var workspaces: [MuxWorkspace] = []
 
     var allPanes: [MuxPane] { tabs.flatMap(\.panes) }
 
