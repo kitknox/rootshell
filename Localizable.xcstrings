@@ -895873,6 +895873,326 @@
           }
         }
       }
+    },
+    "External Display" : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外接顯示器"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外接显示器"
+          }
+        }
+      }
+    },
+    "Connected Display" : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連接顯示器時"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接显示器时"
+          }
+        }
+      }
+    },
+    "Mirror This Device" : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "鏡像輸出此裝置"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "镜像输出此设备"
+          }
+        }
+      }
+    },
+    "Remote Desktop" : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "遠端桌面"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程桌面"
+          }
+        }
+      }
+    },
+    "A connected monitor mirrors this device." : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連接的顯示器會鏡像輸出此裝置。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接的显示器会镜像输出此设备。"
+          }
+        }
+      }
+    },
+    "Show This Session on External Display" : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在外接顯示器顯示此工作階段"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在外接显示器显示此会话"
+          }
+        }
+      }
+    },
+    "When a Display Is Connected" : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連接顯示器時"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接显示器时"
+          }
+        }
+      }
+    },
+    "No external display connected." : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未連接外接顯示器。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未连接外接显示器。"
+          }
+        }
+      }
+    },
+    "The external display mirrors this device." : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外接顯示器正在鏡像輸出此裝置。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外接显示器正在镜像输出此设备。"
+          }
+        }
+      }
+    },
+    "Showing this session on the external display." : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此工作階段正顯示在外接顯示器上。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此会话正显示在外接显示器上。"
+          }
+        }
+      }
+    },
+    "The external display is showing another session." : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外接顯示器正在顯示另一個工作階段。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外接显示器正在显示另一个会话。"
+          }
+        }
+      }
+    },
+    "The display is extending the desktop (windowed apps). Move this window onto it and maximize it, or switch to full-screen apps to show the session on its own." : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示器目前為延伸桌面（視窗化 App）。請將此視窗移到顯示器上並放到最大，或切換為全螢幕 App 以單獨顯示此工作階段。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示器目前为扩展桌面（窗口化 App）。请将此窗口移到显示器上并最大化，或切换为全屏 App 以单独显示此会话。"
+          }
+        }
+      }
+    },
+    "This window is on the external display. Maximize it and the remote screen resizes to fit." : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此視窗在外接顯示器上。將視窗放到最大，遠端畫面就會調整大小以符合。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此窗口在外接显示器上。将窗口最大化，远程画面就会调整大小以适配。"
+          }
+        }
+      }
+    },
+    "Fit the Mac to This Display (High Performance · Match Client)" : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "讓 Mac 符合此顯示器（高效能 · 符合用戶端）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让 Mac 适配此显示器（高性能 · 匹配客户端）"
+          }
+        }
+      }
+    },
+    "Larger" : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "較大"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "较大"
+          }
+        }
+      }
+    },
+    "Largest" : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大"
+          }
+        }
+      }
+    },
+    "Desktop Size" : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面大小"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面大小"
+          }
+        }
+      }
+    },
+    "External Display Scale" : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外接顯示器縮放"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外接显示器缩放"
+          }
+        }
+      }
+    },
+    "A connected monitor shows the visible Screen Sharing session full screen, sized to the monitor, while this device becomes its trackpad and keyboard. Without a session, the monitor mirrors this device. Larger desktop sizes make text and the pointer bigger and send fewer pixels. Requires High Performance · Match Client." : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連接的顯示器會全螢幕顯示目前可見的螢幕共享工作階段，並依顯示器調整大小，此裝置則作為觸控板與鍵盤。沒有工作階段時，顯示器會鏡像輸出此裝置。較大的桌面大小會讓文字與指標更大，並減少傳輸的像素。需要「高效能 · 符合用戶端」。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接的显示器会全屏显示当前可见的屏幕共享会话，并按显示器调整大小，此设备则作为触控板与键盘。没有会话时，显示器会镜像输出此设备。较大的桌面大小会让文字与指针更大，并减少传输的像素。需要“高性能 · 匹配客户端”。"
+          }
+        }
+      }
+    },
+    "Pointer Size" : {
+      "localizations" : {
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "指標大小"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "指针大小"
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

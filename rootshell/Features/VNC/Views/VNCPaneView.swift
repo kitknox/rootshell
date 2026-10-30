@@ -411,6 +411,9 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
         ])
         controller.didMove(toParent: parent)
         hostingController = controller
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        ExternalDisplayCoordinator.shared.registerAccessory(for: self, on: controller)
+        #endif
     }
 
     private func nearestViewController() -> UIViewController? {
@@ -822,6 +825,9 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
             // time its tab is selected. Retry the still-pending enter request
             // now that MainView can validate it as the active focused leaf.
             requestFullScreenIfNeeded()
+            #if os(iOS) && !targetEnvironment(macCatalyst)
+            ExternalDisplayCoordinator.shared.paneDidFocus(self)
+            #endif
         } else {
             keyboardCapture.release()
         }
@@ -1060,6 +1066,10 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
         // Closed while full screen: tear the takeover container down first
         // (no reattach; this close path owns the pane from here).
         fullScreenController?.paneDidClose(self)
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        ExternalDisplayCoordinator.shared.unregisterAccessory(for: self, on: hostingController)
+        ExternalDisplayCoordinator.shared.paneDidClose(self)
+        #endif
         clipboardSynchronizer.invalidate()
         keyboardCapture.onReservedHostShortcut = nil
         session.disconnect()
@@ -1314,6 +1324,9 @@ struct VNCPaneRootView: View {
                         } label: {
                             Label("Session", systemImage: "gearshape")
                         }
+                        #if os(iOS) && !targetEnvironment(macCatalyst)
+                        VNCExternalDisplayMenu(pane: pane)
+                        #endif
                     }
                 )
 
@@ -1866,6 +1879,93 @@ private struct VNCQuickModeMenu: View {
         session.configuration.availableVideoQualityModes.contains(.adaptive)
     }
 }
+
+#if os(iOS) && !targetEnvironment(macCatalyst)
+/// Status of a connected monitor and the External Display setting, reachable
+/// from the session itself so it is obvious whether the takeover is active.
+private struct VNCExternalDisplayMenu: View {
+    let pane: VNCPaneView
+    private let coordinator = ExternalDisplayCoordinator.shared
+    @Setting(Settings.ScreenSharing.externalDisplayMode) private var mode
+    @Setting(Settings.ScreenSharing.externalDisplayScale) private var scale
+    @Setting(Settings.ScreenSharing.cursorSizeDefault) private var pointerSize
+
+    var body: some View {
+        let status = coordinator.status(for: pane)
+        let matchesClient = pane.session.configuration.displaySizingMode == .matchClient
+        Menu {
+            // A disabled button is the one menu row that always renders;
+            // an item-less section drops its header.
+            Button {} label: {
+                Label(statusText(status), systemImage: "info.circle")
+            }
+            .disabled(true)
+            if status == .showingOtherSession {
+                Button {
+                    coordinator.show(pane)
+                } label: {
+                    Label(
+                        String(localized: "Show This Session on External Display"),
+                        systemImage: "rectangle.on.rectangle")
+                }
+            }
+            if !matchesClient {
+                // Only Match Client resizes the remote display; Remote Display
+                // shows the Mac's own screen shape, letterboxed on a monitor.
+                Button {
+                    pane.switchQuickMode(.highPerformanceMatchClient)
+                } label: {
+                    Label(
+                        String(localized: "Fit the Mac to This Display (High Performance · Match Client)"),
+                        systemImage: "arrow.up.left.and.arrow.down.right")
+                }
+            }
+            Divider()
+            Picker(selection: $mode) {
+                ForEach(ScreenSharingExternalDisplayMode.allCases, id: \.rawValue) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            } label: {
+                Text(String(localized: "When a Display Is Connected"))
+            }
+            .pickerStyle(.inline)
+            Picker(selection: $scale) {
+                ForEach(ScreenSharingExternalDisplayScale.allCases, id: \.rawValue) { scale in
+                    Text(scale.displayName).tag(scale)
+                }
+            } label: {
+                Label(String(localized: "Desktop Size"), systemImage: "textformat.size")
+            }
+            Picker(selection: $pointerSize) {
+                ForEach(ScreenSharingCursorSizeDefault.allCases, id: \.rawValue) { size in
+                    Text(size.displayName).tag(size)
+                }
+            } label: {
+                Label(String(localized: "Pointer Size"), systemImage: "cursorarrow")
+            }
+        } label: {
+            Label(String(localized: "External Display"), systemImage: "display")
+        }
+    }
+
+    private func statusText(_ status: ExternalDisplayStatus) -> String {
+        switch status {
+        case .notConnected:
+            return String(localized: "No external display connected.")
+        case .mirroring:
+            return String(localized: "The external display mirrors this device.")
+        case .showingThisSession:
+            return String(localized: "Showing this session on the external display.")
+        case .showingOtherSession:
+            return String(localized: "The external display is showing another session.")
+        case .extendedDesktop:
+            return String(localized: "The display is extending the desktop (windowed apps). Move this window onto it and maximize it, or switch to full-screen apps to show the session on its own.")
+        case .windowOnExternalDisplay:
+            return String(localized: "This window is on the external display. Maximize it and the remote screen resizes to fit.")
+        }
+    }
+}
+#endif
 
 /// HUD menu extra: presents the Connection Info sheet through the owning
 /// MainView. Observes the session directly for the same capture reason as

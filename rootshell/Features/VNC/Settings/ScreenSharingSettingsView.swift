@@ -16,6 +16,8 @@ struct ScreenSharingSettingsView: View {
     @Setting(Settings.ScreenSharing.cursorSizeDefault) private var cursorSizeDefault
     @Setting(Settings.ScreenSharing.controlOptionAsCommandDefault) private var controlOptionAsCommandDefault
     @Setting(Settings.ScreenSharing.routeReservedShortcutsToVNCDefault) private var routeReservedShortcutsToVNCDefault
+    @Setting(Settings.ScreenSharing.externalDisplayMode) private var externalDisplayMode
+    @Setting(Settings.ScreenSharing.externalDisplayScale) private var externalDisplayScale
 
     private var resolvedClipboardSyncDefault: ScreenSharingClipboardSyncDefault {
         clipboardSyncDefault
@@ -163,6 +165,44 @@ struct ScreenSharingSettingsView: View {
                     ? "Local draws the Trackpad pointer on this device, sharp at any zoom. Size applies to that pointer; Medium is the Mac's own. Rendering applies to new connections."
                     : "Remote lets the Mac draw the pointer into the picture: every shape, moving with the picture rather than your finger. Rendering applies to new connections.")
             }
+
+            #if os(iOS) && !targetEnvironment(macCatalyst)
+            Section {
+                Picker(selection: $externalDisplayMode) {
+                    ForEach(ScreenSharingExternalDisplayMode.allCases, id: \.rawValue) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "display")
+                        Text("Connected Display")
+                    }
+                    .settingRow(Settings.ScreenSharing.externalDisplayMode)
+                }
+                .themedRow()
+
+                if externalDisplayMode == .remoteDesktop {
+                    Picker(selection: $externalDisplayScale) {
+                        ForEach(ScreenSharingExternalDisplayScale.allCases, id: \.rawValue) { scale in
+                            Text(scale.displayName).tag(scale)
+                        }
+                    } label: {
+                        HStack(spacing: 12) {
+                            SettingsIcon(systemName: "textformat.size")
+                            Text("Desktop Size")
+                        }
+                        .settingRow(Settings.ScreenSharing.externalDisplayScale)
+                    }
+                    .themedRow()
+                }
+            } header: {
+                SettingGroupHeader("External Display", group: .screenSharing)
+            } footer: {
+                Text(externalDisplayMode == .remoteDesktop
+                    ? "A connected monitor shows the visible Screen Sharing session full screen, sized to the monitor, while this device becomes its trackpad and keyboard. Without a session, the monitor mirrors this device. Larger desktop sizes make text and the pointer bigger and send fewer pixels. Requires High Performance · Match Client."
+                    : "A connected monitor mirrors this device.")
+            }
+            #endif
         }
         .themedList()
         .navigationTitle("Screen Sharing")

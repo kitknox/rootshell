@@ -155,3 +155,63 @@ enum ScreenSharingPointerModeDefault: String, CaseIterable, Sendable {
         }
     }
 }
+
+enum ScreenSharingExternalDisplayMode: String, CaseIterable, Sendable {
+    case mirror
+    case remoteDesktop
+
+    static let storageKey = "screenSharingExternalDisplayMode"
+    static let defaultValue = Self.remoteDesktop
+
+    static var current: Self {
+        SettingsStore.shared.value(Settings.ScreenSharing.externalDisplayMode)
+    }
+
+    var displayName: String {
+        switch self {
+        case .mirror:
+            return String(
+                localized: "Mirror This Device",
+                comment: "Screen Sharing external display mode")
+        case .remoteDesktop:
+            return String(
+                localized: "Remote Desktop",
+                comment: "Screen Sharing external display mode")
+        }
+    }
+}
+
+/// How large the remote desktop looks on an external display. Larger steps
+/// ask the Mac for a smaller virtual display: bigger text and pointer, and
+/// fewer pixels to encode and send.
+enum ScreenSharingExternalDisplayScale: String, CaseIterable, Sendable {
+    case standard
+    case larger
+    case largest
+
+    static let storageKey = "screenSharingExternalDisplayScale"
+    static let defaultValue = Self.standard
+
+    static var current: Self {
+        SettingsStore.shared.value(Settings.ScreenSharing.externalDisplayScale)
+    }
+
+    var factor: CGFloat {
+        switch self {
+        case .standard: return 1
+        case .larger: return 1.25
+        case .largest: return 1.5
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .standard:
+            return String(localized: "Default", comment: "Screen Sharing external display scale")
+        case .larger:
+            return String(localized: "Larger", comment: "Screen Sharing external display scale")
+        case .largest:
+            return String(localized: "Largest", comment: "Screen Sharing external display scale")
+        }
+    }
+}
