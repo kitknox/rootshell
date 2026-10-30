@@ -253,7 +253,8 @@ nonisolated struct ZmxExposeAdapter: MultiplexerExposeAdapter {
                         isActive: true,
                         isPreviewable: true,
                         title: info.command,
-                        workingDirectory: info.cwd
+                        workingDirectory: info.cwd,
+                        programName: info.command.flatMap { ProgramNameNormalizer.normalize(name: $0) }
                     )
                 ],
                 badge: Self.badge(for: info)

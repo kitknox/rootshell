@@ -75,6 +75,14 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
             uniquingKeysWith: { first, _ in first }
         )
 
+        let agentsByPaneID = Dictionary(
+            snap.mxArray("agents").compactMap { agent -> (String, [String: Any])? in
+                guard let id = agent.mxString("pane_id") else { return nil }
+                return (id, agent)
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+
         // Raw sessions use the focused workspace. Native fallback previews
         // may span several workspaces; both preserve snapshot display order.
         // `number` is a stable public tab number, unchanged by tab.move.
@@ -93,6 +101,11 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
             for entry in layout?.mxArray("panes") ?? [] {
                 guard let paneID = entry.mxString("pane_id"), let rect = entry.mxDict("rect") else { continue }
                 let pane = panesByID[paneID]
+                let agent = agentsByPaneID[paneID].flatMap { record -> [String: Any]? in
+                    guard let terminalID = pane?.mxString("terminal_id"), record.mxString("terminal_id") == terminalID else { return nil }
+                    return record
+                }
+                let programName = agent?.mxString("agent") ?? pane?.mxDict("foreground_process")?.mxString("name")
                 if validatesCaptures, pane?.mxString("tab_id") != tabID { continue }
                 panes.append(MuxPane(
                     id: paneID,
@@ -106,7 +119,8 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
                     isPreviewable: true,
                     title: pane?.mxString("title") ?? pane?.mxString("terminal_title_stripped"),
                     workingDirectory: Self.absoluteDirectory(pane?.mxString("foreground_cwd"))
-                        ?? Self.absoluteDirectory(pane?.mxString("cwd"))
+                        ?? Self.absoluteDirectory(pane?.mxString("cwd")),
+                    programName: programName.flatMap { ProgramNameNormalizer.normalize(name: $0) }
                 ))
             }
             let status = info.mxString("agent_status")?.lowercased()
