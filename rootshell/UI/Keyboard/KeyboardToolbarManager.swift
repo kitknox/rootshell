@@ -62,6 +62,7 @@ class KeyboardToolbarManager {
         didSet {
             guard !isReloading else { return }
             SettingsStore.shared.set(Settings.KeyboardToolbar.drawerToggleMode, drawerToggleMode)
+            Self.logger.info("Toolbar user action: drawer mode changed to \(self.drawerToggleMode.rawValue, privacy: .public)")
         }
     }
 
@@ -121,8 +122,19 @@ class KeyboardToolbarManager {
     // MARK: - Layout Mutations
 
     enum ToolbarSection: Equatable, Sendable {
+        case leftPinned
         case mainRow
+        case rightPinned
         case drawer(Int)
+
+        var logName: String {
+            switch self {
+            case .leftPinned: "left pinned"
+            case .mainRow: "primary"
+            case .rightPinned: "right pinned"
+            case .drawer(let index): "drawer \(index + 1)"
+            }
+        }
     }
 
     /// Maximum number of configurable drawer rows.
@@ -145,7 +157,10 @@ class KeyboardToolbarManager {
             rows = Array(rows.prefix(target))
             rows[target - 1].append(contentsOf: overflow)
         }
-        config.drawerRows = rows
+        var updated = config
+        updated.drawerRows = rows
+        config = updated
+        Self.logger.info("Toolbar user action: drawer row count set to \(target, privacy: .public)")
         notifyChange()
     }
 
@@ -157,55 +172,103 @@ class KeyboardToolbarManager {
     /// removed from all rows by hideKey/deleteCustomKey), so assigning the
     /// snapshot's contents directly preserves the invariant that the rows hold
     /// only valid slots.
-    func setLayout(mainRow newMain: [KeySlot], drawerRows newDrawers: [[KeySlot]]) {
+    func setLayout(leftPinned newLeft: [KeySlot], mainRow newMain: [KeySlot],
+                   rightPinned newRight: [KeySlot], drawerRows newDrawers: [[KeySlot]]) {
         let drawers = newDrawers.isEmpty ? [[]] : newDrawers
-        guard config.mainRow != newMain || config.drawerRows != drawers else { return }
-        config.mainRow = newMain
-        config.drawerRows = drawers
+        let orderedSections = [newLeft, newMain, newRight] + drawers
+        var seen = Set<KeySlot>()
+        let uniqueSections = orderedSections.map { row in
+            row.filter { seen.insert($0).inserted }
+        }
+        let left = uniqueSections[0]
+        let main = uniqueSections[1]
+        let right = uniqueSections[2]
+        let uniqueDrawers = Array(uniqueSections.dropFirst(3))
+        guard config.leftPinned != left || config.mainRow != main
+                || config.rightPinned != right || config.drawerRows != uniqueDrawers else { return }
+        var updated = config
+        updated.leftPinned = left
+        updated.mainRow = main
+        updated.rightPinned = right
+        updated.drawerRows = uniqueDrawers
+        config = updated
+        Self.logger.info("Toolbar user action: saved key sections and drawer rows")
+        notifyChange()
+    }
+
+    func setAppearance(_ appearance: ToolbarAppearance) {
+        guard config.appearance != appearance else { return }
+        var updated = config
+        updated.appearance = appearance
+        config = updated
+        Self.logger.info("Toolbar user action: appearance changed to \(appearance.rawValue, privacy: .public)")
+        notifyChange()
+    }
+
+    func setScrollScope(_ scope: ToolbarScrollScope) {
+        guard config.scrollScope != scope else { return }
+        var updated = config
+        updated.scrollScope = scope
+        config = updated
+        Self.logger.info("Toolbar user action: scroll scope changed to \(scope.rawValue, privacy: .public)")
+        notifyChange()
+    }
+
+    func setScrollBehavior(_ behavior: ToolbarScrollBehavior) {
+        guard config.scrollBehavior != behavior else { return }
+        var updated = config
+        updated.scrollBehavior = behavior
+        config = updated
+        Self.logger.info("Toolbar user action: scroll behavior changed to \(behavior.rawValue, privacy: .public)")
         notifyChange()
     }
 
     func moveKeyToSection(_ slot: KeySlot, from: ToolbarSection, to: ToolbarSection) {
         guard from != to else { return }
 
-        switch from {
-        case .mainRow:
-            config.mainRow.removeAll { $0 == slot }
-        case .drawer:
-            // Remove from every drawer row; the source index may be stale.
-            for i in config.drawerRows.indices {
-                config.drawerRows[i].removeAll { $0 == slot }
+        updateLayout(action: "move \(String(describing: slot)) from \(from.logName) to \(to.logName)") { layout in
+            layout.leftPinned.removeAll { $0 == slot }
+            layout.mainRow.removeAll { $0 == slot }
+            layout.rightPinned.removeAll { $0 == slot }
+            for i in layout.drawerRows.indices {
+                layout.drawerRows[i].removeAll { $0 == slot }
+            }
+            switch to {
+            case .leftPinned:
+                layout.leftPinned.append(slot)
+            case .mainRow:
+                layout.mainRow.append(slot)
+            case .rightPinned:
+                layout.rightPinned.append(slot)
+            case .drawer(let index):
+                let clamped = max(0, min(layout.drawerRows.count - 1, index))
+                layout.drawerRows[clamped].insert(slot, at: 0)
             }
         }
-
-        switch to {
-        case .mainRow:
-            config.mainRow.append(slot)
-        case .drawer(let index):
-            let clamped = max(0, min(config.drawerRows.count - 1, index))
-            config.drawerRows[clamped].insert(slot, at: 0)
-        }
-        notifyChange()
     }
 
     func hideKey(_ keyID: KeyID) {
-        config.mainRow.removeAll { $0 == .builtIn(keyID) }
-        for i in config.drawerRows.indices {
-            config.drawerRows[i].removeAll { $0 == .builtIn(keyID) }
+        updateLayout(action: "hide \(keyID.rawValue)") { layout in
+            layout.leftPinned.removeAll { $0 == .builtIn(keyID) }
+            layout.mainRow.removeAll { $0 == .builtIn(keyID) }
+            layout.rightPinned.removeAll { $0 == .builtIn(keyID) }
+            for i in layout.drawerRows.indices {
+                layout.drawerRows[i].removeAll { $0 == .builtIn(keyID) }
+            }
+            layout.hiddenKeys.insert(keyID)
         }
-        config.hiddenKeys.insert(keyID)
-        notifyChange()
     }
 
     func unhideKey(_ keyID: KeyID) {
-        config.hiddenKeys.remove(keyID)
-        // Add back to the first drawer row by default
-        config.drawerRows[0].append(.builtIn(keyID))
-        notifyChange()
+        updateLayout(action: "restore \(keyID.rawValue)") { layout in
+            layout.hiddenKeys.remove(keyID)
+            layout.drawerRows[0].append(.builtIn(keyID))
+        }
     }
 
     func resetToDefaults() {
         config = ToolbarLayoutConfig.defaultConfig(for: currentIdiom)
+        Self.logger.info("Toolbar user action: reset layout to defaults")
         // Remove custom keys from layout but keep their definitions
         customKeys = []
         notifyChange()
@@ -229,9 +292,13 @@ class KeyboardToolbarManager {
 
     func deleteCustomKey(id: UUID) {
         customKeys.removeAll { $0.id == id }
-        config.mainRow.removeAll { $0 == .custom(id) }
-        for i in config.drawerRows.indices {
-            config.drawerRows[i].removeAll { $0 == .custom(id) }
+        updateLayout(action: "delete custom key \(id.uuidString)") { layout in
+            layout.leftPinned.removeAll { $0 == .custom(id) }
+            layout.mainRow.removeAll { $0 == .custom(id) }
+            layout.rightPinned.removeAll { $0 == .custom(id) }
+            for i in layout.drawerRows.indices {
+                layout.drawerRows[i].removeAll { $0 == .custom(id) }
+            }
         }
         notifyChange()
     }
@@ -243,7 +310,7 @@ class KeyboardToolbarManager {
     /// Custom keys whose UUID isn't placed in the main row or any drawer row.
     var unplacedCustomKeys: [CustomKey] {
         let placedIDs = Set(
-            (config.mainRow + config.drawerRows.flatMap { $0 }).compactMap { slot -> UUID? in
+            (config.leftPinned + config.mainRow + config.rightPinned + config.drawerRows.flatMap { $0 }).compactMap { slot -> UUID? in
                 if case .custom(let uuid) = slot { return uuid }
                 return nil
             }
@@ -254,11 +321,14 @@ class KeyboardToolbarManager {
     /// Removes a custom key from layout without deleting its definition.
     func removeCustomKeyFromLayout(id: UUID) {
         let slot = KeySlot.custom(id)
-        config.mainRow.removeAll { $0 == slot }
-        for i in config.drawerRows.indices {
-            config.drawerRows[i].removeAll { $0 == slot }
+        updateLayout(action: "remove custom key \(id.uuidString) from toolbar") { layout in
+            layout.leftPinned.removeAll { $0 == slot }
+            layout.mainRow.removeAll { $0 == slot }
+            layout.rightPinned.removeAll { $0 == slot }
+            for i in layout.drawerRows.indices {
+                layout.drawerRows[i].removeAll { $0 == slot }
+            }
         }
-        notifyChange()
     }
 
     /// Adds a custom key slot to the specified section if the definition exists
@@ -266,16 +336,23 @@ class KeyboardToolbarManager {
     func addCustomKeyToLayout(id: UUID, section: ToolbarSection) {
         guard customKey(for: id) != nil else { return }
         let slot = KeySlot.custom(id)
-        guard !config.mainRow.contains(slot),
+        guard !config.leftPinned.contains(slot),
+              !config.mainRow.contains(slot),
+              !config.rightPinned.contains(slot),
               !config.drawerRows.contains(where: { $0.contains(slot) }) else { return }
-        switch section {
-        case .mainRow:
-            config.mainRow.append(slot)
-        case .drawer(let index):
-            let clamped = max(0, min(config.drawerRows.count - 1, index))
-            config.drawerRows[clamped].append(slot)
+        updateLayout(action: "add custom key \(id.uuidString) to \(section.logName)") { layout in
+            switch section {
+            case .leftPinned:
+                layout.leftPinned.append(slot)
+            case .mainRow:
+                layout.mainRow.append(slot)
+            case .rightPinned:
+                layout.rightPinned.append(slot)
+            case .drawer(let index):
+                let clamped = max(0, min(layout.drawerRows.count - 1, index))
+                layout.drawerRows[clamped].append(slot)
+            }
         }
-        notifyChange()
     }
 
     // MARK: - Capacity & Effective Layout
@@ -290,14 +367,34 @@ class KeyboardToolbarManager {
     /// Main row and drawers must share the same capacity and reservation. A
     /// displaced key leads the first drawer, ahead of its configured contents.
     func effectiveLayout(availableWidth: CGFloat, reservedMainRowSlots: Int = 0,
-                         sizes: KeyboardSizes) -> (main: [KeySlot], drawers: [[KeySlot]]) {
-        KeyboardToolbarOverflow.layout(
-            main: validSlots(config.mainRow),
-            drawers: config.drawerRows.map { validSlots($0) },
-            capacity: mainRowCapacity(availableWidth: availableWidth, sizes: sizes),
+                         sizes: KeyboardSizes, scrollsMainRow: Bool = false) -> (left: [KeySlot], main: [KeySlot], right: [KeySlot], drawers: [[KeySlot]]) {
+        let left = validSlots(config.leftPinned)
+        let right = validSlots(config.rightPinned)
+        let pinned = Set(left + right)
+        let main = validSlots(config.mainRow).filter { !pinned.contains($0) }
+        let drawers = config.drawerRows.map { validSlots($0).filter { !pinned.contains($0) } }
+        let drawerToggle = KeySlot.builtIn(.drawerToggle)
+        var layout = KeyboardToolbarOverflow.layout(
+            main: main,
+            drawers: drawers,
+            capacity: scrollsMainRow ? main.count + reservedMainRowSlots + 1 : mainRowCapacity(availableWidth: availableWidth, sizes: sizes),
             reservedSlots: reservedMainRowSlots,
-            drawerToggle: .builtIn(.drawerToggle),
-            keepsDrawerToggleVisible: !config.hiddenKeys.contains(.drawerToggle))
+            drawerToggle: drawerToggle,
+            keepsDrawerToggleVisible: !config.hiddenKeys.contains(.drawerToggle) && !pinned.contains(drawerToggle))
+        if pinned.contains(drawerToggle) {
+            layout.main.removeAll { $0 == drawerToggle }
+            layout.drawers = layout.drawers.map { $0.filter { $0 != drawerToggle } }
+        }
+        return (left, layout.main, right, layout.drawers)
+    }
+
+    private func updateLayout(action: String, _ update: (inout ToolbarLayoutConfig) -> Void) {
+        var updated = config
+        update(&updated)
+        guard updated != config else { return }
+        config = updated
+        Self.logger.info("Toolbar user action: \(action, privacy: .public)")
+        notifyChange()
     }
 
     /// Filter out slots that reference deleted custom keys or hidden or unavailable built-in keys

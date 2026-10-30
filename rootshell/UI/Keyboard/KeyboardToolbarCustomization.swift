@@ -366,19 +366,60 @@ enum DrawerToggleMode: String, Codable, CaseIterable, Sendable {
     }
 }
 
+enum ToolbarAppearance: String, Codable, CaseIterable, Sendable {
+    case single
+    case separate
+
+    var displayName: String {
+        switch self {
+        case .single: String(localized: "Single Capsule")
+        case .separate: String(localized: "Three Sections")
+        }
+    }
+}
+
+enum ToolbarScrollScope: String, Codable, CaseIterable, Sendable {
+    case primary
+    case all
+
+    var displayName: String {
+        switch self {
+        case .primary: String(localized: "Primary Keys")
+        case .all: String(localized: "All Keys")
+        }
+    }
+}
+
+enum ToolbarScrollBehavior: String, Codable, CaseIterable, Sendable {
+    case continuous
+    case pages
+
+    var displayName: String {
+        switch self {
+        case .continuous: String(localized: "Continuous")
+        case .pages: String(localized: "Pages")
+        }
+    }
+}
+
 // MARK: - ToolbarLayoutConfig
 
 /// Persisted toolbar layout configuration.
 struct ToolbarLayoutConfig: Equatable, Sendable {
     var version: Int
+    var leftPinned: [KeySlot]
     var mainRow: [KeySlot]
+    var rightPinned: [KeySlot]
     /// One or more drawer rows. Invariant: never empty — always at least one row (possibly `[]`).
     var drawerRows: [[KeySlot]]
     var hiddenKeys: Set<KeyID>
+    var appearance: ToolbarAppearance
+    var scrollScope: ToolbarScrollScope
+    var scrollBehavior: ToolbarScrollBehavior
 
     // MARK: - Defaults
 
-    static let currentVersion = 17
+    static let currentVersion = 18
 
     static func defaultConfig(for idiom: UIUserInterfaceIdiom) -> ToolbarLayoutConfig {
         switch idiom {
@@ -391,8 +432,8 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
 
     static let iPhoneDefault = ToolbarLayoutConfig(
         version: currentVersion,
+        leftPinned: [],
         mainRow: [
-            .builtIn(.dismiss),
             .builtIn(.tabSwitcher),
             .builtIn(.esc),
             .builtIn(.ctrl),
@@ -403,6 +444,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
             .builtIn(.drawerToggle),
             .builtIn(.toolbarSettings),
         ],
+        rightPinned: [.builtIn(.aiAgent), .builtIn(.dismiss)],
         drawerRows: [[
             .builtIn(.alt),
             .builtIn(.cmd),
@@ -442,21 +484,24 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
             .builtIn(.toggleTabBar),
             .builtIn(.newConnection),
             .builtIn(.toggleMouseCapture),
-            .builtIn(.aiAgent),
             .builtIn(.brightnessBoost),
             .builtIn(.clipboardManager),
             .builtIn(.fileManager),
             .builtIn(.httpCapture),
             .builtIn(.appSettings),
         ]],
-        hiddenKeys: []
+        hiddenKeys: [],
+        appearance: .single,
+        scrollScope: .primary,
+        scrollBehavior: .pages
     )
 
     static let iPadDefault = ToolbarLayoutConfig(
         version: currentVersion,
+        leftPinned: [],
         // Keep the initial keys in the same order on both devices, including
         // narrow iPad windows where the remaining keys overflow into the drawer.
-        mainRow: iPhoneDefault.mainRow + [
+        mainRow: [.builtIn(.dismiss)] + iPhoneDefault.mainRow + [
             .builtIn(.alt),
             .builtIn(.cmd),
             .builtIn(.backtick),
@@ -467,6 +512,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
             .builtIn(.leftBracket),
             .builtIn(.rightBracket),
         ],
+        rightPinned: [],
         drawerRows: [[
             .builtIn(.tilde),
             .builtIn(.caret),
@@ -504,7 +550,10 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
             .builtIn(.httpCapture),
             .builtIn(.appSettings),
         ]],
-        hiddenKeys: []
+        hiddenKeys: [],
+        appearance: .single,
+        scrollScope: .primary,
+        scrollBehavior: .pages
     )
 
     // MARK: - Migration
@@ -518,11 +567,24 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
         let defaults = defaultConfig(for: idiom)
         var migrated = saved
         if migrated.drawerRows.isEmpty { migrated.drawerRows = [[]] }
+        migrated.leftPinned = []
+        migrated.rightPinned = []
+        migrated.appearance = .single
+        migrated.scrollScope = .primary
+        migrated.scrollBehavior = .pages
 
         // Saved defaults (including Reset to Defaults) should follow the new
         // placement. Compare the complete layout so custom placements stay intact.
         var previousDefaults = defaults
         previousDefaults.version = saved.version
+        previousDefaults.leftPinned = []
+        previousDefaults.rightPinned = []
+        if idiom != .pad {
+            previousDefaults.mainRow.insert(.builtIn(.dismiss), at: 0)
+            if !previousDefaults.drawerRows[0].contains(.builtIn(.aiAgent)) {
+                previousDefaults.drawerRows[0].insert(.builtIn(.aiAgent), at: min(38, previousDefaults.drawerRows[0].count))
+            }
+        }
         if idiom == .pad {
             // Reconstruct the iPad order shipped through v13 before comparing
             // saved defaults. Do not reorder user-customized layouts.
@@ -541,6 +603,17 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
             if saved.version == 12,
                let composeIndex = previousDefaults.mainRow.firstIndex(of: .builtIn(.compose)) {
                 previousDefaults.mainRow.insert(.builtIn(.writingAssistance), at: composeIndex + 1)
+            }
+        }
+        if saved.version < 18, idiom != .pad {
+            migrated.rightPinned = defaultConfig(for: idiom).rightPinned.filter { slot in
+                guard let keyID = slot.keyID else { return true }
+                return !migrated.hiddenKeys.contains(keyID)
+            }
+            let pinned = Set(migrated.rightPinned)
+            migrated.mainRow.removeAll { pinned.contains($0) }
+            for i in migrated.drawerRows.indices {
+                migrated.drawerRows[i].removeAll { pinned.contains($0) }
             }
         }
         if (11...13).contains(saved.version), saved == previousDefaults {
@@ -565,15 +638,23 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
 
         // Collect all KeyIDs currently in the saved config
         let savedKeyIDs = Set(
-            (migrated.mainRow + migrated.drawerRows.flatMap { $0 }).compactMap(\.keyID)
+            (migrated.leftPinned + migrated.mainRow + migrated.rightPinned + migrated.drawerRows.flatMap { $0 }).compactMap(\.keyID)
         )
 
         // Find new keys in defaults that aren't in saved and aren't hidden
         let defaultMainKeyIDs = defaults.mainRow.compactMap(\.keyID)
+        let defaultLeftKeyIDs = defaults.leftPinned.compactMap(\.keyID)
+        let defaultRightKeyIDs = defaults.rightPinned.compactMap(\.keyID)
         let defaultDrawerKeyIDs = defaults.drawerRows.flatMap { $0 }.compactMap(\.keyID)
 
+        for keyID in defaultLeftKeyIDs where !savedKeyIDs.contains(keyID) && !saved.hiddenKeys.contains(keyID) {
+            migrated.leftPinned.append(.builtIn(keyID))
+        }
         for keyID in defaultMainKeyIDs where !savedKeyIDs.contains(keyID) && !saved.hiddenKeys.contains(keyID) {
             migrated.mainRow.append(.builtIn(keyID))
+        }
+        for keyID in defaultRightKeyIDs where !savedKeyIDs.contains(keyID) && !saved.hiddenKeys.contains(keyID) {
+            migrated.rightPinned.append(.builtIn(keyID))
         }
         for keyID in defaultDrawerKeyIDs where !savedKeyIDs.contains(keyID) && !saved.hiddenKeys.contains(keyID) {
             migrated.drawerRows[0].append(.builtIn(keyID))
@@ -581,7 +662,15 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
 
         // Remove slots referencing KeyIDs that no longer exist
         let validKeyIDs = Set(KeyID.allCases)
+        migrated.leftPinned.removeAll { slot in
+            if let keyID = slot.keyID { return !validKeyIDs.contains(keyID) }
+            return false
+        }
         migrated.mainRow.removeAll { slot in
+            if let keyID = slot.keyID { return !validKeyIDs.contains(keyID) }
+            return false
+        }
+        migrated.rightPinned.removeAll { slot in
             if let keyID = slot.keyID { return !validKeyIDs.contains(keyID) }
             return false
         }
@@ -612,16 +701,26 @@ extension ToolbarLayoutConfig: Codable {
     private enum CodingKeys: String, CodingKey {
         case version
         case mainRow
+        case leftPinned
+        case rightPinned
         case drawerRows
         case drawerRow  // legacy (v ≤ 10)
         case hiddenKeys
+        case appearance
+        case scrollScope
+        case scrollBehavior
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decode(Int.self, forKey: .version)
+        leftPinned = try container.decodeIfPresent([KeySlot].self, forKey: .leftPinned) ?? []
         mainRow = try container.decode([KeySlot].self, forKey: .mainRow)
+        rightPinned = try container.decodeIfPresent([KeySlot].self, forKey: .rightPinned) ?? []
         hiddenKeys = try container.decode(Set<KeyID>.self, forKey: .hiddenKeys)
+        appearance = try container.decodeIfPresent(ToolbarAppearance.self, forKey: .appearance) ?? .single
+        scrollScope = try container.decodeIfPresent(ToolbarScrollScope.self, forKey: .scrollScope) ?? .primary
+        scrollBehavior = try container.decodeIfPresent(ToolbarScrollBehavior.self, forKey: .scrollBehavior) ?? .pages
         if let rows = try container.decodeIfPresent([[KeySlot]].self, forKey: .drawerRows) {
             drawerRows = rows.isEmpty ? [[]] : rows
         } else {
@@ -632,10 +731,15 @@ extension ToolbarLayoutConfig: Codable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(version, forKey: .version)
+        try container.encode(leftPinned, forKey: .leftPinned)
         try container.encode(mainRow, forKey: .mainRow)
+        try container.encode(rightPinned, forKey: .rightPinned)
         try container.encode(drawerRows, forKey: .drawerRows)
         try container.encode(drawerRows[0], forKey: .drawerRow)
         try container.encode(hiddenKeys, forKey: .hiddenKeys)
+        try container.encode(appearance, forKey: .appearance)
+        try container.encode(scrollScope, forKey: .scrollScope)
+        try container.encode(scrollBehavior, forKey: .scrollBehavior)
     }
 }
 

@@ -22,6 +22,28 @@ nonisolated enum KeyboardToolbarOverflow {
     }
 }
 
+/// A page contains only complete key cells. The last page keeps the same width
+/// as every other page, so the scroll view can land on an exact page boundary.
+nonisolated struct ToolbarPageLayout {
+    let viewportWidth: CGFloat
+    let capacity: Int
+    let itemCount: Int
+
+    init(viewportWidth: CGFloat, buttonWidth: CGFloat, spacing: CGFloat, itemCount: Int) {
+        self.viewportWidth = max(1, viewportWidth)
+        capacity = max(1, Int((max(1, viewportWidth) + spacing) / max(1, buttonWidth + spacing)))
+        self.itemCount = max(0, itemCount)
+    }
+
+    var cellWidth: CGFloat { viewportWidth / CGFloat(capacity) }
+    var pageCount: Int { max(1, (itemCount + capacity - 1) / capacity) }
+    var contentWidth: CGFloat { CGFloat(pageCount) * viewportWidth }
+
+    func offset(containing item: Int) -> CGFloat {
+        CGFloat(min(pageCount - 1, max(0, item) / capacity)) * viewportWidth
+    }
+}
+
 /// Platform-independent behavior shared by the touch surface and its tests.
 nonisolated enum TerminalTouchKeyboardModel {
     /// Stable persisted identifiers; rendering implementations live in the style files.
