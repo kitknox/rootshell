@@ -16,6 +16,7 @@ struct HTTPCaptureSidebarView: View {
     @Binding var isDragging: Bool
     let totalWidth: CGFloat
     let theme: ResolvedSheetTheme
+    let side: EdgeSidebarSide
     let onClose: () -> Void
     let onSwitchPresentation: (PanelPresentation) -> Void
 
@@ -29,26 +30,39 @@ struct HTTPCaptureSidebarView: View {
         theme.themeColors?.background ?? Color(uiColor: .systemBackground)
     }
 
+    private var columnShape: UnevenRoundedRectangle {
+        side == .leading
+            ? PaneCardStyle.leadingColumnShape(rounded: roundedPanes)
+            : PaneCardStyle.trailingColumnShape(rounded: roundedPanes)
+    }
+
+    private var resizeDivider: some View {
+        SidebarResizeDivider(
+            side: side == .leading ? .left : .right,
+            width: $width,
+            isDragging: $isDragging,
+            minWidth: Self.minWidth,
+            maxWidth: max(Self.minWidth, totalWidth * maxWidthFraction),
+            defaultWidth: Self.defaultWidth,
+            cardGap: roundedPanes ? PaneCardStyle.gap : nil,
+            backgroundColor: roundedPanes ? .clear : background,
+            onCommit: { SettingsStore.shared.set(Settings.HTTPCapture.sidebarWidth, Double($0)) }
+        )
+    }
+
     var body: some View {
         HStack(spacing: 0) {
-            SidebarResizeDivider(
-                side: .right,
-                width: $width,
-                isDragging: $isDragging,
-                minWidth: Self.minWidth,
-                maxWidth: max(Self.minWidth, totalWidth * maxWidthFraction),
-                defaultWidth: Self.defaultWidth,
-                cardGap: roundedPanes ? PaneCardStyle.gap : nil,
-                backgroundColor: roundedPanes ? .clear : background,
-                onCommit: { SettingsStore.shared.set(Settings.HTTPCapture.sidebarWidth, Double($0)) }
-            )
-            HTTPCaptureView(model: model, style: .sidebar, onClose: onClose, onSwitchPresentation: onSwitchPresentation)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(background)
-                .clipShape(PaneCardStyle.trailingColumnShape(rounded: roundedPanes))
-                .shadow(color: .black.opacity(roundedPanes ? 0 : 0.15), radius: 8, x: -2, y: 0)
-                .paneCardDepth(roundedPanes, shape: PaneCardStyle.trailingColumnShape(rounded: true),
-                               palette: IntegratedTabEdgePalette(cardSurface: background))
+            if side == .trailing { resizeDivider }
+                HTTPCaptureView(model: model, style: .sidebar, onClose: onClose, onSwitchPresentation: onSwitchPresentation)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(background)
+            .clipShape(columnShape)
+            .shadow(color: .black.opacity(roundedPanes ? 0 : 0.15), radius: 8, x: side == .leading ? 2 : -2, y: 0)
+            .paneCardDepth(roundedPanes, shape: side == .leading
+                ? PaneCardStyle.leadingColumnShape(rounded: true)
+                : PaneCardStyle.trailingColumnShape(rounded: true),
+                           palette: IntegratedTabEdgePalette(cardSurface: background))
+            if side == .leading { resizeDivider }
         }
         .background((roundedPanes ? .clear : background).ignoresSafeArea(.container, edges: .bottom))
         .fileManagerTheme(theme)

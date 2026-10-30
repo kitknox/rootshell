@@ -12,7 +12,7 @@ import LocalAuthentication
 import SwiftUI
 
 struct ClipboardManagerOverlay: View {
-    enum Style { case hud, sheet }
+    enum Style { case hud, sheet, sidebar }
 
     let style: Style
     @Binding var isPresented: Bool
@@ -23,6 +23,7 @@ struct ClipboardManagerOverlay: View {
     var pasteHandler: (String) -> Void
 
     var manager = ClipboardHistoryManager.shared
+    @Environment(\.edgeSidebarTitleContext) private var edgeSidebarTitleContext
 
     @State private var searchText = ""
     /// Entry IDs matching the debounced off-main search; nil = no active filter.
@@ -48,7 +49,7 @@ struct ClipboardManagerOverlay: View {
     var body: some View {
         Group {
             switch style {
-            case .hud: hudBody
+            case .hud, .sidebar: hudBody
             case .sheet: sheetBody
             }
         }
@@ -63,6 +64,9 @@ struct ClipboardManagerOverlay: View {
     // MARK: - Shared state helpers
 
     private var isLocked: Bool { manager.requireBiometric && !manager.isUnlocked }
+    private var canClearHistory: Bool {
+        manager.isEnabled && !isLocked && !manager.entries.isEmpty && selectedEntryID == nil
+    }
 
     private var filteredEntries: [ClipboardEntry] {
         guard let ids = searchMatchIDs else { return manager.entries }
@@ -337,9 +341,10 @@ struct ClipboardManagerOverlay: View {
             hudHeader
 
             hudContent
-                .frame(width: 380, height: Self.hudContentHeight)
+                .frame(width: style == .sidebar ? nil : 380, height: style == .sidebar ? nil : Self.hudContentHeight)
+                .frame(maxWidth: .infinity, maxHeight: style == .sidebar ? .infinity : nil)
         }
-        .frame(width: 380)
+        .frame(width: style == .sidebar ? nil : 380)
         .floatingHUDPanelBackground()
         // Normally the HUD opens in passthrough and keyboard mode arrives via
         // onChange; onAppear covers a re-mount while the mode is already on.
@@ -432,7 +437,57 @@ struct ClipboardManagerOverlay: View {
         }
     }
 
+    @ViewBuilder
     private var hudHeader: some View {
+        if edgeSidebarTitleContext != nil {
+            EdgeSidebarHeader(
+                title: String(localized: "Clipboard"),
+                systemImage: "clipboard",
+                status: manager.isEnabled && !isLocked && selectedEntryID == nil ? "\(manager.entries.count)" : nil,
+                onBack: selectedEntryID == nil ? nil : { selectedEntryID = nil },
+                onClose: { isPresented = false }
+            ) {
+                if canClearHistory {
+                    clearHistoryButton.edgeSidebarHeaderActionTarget()
+                } else {
+                    EmptyView()
+                }
+            }
+        } else {
+            standaloneHUDHeader
+        }
+    }
+
+    @ViewBuilder
+    private var clearHistoryButton: some View {
+        if canClearHistory {
+            Button {
+                showClearConfirmation = true
+            } label: {
+                Image(systemName: "trash")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Clear All History"))
+            // Keep the dialog attached to the button. A presentation modifier
+            // on the hosted root breaks the draggable HUD's size measurement.
+            .confirmationDialog(
+                "Clear all clipboard history?",
+                isPresented: $showClearConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Clear All History", role: .destructive) {
+                    manager.clearAll()
+                    selectedEntryID = nil
+                }
+            } message: {
+                Text("This deletes every entry, including pinned ones.")
+            }
+        }
+    }
+
+    private var standaloneHUDHeader: some View {
         HStack(spacing: 8) {
             if selectedEntry != nil {
                 Button {
@@ -444,9 +499,7 @@ struct ClipboardManagerOverlay: View {
                 .buttonStyle(.plain)
             }
 
-            Text("Clipboard")
-                .font(.headline)
-                .fontWeight(.semibold)
+            Text("Clipboard").font(.headline).fontWeight(.semibold)
 
             if manager.isEnabled, !isLocked, selectedEntryID == nil {
                 Text("\(manager.entries.count)")
@@ -456,32 +509,7 @@ struct ClipboardManagerOverlay: View {
 
             Spacer()
 
-            if manager.isEnabled, !isLocked, !manager.entries.isEmpty, selectedEntryID == nil {
-                Button {
-                    showClearConfirmation = true
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("Clear All History"))
-                // Attached here, NOT on the panel root: a presentation modifier
-                // on the hosted root breaks DraggableHUDContainer's first
-                // intrinsic-size measurement and the panel latches a bogus frame.
-                .confirmationDialog(
-                    "Clear all clipboard history?",
-                    isPresented: $showClearConfirmation,
-                    titleVisibility: .visible
-                ) {
-                    Button("Clear All History", role: .destructive) {
-                        manager.clearAll()
-                        selectedEntryID = nil
-                    }
-                } message: {
-                    Text("This deletes every entry, including pinned ones.")
-                }
-            }
+            clearHistoryButton
 
             Button(action: { isPresented = false }) {
                 Image(systemName: "xmark.circle.fill")

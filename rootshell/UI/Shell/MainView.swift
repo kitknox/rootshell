@@ -46,6 +46,10 @@ struct MainView: View {
     
     @Environment(\.duoLayout) var duoLayout
     @Environment(\.horizontalSizeClass) var workspaceSizeClass
+    @State var shellViewportSize: CGSize = .zero
+    @State var terminalRowViewportWidth: CGFloat = 0
+    @State var lastActiveEdgeSidebar: EdgeSidebarSide = .leading
+    @State var pendingWideSidebarAutoOpen = false
     @State var duoTabletopDisabled = false
     @State var duoTabletopAvailable = false
     @EnvironmentObject var ghosttyApp: Ghostty.App
@@ -356,10 +360,19 @@ struct MainView: View {
     // Vertical tab sidebar state (toggled by the tab-switcher button/shortcut)
     @State var showingTabSwitcher = false
     @State var tabSidebarCollapsedGateways: Set<UUID> = TabSidebarCollapseStore.load()
-    /// When pinned, the sidebar renders as a docked left column that shrinks
-    /// the terminal (instead of a floating overlay over it). Routes
-    /// `showingTabSwitcher` to docked vs floating — see `tabSidebarIsDocked`.
+    /// When pinned, the sidebar renders as a docked column on the tab
+    /// switcher's side and shrinks the terminal (instead of a floating
+    /// overlay over it). Routes `showingTabSwitcher` to docked vs floating.
+    /// See `tabSidebarIsDocked`.
     @Setting(Settings.Sidebar.pinned) var tabSidebarPinned
+    @Setting(Settings.Sidebar.pinInWideLayout) var edgeSidebarsPinnedInWideLayout
+    @Setting(Settings.Sidebar.openRightInWideLayout) var edgeSidebarOpensRightInWideLayout
+    /// `page:side` tokens. Stock is the tab switcher on the left and the
+    /// other tools on the right.
+    @Setting(Settings.Sidebar.pageSides) var edgeSidebarPageSides
+    @Setting(Settings.Sidebar.edgeSidebarButtons) var edgeSidebarButtonsEnabled
+    /// Selected tool for each edge. Missing keys use the first available tool.
+    @State var edgeSidebarSelectedPage: [EdgeSidebarSide: EdgeSidebarPage] = [:]
     /// Draws panes and docked columns as rounded cards; see PaneCardStyle.
     @Setting(Settings.Window.roundedPanes) var roundedPanes
     @Setting(Settings.Window.showRemotePorts) var showRemotePorts
@@ -369,25 +382,25 @@ struct MainView: View {
     /// No effect on phone/visionOS (those always dismiss) or in pinned/docked mode.
     @Setting(Settings.Sidebar.autoHideOnSelect) var tabSidebarAutoHideOnSelect
 
-    /// Mirror of the tab sidebar's control-density setting so the docked
-    /// column's resize floor (`TabSidebarLayout.dockedMinWidth`) widens when the
+    /// Mirror of the tab sidebar's control-density setting so the legacy
+    /// pinned column's resize floor (`TabSidebarLayout.dockedMinWidth`) widens when the
     /// user switches to large controls (default: large on phone, compact else).
     @Setting(Settings.Sidebar.largeControls) var tabSidebarLargeControls
 
-    /// User-resizable width of the docked (pinned) tab sidebar column. Local
+    /// User-resizable width shared by the pinned edge columns. Local
     /// `@State` drives layout live during a divider drag; the value is
     /// persisted (via `TabSidebarLayout`) only on release. Deliberately NOT
     /// `@AppStorage` — that would republish and re-render `MainView` on every
     /// drag frame (mirrors how `aiAgentSidebarWidth` works).
     @State var tabSidebarDockedWidth: CGFloat = TabSidebarLayout.loadDockedWidth()
-    /// True only while the user is actively dragging the docked sidebar's
+    /// True only while the user is actively dragging a pinned sidebar's
     /// resize divider; used solely to disable the width animation mid-drag.
     /// Must NOT feed any keyboard/focus/`isAnySheetPresented` predicate.
     @State var tabSidebarIsDragging: Bool = false
 
-    /// Pinning (docked column that shrinks the terminal) only makes sense
-    /// where there is room beside the terminal: iPad + Mac Catalyst. iPhone
-    /// has none; visionOS presents the sidebar as a sheet.
+    /// The legacy Pin Tab Sidebar setting uses regular-width availability.
+    /// Adaptive landscape and unfolded Duo pinning uses
+    /// `usesPinnedWideEdgeSidebarLayout` and actual window geometry instead.
     var canPinTabSidebar: Bool {
         #if os(visionOS)
         return false
@@ -396,14 +409,30 @@ struct MainView: View {
         #endif
     }
 
-    /// The sidebar is currently shown as a docked left column rather than the
-    /// floating overlay. The single switch that routes presentation, keyboard
+    /// Wide iOS layouts use pinned edge columns when the setting is enabled.
+    /// The geometry check works for landscape iPhone windows; unfolded Duo is
+    /// detected from its hinge state even if its scene geometry is ambiguous.
+    var usesPinnedWideEdgeSidebarLayout: Bool {
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        let isLandscape = shellViewportSize.width > 0 && shellViewportSize.width >= shellViewportSize.height
+        let isUnfoldedDuo = duoLayout.hasHinge && !duoLayout.isFrontDisplay
+        return edgeSidebarsPinnedInWideLayout
+            && (isLandscape || isUnfoldedDuo)
+            && tabsModel.fullScreenPaneID == nil
+        #else
+        return false
+        #endif
+    }
+
+    /// The tab switcher is currently shown as a pinned edge column rather than
+    /// a floating drawer. The single switch that routes presentation, keyboard
     /// ownership (`isAnySheetPresented`), and tab-select focus.
-    /// Full-screen VNC is a window-level takeover, so an inline docked column
+    /// Full-screen VNC is a window-level takeover, so an inline pinned column
     /// would remain underneath it. Preserve the user's pin preference but use
     /// the floating window overlay until the takeover ends.
     var tabSidebarUsesDockedPresentation: Bool {
-        tabSidebarPinned && canPinTabSidebar && tabsModel.fullScreenPaneID == nil
+        (usesPinnedWideEdgeSidebarLayout || (tabSidebarPinned && canPinTabSidebar))
+            && tabsModel.fullScreenPaneID == nil
     }
 
     var tabSidebarIsDocked: Bool {
@@ -463,8 +492,13 @@ struct MainView: View {
         let content = DuoWorkspaceGeometry(
             context: effectiveDuoLayout,
             headerHeight: showsHorizontalTabHeader ? TabMetrics.tabBarHeight : 0,
-            headerTopLimit: tabHeaderTopLimit
+            headerTopLimit: tabHeaderTopLimit,
+            windowSafeAreaTop: windowSafeAreaInsets.top
         ) { geometry, workspace in
+            let terminalRowAvailableWidth = max(
+                0,
+                geometry.size.width - workspace.terminalInsets.leading - workspace.terminalInsets.trailing
+            )
             #if !os(visionOS)
             let _ = effectManager.keyboardStateVersion
             let defersBottomSystemGesture = !isAnySheetPresented
@@ -515,7 +549,8 @@ struct MainView: View {
                     // hinge reservations, keeping keyboard overlap scene-local.
                     GeometryReader { terminalGeometry in
                         // The detach banner also covers the empty state after tmux prunes its tabs.
-                        if ghosttyApp.readiness == .ready, !terminals.isEmpty {
+                        if ghosttyApp.readiness == .ready,
+                           !terminals.isEmpty || (usesPinnedWideEdgeSidebarLayout && !windowClosingAfterTabTransfer) {
                             terminalAndSidebarContent(geometry: terminalGeometry, theme: resolvedTheme)
                         } else if ghosttyApp.readiness == .ready, terminals.isEmpty, !windowClosingAfterTabTransfer {
                             // Empty state - shown when all tabs are closed
@@ -548,6 +583,39 @@ struct MainView: View {
                     if !available { duoTabletopDisabled = false }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+                .onChange(of: geometry.size, initial: true) { _, size in
+                    shellViewportSize = size
+                }
+                .onChange(of: terminalRowAvailableWidth, initial: true) { _, width in
+                    terminalRowViewportWidth = width
+                    applyPendingWideSidebarAutoOpen()
+                }
+                .onChange(of: usesPinnedWideEdgeSidebarLayout) { wasPinned, isPinned in
+                    let mode = isPinned ? "pinned" : "drawer"
+                    Ghostty.logger.info("Edge sidebar layout mode=\(mode, privacy: .public) window=\(windowId, privacy: .public)")
+                    if !isPinned { pendingWideSidebarAutoOpen = false }
+                    if wasPinned && !isPinned,
+                       edgeSidebarSideIsOpen(.leading), edgeSidebarSideIsOpen(.trailing) {
+                        closeEdgeSidebar(lastActiveEdgeSidebar.opposite)
+                    }
+                    guard isPinned, !wasPinned else { return }
+                    pendingWideSidebarAutoOpen = true
+                    if abs(terminalRowViewportWidth - terminalRowAvailableWidth) < 0.5 {
+                        applyPendingWideSidebarAutoOpen()
+                    }
+                }
+                .onChange(of: showSettings) { wasPresented, isPresented in
+                    guard wasPresented, !isPresented else { return }
+                    applyPendingWideSidebarAutoOpen()
+                }
+                .onChange(of: shellViewportSize.width) { _, _ in
+                    applyPendingWideSidebarAutoOpen()
+                }
+                .onChange(of: canFitBothPinnedEdgeSidebars) { _, canFit in
+                    guard usesPinnedWideEdgeSidebarLayout, !canFit,
+                          edgeSidebarSideIsOpen(.leading), edgeSidebarSideIsOpen(.trailing) else { return }
+                    closeEdgeSidebar(lastActiveEdgeSidebar.opposite)
+                }
                 .background(WindowSceneReporter(onUpdate: { scene, safeAreaInsets, isKeyWindow, newStatusBarBottom in
                     let newID = scene?.session.persistentIdentifier
                     let newInsets = EdgeInsets(
@@ -606,22 +674,29 @@ struct MainView: View {
                     #endif
                 }))
                 #if !os(visionOS)
-                // Pull the tab sidebar in from the left screen edge (iPad).
                 .background(TabSidebarEdgeSwipe(
-                    showingTabSwitcher: $showingTabSwitcher,
-                    canOpen: { !showingTabSwitcher && !isAnySheetPresented },
-                    opensDocked: tabSidebarUsesDockedPresentation,
-                    panelWidth: 420
+                    edge: .leading,
+                    canOpen: { canOpenEdgeSidebar(.leading) },
+                    tracksFinger: edgeTracksFinger(.leading),
+                    panelWidth: 420,
+                    onOpen: { openEdgeSidebar(.leading) },
+                    onCancel: { closeEdgeSidebar(.leading) }
                 ))
-                // Defer the iPad leading edge for the sidebar gesture. Also
-                // defer Home while an iPhone/iPad toolbar sits at the screen
-                // edge without a docked software keyboard. Gesture arbitration
-                // changes; keyboard geometry does not.
+                .background(TabSidebarEdgeSwipe(
+                    edge: .trailing,
+                    canOpen: { canOpenEdgeSidebar(.trailing) },
+                    tracksFinger: edgeTracksFinger(.trailing),
+                    panelWidth: 420,
+                    onOpen: { openEdgeSidebar(.trailing) },
+                    onCancel: { closeEdgeSidebar(.trailing) }
+                ))
+                // Defer an iPhone or iPad edge while its drawer can open or is already
+                // floating. A docked column leaves the system edge alone.
+                // Also defer Home while an iPhone/iPad toolbar sits at the
+                // screen edge without a docked software keyboard.
                 .defersSystemGestures(
-                    on: ((UIDevice.current.userInterfaceIdiom == .pad
-                          && ((!showingTabSwitcher && !isAnySheetPresented)
-                              || (showingTabSwitcher && !tabSidebarIsDocked)))
-                        ? Edge.Set.leading : [])
+                    on: (defersEdgeSidebarGesture(.leading) ? Edge.Set.leading : [])
+                        .union(defersEdgeSidebarGesture(.trailing) ? Edge.Set.trailing : [])
                         .union(
                             (((UIDevice.current.userInterfaceIdiom == .phone
                                || UIDevice.current.userInterfaceIdiom == .pad)
@@ -659,9 +734,8 @@ struct MainView: View {
                     // Center over the terminal, not the window: the docked
                     // (pinned) tab sidebar consumes the leading edge and the
                     // AI agent sidebar the trailing edge.
-                    .padding(.leading, dockedTabSidebarWidth(windowWidth: geometry.size.width))
-                    .padding(.trailing, aiAgentSidebarCurrentWidth() + fileManagerSidebarCurrentWidth + httpCaptureDockedWidth
-                        + agentInboxSidebarCurrentWidth)
+                    .padding(.leading, leadingChromeWidth(windowWidth: geometry.size.width))
+                    .padding(.trailing, trailingChromeWidth(windowWidth: geometry.size.width))
                     .transition(.opacity)
                 }
             }

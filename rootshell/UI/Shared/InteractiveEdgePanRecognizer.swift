@@ -11,6 +11,7 @@
 //
 
 import UIKit
+import os
 
 @MainActor
 final class InteractiveEdgePanRecognizer: NSObject, UIGestureRecognizerDelegate {
@@ -139,6 +140,24 @@ final class InteractiveEdgePanRecognizer: NSObject, UIGestureRecognizerDelegate 
 
     func owns(_ recognizer: UIGestureRecognizer) -> Bool {
         touchPans.contains { $0 === recognizer } || trackpadPan === recognizer
+    }
+
+    /// Uses the installed edge owner's gates, including a reveal that already
+    /// began before the competing terminal recognizer asks to start.
+    static func claimsHorizontalSwipe(in window: UIWindow, startingAt start: CGPoint, translation: CGPoint) -> Bool {
+        for pan in window.gestureRecognizers ?? [] {
+            guard let owner = pan.delegate as? InteractiveEdgePanRecognizer,
+                  owner.configuration.axis == .horizontal,
+                  owner.touchPans.contains(where: { $0 === pan }),
+                  pan.isEnabled, pan.state != .failed, pan.state != .cancelled,
+                  owner.callbacks.isInActivationBand(start, window, 1) else { continue }
+            if (owner.active && !owner.activeIsTrackpad && owner.activePan === pan)
+                || owner.callbacks.shouldBegin(start, translation, window, 1) {
+                Ghostty.logger.debug("Edge swipe owns input window=\(String(describing: ObjectIdentifier(window)), privacy: .public) x=\(start.x) dx=\(translation.x)")
+                return true
+            }
+        }
+        return false
     }
 
     /// Finger count a recognizer stands for; 0 for the trackpad pan.

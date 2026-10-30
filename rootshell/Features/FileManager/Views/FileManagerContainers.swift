@@ -16,6 +16,7 @@ struct FileManagerSidebarView: View {
     let totalWidth: CGFloat
     let canFocus: Bool
     let theme: ResolvedSheetTheme
+    let side: EdgeSidebarSide
     let onClose: () -> Void
     let onSwitchPresentation: (PanelPresentation) -> Void
 
@@ -30,32 +31,45 @@ struct FileManagerSidebarView: View {
         theme.themeColors?.background ?? Color(uiColor: .systemBackground)
     }
 
+    private var columnShape: UnevenRoundedRectangle {
+        side == .leading
+            ? PaneCardStyle.leadingColumnShape(rounded: roundedPanes)
+            : PaneCardStyle.trailingColumnShape(rounded: roundedPanes)
+    }
+
+    private var resizeDivider: some View {
+        SidebarResizeDivider(
+            side: side == .leading ? .left : .right,
+            width: $width,
+            isDragging: $isDragging,
+            minWidth: Self.minWidth,
+            maxWidth: max(Self.minWidth, totalWidth * maxWidthFraction),
+            defaultWidth: Self.defaultWidth,
+            cardGap: roundedPanes ? PaneCardStyle.gap : nil,
+            backgroundColor: roundedPanes ? .clear : background,
+            onCommit: { SettingsStore.shared.set(Settings.Transfer.fileManagerSidebarWidth, Double($0)) }
+        )
+    }
+
     var body: some View {
         HStack(spacing: 0) {
-            SidebarResizeDivider(
-                side: .right,
-                width: $width,
-                isDragging: $isDragging,
-                minWidth: Self.minWidth,
-                maxWidth: max(Self.minWidth, totalWidth * maxWidthFraction),
-                defaultWidth: Self.defaultWidth,
-                cardGap: roundedPanes ? PaneCardStyle.gap : nil,
-                backgroundColor: roundedPanes ? .clear : background,
-                onCommit: { SettingsStore.shared.set(Settings.Transfer.fileManagerSidebarWidth, Double($0)) }
-            )
-            FileManagerView(
-                manager: manager,
-                style: .sidebar,
-                canFocus: canFocus,
-                onClose: onClose,
-                onSwitchPresentation: onSwitchPresentation
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if side == .trailing { resizeDivider }
+                FileManagerView(
+                    manager: manager,
+                    style: .sidebar,
+                    canFocus: canFocus,
+                    onClose: onClose,
+                    onSwitchPresentation: onSwitchPresentation
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(background)
-            .clipShape(PaneCardStyle.trailingColumnShape(rounded: roundedPanes))
-            .shadow(color: .black.opacity(roundedPanes ? 0 : 0.15), radius: 8, x: -2, y: 0)
-            .paneCardDepth(roundedPanes, shape: PaneCardStyle.trailingColumnShape(rounded: true),
+            .clipShape(columnShape)
+            .shadow(color: .black.opacity(roundedPanes ? 0 : 0.15), radius: 8, x: side == .leading ? 2 : -2, y: 0)
+            .paneCardDepth(roundedPanes, shape: side == .leading
+                ? PaneCardStyle.leadingColumnShape(rounded: true)
+                : PaneCardStyle.trailingColumnShape(rounded: true),
                            palette: IntegratedTabEdgePalette(cardSurface: background))
+            if side == .leading { resizeDivider }
         }
         .background((roundedPanes ? .clear : background).ignoresSafeArea(.container, edges: .bottom))
         .fileManagerTheme(theme)

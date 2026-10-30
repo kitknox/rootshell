@@ -3,11 +3,13 @@
 //  rootshell
 //
 //  Presents the file manager: a resizable column beside the terminal, a HUD
-//  over it (floating or covering it), or a sheet on iPhone. The window's model is created on first use
-//  and kept while hidden, so reopening restores panes, selection and focus.
+//  over it (floating or covering it), or an edge drawer. visionOS
+//  compact width still uses a sheet. The window's model is created on first
+//  use and kept while hidden, so reopening restores panes, selection and focus.
 //
 
 import SwiftUI
+import os
 
 extension MainView {
     var fileManagerShowsSidebar: Bool {
@@ -17,15 +19,13 @@ extension MainView {
     /// The floating or full-size HUD.
     var fileManagerShowsOverlay: Bool {
         showFileManager && !isPhone && fileManagerPresentation != .sidebar && fileManagerModel != nil
+            && !edgeSidebarColumnOwns(.fileManager)
     }
 
-    /// The HUD and the iPhone sheet own the keyboard; the sidebar shares the window with the terminal.
+    /// The HUD and drawer own the keyboard; a pinned column shares it.
     var fileManagerOwnsKeyboard: Bool {
-        showFileManager && (isPhone || fileManagerPresentation.ownsKeyboard)
-    }
-
-    var fileManagerSidebarCurrentWidth: CGFloat {
-        fileManagerShowsSidebar ? fileManagerSidebarWidth : 0
+        showFileManager && !edgeSidebarColumnOwns(.fileManager)
+            && (isPhone || fileManagerPresentation.ownsKeyboard)
     }
 
     // MARK: - Toggle
@@ -33,16 +33,14 @@ extension MainView {
     /// First press opens; with the sidebar open but the terminal typing, a press
     /// moves focus into the manager; otherwise it closes.
     func toggleFileManager() {
-        if showFileManager {
-            if fileManagerShowsSidebar, KeyboardTracker.shared.isHardwareKeyboard, !fileManagerFieldFocused {
-                focusedTerminalForFileManager?.resignFirstResponder()
-                fileManagerModel?.requestFocus()
-            } else {
-                closeFileManager()
-            }
+        if (fileManagerShowsSidebar || edgeSidebarColumnOwns(.fileManager)),
+           KeyboardTracker.shared.isHardwareKeyboard,
+           !fileManagerFieldFocused {
+            focusedTerminalForFileManager?.resignFirstResponder()
+            fileManagerModel?.requestFocus()
             return
         }
-        openFileManager()
+        toggleEdgeSidebarPage(.fileManager)
     }
 
     private var fileManagerFieldFocused: Bool {
@@ -87,6 +85,7 @@ extension MainView {
             SettingsStore.shared.set(Settings.Transfer.fileManagerPresentation, presentation)
         }
         if showFileManager {
+            adoptEdgeSidebarPage(.fileManager)
             model.requestFocus()
         } else {
             revealFileManager(model)
@@ -104,8 +103,14 @@ extension MainView {
         yieldSlotToFileManager(fileManagerPresentation)
         #endif
         yieldAgentInboxSlot(to: fileManagerPresentation)
+        adoptEdgeSidebarPage(.fileManager)
 
-        if isPhone {
+        if usesPinnedWideEdgeSidebarLayout {
+            if KeyboardTracker.shared.isHardwareKeyboard {
+                focusedTerminalForFileManager?.resignFirstResponder()
+            }
+            scheduleTerminalRelayout()
+        } else if isPhone {
             resignFirstResponderForSheetPresentation()
         } else if fileManagerPresentation == .sidebar {
             if KeyboardTracker.shared.isHardwareKeyboard { focusedTerminalForFileManager?.resignFirstResponder() }
@@ -118,7 +123,7 @@ extension MainView {
 
     func closeFileManager() {
         guard showFileManager else { return }
-        let wasSidebar = fileManagerShowsSidebar
+        let wasSidebar = fileManagerShowsSidebar || edgeSidebarColumnOwns(.fileManager)
         showFileManager = false
         fileManagerModel?.save()
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented)
@@ -138,6 +143,8 @@ extension MainView {
         yieldAgentInboxSlot(to: presentation)
         fileManagerPresentation = presentation
         SettingsStore.shared.set(Settings.Transfer.fileManagerPresentation, presentation)
+        if showFileManager { adoptEdgeSidebarPage(.fileManager) }
+        Ghostty.logger.info("Edge sidebar presentation page=fileManager mode=\(presentation.rawValue, privacy: .public) window=\(windowId, privacy: .public)")
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented || fileManagerOwnsKeyboard)
         scheduleTerminalRelayout()
         fileManagerModel?.requestFocus()
@@ -193,10 +200,10 @@ extension MainView {
 
     // MARK: - Views
 
-    /// The docked column, placed beside the AI sidebar when both are open.
     @ViewBuilder
     func fileManagerSidebarColumn(width: CGFloat, totalWidth: CGFloat) -> some View {
-        if fileManagerShowsSidebar, let model = fileManagerModel {
+        if fileManagerShowsSidebar, !edgeSidebarColumnOwns(.fileManager), let model = fileManagerModel {
+            let side = edgeSidebarAssignment.side(of: .fileManager)
             FileManagerSidebarView(
                 manager: model,
                 width: $fileManagerSidebarWidth,
@@ -204,11 +211,17 @@ extension MainView {
                 totalWidth: totalWidth,
                 canFocus: showFileManager,
                 theme: resolvedSheetTheme(),
+                side: side,
                 onClose: { closeFileManager() },
                 onSwitchPresentation: { switchFileManagerPresentation($0) }
             )
+            .environment(\.edgeSidebarTitleContext, EdgeSidebarTitleContext(
+                pages: edgeSidebarAssignment.pages(on: side),
+                selection: .fileManager,
+                onSelect: selectEdgeSidebarPage
+            ))
             .frame(width: width)
-            .transition(.move(edge: .trailing))
+            .transition(.move(edge: side == .leading ? .leading : .trailing))
         }
     }
 
@@ -243,7 +256,7 @@ extension MainView {
     func fileManagerPhoneSheetModifier(sheetTheme: ResolvedSheetTheme) -> FileManagerPhoneSheetModifier {
         FileManagerPhoneSheetModifier(
             isPresented: Binding(
-                get: { showFileManager && isPhone },
+                get: { showFileManager && isPhone && !fileManagerUsesEdgeSidebar },
                 set: { if !$0 { closeFileManager() } }
             ),
             model: fileManagerModel,

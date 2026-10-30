@@ -140,8 +140,16 @@ extension MainView {
                     } else {
                         resignFirstResponderForSheetPresentation()
                     }
-                } else if oldValue {
+                } else if oldValue, !isAnySheetPresented {
                     restoreFirstResponderAfterSheetDismissal()
+                }
+            }
+            .onChange(of: edgeSidebarPageSides) { _, _ in
+                for side in EdgeSidebarSide.allCases {
+                    let open = edgeSidebarAssignment.pages(on: side).filter(edgeSidebarPageIsOpen)
+                    if let page = open.first(where: { $0 == selectedEdgePage(on: side) }) ?? open.first {
+                        adoptEdgeSidebarPage(page)
+                    }
                 }
             }
             .onChange(of: connectionInfoToShow != nil) { oldValue, newValue in

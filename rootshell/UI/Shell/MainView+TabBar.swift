@@ -40,7 +40,9 @@ extension MainView {
     /// `TabBar`, where reading title/badge/health metadata does not invalidate
     /// `MainView.body`.
     func availableTabBarWidth(in geometry: GeometryProxy) -> CGFloat {
-        max(0, geometry.size.width - tabBarActionsWidth - tabBarLeadingPadding)
+        let width = usesPinnedWideEdgeSidebarLayout
+            ? terminalRowColumns(width: geometry.size.width).terminal : geometry.size.width
+        return max(0, width - tabBarActionsWidth - edgeSidebarHeaderButtonWidth - tabBarLeadingPadding)
     }
 
     /// Width of the compact tab viewport. Capped tabs leave real flexible
@@ -53,21 +55,15 @@ extension MainView {
         let scopeWidth = integratedScopeMenuWidth > 0 ? integratedScopeMenuWidth + integratedScopeMenuLeadingInset : 0
         let leadingWidth = max(scopeWidth, integratedCardLeadingInset(windowWidth: geometry.size.width))
         let preferred = CGFloat(tabCount) * Self.integratedMaximumTabWidth + leadingWidth
-        var capacity = max(
-            0,
-            geometry.size.width
-                - tabBarLeadingPadding
-                - tabBarActionsWidth
-                - integratedMinimumDragWidth
-        )
-        if topTabStyle == .integrated {
+        var capacity = max(0, availableTabBarWidth(in: geometry) - integratedMinimumDragWidth)
+        if topTabStyle == .integrated && !usesPinnedWideEdgeSidebarLayout {
             // End the track at the terminal so trailing columns (AI agent,
             // file manager) scroll the selected tab back over the surface it
             // joins.
             let columns = terminalRowColumns(width: geometry.size.width)
             let cardGap: CGFloat = roundedPanes ? PaneCardStyle.gap : 0
             let corner: CGFloat = roundedPanes ? PaneCardStyle.cornerRadius : 0
-            let cardMaxX = cardGap + columns.docked + columns.terminal
+            let cardMaxX = cardGap + self.leadingWidth(in: columns) + columns.terminal
             capacity = min(capacity, max(0, cardMaxX - corner - tabBarLeadingPadding))
         }
         return min(preferred, capacity)
@@ -82,8 +78,8 @@ extension MainView {
     /// Extra lead that starts Integrated tabs over the terminal, past the
     /// pinned sidebar and, under Rounded Panes, the card's corner.
     func integratedCardLeadingInset(windowWidth: CGFloat) -> CGFloat {
-        guard topTabStyle == .integrated else { return 0 }
-        let cardMinX = (roundedPanes ? PaneCardStyle.gap : 0) + dockedTabSidebarWidth(windowWidth: windowWidth)
+        guard topTabStyle == .integrated, !usesPinnedWideEdgeSidebarLayout else { return 0 }
+        let cardMinX = (roundedPanes ? PaneCardStyle.gap : 0) + leadingChromeWidth(windowWidth: windowWidth)
         guard cardMinX > 0 else { return 0 }
         let corner: CGFloat = roundedPanes ? PaneCardStyle.cornerRadius : 0
         return max(0, cardMinX + corner - tabBarLeadingPadding)

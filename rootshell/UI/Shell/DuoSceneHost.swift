@@ -24,18 +24,15 @@ enum DuoHingeEvents {
     }
 }
 
-/// The navigation container is installed once for the lifetime of the scene;
-/// folding only changes its chrome, never the identity of MainView.
-/// iPhone only: on iPad this stack captures pushes from side-panel NavigationStacks.
+/// Keeps hinge and toolbar layout state stable for the lifetime of the scene.
+/// Terminal navigation lives in MainView so sidebar stacks stay independent.
 struct DuoSceneHost<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         #if !targetEnvironment(macCatalyst) && !os(visionOS)
         if #available(iOS 27.1, *), UIDevice.current.userInterfaceIdiom == .phone {
-            NavigationStack {
-                DuoSceneContext(content: content)
-            }
+            DuoSceneContext(content: content)
         } else {
             content()
         }
@@ -105,8 +102,11 @@ struct DuoWorkspaceGeometry<Content: View>: View {
     let headerHeight: CGFloat
     /// Window-space y the header may rise to above the safe area, if any.
     var headerTopLimit: CGFloat? = nil
+    let windowSafeAreaTop: CGFloat
     @ViewBuilder var content: (GeometryProxy, DuoWorkspaceLayout) -> Content
     @Environment(\.layoutDirection) private var layoutDirection
+
+    private enum CoordinateSpace { case safeArea }
 
     var body: some View {
         GeometryReader { safe in
@@ -115,6 +115,7 @@ struct DuoWorkspaceGeometry<Content: View>: View {
             }
             .ignoresSafeArea(.container, edges: ignoredEdges)
         }
+        .coordinateSpace(name: CoordinateSpace.safeArea)
     }
 
     private var ignoredEdges: Edge.Set {
@@ -124,8 +125,10 @@ struct DuoWorkspaceGeometry<Content: View>: View {
     }
 
     private func layout(safe: GeometryProxy, expanded: GeometryProxy) -> DuoWorkspaceLayout {
-        let frame = expanded.frame(in: .global)
-        let safeFrame = safe.frame(in: .global).offsetBy(dx: -frame.minX, dy: -frame.minY)
+        // Window reveal effects must not feed back into workspace layout.
+        let frame = expanded.frame(in: .named(CoordinateSpace.safeArea))
+        let safeFrame = CGRect(origin: .zero, size: safe.size)
+            .offsetBy(dx: -frame.minX, dy: -frame.minY)
         var occlusions: [CGRect] = []
         var occlusionContentFrames: [CGRect] = []
         var divisions: [CGRect] = []
@@ -150,9 +153,9 @@ struct DuoWorkspaceGeometry<Content: View>: View {
             occlusions: occlusions, divisions: divisions, context: context,
             headerHeight: headerHeight, rightToLeft: layoutDirection == .rightToLeft,
             occlusionContentFrames: occlusionContentFrames,
-            headerTopLimit: headerTopLimit.map { $0 - frame.minY }
+            headerTopLimit: headerTopLimit.map { safeFrame.minY + $0 - windowSafeAreaTop }
         )
-        layout.safeAreaTop = safe.frame(in: .global).minY
+        layout.safeAreaTop = max(windowSafeAreaTop, safe.safeAreaInsets.top)
         return layout
     }
 }

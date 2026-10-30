@@ -109,6 +109,110 @@ extension MainView {
         showSettings = true
     }
 
+    func toggleQuickSettings() {
+        if !showQuickSettingsOverlay {
+            guard !edgeSidebarUsesDrawer(.quickSettings) || !edgeSidebarModalPresented else { return }
+            adoptEdgeSidebarPage(.quickSettings)
+        }
+        if showQuickSettingsOverlay {
+            showQuickSettingsOverlay = false
+        } else {
+            // Avoid presenting through a modal workflow. Floating tools yield
+            // their keyboard ownership before Quick Settings takes focus.
+            showThemePickerOverlay = false
+            showClipboardManager = false
+            showOpenInFolderOverlay = false
+            showIPLookup = false
+            guard edgeSidebarUsesDrawer(.quickSettings) || !isSheetPresentedBesidesFloatingTabSidebar else { return }
+            if !tabSidebarIsDocked { showingTabSwitcher = false }
+            if terminals.indices.contains(selectedTabIndex) {
+                for terminal in terminals[selectedTabIndex].splitTree.terminalLeaves {
+                    terminal.closeSearch()
+                    terminal.showComposeOverlay = false
+                }
+            }
+            showQuickSettingsOverlay = true
+            setOverlayOwnsKeyboardForAllTerminals(true)
+        }
+    }
+
+    func toggleOpenInFolder() {
+        if !showOpenInFolderOverlay {
+            guard !edgeSidebarUsesDrawer(.openInFolder) || !edgeSidebarModalPresented else { return }
+            adoptEdgeSidebarPage(.openInFolder)
+        }
+        if showOpenInFolderOverlay {
+            showOpenInFolderOverlay = false
+            return
+        }
+        // Same hygiene as Quick Settings: floating tools yield the keyboard first.
+        showThemePickerOverlay = false
+        showClipboardManager = false
+        showQuickSettingsOverlay = false
+        showIPLookup = false
+        guard edgeSidebarUsesDrawer(.openInFolder) || !isSheetPresentedBesidesFloatingTabSidebar else { return }
+        if !tabSidebarIsDocked { showingTabSwitcher = false }
+        if terminals.indices.contains(selectedTabIndex) {
+            for terminal in terminals[selectedTabIndex].splitTree.terminalLeaves {
+                terminal.closeSearch()
+                terminal.showComposeOverlay = false
+            }
+        }
+        // The HUD opens even for an unsupported pane, with a message, so a
+        // chord press always gets a response.
+        let target = captureOpenInFolderTarget() ?? unsupportedOpenInFolderTarget()
+        openInFolderModel = OpenInFolderModel(target: target)
+        showOpenInFolderOverlay = true
+        setOverlayOwnsKeyboardForAllTerminals(true)
+    }
+
+    func toggleIPLookup() {
+        if !showIPLookup {
+            guard !edgeSidebarUsesDrawer(.ipLookup) || !edgeSidebarModalPresented else { return }
+            adoptEdgeSidebarPage(.ipLookup)
+        }
+        if showIPLookup {
+            showIPLookup = false
+            return
+        }
+        // Floating tools share the HUD's top-right anchor; yield like Open in Folder.
+        showThemePickerOverlay = false
+        showClipboardManager = false
+        showQuickSettingsOverlay = false
+        showOpenInFolderOverlay = false
+        guard edgeSidebarUsesDrawer(.ipLookup) || !isSheetPresentedBesidesFloatingTabSidebar else { return }
+        ipLookupModel = IPLookupModel(clipboardText: UIPasteboard.general.getOpinionatedStringContents())
+        showIPLookup = true
+    }
+
+    func toggleThemePicker() {
+        if !showThemePickerOverlay {
+            guard !edgeSidebarUsesDrawer(.themePicker) || !edgeSidebarModalPresented else { return }
+            adoptEdgeSidebarPage(.themePicker)
+        }
+        showQuickSettingsOverlay = false
+        showOpenInFolderOverlay = false
+        showIPLookup = false
+        showThemePickerOverlay.toggle()
+    }
+
+    func toggleClipboardManager() {
+        if !showClipboardManager {
+            guard !edgeSidebarUsesDrawer(.clipboardManager) || !edgeSidebarModalPresented else { return }
+            adoptEdgeSidebarPage(.clipboardManager)
+        }
+        // Dismiss the terminal keyboard before opening the iPhone drawer.
+        // Keep the two-state toggle on iPhone.
+        if UIDevice.current.userInterfaceIdiom == .phone && !edgeSidebarUsesPinnedColumn(.clipboardManager) {
+            if !showClipboardManager {
+                resignFirstResponderForSheetPresentation()
+            }
+            showClipboardManager.toggle()
+            return
+        }
+        advanceClipboardManagerCycle()
+    }
+
     func setupNotificationObservers() {
         // Idempotent: SwiftUI does not guarantee `onAppear` fires only once
         // per live view identity (e.g., back-to-back transitions can re-fire
@@ -537,53 +641,12 @@ extension MainView {
 
         observerBag.observeOnMainActor(.toggleQuickSettings) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
-            if self.showQuickSettingsOverlay {
-                self.showQuickSettingsOverlay = false
-            } else {
-                // Avoid presenting through a modal workflow. Floating tools yield
-                // their keyboard ownership before Quick Settings takes focus.
-                self.showThemePickerOverlay = false
-                self.showClipboardManager = false
-                self.showOpenInFolderOverlay = false
-                self.showIPLookup = false
-                guard !self.isSheetPresentedBesidesFloatingTabSidebar else { return }
-                if !self.tabSidebarIsDocked { self.showingTabSwitcher = false }
-                if self.terminals.indices.contains(self.selectedTabIndex) {
-                    for terminal in self.terminals[self.selectedTabIndex].splitTree.terminalLeaves {
-                        terminal.closeSearch()
-                        terminal.showComposeOverlay = false
-                    }
-                }
-                self.showQuickSettingsOverlay = true
-                self.setOverlayOwnsKeyboardForAllTerminals(true)
-            }
+            self.toggleQuickSettings()
         }
 
         observerBag.observeOnMainActor(.openInFolder) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
-            if self.showOpenInFolderOverlay {
-                self.showOpenInFolderOverlay = false
-                return
-            }
-            // Same hygiene as Quick Settings: floating tools yield the keyboard first.
-            self.showThemePickerOverlay = false
-            self.showClipboardManager = false
-            self.showQuickSettingsOverlay = false
-            self.showIPLookup = false
-            guard !self.isSheetPresentedBesidesFloatingTabSidebar else { return }
-            if !self.tabSidebarIsDocked { self.showingTabSwitcher = false }
-            if self.terminals.indices.contains(self.selectedTabIndex) {
-                for terminal in self.terminals[self.selectedTabIndex].splitTree.terminalLeaves {
-                    terminal.closeSearch()
-                    terminal.showComposeOverlay = false
-                }
-            }
-            // The HUD opens even for an unsupported pane, with a message, so a
-            // chord press always gets a response.
-            let target = self.captureOpenInFolderTarget() ?? self.unsupportedOpenInFolderTarget()
-            self.openInFolderModel = OpenInFolderModel(target: target)
-            self.showOpenInFolderOverlay = true
-            self.setOverlayOwnsKeyboardForAllTerminals(true)
+            self.toggleOpenInFolder()
         }
 
         observerBag.observeOnMainActor(.toggleAgentInbox) { [self] notification in
@@ -595,7 +658,7 @@ extension MainView {
         observerBag.observeOnMainActor(.toggleFileManager) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
             // Another sheet owns the screen; the manager's own sheets are fine.
-            if !self.showFileManager, self.isSheetPresentedBesidesFloatingTabSidebar { return }
+            if !self.showFileManager, self.edgeSidebarModalPresented { return }
             self.toggleFileManager()
         }
 
@@ -603,48 +666,24 @@ extension MainView {
         #if !CHINA_BUILD && (!targetEnvironment(macCatalyst) || STANDALONE)
         observerBag.observeOnMainActor(.toggleHTTPCapture) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
-            if !self.showHTTPCapture, self.isSheetPresentedBesidesFloatingTabSidebar { return }
+            if !self.showHTTPCapture, self.edgeSidebarModalPresented { return }
             self.toggleHTTPCapture()
         }
         #endif
 
         observerBag.observeOnMainActor(.toggleIPLookup) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
-            if self.showIPLookup {
-                self.showIPLookup = false
-                return
-            }
-            // Floating tools share the HUD's top-right anchor; yield like Open in Folder.
-            self.showThemePickerOverlay = false
-            self.showClipboardManager = false
-            self.showQuickSettingsOverlay = false
-            self.showOpenInFolderOverlay = false
-            guard !self.isSheetPresentedBesidesFloatingTabSidebar else { return }
-            self.ipLookupModel = IPLookupModel(clipboardText: UIPasteboard.general.getOpinionatedStringContents())
-            self.showIPLookup = true
+            self.toggleIPLookup()
         }
 
         observerBag.observeOnMainActor(.toggleThemePicker) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
-            self.showQuickSettingsOverlay = false
-            self.showOpenInFolderOverlay = false
-            self.showIPLookup = false
-            self.showThemePickerOverlay.toggle()
+            self.toggleThemePicker()
         }
 
         observerBag.observeOnMainActor(.toggleClipboardManager) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
-            // On iPhone the manager is a sheet: dismiss the terminal keyboard
-            // (and its input-accessory toolbar) first so it doesn't cover the
-            // sheet, and keep the plain 2-state toggle.
-            if UIDevice.current.userInterfaceIdiom == .phone {
-                if !self.showClipboardManager {
-                    self.resignFirstResponderForSheetPresentation()
-                }
-                self.showClipboardManager.toggle()
-                return
-            }
-            self.advanceClipboardManagerCycle()
+            self.toggleClipboardManager()
         }
 
         observerBag.observeOnMainActor(.ghosttySearchStateChanged) { [self] notification in
@@ -694,15 +733,7 @@ extension MainView {
         observerBag.observeOnMainActor(.showTabSwitcher) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
             if self.routeReservedVNCKeyboardShortcut(from: notification) { return }
-            if self.showingTabSwitcher {
-                self.dismissTabSidebar()
-            } else {
-                // The sidebar is a plain overlay (not a cover), so this
-                // cannot race the settings teardown; just close settings so
-                // the sidebar isn't hidden underneath it.
-                if self.showSettings { self.showSettings = false }
-                self.showingTabSwitcher = true
-            }
+            self.toggleEdgeSidebarPage(.tabSwitcher)
         }
 
         observerBag.observeOnMainActor(.toggleTabExpose) { [self] notification in

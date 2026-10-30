@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 
 /// A `Toggle` row that carries an always-visible secondary description line
 /// beneath its title, so per-control guidance lives with the control instead of
@@ -273,6 +274,10 @@ struct WindowSettingsView: View {
     @Setting(Settings.Tabs.hoverPreviewZoom) private var tabHoverPreviewZoom
     @Setting(Settings.Sidebar.translucent) private var tabSidebarTranslucent
     @Setting(Settings.Sidebar.rowLines) private var tabSidebarRowLines
+    @Setting(Settings.Sidebar.pageSides) private var edgeSidebarPageSides
+    @Setting(Settings.Sidebar.edgeSidebarButtons) private var edgeSidebarButtonsEnabled
+    @Setting(Settings.Sidebar.pinInWideLayout) private var edgeSidebarsPinnedInWideLayout
+    @Setting(Settings.Sidebar.openRightInWideLayout) private var edgeSidebarOpensRightInWideLayout
     @Setting(Settings.Window.splitFocusBorderStyle) private var splitFocusBorderStyle
     @Setting(Settings.Window.splitFocusBorderColor) private var splitFocusBorderColor
     @Setting(Settings.Window.splitFocusBorderCustomColor) private var splitFocusBorderCustomHex
@@ -355,6 +360,52 @@ struct WindowSettingsView: View {
             .contains { $0.safeAreaInsets.bottom > 0 }
     }
     #endif
+
+    private var edgeSidebarAssignment: EdgeSidebarAssignment {
+        EdgeSidebarAssignment.decode(edgeSidebarPageSides)
+    }
+
+    private func sidebarToolsPicker(_ side: EdgeSidebarSide) -> some View {
+        let title = side == .leading ? String(localized: "Left Sidebar") : String(localized: "Right Sidebar")
+        let pages = edgeSidebarAssignment.pages(on: side)
+        return NavigationLink {
+            List {
+                Section {
+                    ForEach(EdgeSidebarPage.availableCases, id: \.self) { page in
+                        Toggle(isOn: Binding(
+                            get: { edgeSidebarAssignment.side(of: page) == side },
+                            set: { selected in
+                                let destination = selected ? side : side.opposite
+                                edgeSidebarPageSides = edgeSidebarAssignment.setting(destination, for: page).storedTokens
+                                Ghostty.logger.info("Edge sidebar assign page=\(page.rawValue, privacy: .public) side=\(destination.rawValue, privacy: .public)")
+                            }
+                        )) {
+                            Label(page.title, systemImage: page.systemImage)
+                        }
+                        .disabled(SettingFileLock.isReadOnly(Settings.Sidebar.pageSides.name))
+                        .themedRow()
+                    }
+                } footer: {
+                    Text(side == .leading
+                        ? String(localized: "Tools not selected here appear in the right sidebar.")
+                        : String(localized: "Tools not selected here appear in the left sidebar."))
+                }
+            }
+            .themedList()
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .settingRow(Settings.Sidebar.pageSides)
+                Text(pages.isEmpty ? String(localized: "None") : pages.map(\.title).joined(separator: ", "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .themedRow()
+    }
 
     var body: some View {
         List {
@@ -495,6 +546,37 @@ struct WindowSettingsView: View {
                 .themedRow()
             } header: {
                 Text("Tab Bar")
+            }
+
+            Section {
+                SettingDescribedToggle(
+                    Settings.Sidebar.pinInWideLayout,
+                    title: "Pin Sidebars in Wide Layout",
+                    description: "Show open sidebars beside the terminal in landscape and on unfolded Duo. Portrait keeps the floating drawer."
+                )
+                .themedRow()
+                SettingDescribedToggle(
+                    Settings.Sidebar.openRightInWideLayout,
+                    title: "Open Right Sidebar Automatically",
+                    description: "Also open the right sidebar when entering a wide layout. The left sidebar opens by default."
+                )
+                .themedRow()
+                .disabled(!edgeSidebarsPinnedInWideLayout)
+                SettingToggle(Settings.Sidebar.edgeSidebarButtons, title: "Show Sidebar Buttons")
+                    .themedRow()
+                sidebarToolsPicker(.leading)
+                sidebarToolsPicker(.trailing)
+            } header: {
+                Text("Sidebars")
+            }
+            .onChange(of: edgeSidebarButtonsEnabled) { _, enabled in
+                Ghostty.logger.info("Edge sidebar buttons enabled=\(enabled, privacy: .public)")
+            }
+            .onChange(of: edgeSidebarsPinnedInWideLayout) { _, enabled in
+                Ghostty.logger.info("Edge sidebar wide pinning enabled=\(enabled, privacy: .public)")
+            }
+            .onChange(of: edgeSidebarOpensRightInWideLayout) { _, enabled in
+                Ghostty.logger.info("Right edge sidebar auto-open enabled=\(enabled, privacy: .public)")
             }
 
             #if os(iOS) && !targetEnvironment(macCatalyst)

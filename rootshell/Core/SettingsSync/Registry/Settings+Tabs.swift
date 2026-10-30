@@ -161,6 +161,14 @@ nonisolated extension Settings {
             "tabSidebarPinned", default: false, group: .sidebar, policy: .localByDefault,
             configKey: "tab-sidebar-pinned",
             title: String(localized: "Pin Tab Sidebar", comment: "Setting title"))
+        static let pinInWideLayout = SettingKey(
+            "edgeSidebarsPinnedInWideLayout", default: true, group: .sidebar, policy: .localByDefault,
+            configKey: "edge-sidebars-pinned-in-wide-layout",
+            title: String(localized: "Pin Sidebars in Wide Layout", comment: "Setting title"))
+        static let openRightInWideLayout = SettingKey(
+            "edgeSidebarOpenRightInWideLayout", default: false, group: .sidebar, policy: .localByDefault,
+            configKey: "edge-sidebar-open-right-in-wide-layout",
+            title: String(localized: "Open Right Sidebar Automatically", comment: "Setting title"))
         static let translucent = SettingKey(
             "tabSidebarTranslucent", default: true, group: .transparency, policy: .localByDefault,
             configKey: "tab-sidebar-translucent",
@@ -174,10 +182,21 @@ nonisolated extension Settings {
         static let collapsedGroups = SettingKey(
             "tabSidebarCollapsedGroups", default: [String](), group: .sidebar, policy: .deviceOnly,
             title: String(localized: "Collapsed Tab Groups", comment: "Setting title"))
+        /// `page:side` tokens. See `EdgeSidebarAssignment`.
+        static let pageSides = SettingKey(
+            "edgeSidebarPageSides", default: EdgeSidebarAssignment.stock.storedTokens, group: .sidebar,
+            configKey: "edge-sidebar-page-sides",
+            title: String(localized: "Sidebar Pages", comment: "Setting title"))
+        static let edgeSidebarButtons = SettingKey(
+            "edgeSidebarButtonsEnabled", default: false, group: .sidebar,
+            configKey: "edge-sidebar-buttons-enabled",
+            title: String(localized: "Sidebar Buttons", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
-            autoHideOnSelect.erased, rowLines.erased, largeControls.erased, pinned.erased, translucent.erased,
-            dockedWidth.erased, collapsedGateways.erased, collapsedGroups.erased,
+            autoHideOnSelect.erased, rowLines.erased, largeControls.erased, pinned.erased,
+            pinInWideLayout.erased, openRightInWideLayout.erased, translucent.erased,
+            dockedWidth.erased, collapsedGateways.erased, collapsedGroups.erased, pageSides.erased,
+            edgeSidebarButtons.erased,
         ]
     }
 

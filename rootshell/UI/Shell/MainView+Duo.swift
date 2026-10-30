@@ -48,10 +48,13 @@ extension MainView {
     }
 
     @ViewBuilder
-    func applyDuoChrome<Content: View>(_ content: Content) -> some View {
+    func applyDuoChrome<Content: View>(_ content: Content, inTerminalColumn: Bool = false) -> some View {
         #if !targetEnvironment(macCatalyst) && !os(visionOS)
-        if #available(iOS 27.1, *) {
-            content
+        if #available(iOS 27.1, *), isPhone,
+           usesPinnedWideEdgeSidebarLayout == inTerminalColumn {
+            // Sidebar presentations must remain outside the terminal's navigation stack.
+            NavigationStack {
+                content
                 .toolbarVisibility(showsDuoSideRail ? .visible : .hidden, for: .navigationBar)
                 .toolbar {
                     if showsDuoSideRail {
@@ -68,11 +71,11 @@ extension MainView {
                                     onClose: {
                                         if let position = tabsModel.index(of: tab.id) { requestUserCloseTab(at: position) }
                                     },
-                                    onManage: { showingTabSwitcher = true }
+                                    onManage: { openEdgeSidebarPage(.tabSwitcher) }
                                 )
                             } else {
                                 Button("Tabs", systemImage: "square.on.square") {
-                                    showingTabSwitcher = true
+                                    openEdgeSidebarPage(.tabSwitcher)
                                 }
                                 .labelStyle(.iconOnly)
                                 .disabled(true)
@@ -95,6 +98,7 @@ extension MainView {
                         }
                     }
                 }
+            }
         } else {
             content
         }

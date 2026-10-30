@@ -35,6 +35,7 @@ struct HTTPCaptureView: View {
     let onSwitchPresentation: ((PanelPresentation) -> Void)?
 
     @Environment(\.sheetThemeColors) private var sheetThemeColors
+    @Environment(\.edgeSidebarTitleContext) private var edgeSidebarTitleContext
     private var controller: CaptureController { .shared }
     private var ca: CaptureCAManager { .shared }
 
@@ -107,13 +108,36 @@ struct HTTPCaptureView: View {
 
     // MARK: - Header
 
+    @ViewBuilder
     private var header: some View {
+        if edgeSidebarTitleContext != nil {
+            EdgeSidebarHeader(
+                title: String(localized: "HTTP Capture"),
+                systemImage: "network.badge.shield.half.filled",
+                onClose: onClose
+            ) {
+                HStack(spacing: 4) {
+                    if model.document != nil || controller.isStarting || controller.isRecording {
+                        recordButton(includesClear: false).labelStyle(.iconOnly)
+                            .edgeSidebarHeaderActionTarget()
+                    }
+                    CaptureMoreMenu(model: model, includesSessions: true, presentation: style.presentation, onSwitchPresentation: onSwitchPresentation)
+                        .equatable()
+                        .edgeSidebarHeaderActionTarget()
+                }
+            }
+        } else {
+            standaloneHeader
+        }
+    }
+
+    private var standaloneHeader: some View {
         HStack(spacing: 10) {
             Image(systemName: "network.badge.shield.half.filled").foregroundStyle(Color.accentColor)
             CaptureSessionMenu(model: model, title: currentSessionTitle)
                 .equatable()
             Spacer(minLength: 4)
-            recordButton
+            recordButton()
             CaptureMoreMenu(model: model)
                 .equatable()
             if let onSwitchPresentation, let current = style.presentation {
@@ -139,18 +163,13 @@ struct HTTPCaptureView: View {
     }
 
     @ViewBuilder
-    private var recordButton: some View {
+    private func recordButton(includesClear: Bool = true) -> some View {
         if controller.isStarting {
             ProgressView().controlSize(.small)
         } else if controller.isRecording {
-            Button {
-                Task { await controller.clearActiveSession() }
-            } label: {
-                Image(systemName: "trash")
+            if includesClear {
+                CaptureClearButton().labelStyle(.iconOnly)
             }
-            .disabled(controller.isStopping)
-            .help(String(localized: "Clear the captured requests and keep recording", comment: "HTTP capture clear tooltip"))
-            .accessibilityLabel(String(localized: "Clear", comment: "HTTP capture: clear the recording session"))
             Button {
                 Task { await controller.stop() }
             } label: {
@@ -295,17 +314,49 @@ private struct CaptureSessionMenuItems: View {
     }
 }
 
+private struct CaptureClearButton: View {
+    var body: some View {
+        Button {
+            Task { await CaptureController.shared.clearActiveSession() }
+        } label: {
+            Label(String(localized: "Clear", comment: "HTTP capture: clear the recording session"), systemImage: "trash")
+        }
+        .disabled(CaptureController.shared.isStopping)
+        .help(String(localized: "Clear the captured requests and keep recording", comment: "HTTP capture clear tooltip"))
+    }
+}
+
 /// Equatable owner for the overflow menu, same contract as the session picker.
 private struct CaptureMoreMenu: View, Equatable {
     let model: HTTPCaptureModel
+    var includesSessions = false
+    var presentation: PanelPresentation? = nil
+    var onSwitchPresentation: ((PanelPresentation) -> Void)? = nil
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.model === rhs.model
+        lhs.model === rhs.model && lhs.includesSessions == rhs.includesSessions && lhs.presentation == rhs.presentation
     }
 
     var body: some View {
         Menu {
+            if includesSessions {
+                if CaptureController.shared.isRecording {
+                    CaptureClearButton()
+                    Divider()
+                }
+                Menu {
+                    CaptureSessionMenuItems(model: model)
+                } label: {
+                    Label(String(localized: "Capture Session", comment: "HTTP capture session picker"), systemImage: "clock.arrow.circlepath")
+                }
+                Divider()
+            }
             CaptureMoreMenuItems(model: model)
+            if let presentation, let onSwitchPresentation {
+                Divider()
+                PanelPresentationMenu(current: presentation, onSwitch: onSwitchPresentation, showsTitle: true)
+                    .equatable()
+            }
         } label: {
             Image(systemName: "ellipsis.circle")
         }

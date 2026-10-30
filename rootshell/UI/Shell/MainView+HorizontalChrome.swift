@@ -4,8 +4,17 @@ extension MainView {
     func horizontalTabHeader(geometry: GeometryProxy, resolvedTheme: ResolvedTabBarTheme) -> some View {
         let cardInset = integratedCardLeadingInset(windowWidth: geometry.size.width)
         let surfaceFill = integratedTabSurfaceFill(theme: resolvedTheme)
+        let cardGap = roundedPanes ? PaneCardStyle.gap : 0
+        let pinnedLeadingInset = usesPinnedWideEdgeSidebarLayout
+            ? cardGap + leadingChromeWidth(windowWidth: geometry.size.width) : 0
+        let pinnedTrailingInset = usesPinnedWideEdgeSidebarLayout
+            ? cardGap + trailingChromeWidth(windowWidth: geometry.size.width) : 0
         return HStack(spacing: 0) {
             tabBarLeadingSpacer(geometry: geometry, theme: resolvedTheme)
+
+            if edgeSidebarButtonsEnabled, !edgeSidebarAssignment.pages(on: .leading).isEmpty {
+                tabBarEdgeSidebarButton(side: .leading, theme: resolvedTheme)
+            }
 
             // Tab bar - switches between display modes
             //
@@ -46,19 +55,26 @@ extension MainView {
                 integratedTabBarDragRegion()
                     .layoutPriority(-1)
                 if showsTabBarActions { tabBarSettingsButton(theme: resolvedTheme) }
+                if edgeSidebarButtonsEnabled, !edgeSidebarAssignment.pages(on: .trailing).isEmpty {
+                    tabBarEdgeSidebarButton(side: .trailing, theme: resolvedTheme)
+                }
             } else {
                 TabStyleContextMenuRegion(
                     selectedStyleRawValue: topTabStyleRawValueBinding
                 )
                 .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
                 .layoutPriority(-1)
-                if showsTabBarActions { tabBarActionButtons(theme: resolvedTheme) }
+                tabBarActionButtons(theme: resolvedTheme)
             }
         }
+        .padding(.leading, pinnedLeadingInset)
+        .padding(.trailing, pinnedTrailingInset)
         .frame(height: TabMetrics.tabBarHeight)
         .frame(maxWidth: .infinity)
         // Track the docked column's spring; a live drag drives it directly.
         .animation(tabSidebarIsDragging ? nil : .spring(response: 0.3, dampingFraction: 0.85), value: cardInset)
+        .animation(tabSidebarIsDragging ? nil : .spring(response: 0.3, dampingFraction: 0.85), value: pinnedLeadingInset)
+        .animation(tabSidebarIsDragging ? nil : .spring(response: 0.3, dampingFraction: 0.85), value: pinnedTrailingInset)
         .backgroundPreferenceValue(IntegratedActiveTabBoundsPreferenceKey.self) { bounds in
             ZStack {
                 // The window fill beneath the backdrop already has this color.

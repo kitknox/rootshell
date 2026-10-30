@@ -142,24 +142,34 @@ final class QuickSettingsModel {
 
 struct QuickSettingsHUD: View {
     @Binding var isPresented: Bool
+    var inSidebar = false
     @State private var model = QuickSettingsModel()
 
+    @ViewBuilder
     var body: some View {
-        DraggableHUDContainer(
-            resizing: .quickSettings,
-            dismissShortcuts: [.escape],
-            forwardsQuickSettingsToggle: true,
-            forwardsFindToggle: true,
-            onForwardedToggle: { isPresented = false },
-            onFind: { model.focusSearch() },
-            onDismiss: {
-                if model.editing != nil { model.cancelEditor() } else { isPresented = false }
+        if inSidebar {
+            panelContent
+        } else {
+            DraggableHUDContainer(
+                resizing: .quickSettings,
+                dismissShortcuts: [.escape],
+                forwardsQuickSettingsToggle: true,
+                forwardsFindToggle: true,
+                onForwardedToggle: { isPresented = false },
+                onFind: { model.focusSearch() },
+                onDismiss: {
+                    if model.editing != nil { model.cancelEditor() } else { isPresented = false }
+                }
+            ) {
+                panelContent
             }
-        ) {
-            GeometryReader { geometry in
-                QuickSettingsOverlay(model: model, isPresented: $isPresented,
-                    width: geometry.size.width, height: geometry.size.height)
-            }
+        }
+    }
+
+    private var panelContent: some View {
+        GeometryReader { geometry in
+            QuickSettingsOverlay(model: model, isPresented: $isPresented,
+                width: geometry.size.width, height: geometry.size.height)
         }
     }
 }
@@ -174,6 +184,7 @@ extension HUDResizing {
 struct QuickSettingsOverlay: View {
     @Bindable var model: QuickSettingsModel
     @Binding var isPresented: Bool
+    @Environment(\.edgeSidebarTitleContext) private var edgeSidebarTitleContext
     let width: CGFloat
     let height: CGFloat
     @State private var arrowRepeat = ArrowKeyRepeatManager()
@@ -199,8 +210,19 @@ struct QuickSettingsOverlay: View {
         return $model.draft
     }
 
-    var body: some View {
-        VStack(spacing: 0) {
+    @ViewBuilder
+    private var header: some View {
+        if edgeSidebarTitleContext != nil {
+            EdgeSidebarHeader(
+                title: String(localized: "Quick Settings"),
+                systemImage: "slider.horizontal.3",
+                status: model.editing?.title ?? String(localized: "Global preferences"),
+                onBack: model.editing == nil ? nil : { model.cancelEditor() },
+                onClose: { isPresented = false }
+            ) {
+                EmptyView()
+            }
+        } else {
             HStack {
                 if model.editing != nil {
                     Button { model.cancelEditor() } label: { Image(systemName: "chevron.left") }
@@ -217,6 +239,12 @@ struct QuickSettingsOverlay: View {
             }
             .buttonStyle(.plain)
             .padding(16)
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
 
             HStack {
                 Image(systemName: model.editing == nil || isChoiceEditor ? "magnifyingglass" : "pencil")

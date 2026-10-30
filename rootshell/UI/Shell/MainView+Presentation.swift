@@ -53,29 +53,35 @@ extension MainView {
     /// Returns true if any sheet or overlay is currently presented
     /// Used to prevent focus restoration from showing keyboard over sheets
     var isAnySheetPresented: Bool {
-        // The docked sidebar does NOT cover the terminal or own the
+        // A pinned edge column does NOT cover the terminal or own the
         // keyboard (the user types in the terminal beside it), so it must
         // not count as a presented sheet — otherwise the overlay-owns-
         // keyboard gate would refuse the terminal first responder.
-        (showingTabSwitcher && !tabSidebarIsDocked) || isSheetPresentedBesidesFloatingTabSidebar
+        floatingEdgeSidebarPresented(.leading) || floatingEdgeSidebarPresented(.trailing) || isSheetPresentedBesidesFloatingTabSidebar
     }
 
     /// `isAnySheetPresented` without the floating tab sidebar, for things
     /// that work alongside it (its own rows' hover previews).
     var isSheetPresentedBesidesFloatingTabSidebar: Bool {
+        edgeSidebarModalPresented || fileManagerOwnsKeyboard || httpCaptureHoldsKeyboard
+    }
+
+    /// Sheets that block an edge swipe. The file manager drawer is not one:
+    /// on iPhone a swipe from the other edge closes it and opens that edge.
+    var edgeSidebarModalPresented: Bool {
         let baseFlags = showSettings ||
             showToolbarSettings ||
-            showConnectionSidebar ||
+            (showConnectionSidebar && edgeSidebarUsesExternalPresentation(.connections)) ||
             showPasswordPromptSheet ||
             showKeyboardInteractivePrompt ||
             showKeyResolutionSheet ||
             showYubiKeyPINPrompt ||
-            showThemePickerOverlay ||
-            showQuickSettingsOverlay ||
+            (showThemePickerOverlay && edgeSidebarUsesExternalPresentation(.themePicker)) ||
+            (showQuickSettingsOverlay && edgeSidebarUsesExternalPresentation(.quickSettings)) ||
             showKeyboardChooser ||
-            showOpenInFolderOverlay ||
-            fileManagerOwnsKeyboard ||
-            httpCaptureHoldsKeyboard ||
+            (showOpenInFolderOverlay && edgeSidebarUsesExternalPresentation(.openInFolder)) ||
+            (httpCaptureHoldsKeyboard && !isPhone) ||
+            (fileManagerOwnsKeyboard && !fileManagerUsesEdgeSidebar) ||
             agentInboxOwnsKeyboard ||
             // The iPhone presentation is a sheet that owns the keyboard. On
             // regular width the clipboard manager is a passthrough glass HUD (like
@@ -84,8 +90,9 @@ extension MainView {
             // it, i.e. steal focus. The exception is keyboard mode, where the
             // HUD's search field is guaranteed to take focus (the toggle cycle
             // refuses keyboard mode while the disabled/locked pane is showing).
-            (showClipboardManager &&
+            (showClipboardManager && edgeSidebarUsesExternalPresentation(.clipboardManager) &&
                 (UIDevice.current.userInterfaceIdiom == .phone || clipboardManagerKeyboardMode)) ||
+            (edgeSidebarColumnOwns(.clipboardManager) && clipboardManagerKeyboardMode) ||
             connectionInfoToShow != nil ||
             tmuxDashboardRequest != nil ||
             herdrDashboardRequest != nil ||
@@ -94,7 +101,7 @@ extension MainView {
             trzszTransferOriginRequest != nil ||
             trzszTransferIncomingOffer != nil
         #if !CHINA_BUILD
-        return baseFlags || showAIAgentOverlay
+        return baseFlags || (showAIAgentOverlay && edgeSidebarUsesExternalPresentation(.aiAgent))
         #else
         return baseFlags
         #endif
@@ -168,25 +175,21 @@ extension MainView {
                 accentColor: sheetTheme.accentColor,
                 colorScheme: sheetTheme.colorScheme
             ))
+            #if os(visionOS)
             .modifier(TabSidebarModifier(
-                // The floating overlay is mounted only in floating mode; the
-                // instant the user pins, `tabSidebarIsDocked` flips true and the
-                // overlay animates out (the docked column takes over). Dismissing
-                // the overlay (backdrop/✕) clears `showingTabSwitcher`.
                 showSidebar: Binding(
                     get: { showingTabSwitcher && !tabSidebarIsDocked },
-                    set: { newValue in if !newValue { showingTabSwitcher = false } }
+                    set: { newValue in if !newValue { dismissTabSidebar() } }
                 ),
                 themeColors: sheetTheme.themeColors,
                 accentColor: sheetTheme.accentColor,
                 colorScheme: sheetTheme.colorScheme,
-                // The floating sidebar is re-hosted in a window-level
-                // UIHostingController (SidePanelOverlay), which does not inherit
-                // MainView's environment. Without this injection, the tmux
-                // session dashboard sheet presented from the sidebar crashes in
-                // TmuxPreviewContainer's @EnvironmentObject read.
                 sidebarContent: { verticalTabSidebarContent(sheetTheme: sheetTheme, isDocked: false).environmentObject(ghosttyApp) }
             ))
+            #else
+            .modifier(edgeSidebarModifier(side: .leading, sheetTheme: sheetTheme))
+            .modifier(edgeSidebarModifier(side: .trailing, sheetTheme: sheetTheme))
+            #endif
             .sheet(isPresented: $showToolbarSettings) {
                 NavigationStack {
                     KeyboardToolbarSettingsView()
@@ -196,7 +199,7 @@ extension MainView {
             // Clipboard manager: compact-width presentation (iPhone). Regular
             // width mounts the draggable glass HUD in floatingHUDOverlays() instead.
             .sheet(isPresented: Binding(
-                get: { showClipboardManager && UIDevice.current.userInterfaceIdiom == .phone },
+                get: { showClipboardManager && edgeSidebarUsesExternalPresentation(.clipboardManager) && UIDevice.current.userInterfaceIdiom == .phone },
                 set: { if !$0 { showClipboardManager = false } }
             )) {
                 ClipboardManagerOverlay(
@@ -210,9 +213,6 @@ extension MainView {
             }
             // File manager: iPhone presentation. Larger screens use the sidebar or HUD.
             .modifier(fileManagerPhoneSheetModifier(sheetTheme: sheetTheme))
-            #if !CHINA_BUILD
-            .modifier(httpCapturePhoneSheetModifier(sheetTheme: sheetTheme))
-            #endif
             .modifier(agentInboxPhoneSheetModifier(sheetTheme: sheetTheme))
             .sheet(item: $connectionInfoToShow) { info in
                 ConnectionInfoSheet(info: info)
@@ -333,7 +333,7 @@ extension MainView {
                 if pending { consumePendingAgentInboxOpen() }
             }
             .modifier(ConnectionSidebarModifier(
-                showSidebar: $showConnectionSidebar,
+                showSidebar: Binding(get: { showConnectionSidebar && edgeSidebarUsesExternalPresentation(.connections) }, set: { showConnectionSidebar = $0 }),
                 contentID: AnyHashable(connectionSidebarInitialTab),
                 preventDismissal: terminals.isEmpty,
                 themeColors: sheetTheme.themeColors,
@@ -402,7 +402,7 @@ extension MainView {
             }
             #if !CHINA_BUILD
             .modifier(AIAgentSheetModifier(
-                showOverlay: $showAIAgentOverlay,
+                showOverlay: Binding(get: { showAIAgentOverlay && edgeSidebarUsesExternalPresentation(.aiAgent) }, set: { showAIAgentOverlay = $0 }),
                 session: currentAIAgentSession(),
                 tabID: terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].id : UUID()
             ))
