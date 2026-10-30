@@ -84,7 +84,7 @@ struct KeyboardSizes {
         // visionOS doesn't have device orientation, use iPad sizes
         return .iPad
         #else
-        if traitCollection.horizontalSizeClass == .regular {
+        if UIDevice.current.userInterfaceIdiom != .phone {
             return .iPad
         }
         return traitCollection.verticalSizeClass == .compact ? .iPhoneLandscape : .iPhonePortrait

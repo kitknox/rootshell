@@ -10,14 +10,11 @@ import SwiftUI
 
 struct KeyboardToolbarSettingsView: View {
     @Environment(\.sheetThemeColors) private var sheetThemeColors
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #if os(visionOS)
     @Environment(\.dismiss) private var dismiss
     #endif
     @State private var manager = KeyboardToolbarManager.shared
     @State private var editorContentHeight: CGFloat = 360
-    @State private var availableWidth: CGFloat = 0
     @State private var showingResetConfirmation = false
 
     /// The embedded editor self-sizes to its full content so its rows flow as
@@ -27,20 +24,17 @@ struct KeyboardToolbarSettingsView: View {
         max(editorContentHeight, 120)
     }
 
-    /// Computed from the settings list width (matching the previous
-    /// implementation) so the "X / Y" capacity badge reads the same as before.
-    private var capacity: Int {
-        #if os(visionOS)
-        let sizes = KeyboardSizes.iPad
-        #else
-        let sizes: KeyboardSizes = horizontalSizeClass == .regular ? .iPad
-            : (verticalSizeClass == .compact ? .iPhoneLandscape : .iPhonePortrait)
-        #endif
-        return manager.mainRowCapacity(availableWidth: availableWidth, sizes: sizes)
-    }
-
     var body: some View {
         List {
+            Section {
+                KeyboardToolbarPreview(config: manager.config, customKeys: manager.customKeys)
+                    .frame(height: UIDevice.current.userInterfaceIdiom == .phone ? 44 : 55)
+                    .padding(.vertical, 12)
+                    .themedRow()
+            } header: {
+                Text("Preview")
+            }
+            toolbarOptionsSection
             toolbarLayoutSection
             customKeysSection
             drawerBehaviorSection
@@ -75,29 +69,59 @@ struct KeyboardToolbarSettingsView: View {
         } message: {
             Text("This will restore the default key layout and remove all custom keys from the toolbar.")
         }
-        .background(
-            GeometryReader { geo in
-                Color.clear
-                    .onAppear { availableWidth = geo.size.width }
-                    .onChange(of: geo.size.width) { _, newWidth in
-                        availableWidth = newWidth
-                    }
-            }
-        )
     }
 
-    // MARK: - Toolbar Layout Editor (Main Row + Drawer)
+    private var toolbarOptionsSection: some View {
+        Section {
+            Picker("Appearance", selection: Binding(
+                get: { manager.config.appearance },
+                set: { manager.setAppearance($0) }
+            )) {
+                ForEach(ToolbarAppearance.allCases, id: \.self) { appearance in
+                    Text(appearance.displayName).tag(appearance)
+                }
+            }
+            .pickerStyle(.segmented)
+            .themedRow()
 
-    // The editor hosts its own two inset-grouped sections (Main Row + Drawer)
-    // with native headers/footers, so it is NOT wrapped in a SwiftUI Section —
-    // an empty Section would add a second top gap above the "Main Row" header on
-    // top of the editor's own first-section spacing. As a bare, clear-background,
+            Picker("Scroll Keys", selection: Binding(
+                get: { manager.config.scrollScope },
+                set: { manager.setScrollScope($0) }
+            )) {
+                ForEach(ToolbarScrollScope.allCases, id: \.self) { scope in
+                    Text(scope.displayName).tag(scope)
+                }
+            }
+            .pickerStyle(.segmented)
+            .themedRow()
+
+            Picker("Scroll Behavior", selection: Binding(
+                get: { manager.config.scrollBehavior },
+                set: { manager.setScrollBehavior($0) }
+            )) {
+                ForEach(ToolbarScrollBehavior.allCases, id: \.self) { behavior in
+                    Text(behavior.displayName).tag(behavior)
+                }
+            }
+            .pickerStyle(.segmented)
+            .themedRow()
+        } header: {
+            Text("Toolbar Layout")
+        } footer: {
+            Text("Pin keys in the left and right sections. Primary keys scroll between them, or scroll with all keys. Page mode snaps to the number of keys that fit.")
+        }
+    }
+
+    // MARK: - Toolbar Layout Editor (Pinned, Primary, and Drawer Rows)
+
+    // The editor hosts its own grouped sections with native headers and footers,
+    // so it is not wrapped in a SwiftUI Section. An empty Section would add a
+    // second top gap before its first header. As a bare, clear-background,
     // full-width row, only the editor's grouped chrome shows.
     private var toolbarLayoutSection: some View {
         ToolbarLayoutEditor(
             manager: manager,
             themeColors: sheetThemeColors,
-            capacity: capacity,
             contentHeight: $editorContentHeight
         )
         .frame(height: editorFrameHeight)
@@ -348,4 +372,20 @@ struct KeyboardToolbarSettingsView: View {
         }
     }
 
+}
+
+private struct KeyboardToolbarPreview: UIViewRepresentable {
+    let config: ToolbarLayoutConfig
+    let customKeys: [CustomKey]
+
+    func makeUIView(context: Context) -> KeyboardToolbarView {
+        let toolbar = KeyboardToolbarView(sizes: KeyboardSizes.current(traitCollection: UITraitCollection.current))
+        toolbar.isEmbeddedPreview = true
+        toolbar.setDismissButtonShowsRestore(true)
+        return toolbar
+    }
+
+    func updateUIView(_ toolbar: KeyboardToolbarView, context: Context) {
+        toolbar.updateSizes(KeyboardSizes.current(traitCollection: toolbar.traitCollection))
+    }
 }

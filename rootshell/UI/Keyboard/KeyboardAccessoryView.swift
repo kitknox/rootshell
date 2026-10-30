@@ -178,7 +178,7 @@ class KeyboardAccessoryView: UIInputView {
             height: sizes.toolbar.height
         )
 
-        super.init(frame: frame, inputViewStyle: .keyboard)
+        super.init(frame: frame, inputViewStyle: .default)
 
         setupView()
         observeLayoutChanges()
@@ -186,6 +186,12 @@ class KeyboardAccessoryView: UIInputView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        guard super.point(inside: point, with: event) else { return false }
+        let local = convert(point, to: toolbarView)
+        return local.x >= toolbarView.plateFrame.minX && local.x <= toolbarView.plateFrame.maxX
     }
 
     deinit {
