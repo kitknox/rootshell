@@ -118,7 +118,7 @@ extension MainView {
 #if os(visionOS)
         true
 #else
-        isPhone && !edgeSidebarUsesDrawer(.connections)
+        isPhone && edgeSidebarUsesExternalPresentation(.connections)
 #endif
     }
 

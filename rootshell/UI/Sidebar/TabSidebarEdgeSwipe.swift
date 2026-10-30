@@ -21,7 +21,7 @@ import UIKit
 
 #if !os(visionOS)
 
-/// How far in from a screen edge a drag may start and still open the drawer.
+/// How far inside the safe content edge a drag may start and open the drawer.
 private let edgeActivationWidth: CGFloat = 32
 private let edgeCompactPeek: CGFloat = 48
 
@@ -89,13 +89,16 @@ struct TabSidebarEdgeSwipe: UIViewRepresentable {
                 guard let self else { return false }
                 switch self.edge {
                 case .leading:
-                    return start.x <= edgeActivationWidth
+                    return start.x <= window.safeAreaInsets.left + edgeActivationWidth
                 case .trailing:
-                    return start.x >= window.bounds.width - edgeActivationWidth
+                    return start.x >= window.bounds.width - window.safeAreaInsets.right - edgeActivationWidth
                 }
             }
-            let shouldBegin: (CGPoint, CGPoint, UIWindow, Int) -> Bool = { [weak self] _, translation, _, _ in
-                guard let self, self.canOpen() else { return false }
+            let shouldBegin: (CGPoint, CGPoint, UIWindow, Int) -> Bool = { [weak self] start, translation, window, _ in
+                guard let self else { return false }
+                let canOpen = self.canOpen()
+                Ghostty.logger.debug("Sidebar edge gate edge=\(self.edge == .leading ? "leading" : "trailing", privacy: .public) x=\(start.x) dx=\(translation.x) dy=\(translation.y) width=\(window.bounds.width) safeLeft=\(window.safeAreaInsets.left) safeRight=\(window.safeAreaInsets.right) canOpen=\(canOpen)")
+                guard canOpen else { return false }
                 let horizontal = abs(translation.x) >= abs(translation.y)
                 switch self.edge {
                 case .leading:

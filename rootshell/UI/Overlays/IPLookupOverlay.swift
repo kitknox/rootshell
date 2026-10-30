@@ -31,6 +31,7 @@ struct IPLookupHUD: View {
 struct IPLookupOverlay: View {
     @Bindable var model: IPLookupModel
     @Binding var isPresented: Bool
+    @Environment(\.edgeSidebarTitleContext) private var edgeSidebarTitleContext
     let width: CGFloat
 
     /// Fixed so async results never resize the hosted panel (see ClipboardManagerOverlay).
@@ -61,7 +62,28 @@ struct IPLookupOverlay: View {
 
     // MARK: Chrome
 
+    @ViewBuilder
     private var header: some View {
+        if edgeSidebarTitleContext != nil {
+            EdgeSidebarHeader(
+                title: String(localized: "IP Lookup", comment: "IP Lookup HUD title"),
+                systemImage: "globe",
+                status: providerLabel,
+                onClose: { isPresented = false }
+            ) {
+                Button { model.discoverPublicAddresses() } label: {
+                    Image(systemName: "globe").font(.title3).foregroundStyle(.secondary)
+                }
+                .accessibilityLabel(Text("Show My Public IP", comment: "IP Lookup button"))
+                .help(Text("Show My Public IP", comment: "IP Lookup button"))
+                .edgeSidebarHeaderActionTarget()
+            }
+        } else {
+            standaloneHeader
+        }
+    }
+
+    private var standaloneHeader: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("IP Lookup", comment: "IP Lookup HUD title").font(.headline)

@@ -46,9 +46,10 @@ enum PanelPresentation: String, CaseIterable, Codable, Sendable {
 struct PanelPresentationMenu: View, Equatable {
     let current: PanelPresentation
     let onSwitch: (PanelPresentation) -> Void
+    var showsTitle = false
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.current == rhs.current
+        lhs.current == rhs.current && lhs.showsTitle == rhs.showsTitle
     }
 
     var body: some View {
@@ -64,7 +65,11 @@ struct PanelPresentationMenu: View, Equatable {
             }
             .pickerStyle(.inline)
         } label: {
-            Image(systemName: current.systemImage)
+            if showsTitle {
+                Label(String(localized: "Show As", comment: "Panel presentation menu section title"), systemImage: current.systemImage)
+            } else {
+                Image(systemName: current.systemImage)
+            }
         }
         .accessibilityLabel(String(localized: "Presentation", comment: "Panel presentation menu"))
         .accessibilityValue(current.title)

@@ -203,7 +203,7 @@ extension MainView {
         }
         // Dismiss the terminal keyboard before opening the iPhone drawer.
         // Keep the two-state toggle on iPhone.
-        if UIDevice.current.userInterfaceIdiom == .phone {
+        if UIDevice.current.userInterfaceIdiom == .phone && !edgeSidebarUsesPinnedColumn(.clipboardManager) {
             if !showClipboardManager {
                 resignFirstResponderForSheetPresentation()
             }

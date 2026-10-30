@@ -285,6 +285,7 @@ struct VerticalTabSidebar: View {
     @Setting(Settings.Sidebar.largeControls) private var largeControls
 
     @Setting(Settings.Sidebar.rowLines) private var titleLines
+    @Environment(\.edgeSidebarTitleContext) private var edgeSidebarTitleContext
 
     /// Duplicates the top bar's actions only when it is hidden or obscured (iPhone).
     private var showsHeaderActionButtons: Bool {
@@ -624,7 +625,7 @@ struct VerticalTabSidebar: View {
         #if os(visionOS)
         return false
         #else
-        return horizontalSizeClass != .regular
+        return edgeSidebarTitleContext != nil || horizontalSizeClass != .regular
         #endif
     }
 
@@ -697,16 +698,98 @@ struct VerticalTabSidebar: View {
         }
     }
 
+    @ViewBuilder
     private var headerRow: some View {
+        if edgeSidebarTitleContext != nil {
+            EdgeSidebarHeader(
+                title: String(localized: "Tabs"),
+                systemImage: "rectangle.stack",
+                onClose: onDismiss
+            ) {
+                sidebarHeaderActions
+            }
+        } else {
+            standaloneHeaderRow
+        }
+    }
+
+    @ViewBuilder
+    private var sidebarHeaderActions: some View {
+        if usesCompactLayout {
+            Menu {
+                Button(tabBarHidden ? "Show Top Tab Bar" : "Hide Top Tab Bar", systemImage: tabBarHidden ? "eye" : "eye.slash") {
+                    toggleSidebarTabBar()
+                }
+                Button("Switch Control Size", systemImage: "textformat.size") {
+                    toggleSidebarControlSize()
+                }
+                if canPin {
+                    Button(isPinned ? "Unpin Sidebar" : "Pin Sidebar", systemImage: isPinned ? "pin.slash" : "pin") {
+                        onTogglePin()
+                    }
+                }
+                Button("Settings", systemImage: "gearshape", action: onOpenSettings)
+                Button("Tab Exposé", systemImage: "rectangle.grid.2x2", action: onExposeRequested)
+                Button("New Tab", systemImage: "plus", action: onNewTab)
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: metrics.headerIconSize, weight: .medium))
+                    .foregroundColor(accentTint)
+            }
+            .edgeSidebarHeaderActionTarget()
+            .accessibilityLabel(String(localized: "Tab Sidebar Actions"))
+        } else {
+            HStack(spacing: 4) {
+                headerButton(tabBarHidden ? "eye.slash" : "eye", help: "Show or hide the top tab bar") {
+                    toggleSidebarTabBar()
+                }
+                .edgeSidebarHeaderActionTarget()
+
+                headerButton("textformat.size", help: "Switch between compact and large controls") {
+                    toggleSidebarControlSize()
+                }
+                .edgeSidebarHeaderActionTarget()
+
+                if canPin {
+                    headerButton(
+                        isPinned ? "pin.fill" : "pin",
+                        help: isPinned ? "Unpin the sidebar" : "Pin the sidebar to the side"
+                    ) {
+                        onTogglePin()
+                    }
+                    .edgeSidebarHeaderActionTarget()
+                }
+
+                if showsHeaderActionButtons {
+                    headerButton("gearshape", action: onOpenSettings)
+                        .edgeSidebarHeaderActionTarget()
+                    headerButton("rectangle.grid.2x2", help: "Tab Exposé", action: onExposeRequested)
+                        .edgeSidebarHeaderActionTarget()
+                    headerButton("plus", action: onNewTab)
+                        .edgeSidebarHeaderActionTarget()
+                }
+            }
+        }
+    }
+
+    private func toggleSidebarTabBar() {
+        NotificationCenter.default.post(name: .toggleTabBar, object: nil)
+    }
+
+    private func toggleSidebarControlSize() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            largeControls.toggle()
+        }
+    }
+
+    private var standaloneHeaderRow: some View {
         HStack(spacing: 4) {
             headerButton(tabBarHidden ? "eye.slash" : "eye", help: "Show or hide the top tab bar") {
-                NotificationCenter.default.post(name: .toggleTabBar, object: nil)
+                toggleSidebarTabBar()
             }
 
             headerButton("textformat.size", help: "Switch between compact and large controls") {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                    largeControls.toggle()
-                }
+                toggleSidebarControlSize()
             }
 
             if canPin {
@@ -722,10 +805,8 @@ struct VerticalTabSidebar: View {
 
             if showsHeaderActionButtons {
                 headerButton("gearshape", action: onOpenSettings)
-
                 // Vertical-tabs-only users have no tab bar band to pull down.
                 headerButton("rectangle.grid.2x2", help: "Tab Exposé", action: onExposeRequested)
-
                 headerButton("plus", action: onNewTab)
             }
 

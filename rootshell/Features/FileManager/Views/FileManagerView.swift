@@ -37,6 +37,7 @@ struct FileManagerView: View {
 
     @State private var highlightsShortcutsTip = false
     @Environment(\.sheetThemeColors) private var sheetThemeColors
+    @Environment(\.edgeSidebarTitleContext) private var edgeSidebarTitleContext
 
     private static let dualPaneMinWidth: CGFloat = 640
     private static let detailedColumnsMinPaneWidth: CGFloat = 520
@@ -120,10 +121,26 @@ struct FileManagerView: View {
 
     // MARK: - Header
 
+    @ViewBuilder
     private var header: some View {
+        if edgeSidebarTitleContext != nil {
+            EdgeSidebarHeader(
+                title: String(localized: "Files"),
+                systemImage: "folder.badge.gearshape",
+                onClose: onClose
+            ) {
+                FileManagerMoreMenu(manager: manager, presentation: style.presentation, onSwitchPresentation: onSwitchPresentation)
+                    .equatable()
+                    .edgeSidebarHeaderActionTarget()
+            }
+        } else {
+            standaloneHeader
+        }
+    }
+
+    private var standaloneHeader: some View {
         HStack(spacing: 10) {
-            Image(systemName: "folder.badge.gearshape").foregroundStyle(Color.accentColor)
-            Text("Files").font(.headline)
+            EdgeSidebarTitleMenu(title: String(localized: "Files"), systemImage: "folder.badge.gearshape")
             Spacer()
             if let onSwitchPresentation, let current = style.presentation {
                 PanelPresentationMenu(current: current, onSwitch: onSwitchPresentation)
@@ -347,14 +364,21 @@ struct FileManagerView: View {
 /// menu. The items read live pane/transfer state in their own child scope.
 private struct FileManagerMoreMenu: View, Equatable {
     let manager: FileManagerModel
+    var presentation: PanelPresentation? = nil
+    var onSwitchPresentation: ((PanelPresentation) -> Void)? = nil
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.manager === rhs.manager
+        lhs.manager === rhs.manager && lhs.presentation == rhs.presentation
     }
 
     var body: some View {
         Menu {
             FileManagerMoreMenuItems(manager: manager)
+            if let presentation, let onSwitchPresentation {
+                Divider()
+                PanelPresentationMenu(current: presentation, onSwitch: onSwitchPresentation, showsTitle: true)
+                    .equatable()
+            }
         } label: {
             Image(systemName: "ellipsis.circle")
         }
