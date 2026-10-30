@@ -3564,7 +3564,8 @@ extension Ghostty {
             let newLang = textInputMode?.primaryLanguage
             guard newLang != lastInputModePrimaryLanguage else { return }
             if newLang == "emoji" || lastInputModePrimaryLanguage == "emoji" {
-                resetKeyboardInteractionState(sendSyntheticKeyReleases: true)
+                // The view keeps focus, so held presses still end here.
+                resetKeyboardInteractionState(sendSyntheticKeyReleases: true, resetPressRouting: false)
                 keyboardAccessoryController?.clearOneShotModifiers()
             }
             lastInputModePrimaryLanguage = newLang
