@@ -40,13 +40,11 @@ extension MainView {
     /// `TabBar`, where reading title/badge/health metadata does not invalidate
     /// `MainView.body`.
     func availableTabBarWidth(in geometry: GeometryProxy) -> CGFloat {
-        let width = usesPinnedWideEdgeSidebarLayout
-            ? terminalRowColumns(width: geometry.size.width).terminal : geometry.size.width
-        return max(0, width - tabBarActionsWidth - edgeSidebarHeaderButtonWidth - tabBarLeadingPadding)
+        max(0, geometry.size.width - tabBarActionsWidth - edgeSidebarHeaderButtonWidth - tabBarLeadingPadding)
     }
 
     /// Width of the compact tab viewport. Capped tabs leave real flexible
-    /// space after the new-tab button instead of stretching across the window.
+    /// space before the fixed action buttons instead of stretching across the window.
     func integratedTabTrackWidth(in geometry: GeometryProxy) -> CGFloat {
         let tabCount = tabsModel.navigationTabs.count
         guard tabCount > 0 else { return 0 }

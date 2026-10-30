@@ -370,7 +370,6 @@ struct MainView: View {
     /// overlay over it). Routes `showingTabSwitcher` to docked vs floating.
     /// See `tabSidebarIsDocked`.
     @Setting(Settings.Sidebar.pinned) var tabSidebarPinned
-    @Setting(Settings.Sidebar.pinInWideLayout) var edgeSidebarsPinnedInWideLayout
     @Setting(Settings.Sidebar.openRightInWideLayout) var edgeSidebarOpensRightInWideLayout
     /// `page:side` tokens. Stock is the tab switcher on the left and the
     /// other tools on the right.
@@ -414,19 +413,19 @@ struct MainView: View {
         #endif
     }
 
-    /// Wide iOS layouts use pinned edge columns when the setting is enabled.
-    /// The geometry check works for landscape iPhone windows; unfolded Duo is
-    /// detected from its hinge state even if its scene geometry is ambiguous.
+    /// Sidebar tools share the terminal row in either phone orientation.
     var usesPinnedWideEdgeSidebarLayout: Bool {
         #if os(iOS) && !targetEnvironment(macCatalyst)
-        let isLandscape = shellViewportSize.width > 0 && shellViewportSize.width >= shellViewportSize.height
-        let isUnfoldedDuo = duoLayout.hasHinge && !duoLayout.isFrontDisplay
-        return edgeSidebarsPinnedInWideLayout
-            && (isLandscape || isUnfoldedDuo)
-            && tabsModel.fullScreenPaneID == nil
+        return tabsModel.fullScreenPaneID == nil
         #else
         return false
         #endif
+    }
+
+    var edgeSidebarViewportIsWide: Bool {
+        let isLandscape = shellViewportSize.width > 0 && shellViewportSize.width >= shellViewportSize.height
+        let isUnfoldedDuo = duoLayout.hasHinge && !duoLayout.isFrontDisplay
+        return usesPinnedWideEdgeSidebarLayout && (isLandscape || isUnfoldedDuo)
     }
 
     /// The tab switcher is currently shown as a pinned edge column rather than
@@ -608,15 +607,15 @@ struct MainView: View {
                     terminalRowViewportWidth = width
                     applyPendingWideSidebarAutoOpen()
                 }
-                .onChange(of: usesPinnedWideEdgeSidebarLayout) { wasPinned, isPinned in
-                    let mode = isPinned ? "pinned" : "drawer"
+                .onChange(of: edgeSidebarViewportIsWide) { wasWide, isWide in
+                    let mode = isWide ? "wide" : "compact"
                     Ghostty.logger.info("Edge sidebar layout mode=\(mode, privacy: .public) window=\(windowId, privacy: .public)")
-                    if !isPinned { pendingWideSidebarAutoOpen = false }
-                    if wasPinned && !isPinned,
+                    if !isWide { pendingWideSidebarAutoOpen = false }
+                    if wasWide && !isWide,
                        edgeSidebarSideIsOpen(.leading), edgeSidebarSideIsOpen(.trailing) {
                         closeEdgeSidebar(lastActiveEdgeSidebar.opposite)
                     }
-                    guard isPinned, !wasPinned else { return }
+                    guard isWide, !wasWide else { return }
                     pendingWideSidebarAutoOpen = true
                     if abs(terminalRowViewportWidth - terminalRowAvailableWidth) < 0.5 {
                         applyPendingWideSidebarAutoOpen()
@@ -695,21 +694,26 @@ struct MainView: View {
                 .background(TabSidebarEdgeSwipe(
                     edge: .leading,
                     canOpen: { canOpenEdgeSidebar(.leading) },
+                    canClose: { canCloseEdgeSidebar(.leading, at: $0, contentFrame: geometry.frame(in: .global)) },
                     tracksFinger: edgeTracksFinger(.leading),
-                    panelWidth: 420,
+                    panelWidth: edgeSidebarColumnIsPresented(.leading)
+                        ? terminalRowColumns(width: geometry.size.width).leadingEdgeSidebar : 420,
                     onOpen: { openEdgeSidebar(.leading) },
+                    onClose: { closeEdgeSidebar(.leading) },
                     onCancel: { closeEdgeSidebar(.leading) }
                 ))
                 .background(TabSidebarEdgeSwipe(
                     edge: .trailing,
                     canOpen: { canOpenEdgeSidebar(.trailing) },
+                    canClose: { canCloseEdgeSidebar(.trailing, at: $0, contentFrame: geometry.frame(in: .global)) },
                     tracksFinger: edgeTracksFinger(.trailing),
-                    panelWidth: 420,
+                    panelWidth: edgeSidebarColumnIsPresented(.trailing)
+                        ? terminalRowColumns(width: geometry.size.width).trailingEdgeSidebar : 420,
                     onOpen: { openEdgeSidebar(.trailing) },
+                    onClose: { closeEdgeSidebar(.trailing) },
                     onCancel: { closeEdgeSidebar(.trailing) }
                 ))
-                // Defer an iPhone or iPad edge while its drawer can open or is already
-                // floating. A docked column leaves the system edge alone.
+                // Keep the edge available while a sidebar can open or close.
                 // Also defer Home while an iPhone/iPad toolbar sits at the
                 // screen edge without a docked software keyboard.
                 .defersSystemGestures(

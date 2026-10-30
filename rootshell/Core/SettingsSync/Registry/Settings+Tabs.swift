@@ -161,10 +161,6 @@ nonisolated extension Settings {
             "tabSidebarPinned", default: false, group: .sidebar, policy: .localByDefault,
             configKey: "tab-sidebar-pinned",
             title: String(localized: "Pin Tab Sidebar", comment: "Setting title"))
-        static let pinInWideLayout = SettingKey(
-            "edgeSidebarsPinnedInWideLayout", default: true, group: .sidebar, policy: .localByDefault,
-            configKey: "edge-sidebars-pinned-in-wide-layout",
-            title: String(localized: "Pin Sidebars in Wide Layout", comment: "Setting title"))
         static let openRightInWideLayout = SettingKey(
             "edgeSidebarOpenRightInWideLayout", default: false, group: .sidebar, policy: .localByDefault,
             configKey: "edge-sidebar-open-right-in-wide-layout",
@@ -194,7 +190,7 @@ nonisolated extension Settings {
 
         static let all: [AnySettingDefinition] = [
             autoHideOnSelect.erased, rowLines.erased, largeControls.erased, pinned.erased,
-            pinInWideLayout.erased, openRightInWideLayout.erased, translucent.erased,
+            openRightInWideLayout.erased, translucent.erased,
             dockedWidth.erased, collapsedGateways.erased, collapsedGroups.erased, pageSides.erased,
             edgeSidebarButtons.erased,
         ]
