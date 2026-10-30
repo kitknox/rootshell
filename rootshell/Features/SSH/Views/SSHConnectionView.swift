@@ -398,6 +398,14 @@ struct SSHConnectionView: View {
             case .splitDown: return String(localized: "Split Down")
             }
         }
+
+        var compactDisplayName: String {
+            switch self {
+            case .newTab: String(localized: "Tab")
+            case .splitRight: String(localized: "Right")
+            case .splitDown: String(localized: "Down")
+            }
+        }
     }
     
     enum AuthType: String, CaseIterable {
@@ -616,8 +624,11 @@ struct SSHConnectionView: View {
                 }
             }
 
-            if edgeSidebarTitleContext == nil || connectionType != .profiles {
+            if edgeSidebarTitleContext == nil {
                 connectionTypeSwitcher
+                Divider()
+            } else if connectionType != .profiles {
+                connectionNavigationRow
                 Divider()
             }
             
@@ -1267,8 +1278,7 @@ struct SSHConnectionView: View {
                 showsClose: !preventDismissal,
                 isCloseEnabled: !isConnecting,
                 connectionSwitcher: {
-                    connectionTypeSwitcher
-                    compactOpenAsHeader
+                    connectionNavigationRow
                 }
             )
         }
@@ -1407,22 +1417,62 @@ struct SSHConnectionView: View {
     }
 
     // Shared with the Screen Sharing form (SSHConnectionView+VNC.swift).
+    @ViewBuilder
     var compactOpenAsHeader: some View {
-        VStack(spacing: 0) {
+        if edgeSidebarTitleContext == nil {
             VStack(spacing: 0) {
-                Picker("Open As", selection: $splitOption) {
-                    ForEach(SplitOption.allCases, id: \.self) { option in
-                        Text(option.displayName).tag(option)
+                splitDestinationPicker
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                Divider()
+            }
+            .background(sheetThemeColors?.background ?? Color(.systemGroupedBackground))
+        }
+    }
+
+    private var splitDestinationPicker: some View {
+        Picker("Open As", selection: $splitOption) {
+            ForEach(SplitOption.allCases, id: \.self) { option in
+                Text(edgeSidebarTitleContext == nil ? option.displayName : option.compactDisplayName)
+                    .tag(option)
+                    .accessibilityLabel(option.displayName)
+            }
+        }
+    }
+
+    private var connectionNavigationRow: some View {
+        HStack(spacing: 8) {
+            Menu {
+                Picker("Connection Type", selection: Binding(get: { connectionType }, set: selectConnectionType)) {
+                    ForEach(visibleConnectionTypes, id: \.self) { type in
+                        Label(type.displayName, systemImage: type.iconName).tag(type)
                     }
                 }
-                .pickerStyle(.segmented)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: connectionType.iconName)
+                    Image(systemName: "chevron.down").font(.caption2)
+                }
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(sheetThemeColors?.background ?? Color(.systemGroupedBackground))
-            
-            Divider()
+            .accessibilityLabel("Connection Type")
+            .accessibilityValue(connectionType.displayName)
+            if connectionType != .files {
+                ViewThatFits(in: .horizontal) {
+                    splitDestinationPicker
+                        .pickerStyle(.segmented)
+                        .fixedSize(horizontal: true, vertical: false)
+                    splitDestinationPicker
+                        .pickerStyle(.menu)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
+        .padding(.horizontal, 12)
+        .frame(height: 44)
     }
     
     private var connectionTypeSwitcher: some View {
@@ -1435,7 +1485,7 @@ struct SSHConnectionView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.vertical, 2)
             }
             .onAppear {
                 proxy.scrollTo(connectionType, anchor: .center)
@@ -1476,6 +1526,7 @@ struct SSHConnectionView: View {
             .font(.subheadline.weight(.medium))
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .frame(minHeight: 44)
             .modifier(
                 GlassTabBackgroundModifier(
                     isSelected: isSelected,
@@ -3908,11 +3959,23 @@ extension SSHConnectionView {
                     connectionSwitcher()
                 }
 
+                VStack(spacing: 6) {
+                    searchBar(in: folder)
+                        .frame(height: 44)
+                        .padding(.horizontal, 10)
+                        .background(
+                            sheetThemeColors?.rowBackground ?? Color(uiColor: .secondarySystemBackground),
+                            in: RoundedRectangle(cornerRadius: 12)
+                        )
+                    if !selectedTags.isEmpty {
+                        activeTagChips
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+
                 ScrollViewReader { scrollProxy in
                     List {
-                        // Search section at top
-                        searchSection(in: folder)
-
                         // Folders in current location
                         foldersSection(in: folder)
 
@@ -3923,7 +3986,13 @@ extension SSHConnectionView {
                         noResultsSection(in: folder)
                     }
                     .themedList()
-                    .listStyle(.insetGrouped)
+                    .listStyle(.plain)
+                    .environment(\.defaultMinListRowHeight, edgeSidebarTitleContext == nil ? 44 : 24)
+                    .listSectionSpacing(.compact)
+                    .contentMargins(.top, 0, for: .scrollContent)
+                    .transformEnvironment(\.defaultMinListHeaderHeight) { height in
+                        if edgeSidebarTitleContext != nil { height = 24 }
+                    }
                     .onChange(of: scrollTargetID) { _, target in
                         guard folder == currentFolder, let target else { return }
                         scrollProxy.scrollTo(target, anchor: .center)
@@ -3989,20 +4058,6 @@ extension SSHConnectionView {
         
         // MARK: - Search Section
         
-        @ViewBuilder
-        private func searchSection(in folder: String) -> some View {
-            Section {
-                Group {
-                    searchBar(in: folder)
-                    
-                    if !selectedTags.isEmpty {
-                        activeTagChips
-                    }
-                }
-                .themedRow()
-            }
-        }
-        
         private func searchFocusBinding(for folder: String) -> Binding<Bool> {
             Binding(
                 get: { folder == currentFolder && isSearchFocused },
@@ -4018,7 +4073,7 @@ extension SSHConnectionView {
         private func searchBar(in folder: String) -> some View {
             BrowseSearchBar(
                 searchQuery: $searchQuery,
-                placeholder: String(localized: "Search profiles..."),
+                placeholder: edgeSidebarTitleContext == nil ? String(localized: "Search profiles...") : String(localized: "Search"),
                 focusedBinding: searchFocusBinding(for: folder),
                 focusRequestID: searchFocusRequestID,
                 onEscape: { handleEscapeKey() },
@@ -4122,72 +4177,92 @@ extension SSHConnectionView {
         private func foldersSection(in folder: String) -> some View {
             let subfolders = filteredFolders(in: folder)
             if !subfolders.isEmpty && searchQuery.isEmpty && selectedTags.isEmpty {
-                Section("Folders") {
-                    ForEach(subfolders) { subfolder in
-                        Button {
-                            navigateIntoFolder(subfolder.path)
-                        } label: {
-                            FolderRow(folder: subfolder)
-                        }
-                        .id("folder:\(subfolder.id)")
-                        .listRowBackground(
-                            isItemHighlighted(.folder(subfolder), in: folder)
-                            ? Color.accentColor.opacity(0.15) : sheetThemeColors?.rowBackground
-                        )
+                let rows = ForEach(subfolders) { subfolder in
+                    Button {
+                        navigateIntoFolder(subfolder.path)
+                    } label: {
+                        FolderRow(folder: subfolder)
+                            .frame(minHeight: 44)
                     }
+                    .id("folder:\(subfolder.id)")
+                    .listRowBackground(
+                        isItemHighlighted(.folder(subfolder), in: folder)
+                        ? Color.accentColor.opacity(0.15) : sheetThemeColors?.rowBackground
+                    )
+                }
+                if edgeSidebarTitleContext != nil {
+                    compactProfileSectionHeader("Folders")
+                    rows
+                } else {
+                    Section("Folders") { rows }
                 }
             }
         }
-        
+
         // MARK: - Profiles Section
-        
+
         @ViewBuilder
         private func profilesSection(in folder: String) -> some View {
             let profiles = filteredProfiles(in: folder)
             if !profiles.isEmpty {
-                Section(searchQuery.isEmpty && selectedTags.isEmpty ? "Profiles" : "Results") {
-                    ForEach(profiles) { profile in
-                        ProfileRow(profile: profile)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    profileToDelete = profile
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
+                let title = searchQuery.isEmpty && selectedTags.isEmpty ? "Profiles" : "Results"
+                let rows = ForEach(profiles) { profile in
+                    ProfileRow(profile: profile)
+                        .frame(minHeight: 44)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                profileToDelete = profile
+                            } label: {
+                                Label("Delete", systemImage: "trash")
                             }
-                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                Button {
-                                    editingProfile = profile
-                                } label: {
-                                    Label("Edit", systemImage: "pencil")
-                                }
-                                .tint(.blue)
-                                
-                                Button {
-                                    duplicateProfile(profile)
-                                } label: {
-                                    Label("Duplicate", systemImage: "doc.on.doc")
-                                }
-                                .tint(.orange)
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            Button {
+                                editingProfile = profile
+                            } label: {
+                                Label("Edit", systemImage: "pencil")
                             }
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                selectProfile(profile)
+                            .tint(.blue)
+
+                            Button {
+                                duplicateProfile(profile)
+                            } label: {
+                                Label("Duplicate", systemImage: "doc.on.doc")
                             }
-                            .contextMenu {
-                                profileContextMenu(profile)
-                            }
-                            .id("profile:\(profile.id.uuidString)")
-                            .listRowBackground(
-                                isItemHighlighted(.profile(profile), in: folder)
-                                ? Color.accentColor.opacity(0.15) : sheetThemeColors?.rowBackground
-                            )
-                    }
+                            .tint(.orange)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectProfile(profile)
+                        }
+                        .contextMenu {
+                            profileContextMenu(profile)
+                        }
+                        .id("profile:\(profile.id.uuidString)")
+                        .listRowBackground(
+                            isItemHighlighted(.profile(profile), in: folder)
+                            ? Color.accentColor.opacity(0.15) : sheetThemeColors?.rowBackground
+                        )
+                }
+                if edgeSidebarTitleContext != nil {
+                    compactProfileSectionHeader(title)
+                    rows
+                } else {
+                    Section(title) { rows }
                 }
             }
         }
-        
-        // MARK: - No Results Section
+
+        private func compactProfileSectionHeader(_ title: String) -> some View {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+        }
+
+// MARK: - No Results Section
         
         @ViewBuilder
         private func noResultsSection(in folder: String) -> some View {

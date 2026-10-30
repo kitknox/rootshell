@@ -45,7 +45,7 @@ struct EdgeSidebarTitleMenu: View {
                 .accessibilityLabel(String(localized: "Sidebar Tool"))
                 .accessibilityValue(context.selection.title)
             } else {
-                plainTitle(context.selection.title, status: status)
+                titleLabel(context.selection.title, icon: context.selection.systemImage, showsMenu: false, status: status)
             }
         } else {
             titleLabel(title, icon: systemImage, showsMenu: false)
@@ -66,23 +66,6 @@ struct EdgeSidebarTitleMenu: View {
         }
     }
 
-    @ViewBuilder
-    private func plainTitle(_ title: String, status: String?) -> some View {
-        if let status {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(title)
-                    .font(.headline)
-                    .lineLimit(1)
-                statusLine(status)
-            }
-            .frame(minHeight: 44, alignment: .leading)
-        } else {
-            Text(title)
-                .font(.headline)
-                .lineLimit(1)
-        }
-    }
-
     private func statusLine(_ status: String) -> some View {
         Text(status)
             .font(.caption)
@@ -92,17 +75,32 @@ struct EdgeSidebarTitleMenu: View {
     }
 
     private func titleLine(_ title: String, icon: String, showsMenu: Bool) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .foregroundStyle(Color.accentColor)
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(Color.primary)
-                .lineLimit(1)
-            if showsMenu {
-                Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .foregroundStyle(Color.accentColor)
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(Color.primary)
+                if showsMenu {
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            HStack(spacing: 4) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .fixedSize(horizontal: false, vertical: true)
+                if showsMenu {
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .contentShape(Rectangle())
@@ -160,7 +158,15 @@ struct EdgeSidebarHeader<Actions: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        headerRow
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+        .padding(.horizontal, 8)
+        .background(themeColors?.background)
+    }
+
+    private var headerRow: some View {
+        HStack(spacing: 4) {
             if let onBack {
                 headerButton("chevron.backward", accessibilityLabel: String(localized: "Back"), action: onBack)
             }
@@ -172,18 +178,15 @@ struct EdgeSidebarHeader<Actions: View>: View {
             }
             .layoutPriority(1)
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 0)
             actions
+                .fixedSize()
                 .frame(minHeight: 44)
             if showsClose {
                 headerButton("xmark.circle.fill", accessibilityLabel: String(localized: "Close \(title)"), action: onClose)
                     .disabled(!isCloseEnabled)
             }
         }
-        .buttonStyle(.plain)
-        .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
-        .padding(.horizontal, 12)
-        .background(themeColors?.background)
     }
 
     private func headerButton(
