@@ -50,9 +50,10 @@ extension MainView {
     @ViewBuilder
     func applyDuoChrome<Content: View>(_ content: Content, inTerminalColumn: Bool = false) -> some View {
         #if !targetEnvironment(macCatalyst) && !os(visionOS)
-        if #available(iOS 27.1, *), isPhone,
-           usesPinnedWideEdgeSidebarLayout == inTerminalColumn {
-            // Sidebar presentations must remain outside the terminal's navigation stack.
+        if #available(iOS 27.1, *), isPhone, duoLayout.hasHinge,
+           inTerminalColumn {
+            // Keep the stack around the terminal in every size class. Moving it
+            // between the scene and column reparents live input views during rotation.
             NavigationStack {
                 content
                 .toolbarVisibility(showsDuoSideRail ? .visible : .hidden, for: .navigationBar)
