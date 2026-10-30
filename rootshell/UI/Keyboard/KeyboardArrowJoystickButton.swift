@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import os
 
 class KeyboardArrowJoystickButton: UIView {
     var interactionMode: KeyboardToolbarInteractionMode = .accessory
@@ -70,7 +71,28 @@ class KeyboardArrowJoystickButton: UIView {
     }
 
     private(set) var mode: Mode = .joystick {
-        didSet { updateAppearance() }
+        didSet {
+            joystickTouchRecognizer.isEnabled = mode == .joystick
+            updateAppearance()
+        }
+    }
+
+    // Claim joystick touches before a parent scroll view can start its pan.
+    // Key dispatch stays in the existing touch handlers below.
+    private lazy var joystickTouchRecognizer: UILongPressGestureRecognizer = {
+        let recognizer = UILongPressGestureRecognizer(target: self, action: #selector(joystickTouchChanged(_:)))
+        recognizer.minimumPressDuration = 0
+        recognizer.allowableMovement = .greatestFiniteMagnitude
+        recognizer.cancelsTouchesInView = false
+        recognizer.delaysTouchesBegan = false
+        recognizer.delaysTouchesEnded = false
+        return recognizer
+    }()
+
+    @objc private func joystickTouchChanged(_ recognizer: UILongPressGestureRecognizer) {
+        if recognizer.state == .began {
+            Ghostty.logger.debug("KeyboardToolbar: arrow owns touch before row pan")
+        }
     }
 
     private var sizes: KeyboardSizes
@@ -118,6 +140,12 @@ class KeyboardArrowJoystickButton: UIView {
     // MARK: - Setup
 
     private func setupView() {
+        addGestureRecognizer(joystickTouchRecognizer)
+        joystickTouchRecognizer.isEnabled = mode == .joystick
+        isAccessibilityElement = true
+        accessibilityLabel = String(localized: "Arrow Keys")
+        accessibilityHint = String(localized: "Drag to move the cursor. Hold to switch arrow modes.")
+        accessibilityTraits = .button
         backgroundColor = .clear
         layer.cornerRadius = sizes.button.cornerRadius
         layer.cornerCurve = .continuous
@@ -158,6 +186,7 @@ class KeyboardArrowJoystickButton: UIView {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard canDispatchTouchAction, let touch = touches.first else { return }
+        Ghostty.logger.debug("KeyboardToolbar: arrow touch began in \(self.mode.rawValue, privacy: .public) mode")
         currentTouchMode = interactionMode
         if currentTouchMode == .spacedBottom && !bounds.contains(touch.location(in: self)) { return }
         currentTouch = touch
@@ -267,8 +296,17 @@ class KeyboardArrowJoystickButton: UIView {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if window == nil { cancelTouchInteraction() }
+        guard window != nil else { cancelTouchInteraction(); return }
+        var ancestor = superview
+        while let view = ancestor {
+            if let scrollView = view as? UIScrollView {
+                scrollView.panGestureRecognizer.require(toFail: joystickTouchRecognizer)
+                break
+            }
+            ancestor = view.superview
+        }
     }
+
 
     // MARK: - Long Press
 
@@ -324,6 +362,7 @@ class KeyboardArrowJoystickButton: UIView {
     // MARK: - Key Sending
 
     private func sendKey(_ direction: ArrowDirection) {
+        Ghostty.logger.debug("KeyboardToolbar: arrow input \(String(describing: direction), privacy: .public)")
         delegate?.keyPressed(direction.key, modifiers: [])
     }
 
