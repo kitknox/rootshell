@@ -20,8 +20,8 @@
 //  isolation, KeySlot's (associated-value) Hashable conformance is
 //  main-actor-isolated and cannot satisfy the data source's Sendable
 //  identifier requirement. String is a stdlib (nonisolated) Hashable &
-//  Sendable, so it sidesteps that entirely. Sections are "main" and
-//  "drawer-<index>".
+//  Sendable, so it sidesteps that entirely. Sections are pinned-left, main,
+//  pinned-right, and drawer-<index>.
 //
 
 import SwiftUI
@@ -32,13 +32,11 @@ import UIKit
 struct ToolbarLayoutEditor: UIViewControllerRepresentable {
     var manager: KeyboardToolbarManager
     var themeColors: SheetThemeColors?
-    var capacity: Int
     @Binding var contentHeight: CGFloat
     @Environment(\.editMode) private var editMode
 
     func makeUIViewController(context: Context) -> ToolbarLayoutEditorController {
         let controller = ToolbarLayoutEditorController(manager: manager)
-        controller.capacity = capacity
         controller.onContentHeightChange = { height in
             // Guard against a layout feedback loop: only push real changes.
             if abs(contentHeight - height) > 0.5 {
@@ -51,7 +49,6 @@ struct ToolbarLayoutEditor: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: ToolbarLayoutEditorController, context: Context) {
         // Theme changes are handled by the controller's themeColors didSet.
         controller.themeColors = themeColors
-        controller.capacity = capacity
         controller.setEditing(editMode?.wrappedValue.isEditing ?? false)
         controller.applySnapshot(animated: true)
     }
@@ -70,14 +67,6 @@ final class ToolbarLayoutEditorController: UIViewController {
             reconfigureAllItems()
         }
     }
-    /// Main-row capacity for the "X / Y" badge, computed by the SwiftUI host from
-    /// the settings list width so the number matches the previous implementation.
-    var capacity: Int = 1 {
-        didSet {
-            guard isViewLoaded, capacity != oldValue else { return }
-            reconfigureSupplementaries()
-        }
-    }
     var onContentHeightChange: ((CGFloat) -> Void)?
 
     private var collectionView: UICollectionView!
@@ -87,7 +76,9 @@ final class ToolbarLayoutEditorController: UIViewController {
 
     // MARK: Section identifiers
 
+    private static let leftPinnedSectionID = "pinned-left"
     private static let mainSectionID = "main"
+    private static let rightPinnedSectionID = "pinned-right"
 
     private static func drawerSectionID(_ index: Int) -> String {
         "drawer-\(index)"
@@ -95,6 +86,19 @@ final class ToolbarLayoutEditorController: UIViewController {
 
     private var drawerSectionIDs: [String] {
         manager.config.drawerRows.indices.map { Self.drawerSectionID($0) }
+    }
+
+    private var toolbarSectionIDs: [String] {
+        [Self.leftPinnedSectionID, Self.mainSectionID, Self.rightPinnedSectionID]
+    }
+
+    private func toolbarSection(for sectionID: String) -> KeyboardToolbarManager.ToolbarSection? {
+        switch sectionID {
+        case Self.leftPinnedSectionID: .leftPinned
+        case Self.mainSectionID: .mainRow
+        case Self.rightPinnedSectionID: .rightPinned
+        default: drawerIndex(of: sectionID).map(KeyboardToolbarManager.ToolbarSection.drawer)
+        }
     }
 
     private func drawerIndex(of sectionID: String) -> Int? {
@@ -238,8 +242,10 @@ final class ToolbarLayoutEditorController: UIViewController {
         let mainIDs = validSlots(manager.config.mainRow).map { register($0) }
 
         var snapshot = NSDiffableDataSourceSnapshot<String, String>()
-        snapshot.appendSections([Self.mainSectionID] + drawerSectionIDs)
+        snapshot.appendSections(toolbarSectionIDs + drawerSectionIDs)
+        snapshot.appendItems(validSlots(manager.config.leftPinned).map { register($0) }, toSection: Self.leftPinnedSectionID)
         snapshot.appendItems(mainIDs, toSection: Self.mainSectionID)
+        snapshot.appendItems(validSlots(manager.config.rightPinned).map { register($0) }, toSection: Self.rightPinnedSectionID)
         for (index, row) in manager.config.drawerRows.enumerated() {
             let rowIDs = validSlots(row).map { register($0) }
             snapshot.appendItems(rowIDs, toSection: Self.drawerSectionID(index))
@@ -282,7 +288,9 @@ final class ToolbarLayoutEditorController: UIViewController {
             .filter { drawerIndex(of: $0) != nil }
             .map { slots(from: snapshot.itemIdentifiers(inSection: $0)) }
         manager.setLayout(
+            leftPinned: slots(from: snapshot.itemIdentifiers(inSection: Self.leftPinnedSectionID)),
             mainRow: slots(from: snapshot.itemIdentifiers(inSection: Self.mainSectionID)),
+            rightPinned: slots(from: snapshot.itemIdentifiers(inSection: Self.rightPinnedSectionID)),
             drawerRows: drawerRows
         )
     }
@@ -352,10 +360,25 @@ final class ToolbarLayoutEditorController: UIViewController {
             countLabel.textColor = .secondaryLabel
             countLabel.font = .preferredFont(forTextStyle: .footnote)
         } else {
-            content.text = String(localized: "Main Row")
-            let mainCount = validSlots(manager.config.mainRow).count
-            countLabel.text = "\(mainCount) / \(capacity)"
-            countLabel.textColor = mainCount > capacity ? .systemOrange : .systemGreen
+            let section = toolbarSection(for: headerSectionID)
+            switch section {
+            case .leftPinned:
+                content.text = String(localized: "Pinned Left")
+                countLabel.text = String(localized: "Pinned")
+            case .mainRow:
+                content.text = String(localized: "Primary Keys")
+                countLabel.text = String(localized: "Scrollable")
+            case .rightPinned:
+                content.text = String(localized: "Pinned Right")
+                countLabel.text = String(localized: "Pinned")
+            case .drawer:
+                content.text = String(localized: "Toolbar")
+                countLabel.text = nil
+            case nil:
+                content.text = String(localized: "Toolbar")
+                countLabel.text = nil
+            }
+            countLabel.textColor = .secondaryLabel
             countLabel.font = .systemFont(
                 ofSize: UIFont.preferredFont(forTextStyle: .footnote).pointSize,
                 weight: .medium
@@ -381,13 +404,20 @@ final class ToolbarLayoutEditorController: UIViewController {
                 content.text = String(localized: "Scrolls horizontally on the keyboard.")
             }
         } else {
-            let mainCount = validSlots(manager.config.mainRow).count
-            let overflow = max(0, mainCount - capacity)
-            if overflow > 0 {
-                content.text = String(localized: "\(overflow) key\(overflow == 1 ? "" : "s") will overflow to the drawer.")
-                content.textProperties.color = .systemOrange
-            } else {
-                content.text = String(localized: "These keys fill the main toolbar row. Drag keys between Main Row and Drawer.")
+            switch toolbarSection(for: footerSectionID) {
+            case .leftPinned, .rightPinned:
+                content.text = String(localized: "These keys stay fixed at this side of the toolbar.")
+            case .mainRow:
+                if manager.config.scrollScope == .primary {
+                    content.text = String(localized: "These keys scroll between the pinned sections.")
+                } else {
+                    content.text = String(localized: "All toolbar keys scroll together.")
+                }
+                if manager.config.scrollBehavior == .pages {
+                    content.text = String(localized: "Swipe to move one page at a time.")
+                }
+            case .drawer, nil:
+                content.text = String(localized: "Drag keys between the toolbar sections and drawer rows.")
             }
         }
         view.contentConfiguration = content
@@ -531,39 +561,37 @@ extension ToolbarLayoutEditorController: UICollectionViewDelegate {
         point: CGPoint
     ) -> UIContextMenuConfiguration? {
         guard let id = dataSource.itemIdentifier(for: indexPath), let slot = slotsByID[id] else { return nil }
-        let sourceDrawerIndex = drawerIndex(of: sectionID(at: indexPath.section))
+        let source = toolbarSection(for: sectionID(at: indexPath.section)) ?? .mainRow
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
             guard let self else { return nil }
             var actions: [UIMenuElement] = []
-            let source: KeyboardToolbarManager.ToolbarSection
-            if let sourceDrawerIndex {
-                source = .drawer(sourceDrawerIndex)
-            } else {
-                source = .mainRow
-            }
-
-            if sourceDrawerIndex != nil {
-                actions.append(UIAction(
-                    title: String(localized: "Move to Main Row"),
-                    image: UIImage(systemName: "tray.and.arrow.up")
-                ) { [weak self] _ in
-                    guard let self else { return }
-                    self.manager.moveKeyToSection(slot, from: source, to: .mainRow)
-                    self.applySnapshot(animated: true)
-                })
-            }
-            // One move target per other drawer row; plain "Move to Drawer" when
-            // there's a single row (matching the original wording).
-            for targetIndex in self.manager.config.drawerRows.indices where targetIndex != sourceDrawerIndex {
-                let title = self.manager.drawerRowCount == 1
-                    ? String(localized: "Move to Drawer")
-                    : String(localized: "Move to Drawer \(targetIndex + 1)")
+            var targets: [KeyboardToolbarManager.ToolbarSection] = [.leftPinned, .mainRow, .rightPinned]
+            targets += self.manager.config.drawerRows.indices.map(KeyboardToolbarManager.ToolbarSection.drawer)
+            for target in targets where target != source {
+                let title: String
+                let image: String
+                switch target {
+                case .leftPinned:
+                    title = String(localized: "Move to Pinned Left")
+                    image = "align.horizontal.left"
+                case .mainRow:
+                    title = String(localized: "Move to Primary Keys")
+                    image = "arrow.left.and.right"
+                case .rightPinned:
+                    title = String(localized: "Move to Pinned Right")
+                    image = "align.horizontal.right"
+                case .drawer(let index):
+                    title = self.manager.drawerRowCount == 1
+                        ? String(localized: "Move to Drawer")
+                        : String(localized: "Move to Drawer \(index + 1)")
+                    image = "tray.and.arrow.down"
+                }
                 actions.append(UIAction(
                     title: title,
-                    image: UIImage(systemName: "tray.and.arrow.down")
+                    image: UIImage(systemName: image)
                 ) { [weak self] _ in
                     guard let self else { return }
-                    self.manager.moveKeyToSection(slot, from: source, to: .drawer(targetIndex))
+                    self.manager.moveKeyToSection(slot, from: source, to: target)
                     self.applySnapshot(animated: true)
                 })
             }

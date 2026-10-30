@@ -1148,7 +1148,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             }
         }
         configuredDrawerToggle = key(for: .builtIn(.drawerToggle))
-        configuredMain = manager.config.mainRow.compactMap(key)
+        configuredMain = (manager.config.leftPinned + manager.config.mainRow + manager.config.rightPinned).compactMap(key)
         configuredDrawers = manager.config.drawerRows.map { $0.compactMap(key) }
         if manager.drawerOpenByDefault && !toolbarDrawerOpenByDefault && toolbarDrawerState == .closed {
             toolbarDrawerState = .closed.toggled(rowCount: configuredDrawers.count, cycle: manager.drawerToggleMode == .cycle)
