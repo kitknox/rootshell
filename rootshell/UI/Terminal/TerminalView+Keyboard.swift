@@ -338,7 +338,11 @@ extension Ghostty.TerminalView {
             heldOptionSide = heldOptionSide == .left ? .both : .right
         }
 
-        let hardwareModifiers = normalizedHardwareModifierFlags(key.modifierFlags)
+        let hardwareModifiers = normalizedHardwareModifierFlags(
+            HardwareKeyboardModifiers.droppingStaleShift(
+                from: key.modifierFlags, physicalModifiers: physicalModifiersWitnessing(key)
+            )
+        )
         if !hardwareModifiers.isEmpty { isGCKeyboardModifierStateTrusted = true }
         // Recover the original chord before substituting mod-tap. Recovering
         // afterward would reintroduce the Command bit we just consumed.
@@ -373,6 +377,7 @@ extension Ghostty.TerminalView {
         // encoding and printable/repeat output must use the substituted chord.
         let needsTextTranslation = didSubstituteModifiers
             || key.modifierFlags.contains(.alphaShift) != effectiveModifiers.contains(.alphaShift)
+            || key.modifierFlags.contains(.shift) != effectiveModifiers.contains(.shift)
         lazy var effectiveCharacters = needsTextTranslation
             ? retranslatedHardwareText(for: key, modifiers: effectiveModifiers)
             : key.characters
@@ -1020,7 +1025,10 @@ extension Ghostty.TerminalView {
         if let allPresses = event?.allPresses {
             for p in allPresses where p.phase == .began || p.phase == .changed || p.phase == .stationary {
                 guard let k = p.key else { continue }
-                hwMods.formUnion(ghosttyInputMods(from: normalizedHardwareModifierFlags(k.modifierFlags)))
+                let flags = HardwareKeyboardModifiers.droppingStaleShift(
+                    from: k.modifierFlags, physicalModifiers: physicalModifiersWitnessing(k)
+                )
+                hwMods.formUnion(ghosttyInputMods(from: normalizedHardwareModifierFlags(flags)))
             }
         }
         heldHardwareModifiers = hwMods
@@ -1370,6 +1378,20 @@ extension Ghostty.TerminalView {
         return merged
         #endif
     }
+
+    #if os(iOS) && !targetEnvironment(macCatalyst)
+    /// GCKeyboard's modifier snapshot, only once it already shows this key
+    /// down. That proves it received the same HID event UIKit is delivering,
+    /// so a missing Shift there is a real release and not a missed key-down.
+    func physicalModifiersWitnessing(_ key: UIKey) -> UIKeyModifierFlags? {
+        guard let input = GCKeyboard.coalesced?.keyboardInput,
+              input.button(forKeyCode: GCKeyCode(rawValue: Int(key.keyCode.rawValue)))?.isPressed == true
+        else { return nil }
+        return currentModifierFlagsFromGCKeyboard(input: input)
+    }
+    #else
+    func physicalModifiersWitnessing(_ key: UIKey) -> UIKeyModifierFlags? { nil }
+    #endif
 
     #if !os(visionOS)
     func currentModifierFlagsFromGCKeyboard(input: GCKeyboardInput?) -> UIKeyModifierFlags {

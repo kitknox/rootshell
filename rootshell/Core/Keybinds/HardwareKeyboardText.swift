@@ -9,6 +9,17 @@ enum HardwareKeyboardModifiers {
         if capsLock { result.insert(.alphaShift) } else { result.remove(.alphaShift) }
         return result
     }
+
+    /// UIKit keeps reporting Shift after a Shift key-up that a system overlay
+    /// consumed. Drop it when a physical snapshot taken for this same press
+    /// shows no Shift key down. nil means no live snapshot, so UIKit's flags stand.
+    static func droppingStaleShift(
+        from modifiers: UIKeyModifierFlags, physicalModifiers: UIKeyModifierFlags?
+    ) -> UIKeyModifierFlags {
+        guard let physicalModifiers, modifiers.contains(.shift),
+              !physicalModifiers.contains(.shift) else { return modifiers }
+        return modifiers.subtracting(.shift)
+    }
 }
 
 /// Reconstructs text when a hardware chord's modifiers have been substituted.
