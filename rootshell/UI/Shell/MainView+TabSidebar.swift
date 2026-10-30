@@ -16,6 +16,15 @@ import UniformTypeIdentifiers
 import UIKit
 #endif
 
+@MainActor
+private final class TabSidebarActions {
+    let view: MainView
+
+    init(view: MainView) {
+        self.view = view
+    }
+}
+
 extension MainView {
 
     // MARK: - Vertical Tab Sidebar
@@ -51,6 +60,7 @@ extension MainView {
         isDocked: Bool,
         dockedBottomClearance: CGFloat = 0
     ) -> VerticalTabSidebar {
+        let actions = TabSidebarActions(view: self)
         let _ = muxPanelRevision
         let servesSelectedTerminal = muxExposeFeed.terminal === focusedTerminalForFileManager
             && [.tmux, .herdr, .zmx].contains(muxExposeFeed.type)
@@ -63,104 +73,104 @@ extension MainView {
             dockedBottomClearance: dockedBottomClearance,
             canPin: canPinTabSidebar && !usesPinnedWideEdgeSidebarLayout,
             isPinned: tabSidebarIsDocked,
-            onTogglePin: { tabSidebarPinned.toggle() },
+            onTogglePin: { actions.view.tabSidebarPinned.toggle() },
             onSelectTab: { id in
                 // Select by identity — the sidebar already holds the tab's ID.
                 // Routing through selectTab(at:) here is wrong: that takes a
                 // VISIBLE index, but tabsModel.index(of:) is a FULL-array index,
                 // and the two diverge once a tmux window/gateway is hidden,
                 // landing selection on an off-by-N neighbor. (id=tmux-hidden-windows)
-                if tabBarHidden && id != tabsModel.selectedTabID {
-                    tabIndicator.suppressNextHiddenIndicator = true
+                if actions.view.tabBarHidden && id != actions.view.tabsModel.selectedTabID {
+                    actions.view.tabIndicator.suppressNextHiddenIndicator = true
                 }
-                selectTab(id: id)
+                actions.view.selectTab(id: id)
                 // Dismiss the floating sidebar on select when it shouldn't stay
                 // open: phone/visionOS always, or iPad/Catalyst floating with
                 // auto-hide enabled. The docked column stays open.
-                if !tabSidebarStaysOpenOnSelect && !tabSidebarIsDocked {
-                    dismissTabSidebar()
+                if !actions.view.tabSidebarStaysOpenOnSelect && !actions.view.tabSidebarIsDocked {
+                    actions.view.dismissTabSidebar()
                 }
                 // While the sidebar stays open, handleSelectedTabChange
                 // skips the terminal's becomeFirstResponder, so the panel
                 // keeps the keyboard (no re-resign dance needed here).
             },
             onSelectPane: { tabID, paneID in
-                if tabBarHidden && tabID != tabsModel.selectedTabID {
-                    tabIndicator.suppressNextHiddenIndicator = true
+                if actions.view.tabBarHidden && tabID != actions.view.tabsModel.selectedTabID {
+                    actions.view.tabIndicator.suppressNextHiddenIndicator = true
                 }
-                navigateToTerminal(tabID: tabID, surfaceID: paneID)
-                if !tabSidebarStaysOpenOnSelect && !tabSidebarIsDocked {
-                    dismissTabSidebar()
+                actions.view.navigateToTerminal(tabID: tabID, surfaceID: paneID)
+                if !actions.view.tabSidebarStaysOpenOnSelect && !actions.view.tabSidebarIsDocked {
+                    actions.view.dismissTabSidebar()
                 }
             },
             onCloseTab: { id in
-                guard let index = tabsModel.index(of: id) else { return }
-                requestUserCloseTab(at: index)
-                if terminals.isEmpty {
+                guard let index = actions.view.tabsModel.index(of: id) else { return }
+                actions.view.requestUserCloseTab(at: index)
+                if actions.view.terminals.isEmpty {
                     // Last tab closed: get out of the way before the
                     // connection sidebar takes over.
-                    dismissTabSidebar()
+                    actions.view.dismissTabSidebar()
                 }
             },
             onReorderClass: { orderedIDs, draggedID in
-                reorderTabsPreservingSlots(orderedClassIDs: orderedIDs, draggedID: draggedID)
+                actions.view.reorderTabsPreservingSlots(orderedClassIDs: orderedIDs, draggedID: draggedID)
             },
             onMoveTab: { from, to in
-                moveTab(from: from, to: to, commitRemoteOrder: false)
+                actions.view.moveTab(from: from, to: to, commitRemoteOrder: false)
             },
             onReorderEnded: { draggedID in
-                commitTabReorder(draggedID: draggedID)
+                actions.view.commitTabReorder(draggedID: draggedID)
             },
             onNewTab: {
                 // addNewTab opens the connection sidebar (right overlay).
                 // When floating, hide this one as it takes over; when docked
                 // it's a left column that coexists with the right overlay.
-                if !tabSidebarIsDocked { dismissTabSidebar() }
-                addNewTab()
+                if !actions.view.tabSidebarIsDocked { actions.view.dismissTabSidebar() }
+                actions.view.addNewTab()
             },
             onDismiss: {
-                dismissTabSidebar()
+                actions.view.dismissTabSidebar()
             },
             onOpenSettings: {
                 // The floating sidebar is an overlay, so hide it before the
                 // settings cover presents; the docked column stays put beside it.
-                if !tabSidebarIsDocked { dismissTabSidebar() }
-                requestSettingsPresentation()
+                if !actions.view.tabSidebarIsDocked { actions.view.dismissTabSidebar() }
+                actions.view.requestSettingsPresentation()
             },
-            onNewTmuxWindow: { tab in requestTmuxNewWindow(for: tab) },
+            onNewTmuxWindow: { tab in actions.view.requestTmuxNewWindow(for: tab) },
             tmuxController: { tab in
-                tmuxControllerForTab(tab)
+                actions.view.tmuxControllerForTab(tab)
             },
-            onShowConnectionInfo: { tab in showConnectionInfo(for: tab) },
-            canTransferToNearby: { tab in canTransferTabToNearby(tab) },
-            onTransferToNearby: { tab in transferTabToNearby(tab) },
-            tabHasThemeOverride: { id in tabHasThemeOverride(id) },
-            onClearThemeOverride: { id in themeOverrideManager.clearTabOverride(tabId: id) },
-            onMoveTabToNewWindow: { tab in moveTabToNewWindow(tab) },
-            onMoveTabsToNewWindow: { ids in moveTabsToNewWindow(ids) },
+            onShowConnectionInfo: { tab in actions.view.showConnectionInfo(for: tab) },
+            canTransferToNearby: { tab in actions.view.canTransferTabToNearby(tab) },
+            onTransferToNearby: { tab in actions.view.transferTabToNearby(tab) },
+            tabHasThemeOverride: { id in actions.view.tabHasThemeOverride(id) },
+            onClearThemeOverride: { id in actions.view.themeOverrideManager.clearTabOverride(tabId: id) },
+            onMoveTabToNewWindow: { tab in actions.view.moveTabToNewWindow(tab) },
+            onMoveTabsToNewWindow: { ids in actions.view.moveTabsToNewWindow(ids) },
             sheetThemeColors: sheetTheme.themeColors,
             sheetAccentColor: sheetTheme.accentColor,
             sheetColorScheme: sheetTheme.colorScheme,
             rawMultiplexerSnapshot: servesSelectedTerminal ? muxExposeFeed.snapshot : nil,
             rawMultiplexerHostTabID: servesSelectedTerminal ? tabsModel.selectedTabID : nil,
             rawMultiplexerTitle: muxExposeFeed.title,
-            canFocusMultiplexerTab: { muxExposeFeed.canFocus(tabID: $0) },
+            canFocusMultiplexerTab: { actions.view.muxExposeFeed.canFocus(tabID: $0) },
             onSelectMultiplexerPane: { tabID, paneID in
-                muxExposeFeed.focus(tabID: tabID, paneID: paneID)
-                if !tabSidebarStaysOpenOnSelect && !tabSidebarIsDocked {
-                    dismissTabSidebar()
+                actions.view.muxExposeFeed.focus(tabID: tabID, paneID: paneID)
+                if !actions.view.tabSidebarStaysOpenOnSelect && !actions.view.tabSidebarIsDocked {
+                    actions.view.dismissTabSidebar()
                 }
             },
             onExposeRequested: {
-                if !tabSidebarIsDocked { dismissTabSidebar() }
-                toggleTabExpose()
+                if !actions.view.tabSidebarIsDocked { actions.view.dismissTabSidebar() }
+                actions.view.toggleTabExpose()
             },
             onOpenAgentInbox: {
-                if !tabSidebarIsDocked { dismissTabSidebar() }
-                openAgentInbox()
+                if !actions.view.tabSidebarIsDocked { actions.view.dismissTabSidebar() }
+                actions.view.openAgentInbox()
             },
             onTabHover: { id, isHovered in
-                tabHoverPreview.handleHover(tabID: id, source: .sidebar, isHovered: isHovered)
+                actions.view.tabHoverPreview.handleHover(tabID: id, source: .sidebar, isHovered: isHovered)
             },
             previewAnchors: tabHoverPreview.anchors
         )

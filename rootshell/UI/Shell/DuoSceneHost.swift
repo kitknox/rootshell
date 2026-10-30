@@ -113,14 +113,27 @@ struct DuoWorkspaceGeometry<Content: View>: View {
             GeometryReader { expanded in
                 content(expanded, layout(safe: safe, expanded: expanded))
             }
-            .ignoresSafeArea(.container, edges: ignoredEdges)
+            .ignoresSafeArea(.container, edges: ignoredEdges(in: safe))
         }
         .coordinateSpace(name: CoordinateSpace.safeArea)
     }
 
-    private var ignoredEdges: Edge.Set {
+    private func ignoredEdges(in geometry: GeometryProxy) -> Edge.Set {
         var edges = context.workspaceIgnoredEdges(headerHeight: headerHeight)
         if headerTopLimit != nil, headerHeight > 0 { edges.insert(.top) }
+        #if !targetEnvironment(macCatalyst) && !os(visionOS)
+        if #available(iOS 27.1, *), UIDevice.current.userInterfaceIdiom == .phone,
+           !context.hasHinge, geometry.size.width > geometry.size.height {
+            let regions = geometry.reservedRegions(kind: .occlusion, layoutDirectionBehavior: .fixed)
+            let cameraAtLeft = regions.contains { $0.frame.minX <= 0 && $0.frame.midX < geometry.size.width / 2 }
+            let cameraAtRight = regions.contains { $0.frame.maxX >= geometry.size.width && $0.frame.midX > geometry.size.width / 2 }
+            if cameraAtLeft && !cameraAtRight {
+                edges.insert(layoutDirection == .rightToLeft ? .leading : .trailing)
+            } else if cameraAtRight && !cameraAtLeft {
+                edges.insert(layoutDirection == .rightToLeft ? .trailing : .leading)
+            }
+        }
+        #endif
         return edges
     }
 

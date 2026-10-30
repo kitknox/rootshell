@@ -1478,9 +1478,10 @@ extension MainView {
         if usesPinnedWideEdgeSidebarLayout && (leadingEdgePresented || trailingEdgePresented) {
             let edgeCount = CGFloat((leadingEdgePresented ? 1 : 0) + (trailingEdgePresented ? 1 : 0))
             let edgeCardGap: CGFloat = roundedPanes ? PaneCardStyle.gap : 0
-            let edgeMinimum = TabSidebarLayout.minWidth
+            let preferredEdgeWidth = min(max(tabSidebarDockedWidth, TabSidebarLayout.minWidth),
+                                         UIDevice.current.userInterfaceIdiom == .phone ? min(280, rowWidth * 0.45) : rowWidth * 0.5)
+            let edgeMinimum = min(TabSidebarLayout.minWidth, preferredEdgeWidth)
             let terminalWidthFloor = min(minimumTerminalWidth, max(0, rowWidth - (edgeMinimum + edgeCardGap) * edgeCount))
-            let preferredEdgeWidth = min(max(tabSidebarDockedWidth, edgeMinimum), rowWidth * 0.5)
             let edgeBudget = max(0, rowWidth - terminalWidthFloor)
             let preferredEdgeSlotWidth = preferredEdgeWidth + edgeCardGap
             let edgeScale = min(1, edgeBudget / max(preferredEdgeSlotWidth * edgeCount, 1))

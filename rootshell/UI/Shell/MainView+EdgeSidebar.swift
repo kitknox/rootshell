@@ -133,12 +133,28 @@ extension MainView {
         return !edgeSidebarModalPresented
     }
 
+    func canCloseEdgeSidebar(_ side: EdgeSidebarSide, at point: CGPoint, contentFrame: CGRect) -> Bool {
+        guard edgeSidebarColumnIsPresented(side), !edgeSidebarModalPresented else { return false }
+        guard selectedEdgePage(on: side) != .connections || !terminals.isEmpty else { return false }
+        let columns = terminalRowColumns(width: contentFrame.width)
+        let gap = roundedPanes ? PaneCardStyle.gap : 0
+        let terminalMinX = contentFrame.minX + gap + columns.leadingEdgeSidebar
+        let terminalMaxX = contentFrame.maxX - gap - columns.trailingEdgeSidebar
+        switch side {
+        case .leading:
+            return point.x >= contentFrame.minX && point.x <= terminalMaxX
+        case .trailing:
+            return point.x >= terminalMinX && point.x <= contentFrame.maxX
+        }
+    }
+
     func defersEdgeSidebarGesture(_ side: EdgeSidebarSide) -> Bool {
         #if os(visionOS)
         return false
         #else
         guard UIDevice.current.userInterfaceIdiom == .phone || UIDevice.current.userInterfaceIdiom == .pad else { return false }
         guard !edgeSidebarAssignment.pages(on: side).isEmpty else { return false }
+        if edgeSidebarColumnIsPresented(side) { return true }
         if floatingEdgeSidebarPresented(side) { return true }
         return canOpenEdgeSidebar(side)
         #endif
@@ -151,7 +167,7 @@ extension MainView {
     }
 
     func openConfiguredWideEdgeSidebars() {
-        guard usesPinnedWideEdgeSidebarLayout else { return }
+        guard edgeSidebarViewportIsWide else { return }
         let previousActiveEdge = lastActiveEdgeSidebar
 
         if edgeSidebarSideIsOpen(.leading), edgeSidebarSideIsOpen(.trailing),
@@ -174,7 +190,7 @@ extension MainView {
 
     func applyPendingWideSidebarAutoOpen() {
         guard pendingWideSidebarAutoOpen, !showSettings,
-              terminalRowViewportWidth > 0, usesPinnedWideEdgeSidebarLayout else { return }
+              terminalRowViewportWidth > 0, edgeSidebarViewportIsWide else { return }
         pendingWideSidebarAutoOpen = false
         openConfiguredWideEdgeSidebars()
     }
