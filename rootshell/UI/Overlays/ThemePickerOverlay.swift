@@ -16,6 +16,7 @@ struct ThemePickerOverlay: View {
     let onThemeSelected: (String, ThemePickerScope) -> Void
 
     var fillsSidebar = false
+    var profileSelection: String? = nil
 
     var themeManager = ThemeManager.shared
     @ObservedObject private var favoriteManager = FavoriteThemesManager.shared
@@ -51,7 +52,13 @@ struct ThemePickerOverlay: View {
         // Positioning + (no) dragging is handled by the hosting DraggableHUDContainer.
         // A native UIKit host is required: as a plain SwiftUI overlay the search
         // field's focus made .onKeyPress steal the X-button click on macOS.
-        pickerContent
+        Group {
+            if profileSelection != nil {
+                pickerContent
+            } else {
+                pickerContent.floatingHUDPanelBackground()
+            }
+        }
             .onDisappear {
                 arrowKeyRepeatManager.stop()
             }
@@ -72,7 +79,9 @@ struct ThemePickerOverlay: View {
     private var pickerContent: some View {
         VStack(spacing: 0) {
             // Header with scope picker and close button
-            if edgeSidebarTitleContext != nil {
+            if profileSelection != nil {
+                EmptyView()
+            } else if edgeSidebarTitleContext != nil {
                 EdgeSidebarHeader(
                     title: String(localized: "Theme"),
                     systemImage: "paintpalette",
@@ -100,14 +109,16 @@ struct ThemePickerOverlay: View {
             }
 
             // Scope picker
-            Picker("Scope", selection: $scope) {
-                ForEach(ThemePickerScope.allCases, id: \.self) { s in
-                    Text(s.displayName).tag(s)
+            if profileSelection == nil {
+                Picker("Scope", selection: $scope) {
+                    ForEach(ThemePickerScope.allCases, id: \.self) { s in
+                        Text(s.displayName).tag(s)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
 
             // Search field
             HStack {
@@ -154,6 +165,25 @@ struct ThemePickerOverlay: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 4) {
+                        if let profileSelection {
+                            Button {
+                                onThemeSelected("", scope)
+                                isPresented = false
+                            } label: {
+                                HStack {
+                                    Text("Use Default")
+                                    Spacer()
+                                    if profileSelection.isEmpty {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundStyle(Color.accentColor)
+                                    }
+                                }
+                                .padding(12)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            Divider()
+                        }
                         // Current override info (if any)
                         if let overrideInfo = currentOverrideInfo {
                             overrideInfoSection(overrideInfo)
@@ -190,7 +220,6 @@ struct ThemePickerOverlay: View {
             .frame(height: fillsSidebar ? nil : 350)
         }
         .frame(width: fillsSidebar ? nil : 340)
-        .floatingHUDPanelBackground()
         // Cmd-Shift-T / Escape dismissal is handled by host-level UIKeyCommands in
         // DraggableHUDContainer — a SwiftUI .onKeyPress here is preempted on macOS by
         // the app's registered Cmd-Shift-T menu shortcut.
@@ -199,6 +228,7 @@ struct ThemePickerOverlay: View {
     // MARK: - Current Override Info
 
     private var currentOverrideInfo: (themeName: String, source: ThemeOverrideManager.ThemeSource)? {
+        guard profileSelection == nil else { return nil }
         let (themeName, source) = overrideManager.resolveTheme(tabId: currentTabId, windowId: windowId)
         if source != .global {
             return (themeName, source)
@@ -256,8 +286,7 @@ struct ThemePickerOverlay: View {
     // MARK: - Current Section
 
     private var currentThemeInfo: ThemeManager.ThemeInfo? {
-        let (currentName, _) = overrideManager.resolveTheme(tabId: currentTabId, windowId: windowId)
-        return themeManager.availableThemes.first { $0.name == currentName }
+        themeManager.availableThemes.first { $0.name == selectedThemeName }
     }
 
     @ViewBuilder
@@ -423,8 +452,12 @@ struct ThemePickerOverlay: View {
     }
 
     private func isCurrentTheme(_ theme: ThemeManager.ThemeInfo) -> Bool {
-        let (currentTheme, _) = overrideManager.resolveTheme(tabId: currentTabId, windowId: windowId)
-        return theme.name == currentTheme
+        theme.name == selectedThemeName
+    }
+
+    private var selectedThemeName: String {
+        if let profileSelection { return profileSelection }
+        return overrideManager.resolveTheme(tabId: currentTabId, windowId: windowId).0
     }
 
     // MARK: - Actions
