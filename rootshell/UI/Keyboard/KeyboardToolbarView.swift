@@ -151,7 +151,12 @@ private final class DrawerRowView: UIView {
     private var stackLeadingConstraint: NSLayoutConstraint?
     private var stackTrailingConstraint: NSLayoutConstraint?
     private var stackCenterXConstraint: NSLayoutConstraint?
-    private var stackMinimumWidthConstraint: NSLayoutConstraint?
+    private var stackWidthConstraint: NSLayoutConstraint?
+    private var scrollingButtonCount: Int?
+    private var scrollingSizes: KeyboardSizes?
+    private var scrollingBehavior: ToolbarScrollBehavior?
+    private var lastConfiguredViewportWidth: CGFloat?
+    private var lastScrollingLayout: ToolbarPageLayout?
 
     init(edgePadding: CGFloat) {
         super.init(frame: .zero)
@@ -163,6 +168,7 @@ private final class DrawerRowView: UIView {
         addSubview(separator)
 
         scrollView.showsHorizontalScrollIndicator = false
+        scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(scrollView)
 
@@ -197,30 +203,116 @@ private final class DrawerRowView: UIView {
         stackLeadingConstraint = stackView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor)
         stackTrailingConstraint = stackView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor)
         stackCenterXConstraint = stackView.centerXAnchor.constraint(equalTo: scrollView.frameLayoutGuide.centerXAnchor)
-        stackMinimumWidthConstraint = stackView.widthAnchor.constraint(
-            greaterThanOrEqualTo: scrollView.frameLayoutGuide.widthAnchor
-        )
+        stackWidthConstraint = stackView.widthAnchor.constraint(equalToConstant: 0)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let buttonCount = scrollingButtonCount,
+              let sizes = scrollingSizes,
+              let behavior = scrollingBehavior else { return }
+        updateScrollingLayout(buttonCount: buttonCount, sizes: sizes, behavior: behavior)
+    }
+
     /// Pin the stack to the scroll content edges so overflowing keys scroll horizontally.
     func configureForScrolling() {
         scrollView.isScrollEnabled = true
+        scrollView.isPagingEnabled = false
+        scrollView.contentInset = .zero
+        scrollView.decelerationRate = .normal
+        stackView.distribution = .fillEqually
         stackCenterXConstraint?.isActive = false
         stackLeadingConstraint?.isActive = true
         stackTrailingConstraint?.isActive = true
-        stackMinimumWidthConstraint?.isActive = true
+        stackWidthConstraint?.isActive = true
+    }
+
+    func configureScrollingLayout(buttonCount: Int, sizes: KeyboardSizes, behavior: ToolbarScrollBehavior) {
+        scrollingButtonCount = buttonCount
+        scrollingSizes = sizes
+        scrollingBehavior = behavior
+        lastConfiguredViewportWidth = nil
+        lastScrollingLayout = nil
+        updateScrollingLayout(buttonCount: buttonCount, sizes: sizes, behavior: behavior)
+    }
+
+    private func updateScrollingLayout(buttonCount: Int, sizes: KeyboardSizes, behavior: ToolbarScrollBehavior) {
+        let viewportWidth = scrollView.bounds.width
+        guard abs(viewportWidth - (lastConfiguredViewportWidth ?? -1)) > 0.5 else { return }
+
+        let oldLayout = lastScrollingLayout
+        let oldOffset = scrollView.contentOffset.x
+        let firstVisibleItem = oldLayout.map {
+            Int(max(0, oldOffset) / max(1, $0.cellWidth))
+        } ?? 0
+
+        guard buttonCount > 0, viewportWidth > 0 else {
+            stackWidthConstraint?.constant = 0
+            scrollView.isScrollEnabled = false
+            scrollView.isPagingEnabled = false
+            scrollView.contentInset = .zero
+            scrollView.alwaysBounceHorizontal = false
+            lastConfiguredViewportWidth = viewportWidth
+            lastScrollingLayout = nil
+            return
+        }
+
+        let layout = ToolbarPageLayout(
+            viewportWidth: viewportWidth,
+            buttonWidth: sizes.button.height,
+            spacing: 4,
+            itemCount: buttonCount
+        )
+        let cellWidth: CGFloat
+        let trailingInset: CGFloat
+        switch behavior {
+        case .pages:
+            cellWidth = viewportWidth / CGFloat(min(buttonCount, layout.capacity))
+            let stackWidth = CGFloat(buttonCount) * cellWidth
+            trailingInset = max(0, layout.contentWidth - stackWidth)
+        case .continuous:
+            cellWidth = buttonCount <= layout.capacity
+                ? viewportWidth / CGFloat(buttonCount)
+                : sizes.button.height + 4
+            trailingInset = 0
+        }
+        let stackWidth = CGFloat(buttonCount) * cellWidth
+        stackWidthConstraint?.constant = stackWidth
+        scrollView.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: 0, right: trailingInset)
+        scrollView.isScrollEnabled = true
+        scrollView.isPagingEnabled = behavior == .pages
+        scrollView.decelerationRate = behavior == .pages ? .fast : .normal
+        scrollView.alwaysBounceHorizontal = stackWidth + trailingInset > viewportWidth + 0.5
+        lastConfiguredViewportWidth = viewportWidth
+        lastScrollingLayout = layout
+
+        if oldLayout != nil, !scrollView.isDragging, !scrollView.isDecelerating {
+            let offset = behavior == .pages
+                ? layout.offset(containing: firstVisibleItem)
+                : CGFloat(firstVisibleItem) * cellWidth
+            let maxOffset = max(0, stackWidth + trailingInset - viewportWidth)
+            scrollView.setContentOffset(CGPoint(x: min(maxOffset, offset), y: 0), animated: false)
+        }
     }
 
     /// Center the stack (arrow cluster) with scrolling disabled.
     func configureForCentering() {
+        scrollingButtonCount = nil
+        scrollingSizes = nil
+        scrollingBehavior = nil
+        lastConfiguredViewportWidth = nil
+        lastScrollingLayout = nil
         scrollView.isScrollEnabled = false
+        scrollView.isPagingEnabled = false
+        scrollView.contentInset = .zero
+        stackView.distribution = .fill
         stackLeadingConstraint?.isActive = false
         stackTrailingConstraint?.isActive = false
-        stackMinimumWidthConstraint?.isActive = false
+        stackWidthConstraint?.isActive = false
         stackCenterXConstraint?.isActive = true
     }
 
@@ -701,16 +793,16 @@ class KeyboardToolbarView: UIView {
                 display: .icon("keyboard.badge.ellipsis"), sizes: sizes)
             button.accessibilityLabel = String(localized: "Use Terminal Keyboard")
             button.delegate = self
-            addMainRowButton(button, to: mainRowStackView)
+            addToolbarButton(button, to: mainRowStackView)
         }
         for slot in mainSlots {
             if let button = createButtonForSlot(slot) {
-                addMainRowButton(button, to: mainRowStackView)
+                addToolbarButton(button, to: mainRowStackView)
             }
         }
         for (slots, stack) in [(layout.left, leftPinnedStackView), (layout.right, fixedControlsStackView)] {
             for slot in slots {
-                if let button = createButtonForSlot(slot) { addMainRowButton(button, to: stack) }
+                if let button = createButtonForSlot(slot) { addToolbarButton(button, to: stack) }
             }
         }
         layoutKeySections(preservePosition: true)
@@ -816,7 +908,7 @@ class KeyboardToolbarView: UIView {
         if separate { backgroundBlurView.layer.borderWidth = 0 }
     }
 
-    private func addMainRowButton(_ button: UIView, to stack: UIStackView) {
+    private func addToolbarButton(_ button: UIView, to stack: UIStackView) {
         let cell = UIView()
         let circle = UIView()
         let diameter = sizes.button.height
@@ -1266,10 +1358,7 @@ class KeyboardToolbarView: UIView {
     /// Rebuild the drawer rows to match `drawerState` and update toolbar height.
     private func applyDrawerState() {
         // Remove stale drawer modifier buttons from tracking before clearing rows
-        let drawerModifiers = Set(drawerRowViews.flatMap { row in
-            row.stackView.arrangedSubviews.compactMap { $0 as? KeyboardModifierButton }
-        })
-        modifierButtons.removeAll { drawerModifiers.contains($0) }
+        modifierButtons.removeAll { $0.isDescendant(of: drawerContainerView) }
         for row in drawerRowViews {
             drawerRowsStack.removeArrangedSubview(row)
             row.removeFromSuperview()
@@ -1348,26 +1437,18 @@ class KeyboardToolbarView: UIView {
     private func populateExtraKeysRow(_ row: DrawerRowView, drawerIndex: Int) {
         row.configureForScrolling()
 
-        guard effectiveDrawerRows.indices.contains(drawerIndex) else { return }
-
-        for slot in effectiveDrawerRows[drawerIndex] {
-            switch slot {
-            case .builtIn(let keyID):
-                if keyID.isModifier {
-                    let modButton = createModifierButton(for: keyID.keyDefinition)
-                    row.stackView.addArrangedSubview(modButton)
-                } else if keyID == .drawerToggle {
-                    // Skip drawer toggle in drawer
-                    continue
-                } else if let button = createButtonForKeyID(keyID) {
-                    row.stackView.addArrangedSubview(button)
-                }
-            case .custom(let uuid):
-                if let button = createCustomKeyButton(uuid: uuid) {
-                    row.stackView.addArrangedSubview(button)
+        if effectiveDrawerRows.indices.contains(drawerIndex) {
+            for slot in effectiveDrawerRows[drawerIndex] where slot != .builtIn(.drawerToggle) {
+                if let button = createButtonForSlot(slot) {
+                    addToolbarButton(button, to: row.stackView)
                 }
             }
         }
+        row.configureScrollingLayout(
+            buttonCount: row.stackView.arrangedSubviews.count,
+            sizes: sizes,
+            behavior: KeyboardToolbarManager.shared.config.scrollBehavior
+        )
     }
 
     // MARK: - Modifier State Management
