@@ -440,6 +440,7 @@ class KeyboardToolbarView: UIView {
     private var dismissButtonShowsRestore = false
     private var dismissButtonPinned = false
     private(set) var drawerState: DrawerState = .closed
+    private var drawerManuallyClosed = false
     private var interactionMode: KeyboardToolbarInteractionMode = .accessory
 
     /// Track last known width to detect meaningful size changes
@@ -822,7 +823,12 @@ class KeyboardToolbarView: UIView {
 
         // Open by default if setting is enabled (first drawer row only)
         if drawerState == .closed && manager.drawerOpenByDefault {
-            drawerState = manager.drawerToggleMode == .cycle ? .cycling(index: 0) : .stacked(count: 1)
+            if drawerManuallyClosed {
+                Ghostty.logger.debug("KeyboardToolbar: open-by-default suppressed after manual close")
+            } else {
+                drawerState = manager.drawerToggleMode == .cycle ? .cycling(index: 0) : .stacked(count: 1)
+                Ghostty.logger.debug("KeyboardToolbar: open-by-default applied mode \(manager.drawerToggleMode.rawValue, privacy: .public), row 1")
+            }
         }
 
         // Rebuild drawer rows (also the repopulate path after a layout change)
@@ -1337,6 +1343,7 @@ class KeyboardToolbarView: UIView {
     private func handleExtraKeysToggle() {
         let manager = KeyboardToolbarManager.shared
         let rowCount = manager.drawerRowCount
+        let previousState = drawerState
         switch drawerState {
         case .closed, .arrows:
             drawerState = manager.drawerToggleMode == .cycle ? .cycling(index: 0) : .stacked(count: 1)
@@ -1347,12 +1354,47 @@ class KeyboardToolbarView: UIView {
             drawerState = (manager.drawerToggleMode == .cycle && index + 1 < rowCount)
                 ? .cycling(index: index + 1) : .closed
         }
+        drawerManuallyClosed = drawerState == .closed
+        logDrawerTransition(from: previousState, action: "extra-keys", mode: manager.drawerToggleMode.rawValue)
         applyDrawerState()
     }
 
     private func handleArrowsToggle() {
+        let previousState = drawerState
         drawerState = (drawerState == .arrows) ? .closed : .arrows
+        drawerManuallyClosed = drawerState == .closed
+        logDrawerTransition(from: previousState, action: "arrows", mode: "arrows")
         applyDrawerState()
+    }
+
+    private func logDrawerTransition(from previousState: DrawerState, action: String, mode: String) {
+        let selectedRow: String
+        let keyCount: Int
+        switch drawerState {
+        case .closed:
+            selectedRow = "none"
+            keyCount = 0
+        case .arrows:
+            selectedRow = "arrows"
+            keyCount = 4
+        case .stacked(let count):
+            let index = count - 1
+            selectedRow = "\(count)"
+            keyCount = effectiveDrawerRows.indices.contains(index) ? effectiveDrawerRows[index].count : 0
+        case .cycling(let index):
+            selectedRow = "\(index + 1)"
+            keyCount = effectiveDrawerRows.indices.contains(index) ? effectiveDrawerRows[index].count : 0
+        }
+        Ghostty.logger.debug("KeyboardToolbar: drawer action \(action, privacy: .public), mode \(mode, privacy: .public), from \(self.drawerStateName(previousState), privacy: .public), to \(self.drawerStateName(self.drawerState), privacy: .public), row \(selectedRow, privacy: .public), keys \(keyCount, privacy: .public)")
+    }
+
+    private func drawerStateName(_ state: DrawerState) -> String {
+        switch state {
+        case .closed: return "closed"
+        case .arrows: return "arrows"
+        case .stacked(let count): return "stacked(\(count))"
+        case .cycling(let index): return "cycling(\(index))"
+        }
     }
 
     /// Rebuild the drawer rows to match `drawerState` and update toolbar height.
