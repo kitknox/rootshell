@@ -9,6 +9,65 @@
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
+import os
+
+private struct SidebarHierarchyLabel: View {
+    static let indentation: CGFloat = 16
+    let title: String
+    let mark: BrandMark
+    var subtitle: String? = nil
+    var selected = false
+    let metrics: SidebarMetrics
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Group {
+                if case .symbol(let name) = mark {
+                    Image(systemName: name)
+                        .font(.system(size: metrics.rowIconSize))
+                        .foregroundStyle(.secondary)
+                } else {
+                    AgentBrandMark(mark: mark, size: metrics.rowIconSize)
+                }
+            }
+            .frame(width: 24, height: 24)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: metrics.titleSize, weight: selected ? .semibold : .regular))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: metrics.subtitleSize))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct SidebarHierarchyDisclosure: View {
+    @Binding var isExpanded: Bool
+    let title: String
+    let metrics: SidebarMetrics
+
+    var body: some View {
+        Button { isExpanded.toggle() } label: {
+            Image(systemName: "chevron.right")
+                .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: metrics.rowButtonTarget, height: max(44, metrics.rowButtonTarget))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isExpanded ? "Collapse \(title)" : "Expand \(title)")
+    }
+}
 
 private struct RawMultiplexerSidebarTree: View {
     let snapshot: MuxExposeSnapshot
@@ -17,32 +76,40 @@ private struct RawMultiplexerSidebarTree: View {
     let accent: Color
     let canFocus: (String) -> Bool
     let onSelect: (String, String?) -> Void
+    var metrics: SidebarMetrics = .large
+    var baseIndentation: CGFloat = 0
     @State private var collapsed = Set<String>()
+    @Setting(Settings.Tabs.programIcons) private var programIconsEnabled
+    @Setting(Settings.CodingAgents.attentionBadges) private var attentionBadgesEnabled
 
     var body: some View {
-        DisclosureGroup(isExpanded: expanded("session")) {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(snapshot.workspaces.filter { $0.parentID == nil && workspaceMatches($0) }) { workspace in
-                    workspaceGroup(workspace)
-                }
-                ForEach(matchingTabs(workspaceID: nil), id: \.id) { tab in
-                    tabRow(tab)
-                }
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(snapshot.workspaces.filter { $0.parentID == nil && workspaceMatches($0) }) { workspace in
+                workspaceGroup(workspace)
             }
-        } label: {
-            Label(title, systemImage: "rectangle.stack")
-                .font(.subheadline.weight(.semibold))
-                .frame(minHeight: 44)
+            ForEach(matchingTabs(workspaceID: nil), id: \.id) { tab in tabRow(tab) }
         }
-        .tint(accent)
-        .padding(.horizontal, 8)
-        .buttonStyle(.plain)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(title)
     }
 
     private func expanded(_ id: String) -> Binding<Bool> {
         Binding(get: { !collapsed.contains(id) || !filter.isEmpty }, set: { value in
             if value { collapsed.remove(id) } else { collapsed.insert(id) }
+            Ghostty.logger.info("Sidebar multiplexer group expanded=\(value, privacy: .public) group=\(id, privacy: .public)")
         })
+    }
+
+    private func group<Content: View>(id: String, title: String, icon: String, level: Int,
+                                      @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            hierarchyRow(title: title, mark: .symbol(icon), level: level, disclosure: expanded(id)) {
+                expanded(id).wrappedValue.toggle()
+            }
+            if expanded(id).wrappedValue {
+                VStack(alignment: .leading, spacing: 2, content: content)
+            }
+        }
     }
 
     private func matchingTabs(workspaceID: String?) -> [MuxTab] {
@@ -59,28 +126,13 @@ private struct RawMultiplexerSidebarTree: View {
     }
 
     private func workspaceGroup(_ workspace: MuxWorkspace) -> some View {
-        DisclosureGroup(isExpanded: expanded("workspace:\(workspace.id)")) {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(matchingTabs(workspaceID: workspace.id), id: \.id) { tab in
-                    tabRow(tab)
-                }
-                ForEach(snapshot.workspaces.filter { $0.parentID == workspace.id && workspaceMatches($0) }) { child in
-                    DisclosureGroup(isExpanded: expanded("workspace:\(child.id)")) {
-                        ForEach(matchingTabs(workspaceID: child.id), id: \.id) { tab in
-                            tabRow(tab)
-                        }
-                    } label: {
-                        Label(child.title, systemImage: "arrow.triangle.branch")
-                            .lineLimit(1)
-                            .frame(minHeight: 44)
-                    }
+        group(id: "workspace:\(workspace.id)", title: workspace.title, icon: "folder", level: 0) {
+            ForEach(matchingTabs(workspaceID: workspace.id), id: \.id) { tab in tabRow(tab, level: 1) }
+            ForEach(snapshot.workspaces.filter { $0.parentID == workspace.id && workspaceMatches($0) }) { child in
+                group(id: "workspace:\(child.id)", title: child.title, icon: "arrow.triangle.branch", level: 1) {
+                    ForEach(matchingTabs(workspaceID: child.id), id: \.id) { tab in tabRow(tab, level: 2) }
                 }
             }
-        } label: {
-            Label(workspace.title, systemImage: "folder")
-                .font(.subheadline.weight(.medium))
-                .lineLimit(1)
-                .frame(minHeight: 44)
         }
     }
 
@@ -93,50 +145,118 @@ private struct RawMultiplexerSidebarTree: View {
             }
     }
 
-    @ViewBuilder
-    private func tabRow(_ tab: MuxTab) -> some View {
-        if tab.panes.count > 1 {
-            DisclosureGroup(isExpanded: expanded("tab:\(tab.id)")) {
+    private func tabRow(_ tab: MuxTab, level: Int = 0) -> some View {
+        let hasSplits = tab.panes.count > 1
+        return VStack(alignment: .leading, spacing: 2) {
+            hierarchyRow(title: tab.title,
+                         mark: hasSplits ? .symbol("rectangle.split.2x1") : mark(for: tab.panes.first),
+                         level: level, selected: tab.id == snapshot.activeTabID,
+                         disclosure: hasSplits ? expanded("tab:\(tab.id)") : nil,
+                         enabled: canFocus(tab.id)) { onSelect(tab.id, nil) }
+            if hasSplits && expanded("tab:\(tab.id)").wrappedValue {
                 ForEach(tab.panes, id: \.id) { pane in
-                    selectionButton(
-                        title: pane.title.flatMap { $0.isEmpty ? nil : $0 } ?? pane.id,
-                        icon: "rectangle.split.2x1",
-                        selected: tab.id == snapshot.activeTabID && pane.isActive
-                    ) {
-                        onSelect(tab.id, pane.id)
-                    }
-                    .disabled(!canFocus(tab.id))
+                    hierarchyRow(title: pane.title.flatMap { $0.isEmpty ? nil : $0 } ?? pane.id,
+                                 mark: mark(for: pane), level: level + 1,
+                                 selected: tab.id == snapshot.activeTabID && pane.isActive,
+                                 enabled: canFocus(tab.id)) { onSelect(tab.id, pane.id) }
                 }
-            } label: {
-                tabButton(tab)
             }
-        } else {
-            tabButton(tab)
         }
     }
 
-    private func tabButton(_ tab: MuxTab) -> some View {
-        selectionButton(title: tab.title, icon: "terminal", selected: tab.id == snapshot.activeTabID) {
-            onSelect(tab.id, nil)
-        }
-        .disabled(!canFocus(tab.id))
+    private func mark(for pane: MuxPane?) -> BrandMark {
+        guard let programName = pane?.programName else { return .symbol("terminal") }
+        if attentionBadgesEnabled, let mark = AgentBrandMark.mark(for: programName) { return mark }
+        if programIconsEnabled, let mark = ProgramCatalog.entry(for: programName)?.mark { return mark }
+        return .symbol("terminal")
     }
 
-    private func selectionButton(title: String, icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon).foregroundStyle(selected ? accent : .secondary)
-                Text(title).lineLimit(1).truncationMode(.middle)
-                Spacer(minLength: 4)
-                if selected { Image(systemName: "checkmark").foregroundStyle(accent) }
+    private func hierarchyRow(title: String, mark: BrandMark, level: Int, selected: Bool = false,
+                              disclosure: Binding<Bool>? = nil, enabled: Bool = true,
+                              action: @escaping () -> Void) -> some View {
+        HStack(spacing: 0) {
+            if let disclosure {
+                SidebarHierarchyDisclosure(isExpanded: disclosure, title: title, metrics: metrics)
+            } else {
+                Color.clear.frame(width: metrics.rowButtonTarget, height: 1)
             }
-            .font(.subheadline)
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .background(selected ? accent.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 8))
-            .contentShape(Rectangle())
+            Button(action: action) {
+                SidebarHierarchyLabel(title: title, mark: mark, selected: selected, metrics: metrics)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!enabled)
         }
+        .padding(.leading, 10 + baseIndentation + CGFloat(level) * SidebarHierarchyLabel.indentation)
+        .padding(.trailing, 8)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .background(selected ? accent.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 8))
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+private struct RawMultiplexerSessionSidebar: View {
+    let terminal: Ghostty.TerminalView?
+    let snapshot: MuxExposeSnapshot?
+    let title: String
+    let filter: String
+    let accent: Color
+    let metrics: SidebarMetrics
+    let baseIndentation: CGFloat
+    let isActive: Bool
+    let canFocus: (String) -> Bool
+    let onSelect: (String, String?) -> Void
+    let onActivate: () -> Void
+    @State private var feed = MultiplexerExposeFeed()
+    @State private var revision: UInt64 = 0
+
+    var body: some View {
+        let _ = revision
+        Group {
+            if let current = snapshot ?? feed.snapshot {
+                RawMultiplexerSidebarTree(
+                    snapshot: current, title: snapshot == nil ? feed.title : title,
+                    filter: filter, accent: accent,
+                    canFocus: { snapshot == nil ? feed.canFocus(tabID: $0) : canFocus($0) },
+                    onSelect: { tabID, paneID in
+                        if snapshot != nil {
+                            onSelect(tabID, paneID)
+                        } else {
+                            feed.focus(tabID: tabID, paneID: paneID)
+                            onActivate()
+                        }
+                    },
+                    metrics: metrics, baseIndentation: baseIndentation
+                )
+            } else if feed.state == .unsupported {
+                Text("No supported multiplexer in this session")
+                    .font(.subheadline).foregroundStyle(.secondary).padding(10)
+            } else if feed.state == .failed {
+                Text("Unable to load this session")
+                    .font(.subheadline).foregroundStyle(.secondary).padding(10)
+            } else {
+                ProgressView().frame(maxWidth: .infinity, minHeight: 44)
+            }
+        }
+        .onAppear {
+            feed.onChange = { revision &+= 1 }
+            updateFeed()
+        }
+        .onChange(of: snapshot != nil) { _, _ in updateFeed() }
+        .onChange(of: isActive) { _, _ in updateFeed() }
+        .onDisappear {
+            feed.onChange = nil
+            feed.stopNow(consumer: .panels)
+        }
+    }
+
+    private func updateFeed() {
+        if isActive, snapshot == nil, let terminal {
+            feed.start(terminal: terminal, consumer: .panels)
+        } else {
+            feed.stopNow(consumer: .panels)
+        }
     }
 }
 
@@ -281,19 +401,19 @@ struct SidebarMetrics: Equatable {
     )
 
     static let large = SidebarMetrics(
-        rowHeight: 56,
-        rowSpacing: 4,
-        titleSize: 17,
+        rowHeight: 44,
+        rowSpacing: 0,
+        titleSize: 16,
         subtitleSize: 13,
         hintSize: 14,
         headerButtonTarget: 44,
         headerIconSize: 17,
-        rowButtonTarget: 40,
-        rowIconSize: 15,
+        rowButtonTarget: 28,
+        rowIconSize: 18,
         closeIconSize: 13,
-        searchBarHeight: 44,
+        searchBarHeight: 36,
         searchFieldHeight: 24,
-        searchFontSize: 17
+        searchFontSize: 15
     )
 
     /// Base height plus a line-height per extra title line.
@@ -388,6 +508,7 @@ struct VerticalTabSidebar: View {
 
     /// Session-scoped; not persisted.
     @State private var expandedHiddenGroups: Set<UUID> = []
+    @State private var rawSessionExpansion: [UUID: Bool] = [:]
     @State private var collapsedGroups: Set<String> = TabSidebarGroupCollapseStore.load()
 
     @State private var tmuxDialogs = TmuxTabDialogCoordinator()
@@ -616,11 +737,7 @@ struct VerticalTabSidebar: View {
                 }
 
                 // Self-hiding when off or empty.
-                SidebarAgentUsageFooter(
-                    metrics: metrics,
-                    accentTint: accentTint,
-                    isDocked: isDocked
-                )
+                if !usesCompactLayout { usageFooter }
             }
             .padding(.bottom, dockedBottomClearance)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
@@ -858,6 +975,7 @@ struct VerticalTabSidebar: View {
                 Button("Switch Control Size", systemImage: "textformat.size") {
                     toggleSidebarControlSize()
                 }
+                Button(agentInboxSortHelp, systemImage: agentInboxSortIcon, action: cycleSidebarSort)
                 if canPin {
                     Button(isPinned ? "Unpin Sidebar" : "Pin Sidebar", systemImage: isPinned ? "pin.slash" : "pin") {
                         onTogglePin()
@@ -967,19 +1085,23 @@ struct VerticalTabSidebar: View {
             sortIconName: agentInboxSortIcon,
             sortHelp: agentInboxSortHelp,
             sortIsActive: attentionSortActive || projectGroupingActive,
-            onCycleSort: {
-                // Cycles tab order -> attention -> project.
-                switch agentSortRaw {
-                case "priority":
-                    agentSortRaw = "project"
-                case "project":
-                    agentSortRaw = "static"
-                default:
-                    agentSortRaw = attentionBadgesEnabled ? "priority" : "project"
-                }
-            },
-            onOpenInbox: onOpenAgentInbox
+            onCycleSort: cycleSidebarSort,
+            onOpenInbox: onOpenAgentInbox,
+            compact: usesCompactLayout
         )
+    }
+
+    private func cycleSidebarSort() {
+        switch agentSortRaw {
+        case "priority": agentSortRaw = "project"
+        case "project": agentSortRaw = "static"
+        default: agentSortRaw = attentionBadgesEnabled ? "priority" : "project"
+        }
+        Ghostty.logger.info("Sidebar sort=\(agentSortRaw, privacy: .public)")
+    }
+
+    private var usageFooter: some View {
+        SidebarAgentUsageFooter(metrics: metrics, accentTint: accentTint, isDocked: isDocked)
     }
 
     // MARK: Search
@@ -1084,26 +1206,39 @@ struct VerticalTabSidebar: View {
 
     // MARK: Row List
 
+    private func hasRawMultiplexerSession(_ tab: TabModel) -> Bool {
+        if tab.id == rawMultiplexerHostTabID, rawMultiplexerSnapshot != nil { return true }
+        guard let terminal = tab.focusedPane as? Ghostty.TerminalView,
+              terminal.connectionConfig.requiresSSHCallbacks || terminal.connectionConfig.isRoam
+                || MultiplexerExposeFeed.binding(for: terminal) != nil else { return false }
+        return MultiplexerExposeFeed.canDetect(terminal)
+    }
+
+    private func isRawSessionExpanded(_ id: UUID) -> Bool {
+        rawSessionExpansion[id] ?? (id == rawMultiplexerHostTabID)
+    }
+
     private func rowList(_ rows: [SidebarRow], gatewayOwnerIDs: [UUID]) -> some View {
         let list = ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(spacing: metrics.rowSpacing) {
                 ForEach(rows) { row in
                     rowView(row: row, rows: rows, gatewayOwnerIDs: gatewayOwnerIDs)
                         .id(row.id)
-                    if row.tab.id == rawMultiplexerHostTabID,
-                       row.id == row.tab.id.uuidString,
-                       let snapshot = rawMultiplexerSnapshot {
-                        RawMultiplexerSidebarTree(
-                            snapshot: snapshot,
-                            title: rawMultiplexerTitle,
-                            filter: normalizedSearchFilter,
-                            accent: accentTint,
-                            canFocus: canFocusMultiplexerTab,
-                            onSelect: onSelectMultiplexerPane
+                    if row.id == row.tab.id.uuidString,
+                       hasRawMultiplexerSession(row.tab), isRawSessionExpanded(row.tab.id) {
+                        RawMultiplexerSessionSidebar(
+                            terminal: row.tab.focusedPane as? Ghostty.TerminalView,
+                            snapshot: row.tab.id == rawMultiplexerHostTabID ? rawMultiplexerSnapshot : nil,
+                            title: rawMultiplexerTitle, filter: normalizedSearchFilter,
+                            accent: accentTint, metrics: metrics,
+                            baseIndentation: CGFloat(row.visualIndentLevel + 1) * SidebarHierarchyLabel.indentation,
+                            isActive: isPanelVisible,
+                            canFocus: canFocusMultiplexerTab, onSelect: onSelectMultiplexerPane,
+                            onActivate: { onSelectTab(row.tab.id) }
                         )
-                        .padding(.leading, 16)
                     }
                 }
+                if usesCompactLayout { usageFooter }
             }
             // Drag preview width, since the docked column is resizable. Measured on
             // the stack; a per-row reader re-rendered the sidebar mid-gesture.
@@ -1462,7 +1597,13 @@ struct VerticalTabSidebar: View {
                     accentTint: accentTint,
                     onClose: { onCloseTab(row.tab.id) },
                     onHoverChange: onTabHover.map { hover in { hover(row.tab.id, $0) } },
-                    previewAnchors: previewAnchors
+                    previewAnchors: previewAnchors,
+                    sessionExpanded: hasRawMultiplexerSession(row.tab) ? isRawSessionExpanded(row.tab.id) : nil,
+                    onToggleSession: {
+                        let expanded = !isRawSessionExpanded(row.tab.id)
+                        rawSessionExpansion[row.tab.id] = expanded
+                        Ghostty.logger.info("Sidebar SSH session expanded=\(expanded, privacy: .public) tab=\(row.tab.id.uuidString, privacy: .public)")
+                    }
                 )
                 SidebarContextMenuRow(identity: menuRowIdentity(for: row, presentation: item)) {
                     item
@@ -1844,28 +1985,24 @@ struct VerticalTabSidebar: View {
         collapsed: Bool,
         isHighlighted: Bool
     ) -> some View {
-        HStack(spacing: 8) {
-            Button {
-                toggleGroupCollapse(groupID)
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: metrics.rowIconSize - 1, weight: .semibold))
-                    .foregroundColor(.secondary)
-                    .rotationEffect(.degrees(collapsed ? 0 : 90))
-                    .frame(width: metrics.rowButtonTarget, height: metrics.rowButtonTarget)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+        HStack(spacing: 0) {
+            SidebarHierarchyDisclosure(
+                isExpanded: Binding(get: { !collapsed }, set: { _ in toggleGroupCollapse(groupID) }),
+                title: title,
+                metrics: metrics
+            )
 
             TabGroupHeaderIcon(
                 groupID: groupID,
                 fallbackSystemImage: groupIcon(for: groupID),
-                size: metrics.rowIconSize,
+                size: 20,
                 tint: isActive ? accentTint : .secondary
             )
+            .frame(width: 24)
+            .padding(.trailing, 10)
 
             Text(title)
-                .font(.system(size: metrics.subtitleSize + 2, weight: .semibold))
+                .font(.system(size: metrics.titleSize, weight: .semibold))
                 .foregroundColor(isActive ? .primary : .secondary)
                 .lineLimit(1)
 
@@ -1882,7 +2019,7 @@ struct VerticalTabSidebar: View {
         .contentShape(Rectangle())
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isHighlighted ? accentTint.opacity(0.22) : (isActive ? accentTint.opacity(0.10) : Color.primary.opacity(0.04)))
+                .fill(isHighlighted ? accentTint.opacity(0.22) : .clear)
         )
         .onTapGesture {
             highlightedRowID = row.id
@@ -3230,6 +3367,9 @@ private struct SidebarTabRowItem: View, Equatable {
     var onHoverChange: ((Bool) -> Void)? = nil
     var previewAnchors: TabHoverPreviewAnchorRegistry? = nil
 
+    var sessionExpanded: Bool? = nil
+    var onToggleSession: () -> Void = {}
+
     // Parent inputs only; observed reads in `body` still update live. Unlike
     // TabBarItem, no index (onClose captures tab.id) and no badge color (the
     // theme is observed in `body`).
@@ -3244,6 +3384,7 @@ private struct SidebarTabRowItem: View, Equatable {
             && lhs.shortcutHint == rhs.shortcutHint
             && lhs.metrics == rhs.metrics
             && lhs.accentTint == rhs.accentTint
+            && lhs.sessionExpanded == rhs.sessionExpanded
             && lhs.previewAnchors === rhs.previewAnchors
             && (lhs.onHoverChange != nil) == (rhs.onHoverChange != nil)
     }
@@ -3251,17 +3392,24 @@ private struct SidebarTabRowItem: View, Equatable {
     var body: some View {
         // Split tabs become a rollup row with pane cards below.
         let solePane = tab.splitTree.count == 1 ? tab.splitTree.first : nil
-        let agentRow: AgentRowState? = attentionBadgesEnabled ? solePane?.presentation.agentRow : nil
+        let terminal = tab.focusedPane as? Ghostty.TerminalView
+        let isConnectionSession = sessionExpanded != nil || terminal?.rawMultiplexer != nil || terminal?.passthroughMultiplexer != nil
+            || terminal?.connectionConfig.requiresSSHCallbacks == true || terminal?.connectionConfig.isRoam == true
+        let agentRow: AgentRowState? = attentionBadgesEnabled && !isConnectionSession ? solePane?.presentation.agentRow : nil
         SidebarTabRow(
             title: tab.title,
             roamProtocol: tab.activeRoamProtocol,
             tmuxBadge: tmuxBadge,
             tmuxBadgePalette: .currentTheme,
             agentRow: agentRow,
+            isSessionRow: true,
+            directory: (tab.focusedPane as? Ghostty.TerminalView)?.pwd ?? agentRow?.project?.path,
+            sessionExpanded: sessionExpanded,
+            onToggleSession: onToggleSession,
             // Same pane the top tab's logo follows.
-            programMark: programIconsEnabled
+            programMark: isConnectionSession ? .symbol("network") : programIconsEnabled
                 ? (tab.focusedPane ?? tab.splitTree.first)?.presentation.foregroundProgram?.mark : nil,
-            attentionBadge: attentionBadgesEnabled ? tab.attentionBadge : nil,
+            attentionBadge: attentionBadgesEnabled && !isConnectionSession ? tab.attentionBadge : nil,
             // The agent's own pane's project, not the focused pane's. (id=agent-project)
             contextLine: agentRow?.project,
             isSelected: isSelected,
@@ -3345,13 +3493,16 @@ private struct SidebarAgentSummaryBar: View {
     let sortIsActive: Bool
     let onCycleSort: () -> Void
     let onOpenInbox: () -> Void
+    var compact = false
 
     var body: some View {
         // Registers the Observation dependency; the value itself is meaningless.
         let _ = AgentAttentionCenter.shared.revision
-        let hasAgents = showsAttention && !AgentAttentionCenter.shared.globalAgentCounts().isEmpty
+        let counts = AgentAttentionCenter.shared.globalAgentCounts()
+        let buttonTarget = compact ? 24.0 : metrics.headerButtonTarget
+        let hasAgents = showsAttention && (compact ? counts.contains { $0.key != .idle && $0.value > 0 } : !counts.isEmpty)
         let unread = AgentInboxStore.shared.unreadActions.count
-        if hasAgents || hasProjects || unread > 0 {
+        if hasAgents || (!compact && hasProjects) || unread > 0 {
             HStack(spacing: 6) {
                 if hasAgents {
                     Button(action: onOpenInbox) {
@@ -3374,7 +3525,7 @@ private struct SidebarAgentSummaryBar: View {
                         }
                         .font(.system(size: metrics.subtitleSize + 1, weight: .medium))
                         .foregroundColor(accentTint)
-                        .frame(height: metrics.headerButtonTarget)
+                        .frame(height: buttonTarget)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -3386,7 +3537,7 @@ private struct SidebarAgentSummaryBar: View {
                         Image(systemName: sortIconName)
                             .font(.system(size: metrics.headerIconSize, weight: .medium))
                             .foregroundColor(sortIsActive ? accentTint : .secondary)
-                            .frame(width: metrics.headerButtonTarget, height: metrics.headerButtonTarget)
+                            .frame(width: buttonTarget, height: buttonTarget)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -3395,7 +3546,7 @@ private struct SidebarAgentSummaryBar: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 4)
+            .padding(.top, compact ? 0 : 4)
         }
     }
 }
@@ -3579,6 +3730,10 @@ private struct SidebarTabRow: View {
     var tmuxBadgePalette: TmuxTabBadgePalette = .fallback
     /// Non-nil makes a three-line card. (id=agent-attention)
     var agentRow: AgentRowState? = nil
+    var isSessionRow = false
+    var directory: String? = nil
+    var sessionExpanded: Bool? = nil
+    var onToggleSession: () -> Void = {}
     /// Shell or program logo, shown only on plain rows; cards carry their own.
     var programMark: BrandMark? = nil
     /// Dot shown only on plain rows; cards show status on line 1.
@@ -3604,7 +3759,9 @@ private struct SidebarTabRow: View {
 
     var body: some View {
         Group {
-            if let agentRow {
+            if isSessionRow {
+                sessionLine
+            } else if let agentRow {
                 VStack(alignment: .leading, spacing: 2) {
                     agentStatusLine(agentRow)
                         .opacity(recedingOpacity)
@@ -3618,8 +3775,8 @@ private struct SidebarTabRow: View {
         }
         .padding(.leading, 10)
         .padding(.trailing, 8)
-        .padding(.leading, CGFloat(indentLevel) * 20)
-        .frame(height: agentRow != nil ? metrics.agentCardRowHeight : metrics.tabRowHeight)
+        .padding(.leading, CGFloat(indentLevel) * (isSessionRow ? SidebarHierarchyLabel.indentation : 20))
+        .frame(height: !isSessionRow && agentRow != nil ? metrics.agentCardRowHeight : metrics.tabRowHeight)
         .contentShape(Rectangle())
         .background(
             SidebarRowHoverBackground(
@@ -3639,6 +3796,35 @@ private struct SidebarTabRow: View {
             isHovered = hovering
             if !hovering { isCloseHovered = false }
             onHoverChange?(hovering)
+        }
+    }
+
+    private var sessionLine: some View {
+        HStack(spacing: 0) {
+            if let sessionExpanded {
+                SidebarHierarchyDisclosure(
+                    isExpanded: Binding(get: { sessionExpanded }, set: { _ in onToggleSession() }),
+                    title: "SSH Session",
+                    metrics: metrics
+                )
+                .accessibilityValue(title)
+            } else {
+                Color.clear.frame(width: metrics.rowButtonTarget, height: 1)
+            }
+            SidebarHierarchyLabel(
+                title: title,
+                mark: agentRow.flatMap { AgentBrandMark.mark(for: $0.agentID) } ?? programMark ?? .symbol("terminal"),
+                subtitle: directory,
+                selected: isSelected,
+                metrics: metrics
+            )
+            if let attentionBadge, attentionBadge != .idle, attentionBadge != .unknown {
+                AttentionStatusDotView(status: attentionBadge, size: 6)
+            }
+            if showsCloseButton && isHovered && sessionExpanded == nil {
+                SidebarRowCloseButton(isCloseHovered: $isCloseHovered, iconSize: metrics.closeIconSize,
+                                      target: metrics.rowButtonTarget, action: onClose)
+            }
         }
     }
 
