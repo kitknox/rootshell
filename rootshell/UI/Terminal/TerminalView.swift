@@ -1754,12 +1754,9 @@ extension Ghostty {
             cleanup(reason: .userClose)
         }
 
-        /// Re-home overlay child view controllers (the SSH auth-banner card)
-        /// under the destination window's controller before the split tree
-        /// inserts this pane — a live card mid-auth must not keep a child-VC
-        /// relationship with the old window after a tab transfer.
+        /// Banner controllers must follow the pane before UIKit inserts its views.
         override func prepareForAttachment(to parentViewController: UIViewController?) -> Bool {
-            enclosingTerminalScrollView?.refreshAuthBannerParentViewController(parentViewController)
+            enclosingTerminalScrollView?.refreshBannerParentViewController(parentViewController)
             return true
         }
 

@@ -473,6 +473,7 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
     static var dividerVisibleThickness: CGFloat { PaneCardStyle.isEnabled ? PaneCardStyle.gap : 2 }
     private let dividerTouchThickness: CGFloat = 24
     private var tree: SplitTree<SplitPaneView>?
+    private var wasReplaced = false
     private var focusedPane: SplitPaneView?
     private var hasCompletedHerdrLayout = false
     private let herdrMetricsRefresh = HerdrLayoutRefresh()
@@ -630,6 +631,7 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
     }
 
     func update(tree: SplitTree<SplitPaneView>, focusedPane: SplitPaneView?) {
+        guard !wasReplaced else { return }
         paneRearrangement.update(tree: tree, enabled: isActiveTab && allowsPaneRearrangement && onMove != nil)
         // SwiftUI calls this on every MainView body evaluation. Only a real
         // tree or focus change may relayout every attached pane.
@@ -1441,6 +1443,14 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
         // Attach the container (for terminals, it contains the terminal view)
         let newlyAttached = container.superview !== self
         if newlyAttached {
+            // SwiftUI can lay out the old host after its replacement adopts
+            // this tab. Retire it before it can pull the live pane back.
+            if let previous = container.superview as? SplitTreeHostingView,
+               let surfaceTabID, previous.surfaceTabID == surfaceTabID {
+                previous.wasReplaced = true
+                previous.detachAllPanes()
+                Ghostty.logger.debug("SplitTreeHostingView: retired replaced host for tab \(surfaceTabID, privacy: .public)")
+            }
             container.removeFromSuperview()
 
             // A non-terminal pane may carry a live child view controller. Give
