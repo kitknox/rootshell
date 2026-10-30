@@ -100,12 +100,15 @@ final class FileManagerModel {
     /// Brings the focused terminal's host into view. A pane already showing that
     /// host keeps its folder (state survives reopening); otherwise the host opens
     /// on the right at the terminal's working directory, local stays on the left.
-    func present(from source: FileEndpoint.PaneSource?, directory: String?) {
+    func present(from source: FileEndpoint.PaneSource?, directory: String?, followDirectory: Bool = false) {
         guard let source else { return }
         originPane = source
         let endpoint: FileEndpoint = source.fallbackConfig.underlyingSSHConfig == nil ? .local : .pane(source)
         if let existing = [left, right].first(where: { $0.endpoint.sharesFileSystem(with: endpoint) }) {
             activeSide = existing.id
+            if followDirectory, let directory, directory.hasPrefix("/"), existing.path != directory {
+                existing.navigate(to: directory)
+            }
             return
         }
         let side: FilePaneModel.Side = endpoint.isLocal ? .left : .right

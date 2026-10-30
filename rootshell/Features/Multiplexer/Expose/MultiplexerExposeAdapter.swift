@@ -64,6 +64,7 @@ nonisolated protocol MultiplexerExposeAdapter: Sendable {
     func canFocus(session: String?, tabID: String) -> Bool
 
     func focusScript(session: String?, tabID: String) -> String
+    func focusPaneScript(session: String?, tabID: String, paneID: String) -> String?
 
     /// Whether the focus command's output confirms the switch.
     func parseFocusResult(output: String, session: String?, tabID: String) -> Bool
@@ -73,6 +74,7 @@ nonisolated protocol MultiplexerExposeAdapter: Sendable {
 }
 
 nonisolated extension MultiplexerExposeAdapter {
+    func focusPaneScript(session: String?, tabID: String, paneID: String) -> String? { nil }
     var minInterval: TimeInterval { 0 }
     func parseFocusResult(output: String, session: String?, tabID: String) -> Bool { true }
     func canFocus(session: String?, tabID: String) -> Bool { true }

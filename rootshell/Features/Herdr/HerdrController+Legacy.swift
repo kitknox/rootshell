@@ -121,8 +121,15 @@ extension HerdrController {
     func legacyRun(command: String, method: String, input: Data? = nil,
                            timeout: Duration = .seconds(15), maxResponseBytes: Int = legacyMaxResponseBytes,
                            allowsTruncation: Bool = false) async throws -> Data {
-        try Task.checkCancellation()
         guard let gateway else { throw HerdrChannelError.closed }
+        return try await Self.runHostCommand(command: command, method: method, input: input,
+            on: gateway, timeout: timeout, maxResponseBytes: maxResponseBytes, allowsTruncation: allowsTruncation)
+    }
+
+    private static func runHostCommand(command: String, method: String, input: Data? = nil,
+                           on gateway: Ghostty.TerminalView, timeout: Duration = .seconds(15),
+                           maxResponseBytes: Int = legacyMaxResponseBytes, allowsTruncation: Bool = false) async throws -> Data {
+        try Task.checkCancellation()
         let pipe = try await HerdrChannelFactory.open(command: command, on: gateway)
         let limit = maxResponseBytes
         do {
@@ -172,10 +179,10 @@ extension HerdrController {
     func legacyRequest<Result: Decodable>(args: String, as: Result.Type) async throws -> Result {
         let output = try await legacyRun(args: args)
         try Task.checkCancellation()
-        return try decodeLegacyResponse(output, method: args, as: Result.self)
+        return try Self.decodeLegacyResponse(output, method: args, as: Result.self)
     }
 
-    private func decodeLegacyResponse<Result: Decodable>(_ output: Data, method: String, as: Result.Type) throws -> Result {
+    private static func decodeLegacyResponse<Result: Decodable>(_ output: Data, method: String, as: Result.Type) throws -> Result {
         guard let line = output.split(separator: 0x0A).last(where: { $0.first == UInt8(ascii: "{") }) else {
             throw HerdrChannelError.malformed("herdr \(method) returned no JSON")
         }
@@ -203,7 +210,18 @@ extension HerdrController {
     }
 
     func legacyAPIRequest<P: Encodable, R: Decodable>(_ method: String, _ params: P, as: R.Type) async throws -> R {
-        let statusOutput = try await legacyRun(args: "status --json")
+        guard let gateway else { throw HerdrChannelError.closed }
+        return try await Self.hostAPIRequest(method, params, as: R.self, on: gateway,
+            sessionName: sessionName, localAttachment: localControlAttachment)
+    }
+
+    static func hostAPIRequest<P: Encodable, R: Decodable>(
+        _ method: String, _ params: P, as: R.Type, on gateway: Ghostty.TerminalView,
+        sessionName: String?, localAttachment: LocalMultiplexerAttachment? = nil
+    ) async throws -> R {
+        let statusOutput = try await runHostCommand(
+            command: SSHConfig.herdrCommandLine(sessionName: sessionName, args: "status --json", localAttachment: localAttachment),
+            method: "status", on: gateway)
         guard let start = statusOutput.firstIndex(of: UInt8(ascii: "{")),
               let end = statusOutput.lastIndex(of: UInt8(ascii: "}")), start <= end else {
             throw HerdrChannelError.malformed("herdr status returned no JSON")
@@ -238,8 +256,8 @@ extension HerdrController {
             id: "rootshell:api:\(UUID().uuidString)", method: method, params: params
         ))
         request.append(0x0A)
-        let output = try await legacyRun(
-            command: LoginShellCommand.runInPOSIXShell(script), method: method, input: request
+        let output = try await runHostCommand(
+            command: LoginShellCommand.runInPOSIXShell(script), method: method, input: request, on: gateway
         )
         return try decodeLegacyResponse(output, method: method, as: R.self)
     }

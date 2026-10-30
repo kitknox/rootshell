@@ -10,6 +10,136 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
+private struct RawMultiplexerSidebarTree: View {
+    let snapshot: MuxExposeSnapshot
+    let title: String
+    let filter: String
+    let accent: Color
+    let canFocus: (String) -> Bool
+    let onSelect: (String, String?) -> Void
+    @State private var collapsed = Set<String>()
+
+    var body: some View {
+        DisclosureGroup(isExpanded: expanded("session")) {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(snapshot.workspaces.filter { $0.parentID == nil && workspaceMatches($0) }) { workspace in
+                    workspaceGroup(workspace)
+                }
+                ForEach(matchingTabs(workspaceID: nil), id: \.id) { tab in
+                    tabRow(tab)
+                }
+            }
+        } label: {
+            Label(title, systemImage: "rectangle.stack")
+                .font(.subheadline.weight(.semibold))
+                .frame(minHeight: 44)
+        }
+        .tint(accent)
+        .padding(.horizontal, 8)
+        .buttonStyle(.plain)
+    }
+
+    private func expanded(_ id: String) -> Binding<Bool> {
+        Binding(get: { !collapsed.contains(id) || !filter.isEmpty }, set: { value in
+            if value { collapsed.remove(id) } else { collapsed.insert(id) }
+        })
+    }
+
+    private func matchingTabs(workspaceID: String?) -> [MuxTab] {
+        let workspaceMatches = snapshot.workspaces.first { $0.id == workspaceID }?
+            .title.localizedCaseInsensitiveContains(filter) == true
+        return snapshot.tabs.filter { tab in
+            tab.workspaceID == workspaceID && (filter.isEmpty || workspaceMatches
+                || tab.title.localizedCaseInsensitiveContains(filter)
+                || tab.panes.contains { pane in
+                    pane.title?.localizedCaseInsensitiveContains(filter) == true
+                        || pane.workingDirectory?.localizedCaseInsensitiveContains(filter) == true
+                })
+        }
+    }
+
+    private func workspaceGroup(_ workspace: MuxWorkspace) -> some View {
+        DisclosureGroup(isExpanded: expanded("workspace:\(workspace.id)")) {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(matchingTabs(workspaceID: workspace.id), id: \.id) { tab in
+                    tabRow(tab)
+                }
+                ForEach(snapshot.workspaces.filter { $0.parentID == workspace.id && workspaceMatches($0) }) { child in
+                    DisclosureGroup(isExpanded: expanded("workspace:\(child.id)")) {
+                        ForEach(matchingTabs(workspaceID: child.id), id: \.id) { tab in
+                            tabRow(tab)
+                        }
+                    } label: {
+                        Label(child.title, systemImage: "arrow.triangle.branch")
+                            .lineLimit(1)
+                            .frame(minHeight: 44)
+                    }
+                }
+            }
+        } label: {
+            Label(workspace.title, systemImage: "folder")
+                .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+                .frame(minHeight: 44)
+        }
+    }
+
+    private func workspaceMatches(_ workspace: MuxWorkspace) -> Bool {
+        filter.isEmpty || workspace.title.localizedCaseInsensitiveContains(filter)
+            || !matchingTabs(workspaceID: workspace.id).isEmpty
+            || snapshot.workspaces.contains {
+                $0.parentID == workspace.id && ($0.title.localizedCaseInsensitiveContains(filter)
+                    || !matchingTabs(workspaceID: $0.id).isEmpty)
+            }
+    }
+
+    @ViewBuilder
+    private func tabRow(_ tab: MuxTab) -> some View {
+        if tab.panes.count > 1 {
+            DisclosureGroup(isExpanded: expanded("tab:\(tab.id)")) {
+                ForEach(tab.panes, id: \.id) { pane in
+                    selectionButton(
+                        title: pane.title.flatMap { $0.isEmpty ? nil : $0 } ?? pane.id,
+                        icon: "rectangle.split.2x1",
+                        selected: tab.id == snapshot.activeTabID && pane.isActive
+                    ) {
+                        onSelect(tab.id, pane.id)
+                    }
+                    .disabled(!canFocus(tab.id))
+                }
+            } label: {
+                tabButton(tab)
+            }
+        } else {
+            tabButton(tab)
+        }
+    }
+
+    private func tabButton(_ tab: MuxTab) -> some View {
+        selectionButton(title: tab.title, icon: "terminal", selected: tab.id == snapshot.activeTabID) {
+            onSelect(tab.id, nil)
+        }
+        .disabled(!canFocus(tab.id))
+    }
+
+    private func selectionButton(title: String, icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon).foregroundStyle(selected ? accent : .secondary)
+                Text(title).lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 4)
+                if selected { Image(systemName: "checkmark").foregroundStyle(accent) }
+            }
+            .font(.subheadline)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .background(selected ? accent.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
+        }
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
 // MARK: - Collapse State Persistence
 
 /// Keyed by the gateway's owner terminal UUID, which is stable across restore.
@@ -235,6 +365,11 @@ struct VerticalTabSidebar: View {
     let sheetThemeColors: SheetThemeColors?
     let sheetAccentColor: Color?
     let sheetColorScheme: ColorScheme?
+    var rawMultiplexerSnapshot: MuxExposeSnapshot? = nil
+    var rawMultiplexerHostTabID: UUID? = nil
+    var rawMultiplexerTitle = ""
+    var canFocusMultiplexerTab: (String) -> Bool = { _ in false }
+    var onSelectMultiplexerPane: (String, String?) -> Void = { _, _ in }
     var onExposeRequested: () -> Void = {}
     var onOpenAgentInbox: () -> Void = {}
     var onTabHover: ((UUID, Bool) -> Void)? = nil
@@ -955,6 +1090,19 @@ struct VerticalTabSidebar: View {
                 ForEach(rows) { row in
                     rowView(row: row, rows: rows, gatewayOwnerIDs: gatewayOwnerIDs)
                         .id(row.id)
+                    if row.tab.id == rawMultiplexerHostTabID,
+                       row.id == row.tab.id.uuidString,
+                       let snapshot = rawMultiplexerSnapshot {
+                        RawMultiplexerSidebarTree(
+                            snapshot: snapshot,
+                            title: rawMultiplexerTitle,
+                            filter: normalizedSearchFilter,
+                            accent: accentTint,
+                            canFocus: canFocusMultiplexerTab,
+                            onSelect: onSelectMultiplexerPane
+                        )
+                        .padding(.leading, 16)
+                    }
                 }
             }
             // Drag preview width, since the docked column is resizable. Measured on
@@ -2664,6 +2812,16 @@ struct VerticalTabSidebar: View {
     private func searchFilterMatches(_ tab: TabModel) -> Bool {
         searchFilterMatchesTabTitle(tab)
             || paneIDsForRows(in: tab).contains { searchFilterMatchesPane(tab, paneID: $0) }
+            || (tab.id == rawMultiplexerHostTabID && rawMultiplexerMatchesSearch)
+    }
+
+    private var rawMultiplexerMatchesSearch: Bool {
+        guard let snapshot = rawMultiplexerSnapshot else { return false }
+        return (snapshot.workspaces.map(\.title)
+            + snapshot.tabs.map(\.title)
+            + snapshot.allPanes.compactMap(\.title)
+            + snapshot.allPanes.compactMap(\.workingDirectory))
+            .contains { $0.localizedCaseInsensitiveContains(normalizedSearchFilter) }
     }
 
     private func buildTmuxGatewayGroupRows(from tabs: [TabModel], ownerID: UUID) -> [SidebarRow] {
