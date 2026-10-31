@@ -139,12 +139,11 @@ private final class KeyboardDismissButton: KeyboardSymbolButton {
 
 // MARK: - Drawer Row View
 
-/// One drawer row: a horizontally scrolling (or centered) stack of keys with a
-/// bottom hairline separator. Multiple rows stack vertically above the main row.
+/// One drawer row: a horizontally scrolling (or centered) stack of keys.
+/// Multiple rows stack vertically above the main row.
 private final class DrawerRowView: UIView {
     let scrollView = UIScrollView()
     let stackView = UIStackView()
-    private let separator = UIView()
 
     private var scrollLeadingConstraint: NSLayoutConstraint?
     private var scrollTrailingConstraint: NSLayoutConstraint?
@@ -162,10 +161,6 @@ private final class DrawerRowView: UIView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         clipsToBounds = true
-
-        separator.backgroundColor = .separator.withAlphaComponent(0.5)
-        separator.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(separator)
 
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.contentInsetAdjustmentBehavior = .never
@@ -185,15 +180,10 @@ private final class DrawerRowView: UIView {
         scrollTrailingConstraint = scrollTrailing
 
         NSLayoutConstraint.activate([
-            separator.leadingAnchor.constraint(equalTo: leadingAnchor),
-            separator.trailingAnchor.constraint(equalTo: trailingAnchor),
-            separator.bottomAnchor.constraint(equalTo: bottomAnchor),
-            separator.heightAnchor.constraint(equalToConstant: 0.5),
-
             scrollLeading,
             scrollTrailing,
             scrollView.topAnchor.constraint(equalTo: topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: separator.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
             stackView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
             stackView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
