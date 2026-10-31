@@ -170,8 +170,16 @@ struct DuoWorkspaceGeometry<Content: View>: View {
         if UIDevice.current.userInterfaceIdiom == .phone, !context.hasHinge,
            expanded.size.width > expanded.size.height {
             let reclaimed = ignoredEdges(in: safe)
-            if reclaimed.contains(.leading) { layout.headerInsets.leading = 0 }
-            if reclaimed.contains(.trailing) { layout.headerInsets.trailing = 0 }
+            // Keep the canvas and its controls on one shared edge inside the corner.
+            let edgeInset: CGFloat = 24
+            if reclaimed.contains(.leading) {
+                layout.headerInsets.leading = edgeInset
+                layout.terminalInsets.leading = edgeInset
+            }
+            if reclaimed.contains(.trailing) {
+                layout.headerInsets.trailing = edgeInset
+                layout.terminalInsets.trailing = edgeInset
+            }
         }
         #endif
         return layout
