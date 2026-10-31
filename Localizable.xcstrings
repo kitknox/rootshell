@@ -91414,6 +91414,9 @@
         }
       }
     },
+    "Assign different actions to swipes starting in the top and bottom halves of the terminal. Turning this off restores the shared swipe actions. Trackpad swipes always use the shared actions." : {
+
+    },
     "Assists direct typing with Apple's on-screen keyboard. Corrections are applied only while recent input can be safely tracked." : {
       "localizations" : {
         "ar" : {
@@ -117075,6 +117078,9 @@
           }
         }
       }
+    },
+    "Bottom Half" : {
+
     },
     "Branch" : {
       "localizations" : {
@@ -614095,7 +614101,11 @@
         }
       }
     },
+    "Restore left swipe to Next Tab and right swipe to Previous Tab for all areas, and turn off separate top and bottom swipes." : {
+
+    },
     "Restore left swipe to Next Tab and right swipe to Previous Tab." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -657328,6 +657338,9 @@
           }
         }
       }
+    },
+    "Separate Top and Bottom Swipes" : {
+
     },
     "Separate Window" : {
       "comment" : "AI Agent presentation mode: dedicated window",
@@ -808164,6 +808177,9 @@
           }
         }
       }
+    },
+    "Top Half" : {
+
     },
     "total 42" : {
       "localizations" : {
