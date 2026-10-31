@@ -715,6 +715,15 @@ final class PortForwardManager {
 
     /// Handle SSH channel creation error - track consecutive failures to detect connection death
     private func handleSSHChannelError(_ error: Error) {
+        // OPEN_FAILURE is the server answering, so the connection is alive. Its text contains
+        // "channel", which the patterns below would otherwise count: any local app hitting a closed
+        // target port three times would tear the tunnel down.
+        if let sshError = error as? NIOSSHError, sshError.type == .channelSetupRejected {
+            Self.logger.debug("SSH channel open refused by server: \(error.localizedDescription)")
+            consecutiveSSHErrors = 0
+            return
+        }
+
         // Check if this error indicates the SSH connection is dead
         let errorString = String(describing: error).lowercased()
 

@@ -9,6 +9,54 @@ import Citadel
 import Observation
 import os.log
 
+/// One connection's session-bind@openssh.com records, checked as OpenSSH's ssh-agent does
+/// (process_ext_session_bind): the host key must have signed the session ID, nothing may
+/// follow an authentication bind, and at most 16 are kept.
+nonisolated struct LocalAgentSessionBinds: Sendable {
+    private struct Bind: Sendable {
+        var hostKeyBlob: Data
+        var sessionID: Data
+        var isForwarding: Bool
+    }
+
+    private var binds: [Bind] = []
+
+    /// The first hop: the host the connecting client itself reached. Later hops, sent through a
+    /// forwarded agent, can't replace it.
+    var first: (hostKeyBlob: Data, isForwarding: Bool)? {
+        binds.first.map { ($0.hostKeyBlob, $0.isForwarding) }
+    }
+
+    mutating func record(hostKeyBlob: Data, sessionID: Data, signature: Data, isForwarding: Bool) -> Bool {
+        guard Self.signatureIsValid(hostKeyBlob: hostKeyBlob, sessionID: sessionID, signature: signature) else {
+            return false
+        }
+        for bind in binds {
+            // A socket bound for authentication takes no further binds.
+            guard bind.isForwarding else { return false }
+            if bind.sessionID == sessionID {
+                return bind.hostKeyBlob == hostKeyBlob
+            }
+        }
+        guard binds.count < SSHAgentWireCodec.maxSessionBinds else { return false }
+        binds.append(Bind(hostKeyBlob: hostKeyBlob, sessionID: sessionID, isForwarding: isForwarding))
+        return true
+    }
+
+    private static func signatureIsValid(hostKeyBlob: Data, sessionID: Data, signature: Data) -> Bool {
+        // RSA host keys parse through Citadel's types, which a Citadel connection may not have registered yet.
+        NIOSSHAlgorithms.register(
+            publicKey: Insecure.RSA.PublicKey.self,
+            // OpenSSH clients usually sign their KEX (hence the bind) with rsa-sha2-512.
+            signatures: [Insecure.RSA.Signature.self, Insecure.RSA.SHA1Signature.self, Insecure.RSA.SHA512Signature.self]
+        )
+        guard let hostKey = try? NIOSSHPublicKey(sshWireBlob: ByteBuffer(data: hostKeyBlob)) else {
+            return false
+        }
+        return hostKey.isValidSignature(sshWireSignature: ByteBuffer(data: signature), for: ByteBuffer(data: sessionID))
+    }
+}
+
 nonisolated struct LocalAgentBoundDestination: Sendable, Equatable {
     var hostKeyBlob: Data
     var isForwarding: Bool

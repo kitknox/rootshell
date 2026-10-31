@@ -2199,9 +2199,9 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
         // principal that is in the list, preserving its cryptographic checks.
         let principal: String
         if cert.validPrincipals.isEmpty {
-            // Empty principals = valid for any host (the CA + our host-pattern
-            // scoping already constrain trust).
-            principal = hostname
+            // OpenSSH refuses these ("Certificate lacks principal list"); falls back to the base key.
+            logger.info("[\(labelTag)] Host cert has no principals; not trusting it via CA")
+            return false
         } else if cert.validPrincipals.contains(hostname) {
             principal = hostname
         } else if let matched = cert.validPrincipals.first(where: {

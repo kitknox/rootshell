@@ -28,6 +28,9 @@ nonisolated protocol ChunkWriter: Sendable {
     func abort() async
     /// True when a failed or aborted write leaves any existing destination untouched.
     var replacesAtomically: Bool { get }
+    /// Sets mode and mtime through the open handle, so a path swapped for a symlink after the open
+    /// can't redirect them (cf. OpenSSH bc01263f1). False when the writer has no such handle.
+    func applyAttributes(mode: UInt32?, modified: Date?) async throws -> Bool
 }
 
 nonisolated extension ChunkWriter {
@@ -36,6 +39,8 @@ nonisolated extension ChunkWriter {
     }
 
     var replacesAtomically: Bool { false }
+
+    func applyAttributes(mode: UInt32?, modified: Date?) async throws -> Bool { false }
 }
 
 /// Pipelined transfer operations that overlap multiple read/write requests
@@ -84,6 +89,17 @@ enum PipelinedTransfer {
 
         func close() async throws {
             try await file.close()
+        }
+
+        func applyAttributes(mode: UInt32?, modified: Date?) async throws -> Bool {
+            var attributes = SFTPFileAttributes()
+            // No setuid/setgid/sticky on copied files, as OpenSSH's sftp.
+            attributes.permissions = mode.map { $0 & 0o777 }
+            if let modified {
+                attributes.accessModificationTime = .init(accessTime: modified, modificationTime: modified)
+            }
+            try await file.setAttributes(attributes)
+            return true
         }
     }
 
@@ -138,6 +154,19 @@ enum PipelinedTransfer {
             guard ownsDescriptor else { return }
             guard Darwin.close(descriptor) == 0 else { throw LocalIOError(underlying: POSIXError.current) }
         }
+
+        func applyAttributes(mode: UInt32?, modified: Date?) async throws -> Bool {
+            if let mode, fchmod(descriptor, mode_t(mode & 0o777)) != 0 {
+                throw LocalIOError(underlying: POSIXError.current)
+            }
+            if let modified {
+                let seconds = modified.timeIntervalSince1970.rounded(.down)
+                let time = timespec(tv_sec: Int(seconds), tv_nsec: Int((modified.timeIntervalSince1970 - seconds) * 1_000_000_000))
+                var times = [time, time]
+                guard futimens(descriptor, &times) == 0 else { throw LocalIOError(underlying: POSIXError.current) }
+            }
+            return true
+        }
     }
 
     // MARK: - Copy
@@ -155,7 +184,8 @@ enum PipelinedTransfer {
             return
         }
 
-        let totalChunks = Int((size + UInt64(chunkSize) - 1) / UInt64(chunkSize))
+        // No `size + chunk - 1`: a peer-reported size near UInt64.max would overflow.
+        let totalChunks = Int(size / UInt64(chunkSize) + (size % UInt64(chunkSize) == 0 ? 0 : 1))
         var nextChunk = 0
         var completed: Int64 = 0
 
@@ -164,7 +194,7 @@ enum PipelinedTransfer {
             // commonly cap read responses (OpenSSH: 256KB), below the 1MB request.
             func submit(_ chunkIndex: Int) {
                 let rangeStart = UInt64(chunkIndex) * UInt64(chunkSize)
-                let rangeEnd = min(rangeStart + UInt64(chunkSize), size)
+                let rangeEnd = rangeStart + min(UInt64(chunkSize), size - rangeStart)
                 group.addTask {
                     var offset = rangeStart
                     while offset < rangeEnd {

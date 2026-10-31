@@ -915,7 +915,7 @@ final class SFTPSession {
                 onOutput?("Invalid command.\r\n")
             }
         } catch {
-            onOutput?("\(error.localizedDescription)\r\n")
+            onOutput?("\(SSHBanner.terminalSafe(error.localizedDescription))\r\n")
         }
 
         displayPrompt()
@@ -1001,12 +1001,12 @@ final class SFTPSession {
         if showLong {
             for (_, longname) in entries {
                 if let longname = longname {
-                    onOutput?(longname + "\r\n")
+                    onOutput?(SSHBanner.terminalSafe(longname) + "\r\n")
                 }
             }
         } else {
             for (name, _) in entries {
-                onOutput?(name + "\r\n")
+                onOutput?(SSHBanner.terminalSafe(name) + "\r\n")
             }
         }
     }
@@ -1124,7 +1124,7 @@ final class SFTPSession {
     }
 
     private func doPwd() async throws {
-        onOutput?("Remote working directory: \(remoteWorkingDirectory)\r\n")
+        onOutput?("Remote working directory: \(SSHBanner.terminalSafe(remoteWorkingDirectory))\r\n")
     }
 
     private func doLpwd() {
@@ -1186,10 +1186,10 @@ final class SFTPSession {
                 if isDir && recursive {
                     let dirFiles = try await enumerateRemoteDirectory(path: match)
                     totalFiles += dirFiles.count
-                    totalBytes += dirFiles.reduce(Int64(0)) { $0 + Int64($1.size) }
+                    totalBytes = totalBytes.addingSaturating(dirFiles.saturatingByteTotal { $0.size })
                 } else if !isDir {
                     totalFiles += 1
-                    totalBytes += Int64(attrs.size ?? 0)
+                    totalBytes = totalBytes.addingSaturating(Int64(clamping: attrs.size ?? 0))
                 }
             }
 
@@ -1216,14 +1216,14 @@ final class SFTPSession {
 
                     if matchIsDir[index] {
                         if recursive {
-                            onOutput?("Fetching \(match)/ to \(localDest)/\r\n")
+                            onOutput?("Fetching \(SSHBanner.terminalSafe(match))/ to \(SSHBanner.terminalSafe(localDest))/\r\n")
                             try await downloadDirectory(remotePath: match, localPath: localDest, progress: &progress, updateTotals: false)
                         } else {
                             throw SFTPError.isADirectory(path: fileName)
                         }
                     } else {
                         progress.currentFileIndex += 1
-                        onOutput?("Fetching \(match) to \(localDest)\r\n")
+                        onOutput?("Fetching \(SSHBanner.terminalSafe(match)) to \(SSHBanner.terminalSafe(localDest))\r\n")
                         try await downloadFile(remotePath: match, localPath: localDest, progress: &progress)
                     }
                 }
@@ -1271,7 +1271,7 @@ final class SFTPSession {
                 progress.currentFile = fileName
                 progress.currentFileIndex = 1
                 progress.totalFiles = 1
-                progress.totalBytes = Int64(attrs.size ?? 0)
+                progress.totalBytes = Int64(clamping: attrs.size ?? 0)
                 progress.state = .transferring(currentFile: fileName)
                 emitProgress(progress, force: true)
 
@@ -1286,7 +1286,7 @@ final class SFTPSession {
             throw error
         }
 
-        onOutput?("Fetching \(remote) to \((localPath ?? local))\r\n")
+        onOutput?("Fetching \(SSHBanner.terminalSafe(remote)) to \(SSHBanner.terminalSafe(localPath ?? local))\r\n")
     }
 
     private func doPut(args: [String]) async throws {
@@ -1345,7 +1345,7 @@ final class SFTPSession {
                 if isDir.boolValue && recursive {
                     let dirFiles = try enumerateLocalDirectory(path: match)
                     totalFiles += dirFiles.count
-                    totalBytes += dirFiles.reduce(Int64(0)) { $0 + Int64($1.size) }
+                    totalBytes = totalBytes.addingSaturating(dirFiles.saturatingByteTotal { $0.size })
                 } else if !isDir.boolValue {
                     totalFiles += 1
                     let fileSize = (try? FileManager.default.attributesOfItem(atPath: match)[.size]) as? Int64 ?? 0
@@ -1515,7 +1515,7 @@ final class SFTPSession {
         let files = try await enumerateRemoteDirectory(path: remotePath)
         if updateTotals {
             progress.totalFiles = files.count
-            progress.totalBytes = files.reduce(Int64(0)) { $0 + Int64($1.size) }
+            progress.totalBytes = files.saturatingByteTotal { $0.size }
         }
 
         for (index, entry) in files.enumerated() {
@@ -1590,7 +1590,7 @@ final class SFTPSession {
         let files = try enumerateLocalDirectory(path: localPath)
         if updateTotals {
             progress.totalFiles = files.count
-            progress.totalBytes = files.reduce(Int64(0)) { $0 + Int64($1.size) }
+            progress.totalBytes = files.saturatingByteTotal { $0.size }
         }
 
         for (index, entry) in files.enumerated() {
@@ -1662,7 +1662,7 @@ final class SFTPSession {
     private func outputProgressLine(_ progress: SFTPTransferProgress) {
         switch progress.state {
         case .transferring(let file):
-            let displayFile = file.isEmpty ? progress.currentFile : file
+            let displayFile = SSHBanner.terminalSafe(file.isEmpty ? progress.currentFile : file)
             let throughput = formatThroughput(progress.throughput)
             let message: String
 
@@ -1753,10 +1753,10 @@ final class SFTPSession {
                 // Skip directories — rm only removes files (use rmdir for directories)
                 let attrs = try await sftp.getAttributes(at: match)
                 if isDirectory(attrs) {
-                    onOutput?("Skipping directory: \(fileName)\r\n")
+                    onOutput?("Skipping directory: \(SSHBanner.terminalSafe(fileName))\r\n")
                     continue
                 }
-                onOutput?("Removing \(fileName)\r\n")
+                onOutput?("Removing \(SSHBanner.terminalSafe(fileName))\r\n")
                 do {
                     try await sftp.remove(at: match)
                 } catch {
