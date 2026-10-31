@@ -103,6 +103,7 @@ struct DuoWorkspaceGeometry<Content: View>: View {
     /// Window-space y the header may rise to above the safe area, if any.
     var headerTopLimit: CGFloat? = nil
     let windowSafeAreaTop: CGFloat
+    var landscapeCameraOnLeft: Bool? = nil
     @ViewBuilder var content: (GeometryProxy, DuoWorkspaceLayout) -> Content
     @Environment(\.layoutDirection) private var layoutDirection
 
@@ -122,12 +123,11 @@ struct DuoWorkspaceGeometry<Content: View>: View {
         var edges = context.workspaceIgnoredEdges(headerHeight: headerHeight)
         if headerTopLimit != nil, headerHeight > 0 { edges.insert(.top) }
         #if !targetEnvironment(macCatalyst) && !os(visionOS)
-        if #available(iOS 27.1, *), UIDevice.current.userInterfaceIdiom == .phone,
-           !context.hasHinge, geometry.size.width > geometry.size.height {
-            let regions = geometry.reservedRegions(kind: .occlusion, layoutDirectionBehavior: .fixed)
+        if UIDevice.current.userInterfaceIdiom == .phone,
+           !context.hasHinge, geometry.size.width > geometry.size.height,
+           let landscapeCameraOnLeft {
             edges.formUnion(DuoLayoutContext.unoccludedLandscapeEdge(
-                bounds: CGRect(origin: .zero, size: geometry.size),
-                occlusions: regions.map(\.frame), rightToLeft: layoutDirection == .rightToLeft
+                cameraOnLeft: landscapeCameraOnLeft, rightToLeft: layoutDirection == .rightToLeft
             ))
         }
         #endif

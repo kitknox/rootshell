@@ -285,6 +285,7 @@ struct MainView: View {
     @State var sessionDiscoveryVersion: Int = 0
     @State var windowSceneSessionID: String?
     @State var windowSafeAreaInsets: EdgeInsets = EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+    @State var landscapeCameraOnLeft: Bool?
     // Window-space bottom of the system status bar; 0 while it is hidden.
     @State var statusBarBottom: CGFloat = 0
 #if targetEnvironment(macCatalyst)
@@ -506,7 +507,8 @@ struct MainView: View {
             context: effectiveDuoLayout,
             headerHeight: showsHorizontalTabHeader ? TabMetrics.tabBarHeight : 0,
             headerTopLimit: tabHeaderTopLimit,
-            windowSafeAreaTop: windowSafeAreaInsets.top
+            windowSafeAreaTop: windowSafeAreaInsets.top,
+            landscapeCameraOnLeft: landscapeCameraOnLeft
         ) { geometry, workspace in
             let terminalRowAvailableWidth = max(
                 0,
@@ -637,6 +639,16 @@ struct MainView: View {
                     applyPendingWideSidebarAutoOpen()
                 }
                 .background(WindowSceneReporter(onUpdate: { scene, safeAreaInsets, isKeyWindow, newStatusBarBottom in
+                    let cameraOnLeft: Bool?
+                    #if !targetEnvironment(macCatalyst) && !os(visionOS)
+                    switch scene?.effectiveGeometry.interfaceOrientation {
+                    case .landscapeRight: cameraOnLeft = true
+                    case .landscapeLeft: cameraOnLeft = false
+                    default: cameraOnLeft = nil
+                    }
+                    #else
+                    cameraOnLeft = nil
+                    #endif
                     let newID = scene?.session.persistentIdentifier
                     let newInsets = EdgeInsets(
                         top: safeAreaInsets.top,
@@ -646,6 +658,10 @@ struct MainView: View {
                     )
                     // Dispatch to avoid modifying state during view update
                     DispatchQueue.main.async {
+                        if landscapeCameraOnLeft != cameraOnLeft {
+                            landscapeCameraOnLeft = cameraOnLeft
+                            Ghostty.logger.info("Workspace landscape camera side left=\(String(describing: cameraOnLeft), privacy: .public) safeInsets=\(String(describing: safeAreaInsets), privacy: .public)")
+                        }
                         if windowSceneSessionID != newID {
                             windowSceneSessionID = newID
                             TerminalWindowRegistry.updateSceneSessionId(newID, for: windowId)
