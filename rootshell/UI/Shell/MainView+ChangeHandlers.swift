@@ -80,6 +80,9 @@ extension MainView {
                 Ghostty.logger.info("onChange(isAnySheetPresented) \(oldValue) -> \(newValue) showingTabSwitcher=\(showingTabSwitcher)")
                 setOverlayOwnsKeyboardForAllTerminals(newValue)
             }
+            .onChange(of: edgeSidebarModalPresented) { _, _ in
+                updateSidebarToolbarRetention()
+            }
             .onChange(of: terminals.count) { oldCount, newCount in
                 if newCount > 0 {
                     windowClosingAfterTabTransfer = false
@@ -95,6 +98,7 @@ extension MainView {
             // Focus follows identity; reordering the same tab needs no handoff.
             .onChange(of: tabsModel.selectedTabID) { oldValue, newValue in
                 handleSelectedTabChange(oldValue: oldValue, newValue: newValue)
+                updateSidebarToolbarRetention()
             }
             .onChange(of: tabsModel.displayedTabID) { oldValue, newValue in
                 handleDisplayedTabChange(oldValue: oldValue, newValue: newValue)

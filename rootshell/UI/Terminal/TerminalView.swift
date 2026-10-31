@@ -2683,6 +2683,7 @@ extension Ghostty {
         /// bottom padding from live state. The version bump is a no-op layout
         /// when the live reserve matches the latched value.
         private func clearOverlayLatchedToolbarReserve() {
+            keyboardAccessoryController?.setSidebarToolbarRetention(false)
             guard overlayLatchedToolbarReserve > 0 else { return }
             overlayLatchedToolbarReserve = 0
             EffectManager.shared.notifyKeyboardToolbarLayoutChanged()

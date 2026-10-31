@@ -77,6 +77,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
     /// Owner displaced by the last claim, so a refused focus change can hand
     /// the keyboard straight back to the responder that kept focus.
     private weak var displacedTouchKeyboardOwner: TerminalKeyboardAccessoryController?
+    private var retainsToolbarForSidebar = false
     private let fallbackTouchKeyboardState = TerminalFloatingKeyboardState()
     private var boundTouchKeyboardState: TerminalFloatingKeyboardState?
     private var touchKeyboardEnabled = SettingsStore.shared.value(Settings.Keyboard.touchEnabled)
@@ -153,7 +154,9 @@ final class TerminalKeyboardAccessoryController: NSObject {
     func releaseTouchKeyboardState() {
         boundTouchKeyboardState = nil
         // Focus can move between panes without the keyboard hiding.
-        reclaimWindowToolbar()
+        if !retainsToolbarForSidebar || host?.keyboardHostView.window == nil {
+            reclaimWindowToolbar()
+        }
         guard let scope = ownedTouchKeyboardScope else { return }
         scope.keyboard.cancelInteraction(preservingModifiers: true)
         scope.toolbarInput.isActive = false
@@ -182,6 +185,15 @@ final class TerminalKeyboardAccessoryController: NSObject {
             }
             scope.dismissOverlay()
         }
+    }
+
+    func setSidebarToolbarRetention(_ retained: Bool) {
+        guard retainsToolbarForSidebar != retained else { return }
+        retainsToolbarForSidebar = retained
+        Ghostty.logger.info("Keyboard toolbar sidebar retention=\(retained, privacy: .public)")
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        scheduleWindowToolbarUpdate()
+        #endif
     }
 
     /// A key press on a parked card returns focus to its terminal first.
@@ -955,7 +967,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
     private var accessoryIsVisible: Bool {
         guard let host else { return false }
         return shouldShowKeyboardToolbar
-            && !host.keyboardAIAgentOverlayActive
+            && (!host.keyboardAIAgentOverlayActive || retainsToolbarForSidebar)
             && !keyboardToolbarCollapsed
             && !(toolbarOnlyMode && toolbarOnlyHidesToolbar)
     }
@@ -1023,7 +1035,8 @@ final class TerminalKeyboardAccessoryController: NSObject {
     /// Keep the phone toolbar inside its terminal column in both input modes.
     /// The Duo also uses this host to place the row below its keyboard fold.
     private var windowToolbarFrame: CGRect? {
-        if let host, host.keyboardIsFirstResponder, !usesTouchKeyboard,
+        guard !retainsToolbarForSidebar || !hasPresentedUIKitModal else { return nil }
+        if let host, (host.keyboardIsFirstResponder || retainsToolbarForSidebar), !usesTouchKeyboard,
            host.keyboardHostView.traitCollection.userInterfaceIdiom == .phone,
            let accessory = keyboardAccessory, let window = host.keyboardHostView.window,
            toolbarOnlyMode || TerminalTouchKeyboardWindowState.forWindow(window).foldRegion == nil,
@@ -1063,6 +1076,16 @@ final class TerminalKeyboardAccessoryController: NSObject {
                       width: window.bounds.width, height: height)
     }
 
+    private var hasPresentedUIKitModal: Bool {
+        guard let root = host?.keyboardHostView.window?.rootViewController else { return false }
+        var controllers = [root]
+        while let controller = controllers.popLast() {
+            if controller.presentedViewController != nil { return true }
+            controllers.append(contentsOf: controller.children)
+        }
+        return false
+    }
+
     /// UIKit releases a withdrawn accessory during the input-view reload, so
     /// mounting waits until that reload has returned.
     private func scheduleWindowToolbarUpdate() {
@@ -1085,6 +1108,12 @@ final class TerminalKeyboardAccessoryController: NSObject {
         let container = windowToolbarHost
         if container.superview !== window {
             container.removeFromSuperview()
+        }
+        if let sidebarOverlay = window.subviews.first(where: {
+            $0.accessibilityIdentifier == edgeSidebarOverlayRootAccessibilityIdentifier
+        }) {
+            window.insertSubview(container, belowSubview: sidebarOverlay)
+        } else if container.superview !== window {
             window.addSubview(container)
         }
         if !windowToolbarMounted {
@@ -1103,7 +1132,6 @@ final class TerminalKeyboardAccessoryController: NSObject {
             // UIKit still shows the emptied accessory; let it re-query.
             if accessory.window != nil { host?.keyboardReloadInputViews() }
         }
-        window.bringSubviewToFront(container)
         accessory.toolbarView.terminalViewportInScreen = window.convert(frame, to: window.screen.coordinateSpace)
         guard container.frame != frame else { return }
         container.frame = frame
@@ -1262,7 +1290,8 @@ final class TerminalKeyboardAccessoryController: NSObject {
             let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0
             let curve = notification.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt ?? 0
             DispatchQueue.main.async { [weak self] in
-                guard let self, self.host?.keyboardIsFirstResponder == true else { return }
+                guard let self,
+                      self.host?.keyboardIsFirstResponder == true || self.retainsToolbarForSidebar else { return }
                 UIView.animate(withDuration: duration, delay: 0,
                                options: [UIView.AnimationOptions(rawValue: curve << 16), .beginFromCurrentState]) {
                     self.updateWindowToolbar()
