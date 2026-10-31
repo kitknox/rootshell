@@ -542,6 +542,9 @@ class KeyboardToolbarView: UIView {
         backgroundBlurView.layer.cornerRadius = sizes.toolbar.cornerRadius
         backgroundBlurView.layer.cornerCurve = .continuous
         backgroundBlurView.clipsToBounds = true
+        if #available(iOS 26.0, *), isPhone {
+            backgroundBlurView.clipsToBounds = false
+        }
         tintOverlayView.translatesAutoresizingMaskIntoConstraints = false
         tintOverlayView.isUserInteractionEnabled = false
         tintOverlayView.backgroundColor = glassTintColor(for: traitCollection)
@@ -592,6 +595,10 @@ class KeyboardToolbarView: UIView {
             plate.isUserInteractionEnabled = false
             plate.clipsToBounds = true
             plate.layer.cornerCurve = .continuous
+            if #available(iOS 26.0, *), isPhone {
+                plate.cornerConfiguration = .capsule()
+                plate.clipsToBounds = false
+            }
             sectionPlates.append(plate)
             mainToolbarContainer.insertSubview(plate, at: 0)
         }
@@ -718,6 +725,11 @@ class KeyboardToolbarView: UIView {
         layer.cornerRadius = backgroundBlurView.layer.cornerRadius
         backgroundBlurView.layer.borderWidth = floating ? 0.5 : 0
         backgroundBlurView.layer.borderColor = UIColor.label.withAlphaComponent(0.18).cgColor
+        if #available(iOS 26.0, *), isPhone {
+            backgroundBlurView.cornerConfiguration = .capsule(maximumRadius: sizes.toolbar.height / 2)
+            backgroundBlurView.layer.borderWidth = 0
+            layer.masksToBounds = !floating
+        }
         topBorder.isHidden = floating || displayedAppearance == .separate
         let insets = currentChromeHorizontalInsets()
         let width = bounds.width - insets.left - insets.right - currentEdgePadding() * 2
@@ -907,6 +919,9 @@ class KeyboardToolbarView: UIView {
             plate.layer.cornerRadius = area.height / 2
             plate.layer.borderWidth = 0.5
             plate.layer.borderColor = UIColor.label.withAlphaComponent(0.18).cgColor
+            if #available(iOS 26.0, *), isPhone {
+                plate.layer.borderWidth = 0
+            }
             plate.contentView.backgroundColor = glassTintColor(for: traitCollection)
         }
         backgroundBlurView.isHidden = separate && visibleDrawerRowCount == 0
@@ -1662,6 +1677,7 @@ class KeyboardToolbarView: UIView {
     /// The glass tint the accessory's bottom skirt reuses so the reserved
     /// home-indicator strip reads as part of this toolbar's plate.
     func glassTintColor(for traitCollection: UITraitCollection) -> UIColor {
+        if #available(iOS 26.0, *), isPhone { return .clear }
         let isLight = traitCollection.userInterfaceStyle != .dark
         return (isLight ? UIColor.white : UIColor.black).withAlphaComponent(0.16)
     }
