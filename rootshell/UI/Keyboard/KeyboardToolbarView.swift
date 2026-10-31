@@ -871,6 +871,9 @@ class KeyboardToolbarView: UIView {
         let paged = displayedScrollBehavior == .pages
         let cellWidth = paged ? pageLayout.cellWidth : max(diameter + 4, scrollFrame.width / CGFloat(max(1, scrollCount)))
         mainRowScrollView.frame = scrollFrame
+        let clipsToScrollCapsule = displayedAppearance == .separate && !scrollsAll
+        mainRowScrollView.layer.cornerCurve = .continuous
+        mainRowScrollView.layer.cornerRadius = clipsToScrollCapsule ? area.height / 2 : 0
         let contentWidth = paged ? pageLayout.contentWidth : max(scrollFrame.width, CGFloat(scrollCount) * cellWidth)
         scrollContentView.frame = CGRect(x: 0, y: 0, width: contentWidth, height: area.height)
         mainRowScrollView.contentSize = scrollContentView.bounds.size
