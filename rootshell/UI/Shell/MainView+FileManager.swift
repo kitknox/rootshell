@@ -13,12 +13,14 @@ import os
 
 extension MainView {
     var fileManagerShowsSidebar: Bool {
-        showFileManager && !isPhone && fileManagerPresentation == .sidebar && fileManagerModel != nil
+        showFileManager && !usesPinnedWideEdgeSidebarLayout && !isPhone
+            && fileManagerPresentation == .sidebar && fileManagerModel != nil
     }
 
     /// The floating or full-size HUD.
     var fileManagerShowsOverlay: Bool {
-        showFileManager && !isPhone && fileManagerPresentation != .sidebar && fileManagerModel != nil
+        showFileManager && !usesPinnedWideEdgeSidebarLayout && !isPhone
+            && fileManagerPresentation != .sidebar && fileManagerModel != nil
             && !edgeSidebarColumnOwns(.fileManager)
     }
 
@@ -158,7 +160,8 @@ extension MainView {
             model.activeSide = side
         }
 
-        if let presentation, !isPhone, presentation != fileManagerPresentation {
+        if let presentation, !usesPinnedWideEdgeSidebarLayout, !isPhone,
+           presentation != fileManagerPresentation {
             if showFileManager {
                 switchFileManagerPresentation(presentation)
                 return
@@ -188,10 +191,9 @@ extension MainView {
         adoptEdgeSidebarPage(.fileManager)
 
         if usesPinnedWideEdgeSidebarLayout {
-            if KeyboardTracker.shared.isHardwareKeyboard {
-                focusedTerminalForFileManager?.resignFirstResponder()
+            if edgeSidebarIsPinned(edgeSidebarAssignment.side(of: .fileManager)) {
+                scheduleTerminalRelayout()
             }
-            scheduleTerminalRelayout()
         } else if isPhone {
             resignFirstResponderForSheetPresentation()
         } else if fileManagerPresentation == .sidebar {
@@ -200,12 +202,12 @@ extension MainView {
         }
         showFileManager = true
         if fileManagerOwnsKeyboard { setOverlayOwnsKeyboardForAllTerminals(true) }
-        model.requestFocus()
     }
 
     func closeFileManager() {
         guard showFileManager else { return }
         let wasSidebar = fileManagerShowsSidebar || edgeSidebarColumnOwns(.fileManager)
+            || floatingEdgeSidebarPresented(edgeSidebarAssignment.side(of: .fileManager))
         showFileManager = false
         fileManagerModel?.save()
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented)
@@ -218,6 +220,7 @@ extension MainView {
     }
 
     func switchFileManagerPresentation(_ presentation: PanelPresentation) {
+        guard !usesPinnedWideEdgeSidebarLayout else { return }
         guard presentation != fileManagerPresentation else { return }
         #if !CHINA_BUILD
         yieldSlotToFileManager(presentation)
@@ -300,6 +303,9 @@ extension MainView {
             .environment(\.edgeSidebarTitleContext, EdgeSidebarTitleContext(
                 pages: edgeSidebarAssignment.pages(on: side),
                 selection: .fileManager,
+                side: side,
+                isPinned: edgeSidebarIsPinned(side),
+                onTogglePin: { toggleEdgeSidebarPin(side) },
                 onSelect: selectEdgeSidebarPage
             ))
             .frame(width: width)

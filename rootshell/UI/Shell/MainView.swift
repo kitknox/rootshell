@@ -370,6 +370,8 @@ struct MainView: View {
     /// overlay over it). Routes `showingTabSwitcher` to docked vs floating.
     /// See `tabSidebarIsDocked`.
     @Setting(Settings.Sidebar.pinned) var tabSidebarPinned
+    @Setting(Settings.Sidebar.leadingEdgePinned) var leadingEdgeSidebarPinned
+    @Setting(Settings.Sidebar.trailingEdgePinned) var trailingEdgeSidebarPinned
     @Setting(Settings.Sidebar.openRightInWideLayout) var edgeSidebarOpensRightInWideLayout
     /// `page:side` tokens. Stock is the tab switcher on the left and the
     /// other tools on the right.
@@ -391,11 +393,9 @@ struct MainView: View {
     /// user switches to large controls (default: large on phone, compact else).
     @Setting(Settings.Sidebar.largeControls) var tabSidebarLargeControls
 
-    /// User-resizable width shared by the pinned edge columns. Local
-    /// `@State` drives layout live during a divider drag; the value is
-    /// persisted (via `TabSidebarLayout`) only on release. Deliberately NOT
-    /// `@AppStorage` — that would republish and re-render `MainView` on every
-    /// drag frame (mirrors how `aiAgentSidebarWidth` works).
+    /// Per-edge, per-orientation widths. Live divider movement stays in local
+    /// state and writes settings only when the drag ends.
+    @State var edgeSidebarPreferredWidths: [EdgeSidebarWidthKey: CGFloat] = EdgeSidebarLayout.loadWidths()
     @State var tabSidebarDockedWidth: CGFloat = TabSidebarLayout.loadDockedWidth()
     /// True only while the user is actively dragging a pinned sidebar's
     /// resize divider; used solely to disable the width animation mid-drag.
@@ -408,8 +408,10 @@ struct MainView: View {
     var canPinTabSidebar: Bool {
         #if os(visionOS)
         return false
-        #else
+        #elseif targetEnvironment(macCatalyst)
         return workspaceSizeClass == .regular
+        #else
+        return true
         #endif
     }
 
@@ -435,8 +437,15 @@ struct MainView: View {
     /// would remain underneath it. Preserve the user's pin preference but use
     /// the floating window overlay until the takeover ends.
     var tabSidebarUsesDockedPresentation: Bool {
-        (usesPinnedWideEdgeSidebarLayout || (tabSidebarPinned && canPinTabSidebar))
+        #if os(visionOS)
+        return false
+        #elseif targetEnvironment(macCatalyst)
+        return tabSidebarPinned && canPinTabSidebar
             && tabsModel.fullScreenPaneID == nil
+        #else
+        edgeSidebarIsPinned(edgeSidebarAssignment.side(of: .tabSwitcher))
+            && tabsModel.fullScreenPaneID == nil
+        #endif
     }
 
     var tabSidebarIsDocked: Bool {
@@ -610,10 +619,9 @@ struct MainView: View {
                 .onChange(of: edgeSidebarViewportIsWide) { wasWide, isWide in
                     let mode = isWide ? "wide" : "compact"
                     Ghostty.logger.info("Edge sidebar layout mode=\(mode, privacy: .public) window=\(windowId, privacy: .public)")
-                    if !isWide { pendingWideSidebarAutoOpen = false }
-                    if wasWide && !isWide,
-                       edgeSidebarSideIsOpen(.leading), edgeSidebarSideIsOpen(.trailing) {
-                        closeEdgeSidebar(lastActiveEdgeSidebar.opposite)
+                    if !isWide {
+                        pendingWideSidebarAutoOpen = false
+                        applyPendingWideSidebarAutoOpen()
                     }
                     guard isWide, !wasWide else { return }
                     pendingWideSidebarAutoOpen = true
@@ -627,11 +635,6 @@ struct MainView: View {
                 }
                 .onChange(of: shellViewportSize.width) { _, _ in
                     applyPendingWideSidebarAutoOpen()
-                }
-                .onChange(of: canFitBothPinnedEdgeSidebars) { _, canFit in
-                    guard usesPinnedWideEdgeSidebarLayout, !canFit,
-                          edgeSidebarSideIsOpen(.leading), edgeSidebarSideIsOpen(.trailing) else { return }
-                    closeEdgeSidebar(lastActiveEdgeSidebar.opposite)
                 }
                 .background(WindowSceneReporter(onUpdate: { scene, safeAreaInsets, isKeyWindow, newStatusBarBottom in
                     let newID = scene?.session.persistentIdentifier

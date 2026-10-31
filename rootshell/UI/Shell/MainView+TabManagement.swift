@@ -104,6 +104,7 @@ extension MainView {
     func addNewTab() {
         // Dismiss settings sidebar if open (mutual exclusion)
         if showSettings { showSettings = false }
+        adoptEdgeSidebarPage(.connections)
         // Show connection sidebar
         connectionSidebarInitialTab = .lastUsed
         showConnectionSidebar = true

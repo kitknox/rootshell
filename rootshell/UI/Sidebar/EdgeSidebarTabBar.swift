@@ -10,6 +10,9 @@ import SwiftUI
 struct EdgeSidebarTitleContext {
     let pages: [EdgeSidebarPage]
     let selection: EdgeSidebarPage
+    let side: EdgeSidebarSide
+    let isPinned: Bool
+    let onTogglePin: () -> Void
     let onSelect: (EdgeSidebarPage) -> Void
 }
 
@@ -124,6 +127,7 @@ struct EdgeSidebarToolPicker: View {
 
 struct EdgeSidebarHeader<Actions: View>: View {
     @Environment(\.sheetThemeColors) private var themeColors
+    @Environment(\.edgeSidebarTitleContext) private var sidebarContext
 
     let title: String
     let systemImage: String
@@ -158,7 +162,10 @@ struct EdgeSidebarHeader<Actions: View>: View {
     }
 
     var body: some View {
-        headerRow
+        ViewThatFits(in: .horizontal) {
+            headerRow
+            compactHeader
+        }
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
         .padding(.horizontal, 8)
@@ -167,18 +174,49 @@ struct EdgeSidebarHeader<Actions: View>: View {
 
     private var headerRow: some View {
         HStack(spacing: 4) {
+            titleRow
+            Spacer(minLength: 0)
+            headerActions
+        }
+    }
+
+    private var compactHeader: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            titleRow
+            HStack(spacing: 4) {
+                Spacer(minLength: 0)
+                headerActions
+            }
+        }
+    }
+
+    private var titleRow: some View {
+        HStack(spacing: 4) {
             if let onBack {
                 headerButton("chevron.backward", accessibilityLabel: String(localized: "Back"), action: onBack)
             }
+            EdgeSidebarTitleMenu(title: title, systemImage: systemImage, status: status, statusColor: statusColor)
+                .frame(minWidth: 150, minHeight: 44, alignment: .leading)
+                .layoutPriority(1)
+        }
+    }
 
-            VStack(alignment: .leading, spacing: 1) {
-                EdgeSidebarTitleMenu(title: title, systemImage: systemImage, status: status, statusColor: statusColor)
-                    .frame(minHeight: 44, alignment: .leading)
-                    .layoutPriority(1)
+    private var headerActions: some View {
+        HStack(spacing: 4) {
+            #if !targetEnvironment(macCatalyst) && !os(visionOS)
+            if let sidebarContext {
+                Button(action: sidebarContext.onTogglePin) {
+                    Image(systemName: sidebarContext.isPinned ? "pin.slash" : "pin")
+                        .font(.title3)
+                        .foregroundStyle(sidebarContext.isPinned ? Color.accentColor : .secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel(String(localized: sidebarContext.isPinned ? "Unpin Sidebar" : "Pin Sidebar"))
+                .accessibilityValue(String(localized: sidebarContext.isPinned ? "Pinned" : "Not pinned"))
+                .help(String(localized: sidebarContext.isPinned ? "Unpin Sidebar" : "Pin Sidebar"))
             }
-            .layoutPriority(1)
-
-            Spacer(minLength: 0)
+            #endif
             actions
                 .fixedSize()
                 .frame(minHeight: 44)

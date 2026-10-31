@@ -34,7 +34,7 @@ extension MainView {
     /// The iPhone Settings sheet is still sliding away; the drawer waits for it.
     var httpCaptureWaitsForSettingsSheet: Bool {
         #if !CHINA_BUILD
-        pendingHTTPCaptureOpen && isPhone
+        pendingHTTPCaptureOpen && (usesPinnedWideEdgeSidebarLayout || isPhone)
         #else
         false
         #endif
@@ -54,12 +54,14 @@ extension MainView {
 
 extension MainView {
     var httpCaptureShowsSidebar: Bool {
-        showHTTPCapture && !isPhone && httpCapturePresentation == .sidebar && httpCaptureModel != nil
+        showHTTPCapture && !usesPinnedWideEdgeSidebarLayout && !isPhone
+            && httpCapturePresentation == .sidebar && httpCaptureModel != nil
     }
 
     /// The floating or full-size HUD.
     var httpCaptureShowsOverlay: Bool {
-        showHTTPCapture && !isPhone && httpCapturePresentation != .sidebar && httpCaptureModel != nil
+        showHTTPCapture && !usesPinnedWideEdgeSidebarLayout && !isPhone
+            && httpCapturePresentation != .sidebar && httpCaptureModel != nil
             && !edgeSidebarColumnOwns(.httpCapture)
     }
 
@@ -90,7 +92,9 @@ extension MainView {
         adoptEdgeSidebarPage(.httpCapture)
 
         if usesPinnedWideEdgeSidebarLayout {
-            scheduleTerminalRelayout()
+            if edgeSidebarIsPinned(edgeSidebarAssignment.side(of: .httpCapture)) {
+                scheduleTerminalRelayout()
+            }
         } else if isPhone {
             resignFirstResponderForSheetPresentation()
         } else if httpCapturePresentation == .sidebar {
@@ -110,6 +114,7 @@ extension MainView {
     func closeHTTPCapture() {
         guard showHTTPCapture else { return }
         let wasSidebar = httpCaptureShowsSidebar || edgeSidebarColumnOwns(.httpCapture)
+            || floatingEdgeSidebarPresented(edgeSidebarAssignment.side(of: .httpCapture))
         showHTTPCapture = false
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented)
         if wasSidebar {
@@ -123,6 +128,7 @@ extension MainView {
     }
 
     func switchHTTPCapturePresentation(_ presentation: PanelPresentation) {
+        guard !usesPinnedWideEdgeSidebarLayout else { return }
         guard presentation != httpCapturePresentation else { return }
         yieldSlotToHTTPCapture(presentation)
         yieldAgentInboxSlot(to: presentation)
@@ -137,7 +143,8 @@ extension MainView {
     /// HTTP capture is about to show as `presentation`: hide the file manager
     /// if it holds that spot (docked column or overlay), or either covers the terminal.
     private func yieldSlotToHTTPCapture(_ presentation: PanelPresentation) {
-        guard !isPhone, showFileManager, fileManagerPresentation.sharesSlot(with: presentation) else { return }
+        guard !usesPinnedWideEdgeSidebarLayout, !isPhone,
+              showFileManager, fileManagerPresentation.sharesSlot(with: presentation) else { return }
         if presentation == .sidebar, fileManagerPresentation == .sidebar,
            edgeSidebarAssignment.side(of: .fileManager) != edgeSidebarAssignment.side(of: .httpCapture) { return }
         closeFileManager()
@@ -146,7 +153,8 @@ extension MainView {
     /// The file manager is about to show as `presentation`: hide HTTP capture
     /// if it holds that spot.
     func yieldSlotToFileManager(_ presentation: PanelPresentation) {
-        guard !isPhone, showHTTPCapture, httpCapturePresentation.sharesSlot(with: presentation) else { return }
+        guard !usesPinnedWideEdgeSidebarLayout, !isPhone,
+              showHTTPCapture, httpCapturePresentation.sharesSlot(with: presentation) else { return }
         if presentation == .sidebar, httpCapturePresentation == .sidebar,
            edgeSidebarAssignment.side(of: .fileManager) != edgeSidebarAssignment.side(of: .httpCapture) { return }
         closeHTTPCapture()
@@ -171,6 +179,9 @@ extension MainView {
             .environment(\.edgeSidebarTitleContext, EdgeSidebarTitleContext(
                 pages: edgeSidebarAssignment.pages(on: side),
                 selection: .httpCapture,
+                side: side,
+                isPinned: edgeSidebarIsPinned(side),
+                onTogglePin: { toggleEdgeSidebarPin(side) },
                 onSelect: selectEdgeSidebarPage
             ))
             .frame(width: width)

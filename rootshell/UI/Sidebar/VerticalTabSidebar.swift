@@ -976,9 +976,14 @@ struct VerticalTabSidebar: View {
                     toggleSidebarControlSize()
                 }
                 Button(agentInboxSortHelp, systemImage: agentInboxSortIcon, action: cycleSidebarSort)
-                if canPin {
-                    Button(isPinned ? "Unpin Sidebar" : "Pin Sidebar", systemImage: isPinned ? "pin.slash" : "pin") {
-                        onTogglePin()
+                if canPin || edgeSidebarTitleContext != nil {
+                    let pinned = edgeSidebarTitleContext?.isPinned ?? isPinned
+                    Button(pinned ? "Unpin Sidebar" : "Pin Sidebar", systemImage: pinned ? "pin.slash" : "pin") {
+                        if let context = edgeSidebarTitleContext {
+                            context.onTogglePin()
+                        } else {
+                            onTogglePin()
+                        }
                     }
                 }
                 Button("Settings", systemImage: "gearshape", action: onOpenSettings)

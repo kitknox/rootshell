@@ -1483,15 +1483,18 @@ extension MainView {
         if usesPinnedWideEdgeSidebarLayout && (leadingEdgePresented || trailingEdgePresented) {
             let edgeCount = CGFloat((leadingEdgePresented ? 1 : 0) + (trailingEdgePresented ? 1 : 0))
             let edgeCardGap: CGFloat = roundedPanes ? PaneCardStyle.gap : 0
-            let preferredEdgeWidth = min(max(tabSidebarDockedWidth, TabSidebarLayout.minWidth),
-                                         UIDevice.current.userInterfaceIdiom == .phone ? min(280, rowWidth * 0.45) : rowWidth * 0.5)
-            let edgeMinimum = min(TabSidebarLayout.minWidth, preferredEdgeWidth)
-            let terminalWidthFloor = min(minimumTerminalWidth, max(0, rowWidth - (edgeMinimum + edgeCardGap) * edgeCount))
-            let edgeBudget = max(0, rowWidth - terminalWidthFloor)
-            let preferredEdgeSlotWidth = preferredEdgeWidth + edgeCardGap
-            let edgeScale = min(1, edgeBudget / max(preferredEdgeSlotWidth * edgeCount, 1))
-            let leadingEdgeWidth = leadingEdgePresented ? preferredEdgeSlotWidth * edgeScale : 0
-            let trailingEdgeWidth = trailingEdgePresented ? preferredEdgeSlotWidth * edgeScale : 0
+            let terminalWidthFloor: CGFloat = 96
+            let edgeGaps = edgeCardGap * edgeCount
+            let edgeBudget = max(0, rowWidth - terminalWidthFloor - edgeGaps)
+            let preferredLeading = leadingEdgePresented ? edgeSidebarPreferredWidth(.leading) : 0
+            let preferredTrailing = trailingEdgePresented ? edgeSidebarPreferredWidth(.trailing) : 0
+            let desiredTotal = preferredLeading + preferredTrailing
+            let minimumColumnWidth = min(200, edgeBudget / max(edgeCount, 1))
+            let minimumTotal = edgeCount * minimumColumnWidth
+            let excessTotal = max(0, desiredTotal - minimumTotal)
+            let excessScale = min(1, max(0, edgeBudget - minimumTotal) / max(excessTotal, 1))
+            let leadingEdgeWidth = leadingEdgePresented ? minimumColumnWidth + max(0, preferredLeading - minimumColumnWidth) * excessScale : 0
+            let trailingEdgeWidth = trailingEdgePresented ? minimumColumnWidth + max(0, preferredTrailing - minimumColumnWidth) * excessScale : 0
 
             #if !CHINA_BUILD
             let currentTabId = terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].id : UUID()
@@ -1515,13 +1518,13 @@ extension MainView {
                 : 0
             let legacyWidthDemand = desiredAISidebarWidth + desiredFileManagerWidth
                 + desiredHTTPCaptureWidth + desiredAgentInboxWidth
-            let legacyWidthBudget = max(0, rowWidth - terminalWidthFloor - leadingEdgeWidth - trailingEdgeWidth)
+            let legacyWidthBudget = max(0, rowWidth - terminalWidthFloor - edgeGaps - leadingEdgeWidth - trailingEdgeWidth)
             let legacyScale = min(1, legacyWidthBudget / max(legacyWidthDemand, 1))
             let aiSidebarWidth = desiredAISidebarWidth * legacyScale
             let fileManagerWidth = desiredFileManagerWidth * legacyScale
             let httpCaptureWidth = desiredHTTPCaptureWidth * legacyScale
             let agentInboxWidth = desiredAgentInboxWidth * legacyScale
-            let terminalWidth = max(0, rowWidth - leadingEdgeWidth - trailingEdgeWidth
+            let terminalWidth = max(terminalWidthFloor, rowWidth - edgeGaps - leadingEdgeWidth - trailingEdgeWidth
                 - aiSidebarWidth - fileManagerWidth - httpCaptureWidth - agentInboxWidth)
 
             return TerminalRowColumns(
@@ -1870,7 +1873,7 @@ extension MainView {
         let innerGap: CGFloat = usesPinnedWideEdgeSidebarLayout && roundedPanes ? PaneCardStyle.gap : 0
         let card = HStack(spacing: 0) {
             if side == .trailing {
-                dockedTabSidebarDivider(side: .right, geometry: geometry)
+                edgePinnedSidebarDivider(side: .trailing, geometry: geometry)
             }
             edgeSidebarBody(
                 side: side,
@@ -1881,7 +1884,7 @@ extension MainView {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .paneCardClip(roundedPanes)
             if side == .leading {
-                dockedTabSidebarDivider(side: .left, geometry: geometry)
+                edgePinnedSidebarDivider(side: .leading, geometry: geometry)
             }
         }
         .frame(maxHeight: .infinity)
@@ -1911,6 +1914,10 @@ extension MainView {
                                 cardSurface: theme.themeColors?.background ?? Color(uiColor: .systemBackground)
                                ))
                 .padding(side == .leading ? .trailing : .leading, innerGap)
+                .background(alignment: side == .leading ? .leading : .trailing) {
+                    dockedTabSidebarBackground(theme: theme)
+                        .ignoresSafeArea(.container, edges: side == .leading ? .leading : .trailing)
+                }
         } else {
             card
         }
@@ -1931,6 +1938,32 @@ extension MainView {
             cardGap: roundedPanes ? PaneCardStyle.gap : nil,
             backgroundColor: .clear,
             onCommit: { TabSidebarLayout.saveDockedWidth($0) }
+        )
+    }
+
+    private func edgePinnedSidebarDivider(side: EdgeSidebarSide, geometry: GeometryProxy) -> some View {
+        let key = edgeSidebarWidthKey(side)
+        let otherSide = side.opposite
+        let otherWidth = edgeSidebarColumnIsPresented(otherSide)
+            ? edgeSidebarPreferredWidth(otherSide) + (roundedPanes ? PaneCardStyle.gap : 0)
+            : 0
+        let gap = roundedPanes ? PaneCardStyle.gap : 0
+        let maximum = max(0, geometry.size.width - otherWidth - 96 - gap * 2)
+        let minimum = min(200, maximum)
+        return SidebarResizeDivider(
+            side: side == .leading ? .left : .right,
+            width: edgeSidebarWidthBinding(side),
+            isDragging: $tabSidebarIsDragging,
+            minWidth: minimum,
+            maxWidth: maximum,
+            defaultWidth: nil,
+            cardGap: roundedPanes ? PaneCardStyle.gap : nil,
+            backgroundColor: .clear,
+            onCommit: { width in
+                EdgeSidebarLayout.saveWidth(width, for: key)
+                Ghostty.logger.info("Edge sidebar width commit side=\(side.rawValue, privacy: .public) width=\(width, privacy: .public)")
+            },
+            commitsOnRelease: true
         )
     }
 
@@ -2023,6 +2056,9 @@ extension MainView {
         .environment(\.edgeSidebarTitleContext, EdgeSidebarTitleContext(
             pages: edgeSidebarAssignment.pages(on: edgeSidebarAssignment.side(of: .aiAgent)),
             selection: .aiAgent,
+            side: edgeSidebarAssignment.side(of: .aiAgent),
+            isPinned: edgeSidebarIsPinned(edgeSidebarAssignment.side(of: .aiAgent)),
+            onTogglePin: { toggleEdgeSidebarPin(edgeSidebarAssignment.side(of: .aiAgent)) },
             onSelect: selectEdgeSidebarPage
         ))
         .frame(width: sidebarWidth)
@@ -2063,6 +2099,33 @@ enum TabSidebarLayout {
 
     static func saveDockedWidth(_ width: CGFloat) {
         SettingsStore.shared.set(Settings.Sidebar.dockedWidth, Double(max(width, minWidth)))
+    }
+}
+
+struct EdgeSidebarWidthKey: Hashable {
+    let side: EdgeSidebarSide
+    let isLandscape: Bool
+}
+
+@MainActor
+enum EdgeSidebarLayout {
+    static func loadWidths() -> [EdgeSidebarWidthKey: CGFloat] {
+        [
+            EdgeSidebarWidthKey(side: .leading, isLandscape: false): CGFloat(SettingsStore.shared.get(Settings.Sidebar.leadingPortraitWidth)),
+            EdgeSidebarWidthKey(side: .leading, isLandscape: true): CGFloat(SettingsStore.shared.get(Settings.Sidebar.leadingLandscapeWidth)),
+            EdgeSidebarWidthKey(side: .trailing, isLandscape: false): CGFloat(SettingsStore.shared.get(Settings.Sidebar.trailingPortraitWidth)),
+            EdgeSidebarWidthKey(side: .trailing, isLandscape: true): CGFloat(SettingsStore.shared.get(Settings.Sidebar.trailingLandscapeWidth))
+        ]
+    }
+
+    static func saveWidth(_ width: CGFloat, for key: EdgeSidebarWidthKey) {
+        let value = Double(max(0, width))
+        switch (key.side, key.isLandscape) {
+        case (.leading, false): SettingsStore.shared.set(Settings.Sidebar.leadingPortraitWidth, value)
+        case (.leading, true): SettingsStore.shared.set(Settings.Sidebar.leadingLandscapeWidth, value)
+        case (.trailing, false): SettingsStore.shared.set(Settings.Sidebar.trailingPortraitWidth, value)
+        case (.trailing, true): SettingsStore.shared.set(Settings.Sidebar.trailingLandscapeWidth, value)
+        }
     }
 }
 

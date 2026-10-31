@@ -80,7 +80,7 @@ extension MainView {
             (showQuickSettingsOverlay && edgeSidebarUsesExternalPresentation(.quickSettings)) ||
             showKeyboardChooser ||
             (showOpenInFolderOverlay && edgeSidebarUsesExternalPresentation(.openInFolder)) ||
-            (httpCaptureHoldsKeyboard && !isPhone) ||
+            (httpCaptureHoldsKeyboard && !edgeSidebarUsesDrawer(.httpCapture)) ||
             (fileManagerOwnsKeyboard && !fileManagerUsesEdgeSidebar) ||
             agentInboxOwnsKeyboard ||
             // The iPhone presentation is a sheet that owns the keyboard. On
