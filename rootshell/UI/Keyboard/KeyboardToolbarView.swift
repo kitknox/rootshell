@@ -1514,7 +1514,7 @@ class KeyboardToolbarView: UIView {
         row.configureScrollingLayout(
             buttonCount: row.stackView.arrangedSubviews.count,
             sizes: sizes,
-            behavior: KeyboardToolbarManager.shared.config.scrollBehavior
+            behavior: KeyboardToolbarManager.shared.config.drawerScrollBehavior
         )
     }
 

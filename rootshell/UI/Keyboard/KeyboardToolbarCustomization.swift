@@ -416,6 +416,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
     var appearance: ToolbarAppearance
     var scrollScope: ToolbarScrollScope
     var scrollBehavior: ToolbarScrollBehavior
+    var drawerScrollBehavior: ToolbarScrollBehavior = .pages
 
     // MARK: - Defaults
 
@@ -709,6 +710,7 @@ extension ToolbarLayoutConfig: Codable {
         case appearance
         case scrollScope
         case scrollBehavior
+        case drawerScrollBehavior
     }
 
     init(from decoder: Decoder) throws {
@@ -721,6 +723,7 @@ extension ToolbarLayoutConfig: Codable {
         appearance = try container.decodeIfPresent(ToolbarAppearance.self, forKey: .appearance) ?? .single
         scrollScope = try container.decodeIfPresent(ToolbarScrollScope.self, forKey: .scrollScope) ?? .primary
         scrollBehavior = try container.decodeIfPresent(ToolbarScrollBehavior.self, forKey: .scrollBehavior) ?? .pages
+        drawerScrollBehavior = try container.decodeIfPresent(ToolbarScrollBehavior.self, forKey: .drawerScrollBehavior) ?? scrollBehavior
         if let rows = try container.decodeIfPresent([[KeySlot]].self, forKey: .drawerRows) {
             drawerRows = rows.isEmpty ? [[]] : rows
         } else {
@@ -740,6 +743,7 @@ extension ToolbarLayoutConfig: Codable {
         try container.encode(appearance, forKey: .appearance)
         try container.encode(scrollScope, forKey: .scrollScope)
         try container.encode(scrollBehavior, forKey: .scrollBehavior)
+        try container.encode(drawerScrollBehavior, forKey: .drawerScrollBehavior)
     }
 }
 
