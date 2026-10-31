@@ -35,6 +35,14 @@ struct DuoLayoutContext: Equatable {
         return []
     }
 
+    static func unoccludedLandscapeEdge(bounds: CGRect, occlusions: [CGRect], rightToLeft: Bool) -> Edge.Set {
+        let sideRegions = occlusions.filter { !$0.isEmpty && $0.height > $0.width }
+        let leftOccupied = sideRegions.contains { $0.midX < bounds.midX }
+        let rightOccupied = sideRegions.contains { $0.midX > bounds.midX }
+        guard leftOccupied != rightOccupied else { return [] }
+        return leftOccupied != rightToLeft ? .trailing : .leading
+    }
+
     func showsHorizontalTabs(globallyHidden: Bool) -> Bool {
         if usesFullWidth {
             return frontMode == .belowCamera || (behindCameraShowsTabs && !globallyHidden)

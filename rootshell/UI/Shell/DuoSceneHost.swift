@@ -125,13 +125,10 @@ struct DuoWorkspaceGeometry<Content: View>: View {
         if #available(iOS 27.1, *), UIDevice.current.userInterfaceIdiom == .phone,
            !context.hasHinge, geometry.size.width > geometry.size.height {
             let regions = geometry.reservedRegions(kind: .occlusion, layoutDirectionBehavior: .fixed)
-            let cameraAtLeft = regions.contains { $0.frame.minX <= 0 && $0.frame.midX < geometry.size.width / 2 }
-            let cameraAtRight = regions.contains { $0.frame.maxX >= geometry.size.width && $0.frame.midX > geometry.size.width / 2 }
-            if cameraAtLeft && !cameraAtRight {
-                edges.insert(layoutDirection == .rightToLeft ? .leading : .trailing)
-            } else if cameraAtRight && !cameraAtLeft {
-                edges.insert(layoutDirection == .rightToLeft ? .trailing : .leading)
-            }
+            edges.formUnion(DuoLayoutContext.unoccludedLandscapeEdge(
+                bounds: CGRect(origin: .zero, size: geometry.size),
+                occlusions: regions.map(\.frame), rightToLeft: layoutDirection == .rightToLeft
+            ))
         }
         #endif
         return edges
@@ -169,6 +166,14 @@ struct DuoWorkspaceGeometry<Content: View>: View {
             headerTopLimit: headerTopLimit.map { safeFrame.minY + $0 - windowSafeAreaTop }
         )
         layout.safeAreaTop = max(windowSafeAreaTop, safe.safeAreaInsets.top)
+        #if !targetEnvironment(macCatalyst) && !os(visionOS)
+        if UIDevice.current.userInterfaceIdiom == .phone, !context.hasHinge,
+           expanded.size.width > expanded.size.height {
+            let reclaimed = ignoredEdges(in: safe)
+            if reclaimed.contains(.leading) { layout.headerInsets.leading = 0 }
+            if reclaimed.contains(.trailing) { layout.headerInsets.trailing = 0 }
+        }
+        #endif
         return layout
     }
 }
