@@ -2,10 +2,17 @@ import SwiftUI
 
 extension MainView {
     func horizontalTabHeader(geometry: GeometryProxy, resolvedTheme: ResolvedTabBarTheme) -> some View {
-        let cardInset = integratedCardLeadingInset(windowWidth: geometry.size.width)
-        let surfaceFill = integratedTabSurfaceFill(theme: resolvedTheme)
-        return HStack(spacing: 0) {
-            tabBarLeadingSpacer(geometry: geometry, theme: resolvedTheme)
+        let rowWidth = terminalRowViewportWidth > 0 ? terminalRowViewportWidth : geometry.size.width
+        let columns = terminalRowColumns(width: rowWidth)
+        let cardGap = roundedPanes ? PaneCardStyle.gap : 0
+        let followsTerminalColumn = usesPinnedWideEdgeSidebarLayout
+        let headerWidth = followsTerminalColumn ? columns.terminal : geometry.size.width
+        let terminalLeadingInset = followsTerminalColumn ? cardGap + leadingWidth(in: columns) : 0
+        return GeometryReader { terminalHeaderGeometry in
+            let cardInset = integratedCardLeadingInset(windowWidth: terminalHeaderGeometry.size.width)
+            let surfaceFill = integratedTabSurfaceFill(theme: resolvedTheme)
+            HStack(spacing: 0) {
+            tabBarLeadingSpacer(geometry: terminalHeaderGeometry, theme: resolvedTheme)
 
             if edgeSidebarButtonsEnabled, !edgeSidebarAssignment.pages(on: .leading).isEmpty {
                 tabBarEdgeSidebarButton(side: .leading, theme: resolvedTheme)
@@ -22,7 +29,7 @@ extension MainView {
             // re-evaluates only on the property reads it
             // actually performs, so no manual refresh signal
             // is needed.
-            tabBarTrack(in: geometry, theme: resolvedTheme)
+            tabBarTrack(in: terminalHeaderGeometry, theme: resolvedTheme)
                 .layoutPriority(0)
                 // Toggling grouped mode changes `navigationTabs`,
                 // which can flip the tab-bar display mode (e.g.
@@ -63,9 +70,9 @@ extension MainView {
                 .layoutPriority(-1)
                 tabBarActionButtons(theme: resolvedTheme)
             }
-        }
-        .frame(height: TabMetrics.tabBarHeight)
-        .frame(maxWidth: .infinity)
+            }
+            .frame(height: TabMetrics.tabBarHeight)
+            .frame(maxWidth: .infinity)
         // Track the docked column's spring; a live drag drives it directly.
         .animation(tabSidebarIsDragging ? nil : .spring(response: 0.3, dampingFraction: 0.85), value: cardInset)
         .backgroundPreferenceValue(IntegratedActiveTabBoundsPreferenceKey.self) { bounds in
@@ -101,7 +108,7 @@ extension MainView {
 #if targetEnvironment(macCatalyst)
         .catalystCursorRegion()
 #endif
-        .onPreferenceChange(TabFramePreferenceKey.self) { frames in
+            .onPreferenceChange(TabFramePreferenceKey.self) { frames in
             // Tab frame preferences are only used by Catalyst
             // titlebar dragging. Guard and defer the write so
             // selection animations don't feed layout-pass
@@ -111,6 +118,11 @@ extension MainView {
                     tabFrames = frames
                 }
             }
+            }
         }
+        .frame(width: headerWidth, height: TabMetrics.tabBarHeight, alignment: .leading)
+        // Keep the actions over the terminal column when a sidebar is pinned.
+        .padding(.leading, terminalLeadingInset)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
