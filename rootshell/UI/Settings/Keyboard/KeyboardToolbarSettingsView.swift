@@ -183,6 +183,23 @@ struct KeyboardToolbarSettingsView: View {
 
     private var drawerBehaviorSection: some View {
         Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Drawer Scrolling")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Picker("Drawer Scrolling", selection: Binding(
+                    get: { manager.config.drawerScrollBehavior },
+                    set: { manager.setDrawerScrollBehavior($0) }
+                )) {
+                    ForEach(ToolbarScrollBehavior.allCases, id: \.self) { behavior in
+                        Text(behavior.displayName).tag(behavior)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            .themedRow()
+
             Stepper(value: Binding(
                 get: { manager.drawerRowCount },
                 set: { manager.setDrawerRowCount($0) }

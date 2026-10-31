@@ -223,6 +223,15 @@ class KeyboardToolbarManager {
         notifyChange()
     }
 
+    func setDrawerScrollBehavior(_ behavior: ToolbarScrollBehavior) {
+        guard config.drawerScrollBehavior != behavior else { return }
+        var updated = config
+        updated.drawerScrollBehavior = behavior
+        config = updated
+        Self.logger.info("Toolbar user action: drawer scroll behavior changed to \(behavior.rawValue, privacy: .public)")
+        notifyChange()
+    }
+
     func moveKeyToSection(_ slot: KeySlot, from: ToolbarSection, to: ToolbarSection) {
         guard from != to else { return }
 
