@@ -75,10 +75,12 @@ struct FilePaneView: View {
 
             Spacer(minLength: 4)
 
-            navButton("chevron.left", command: .back, enabled: pane.canGoBack) { pane.goBack() }
-            navButton("chevron.right", command: .forward, enabled: pane.canGoForward) { pane.goForward() }
-            navButton("arrow.up", command: .parent, enabled: !pane.path.isEmpty && pane.path != "/") { pane.goUp() }
-            navButton("arrow.clockwise", command: .refresh, enabled: !pane.isBusy) { pane.refresh() }
+            if !embedsPaneSwitcher {
+                navButton("chevron.left", command: .back, enabled: pane.canGoBack) { pane.goBack() }
+                navButton("chevron.right", command: .forward, enabled: pane.canGoForward) { pane.goForward() }
+                navButton("arrow.up", command: .parent, enabled: !pane.path.isEmpty && pane.path != "/") { pane.goUp() }
+                navButton("arrow.clockwise", command: .refresh, enabled: !pane.isBusy) { pane.refresh() }
+            }
             if !usesPointerSemantics {
                 Button {
                     isSelecting.toggle()
@@ -160,6 +162,10 @@ struct FilePaneView: View {
 
     private var filterRow: some View {
         HStack(spacing: 6) {
+            if embedsPaneSwitcher {
+                navButton("chevron.left", command: .back, enabled: pane.canGoBack) { pane.goBack() }
+                navButton("arrow.up", command: .parent, enabled: !pane.path.isEmpty && pane.path != "/") { pane.goUp() }
+            }
             breadcrumb
             Image(systemName: "line.3.horizontal.decrease").foregroundStyle(.secondary).font(.caption)
             SidebarSearchField(

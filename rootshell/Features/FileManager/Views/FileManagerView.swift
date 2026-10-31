@@ -130,7 +130,7 @@ struct FileManagerView: View {
     private var header: some View {
         if edgeSidebarTitleContext != nil {
             EdgeSidebarHeader(
-                title: String(localized: "Files"),
+                title: String(localized: "File Manager"),
                 systemImage: "folder.badge.gearshape",
                 onClose: onClose
             ) {
@@ -145,7 +145,7 @@ struct FileManagerView: View {
 
     private var standaloneHeader: some View {
         HStack(spacing: 10) {
-            EdgeSidebarTitleMenu(title: String(localized: "Files"), systemImage: "folder.badge.gearshape")
+            EdgeSidebarTitleMenu(title: String(localized: "File Manager"), systemImage: "folder.badge.gearshape")
             Spacer()
             if let onSwitchPresentation, let current = style.presentation {
                 PanelPresentationMenu(current: current, onSwitch: onSwitchPresentation)
@@ -398,6 +398,23 @@ struct FileManagerMoreMenuItems: View {
 
     var body: some View {
         let pane = side.map { manager.pane($0) } ?? manager.activePane
+        if side == nil {
+            Button {
+                activate()
+                pane.goForward()
+            } label: {
+                Label(FileManagerShortcut.shortcut(for: .forward).title, systemImage: "chevron.right")
+            }
+            .disabled(!pane.canGoForward)
+            Button {
+                activate()
+                pane.refresh()
+            } label: {
+                Label(FileManagerShortcut.shortcut(for: .refresh).title, systemImage: "arrow.clockwise")
+            }
+            .disabled(pane.isBusy)
+            Divider()
+        }
         Button { activate(); manager.perform(.paste) } label: {
             Label(FileManagerShortcut.shortcut(for: .paste).title, systemImage: "doc.on.clipboard")
         }
