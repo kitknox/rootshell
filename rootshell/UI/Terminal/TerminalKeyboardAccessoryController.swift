@@ -1049,7 +1049,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
             let keyboard = window.convert(KeyboardTracker.shared.keyboardFrame, from: window.screen.coordinateSpace)
             let keyboardIsDocked = !toolbarOnlyMode && TerminalKeyboardGeometry.isDocked(keyboard: keyboard, container: window.bounds)
             let bottom = keyboardIsDocked ? keyboard.minY : window.bounds.maxY - bottomSafeAreaStripHeight
-            if #available(iOS 27.1, *) {
+            if #available(iOS 27.1, *), window.bounds.height >= window.bounds.width {
                 let rowHeight = KeyboardSizes.current(traitCollection: host.keyboardHostView.traitCollection).toolbar.height
                 let bar = window.layoutGuide(for: .bar(onEdge: UIRectEdge.bottom, extent: rowHeight)).layoutFrame
                 let left = max(column.minX, bar.minX)
