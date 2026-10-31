@@ -15,8 +15,10 @@ nonisolated struct ClaudeCredentials: Equatable, Sendable {
     var accessToken: String
     /// Absent for setup-tokens, which carry no expiry.
     var expiresAt: Date?
-    /// "claude_max", "claude_pro", "api", ... — the CLI's own label.
+    /// "max", "pro", "api", ... (older CLIs: "claude_max"), the CLI's own label.
     var subscriptionType: String?
+    /// "default_claude_max_20x", ...; the only field that tells Ultra from Max.
+    var rateLimitTier: String?
 
     /// Expired tokens are not worth an API call; the running CLI refreshes
     /// its own credentials, so a re-probe is the fix, not a refresh.
@@ -27,7 +29,10 @@ nonisolated struct ClaudeCredentials: Equatable, Sendable {
 
     var planLabel: String? {
         switch subscriptionType?.lowercased() {
-        case "claude_max", "max": return "Max"
+        case "claude_ultra", "ultra": return "Ultra"
+        // Ultra is the renamed Max 20x; its grants can still say "max".
+        case "claude_max", "max":
+            return rateLimitTier?.lowercased().contains("20x") == true ? "Ultra" : "Max"
         case "claude_pro", "pro": return "Pro"
         case "api": return "API"
         default: return subscriptionType
@@ -48,6 +53,7 @@ nonisolated struct ClaudeCredentials: Equatable, Sendable {
             credentials.expiresAt = Date(timeIntervalSince1970: ms / 1000)
         }
         credentials.subscriptionType = oauth["subscriptionType"] as? String
+        credentials.rateLimitTier = oauth["rateLimitTier"] as? String
         return credentials
     }
 }
