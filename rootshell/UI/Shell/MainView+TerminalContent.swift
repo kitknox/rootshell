@@ -951,7 +951,7 @@ extension MainView {
         // A toolbar in the lower tabletop input region must not consume a
         // second toolbar-height strip from the upper terminal workspace.
         let toolbarIntersectsContainer = accessoryFrame.map {
-            TerminalKeyboardGeometry.overlapHeight(keyboard: $0, container: containerFrame) > 0
+            TerminalKeyboardGeometry.overlapHeight(keyboard: $0, container: containerFrame, requireFullWidth: false) > 0
         } ?? window.map {
             containerFrame.maxY >= $0.bounds.maxY - $0.safeAreaInsets.bottom - 2
         } ?? false
