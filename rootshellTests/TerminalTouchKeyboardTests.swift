@@ -1269,7 +1269,13 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         XCTAssertEqual(row(.german, 2), "yxcvbnm")
         XCTAssertEqual(row(.french, 0), "azertyuiop")
         XCTAssertEqual(row(.french, 1), "qsdfghjklm")
-        XCTAssertEqual(row(.portuguese, 1), "asdfghjklç")
+        // Apple's Portuguese keyboards are plain QWERTY; ç is on long-press.
+        XCTAssertEqual(row(.portuguese, 1), "asdfghjkl")
+        XCTAssertEqual(row(.brazilianPortuguese, 1), "asdfghjkl")
+        for layout in [Model.Layout.englishQWERTZ, .croatian, .hungarian, .slovenian] {
+            XCTAssertEqual(row(layout, 0), "qwertzuiop", "\(layout)")
+            XCTAssertEqual(row(layout, 2), "yxcvbnm", "\(layout)")
+        }
         XCTAssertEqual(row(.turkish, 0), "qwertyuıopğü")
         XCTAssertEqual(row(.turkish, 2), "zxcvbnmöç")
         // Shift and Delete fill out the shorter third row.
@@ -1302,19 +1308,40 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         XCTAssertNil(Model.Layout.french.shiftedLetter("'"))
     }
 
-    func testLayoutVariantsLeadWithNativeLetters() {
-        XCTAssertEqual(Model.Layout.french.variants(for: "e")?.first, "é")
-        XCTAssertEqual(Model.Layout.german.variants(for: "a")?.first, "ä")
-        XCTAssertEqual(Model.Layout.portuguese.variants(for: "a").map { String($0.prefix(4)) }, "áàâã")
-        XCTAssertEqual(Model.Layout.us.variants(for: "e")?.first, "è")
-        for layout in Model.Layout.allCases {
-            let variants = layout.variants(for: "e") ?? ""
-            XCTAssertEqual(Set(variants).count, variants.count, "\(layout) repeats a variant")
+    func testLongPressListsFollowApple() {
+        func list(_ layout: Model.Layout, _ text: String, shifted: Bool = false) -> [String]? {
+            layout.variants(for: text, shifted: shifted)
         }
-        XCTAssertTrue(Model.Layout.us.variants(for: "$")?.contains("€") == true)
-        XCTAssertEqual(Model.Layout.spanish.variants(for: "?"), "¿")
-        XCTAssertTrue(Model.Layout.german.variants(for: "\"")?.contains("„") == true)
-        XCTAssertNil(Model.Layout.us.variants(for: "q"))
+        XCTAssertEqual(list(.us, "e")?.first, "e")
+        XCTAssertEqual(list(.french, "e")?.first, "é")
+        XCTAssertEqual(list(.german, "a")?.first, "ä")
+        XCTAssertEqual(list(.romanian, "s")?.first, "ș")
+        XCTAssertEqual(list(.portuguese, "c"), ["ç", "c", "č", "ć"])
+        XCTAssertEqual(list(.brazilianPortuguese, "c"), ["ç", "c"])
+        XCTAssertEqual(list(.brazilianPortuguese, "1"), ["1º", "1ª", "1"])
+        XCTAssertEqual(list(.portuguese, "1"), ["1.º", "1.ª", "1"])
+        // Languages don't inherit English letters, as on Apple's keyboards.
+        XCTAssertNil(list(.german, "z"))
+        XCTAssertNil(list(.us, "q"))
+        XCTAssertEqual(list(.englishQWERTZ, "a"), list(.us, "a"))
+        // Capitals use Apple's own order where it differs.
+        XCTAssertEqual(list(.us, "s", shifted: true), ["S", "ẞ", "Ś", "Š", "Ş", "Ș"])
+        XCTAssertEqual(list(.us, "e", shifted: true)?.first, "E")
+        XCTAssertEqual(list(.turkish, "i", shifted: true)?.contains("İ"), true)
+        // Punctuation falls back to the shared lists.
+        XCTAssertEqual(list(.spanish, "?"), ["¿", "?"])
+        XCTAssertEqual(list(.us, "$"), ["$", "¢"])
+        XCTAssertEqual(list(.german, "\"")?.first, "„")
+        for layout in Model.Layout.allCases {
+            let keys = Model.Page.allCases.flatMap { Model.rows(page: $0, layout: layout).flatMap { $0 } }
+            for case .text(let text) in keys.map(\.action) {
+                for shifted in [false, true] {
+                    guard let choices = list(layout, text, shifted: shifted) else { continue }
+                    XCTAssertEqual(Set(choices).count, choices.count, "\(layout) \(text) repeats a choice")
+                    XCTAssertFalse(choices.contains(""), "\(layout) \(text)")
+                }
+            }
+        }
     }
 
     /// Production row frames for the three typing rows plus the bottom row.

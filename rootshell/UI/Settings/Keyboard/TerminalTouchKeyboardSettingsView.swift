@@ -56,7 +56,7 @@ struct TerminalTouchKeyboardSettingsView: View {
                 .settingContextMenu(Settings.Keyboard.touchLayout)
                 .themedRow()
             } footer: {
-                Text("An optional terminal keyboard with English, German, French, Spanish, Portuguese, Nordic, and Turkish layouts. Switch to Apple's keyboard for other languages, swipe typing, emoji, or dictation.")
+                Text("An optional terminal keyboard with layouts for English and most European languages, and long-press accents that match Apple's keyboards. Switch to Apple's keyboard for other languages, swipe typing, emoji, or dictation.")
             }
             Section {
                 Picker("Preview Placement", selection: $previewFloating) {

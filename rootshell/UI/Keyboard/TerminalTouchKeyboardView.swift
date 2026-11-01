@@ -1116,11 +1116,11 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                 self.showPage(.navigation)
             } else { self.perform(cap.key) }
         }
-        if case .text(let text) = key.action, let variants = layout.variants(for: text) {
-            cap.accessibilityCustomActions = variants.map { variant in
-                UIAccessibilityCustomAction(name: String(variant)) { [weak self] _ in
+        if case .text(let text) = key.action, let variants = layout.variants(for: text, shifted: false) {
+            cap.accessibilityCustomActions = variants.filter { $0 != text }.map { variant in
+                UIAccessibilityCustomAction(name: variant) { [weak self] _ in
                     guard let self, self.canSend else { return false }
-                    self.perform(Model.Key(title: String(variant), action: .text(String(variant))))
+                    self.perform(Model.Key(title: variant, action: .text(variant)))
                     return true
                 }
             }
@@ -1493,7 +1493,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                     key.label.text = "↔  cursor  ↕"
                     self.feedback()
                 case .text(let text) where !self.isToolbarOnly:
-                    if let variants = self.layout.variants(for: text) { self.showAccents(variants, contact: contact) }
+                    self.showAccents(for: text, contact: contact)
                 case .dismiss:
                     contact.consumed = true
                     self.cancelInteraction()
@@ -1933,11 +1933,12 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         preview.isHidden = false
         bringSubviewToFront(preview)
     }
-    private func showAccents(_ variants: String, contact: Contact) {
+    private func showAccents(for text: String, contact: Contact) {
+        let shifted = (contact.selection?.modifiers ?? modifierState.rawValue) & Model.Modifier.shift.rawValue != 0
+        guard let choices = layout.variants(for: text, shifted: shifted) else { return }
         contact.accent = true; contact.consumed = true
         preview.isHidden = true
-        let shifted = (contact.selection?.modifiers ?? modifierState.rawValue) & Model.Modifier.shift.rawValue != 0
-        accentChoices = variants.map { shifted ? layout.shifted(String($0)) : String($0) }
+        accentChoices = choices
         accents.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for value in accentChoices {
             let label = UILabel(); label.text = value; label.textAlignment = .center
