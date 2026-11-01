@@ -26,7 +26,6 @@ nonisolated struct KeyboardToolbarDrawerDrag {
     }
 }
 
-
 /// One partition for the system toolbar and the touch keyboard. Runtime buttons
 /// reserve main-row slots without changing the user's saved configuration.
 nonisolated enum KeyboardToolbarOverflow {
@@ -956,6 +955,15 @@ nonisolated enum TerminalTouchKeyboardModel {
         let y = min(1, max(0, anchor.y.isFinite ? anchor.y : 1))
         return CGRect(x: available.minX + (available.width - size.width) * x,
                       y: available.minY + (available.height - size.height) * y, width: size.width, height: size.height)
+    }
+
+    /// Grow drawers upward while keeping the typing area and bottom edge fixed.
+    /// Only move the bottom edge when the available region requires clamping.
+    static func resizedFloatingFrame(_ frame: CGRect, height: CGFloat, in available: CGRect) -> CGRect {
+        let size = floatingFrame(in: available, height: height, anchor: .zero).size
+        return CGRect(x: min(max(frame.minX, available.minX), available.maxX - size.width),
+                      y: min(max(frame.maxY - size.height, available.minY), available.maxY - size.height),
+                      width: size.width, height: size.height)
     }
 
     /// Moves a floating card off the Duo's fold, to the side holding most of it

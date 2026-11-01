@@ -422,6 +422,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     private var toolbarDrawerRows: [UIScrollView] = []
     private var toolbarDrawerIndices: [Int] = []
     private var toolbarDrawerButtons: [[TerminalTouchDrawerButton]] = []
+    private var toolbarDrawerCache: [Int: (UIScrollView, [TerminalTouchDrawerButton])] = [:]
     private var toolbarDrawerHeight: CGFloat { CGFloat(toolbarDrawerRows.count) * keyboardHeight.toolbarDrawerRowHeight }
     private var toolbarHeight: CGFloat { keyboardHeight.toolbarRowHeight + toolbarDrawerHeight }
     private var configuredMain: [Model.Key] = []
@@ -528,6 +529,9 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         var selection: Model.TouchSelection?
         /// Toolbar modifiers this touch has swiped across, starting with `initial`.
         var sweep: Model.ModifierSweep<TerminalTouchKeycap>?
+        var drawerDrag: KeyboardToolbarDrawerDrag?
+        var originalDrawerState: Model.ToolbarDrawerState?
+        weak var drawerSelection: TerminalTouchDrawerButton?
         init(key: TerminalTouchKeycap, point: CGPoint, order: UInt64, selection: Model.TouchSelection?) {
             initial = key; current = key; origin = point; anchor = point
             self.order = order; self.selection = selection
@@ -959,25 +963,32 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                 floatingGlass.effect = UIBlurEffect(style: floatingStyle == .clear ? .systemUltraThinMaterial : .systemThinMaterial)
                 floatingGlass.contentView.backgroundColor = tint
             }
-            controlGlass.effect = nil
-            controlGlass.contentView.backgroundColor = toolbar.withAlphaComponent(0.14)
+        }
+        configureControlGlass(controlGlass, toolbar: toolbar, usesFloatingGlass: usesFloatingGlass)
+        if !usesFloatingGlass { floatingGlass.effect = nil }
+    }
+
+    /// Configure the terminal keyboard's single toolbar plate.
+    private func configureControlGlass(_ plate: UIVisualEffectView, toolbar: UIColor, usesFloatingGlass: Bool) {
+        if usesFloatingGlass {
+            plate.effect = nil
+            plate.contentView.backgroundColor = toolbar.withAlphaComponent(0.14)
         } else if isFloating {
-            controlGlass.effect = nil
-            controlGlass.contentView.backgroundColor = toolbar
+            plate.effect = nil
+            plate.contentView.backgroundColor = toolbar
         } else if #available(iOS 26.0, *), !UIAccessibility.isReduceTransparencyEnabled {
             let glass = UIGlassEffect(style: .clear)
             glass.tintColor = toolbar.withAlphaComponent(0.8)
-            controlGlass.effect = glass
-            controlGlass.contentView.backgroundColor = .clear
+            plate.effect = glass
+            plate.contentView.backgroundColor = .clear
         } else if UIAccessibility.isReduceTransparencyEnabled {
-            controlGlass.effect = nil
-            controlGlass.contentView.backgroundColor = toolbar
+            plate.effect = nil
+            plate.contentView.backgroundColor = toolbar
         } else {
-            controlGlass.effect = UIBlurEffect(style: .systemThinMaterial)
-            controlGlass.contentView.backgroundColor = toolbar.withAlphaComponent(0.75)
+            plate.effect = UIBlurEffect(style: .systemThinMaterial)
+            plate.contentView.backgroundColor = toolbar.withAlphaComponent(0.75)
         }
-        controlGlass.backgroundColor = .clear
-        if !usesFloatingGlass { floatingGlass.effect = nil }
+        plate.backgroundColor = .clear
     }
 
     /// The optional instrument sits above the glass/effect but below every key.
@@ -1191,8 +1202,13 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         if isFloating { layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: 24).cgPath }
         grabber.isHidden = !isFloating
         grabber.frame = CGRect(x: (bounds.width - 88) / 2, y: bounds.height - 44, width: 88, height: 44)
-        controlGlass.frame = CGRect(x: leading + 2, y: top + 2, width: max(0, width - 4), height: toolbarHeight - 4)
+        controlGlass.frame = CGRect(x: leading + 2,
+            y: top + 2,
+            width: max(0, width - 4),
+            height: toolbarDrawerHeight + keyboardHeight.toolbarRowHeight - 4)
         controlGlass.layer.cornerRadius = min(22, (keyboardHeight.toolbarRowHeight - 4) / 2)
+        controlGlass.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner,
+                                           .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         layoutBackgroundEffect()
         let split = splitLayout(leading: leading, width: width)
         let wasSplit = splitActive
@@ -1319,7 +1335,10 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             touchCorrection: traitCollection.userInterfaceIdiom != .pad || isFloating)
         if typingGeometry.bounds != geometry.bounds || typingGeometry.targets.map(\.frame) != geometry.targets.map(\.frame)
             || typingGeometry.targets.map(\.key) != geometry.targets.map(\.key) {
-            if !contacts.isEmpty { cancelInteraction() }
+            // Drawer drags intentionally resize the keyboard in every placement.
+            // Keep that contact while the typing rows move beneath it.
+            let onlyDrawerContacts = contacts.values.allSatisfy { $0.drawerDrag != nil }
+            if !contacts.isEmpty && !onlyDrawerContacts { cancelInteraction() }
             typingGeometry = geometry
         }
         if let offsets = pendingPresentationOffsets {
@@ -1439,6 +1458,24 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         key.pressed = true
         feedback()
         if clickSoundEnabled { TerminalTouchKeyClick.shared.play(keyboardStyle.clickProfile) }
+        if key.key.action == .drawer {
+            guard !contacts.values.contains(where: { $0 !== contact && $0.drawerDrag != nil }) else {
+                contacts.removeValue(forKey: id)
+                key.pressed = false
+                return
+            }
+            let count: Int
+            switch toolbarDrawerState {
+            case .closed: count = 0
+            case .stacked(let value): count = value
+            case .cycling(let index): count = index + 1
+            }
+            contact.originalDrawerState = toolbarDrawerState
+            contact.drawerDrag = KeyboardToolbarDrawerDrag(initialCount: count,
+                origin: contact.windowOrigin, buttonFrame: convert(key.frame, to: window),
+                rowHeight: keyboardHeight.toolbarDrawerRowHeight)
+            return
+        }
         if case .modifier(let mod) = key.key.action {
             modifierState.begin(mod)
             publishModifiers()
@@ -1512,6 +1549,10 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         for touch in touches {
             guard let contact = contacts[ObjectIdentifier(touch)] else { continue }
             guard validateToolbarContact(contact, touch: touch) else { continue }
+            if contact.drawerDrag != nil {
+                updateToolbarDrawerDrag(contact, touch: touch)
+                continue
+            }
             let point = touch.location(in: self)
             if contact.selection != nil, !contact.trackpad, !contact.accent,
                touchJumped(touch, with: event, in: self) || (contact.fastTyping && typingGeometry.splitsMergedDrift(
@@ -1702,6 +1743,13 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             contact.task?.cancel()
             contact.current?.pressed = false
             contact.initial.pressed = false
+            if contact.drawerDrag != nil {
+                if !cancelled && canSend { updateToolbarDrawerDrag(contact, touch: touch) }
+                if contact.drawerDrag?.isDragging == true {
+                    finishToolbarDrawerDrag(contact, activate: !cancelled && canSend)
+                    continue
+                }
+            }
             if case .modifier(let mod) = contact.initial.key.action {
                 let point = touch.location(in: self)
                 if let sweep = contact.sweep {
@@ -1738,6 +1786,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         // Joystick drags are intentional; other spaced-bottom controls are taps.
         // Modifier swipes stay in the row; leaving it vertically still cancels.
         let valid = canSend && (contact.interactionMode != .spacedBottom || contact.initial.key.action == .joystick
+            || contact.drawerDrag != nil
             || (contact.sweep != nil && abs(point.y - contact.windowOrigin.y) <= 10)
             || (hypot(point.x - contact.windowOrigin.x, point.y - contact.windowOrigin.y) <= 10
                 && contact.initial.frame.contains(touch.location(in: self))))
@@ -1746,6 +1795,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             contact.task?.cancel()
             contact.current?.pressed = false
             contact.initial.pressed = false
+            if contact.drawerDrag != nil { finishToolbarDrawerDrag(contact, activate: false) }
             if case .modifier(let modifier) = contact.initial.key.action {
                 if let sweep = contact.sweep {
                     modifierState.endSweep(sweep.modifiers, at: touch.timestamp, holding: false, cancelled: true)
@@ -1761,8 +1811,10 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
 
     func cancelInteraction(preservingModifiers: Bool = false, preservingSuggestions: Bool = false) {
         hidePageIndicator()
+        let drawerContacts = contacts.values.filter { $0.drawerDrag != nil }
         contacts.values.forEach { $0.task?.cancel(); $0.initial.pressed = false; $0.current?.pressed = false }
         contacts.removeAll()
+        for contact in drawerContacts { finishToolbarDrawerDrag(contact, activate: false) }
         allKeycaps.forEach { $0.finishVisualTransition() }
         (drawerButtons + toolbarDrawerButtons.flatMap { $0 }).forEach { $0.cancelInteraction() }
         writingAssistanceButton.cancelInteraction()
@@ -2200,7 +2252,9 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     private func layoutToolbarDrawer(_ row: UIScrollView, buttons: [TerminalTouchDrawerButton],
                                      position: Int, leading: CGFloat, width: CGFloat) {
         let rowHeight = keyboardHeight.toolbarDrawerRowHeight
-        row.frame = CGRect(x: leading + 5, y: contentTop + CGFloat(position) * rowHeight, width: max(0, width - 10), height: rowHeight)
+        row.frame = CGRect(x: leading + 5,
+            y: contentTop + CGFloat(position) * rowHeight,
+            width: max(0, width - 10), height: rowHeight)
         // Snap to the main toolbar row's columns so drawer keys sit under its keys,
         // whether or not the row scrolls. Long titles span whole columns.
         let unit = toolbarColumns.map { CGFloat($0.unit) }
@@ -2217,6 +2271,79 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             button.frame = CGRect(x: x, y: 2, width: width, height: rowHeight - 4)
         }
         row.contentSize = CGSize(width: zip(origins, widths).map { $0 + $1 }.max() ?? 0, height: rowHeight)
+    }
+
+    private func updateToolbarDrawerDrag(_ contact: Contact, touch: UITouch) {
+        guard canSend, var drag = contact.drawerDrag else { return }
+        let wasDragging = drag.isDragging
+        let location = touch.location(in: window)
+        guard let selection = drag.update(at: location) else { return }
+        contact.drawerDrag = drag
+        if !wasDragging {
+            contact.consumed = true
+            contact.task?.cancel()
+            preview.isHidden = true
+        }
+        let count = min(selection, toolbarDrawerKeys.count)
+        let state: Model.ToolbarDrawerState = count == 0 ? .closed
+            : KeyboardToolbarManager.shared.drawerToggleMode == .cycle ? .cycling(count - 1) : .stacked(count)
+        if state != toolbarDrawerState {
+            setToolbarDrawerSelection(nil, contact: contact)
+            toolbarDrawerState = state
+            rebuildToolbarDrawers(preservingRows: true).forEach { $0.removeFromSuperview() }
+            updateModifierAppearance()
+            feedback()
+            heightConstraint.constant = desiredHeight
+            invalidateIntrinsicContentSize()
+            onHeightChanged?()
+        }
+        setNeedsLayout()
+        layoutIfNeeded()
+        guard contact.drawerDrag != nil else { return }
+        let selected = drag.isQuickSelection ? toolbarDrawerRows.enumerated().compactMap { index, row -> TerminalTouchDrawerButton? in
+            guard row.bounds.contains(row.convert(location, from: window)) else { return nil }
+            return toolbarDrawerButtons[index].first {
+                !$0.showsMenuAsPrimaryAction && $0.bounds.contains($0.convert(location, from: window))
+            }
+        }.first : nil
+        setToolbarDrawerSelection(selected, contact: contact)
+    }
+
+    private func setToolbarDrawerSelection(_ button: TerminalTouchDrawerButton?, contact: Contact) {
+        guard button !== contact.drawerSelection else { return }
+        UIView.performWithoutAnimation {
+            contact.drawerSelection?.isHighlighted = false
+            contact.drawerSelection?.keycap.pressed = false
+            contact.drawerSelection = button
+            button?.isHighlighted = true
+            button?.keycap.pressed = true
+        }
+    }
+
+    private func finishToolbarDrawerDrag(_ contact: Contact, activate: Bool) {
+        guard let drag = contact.drawerDrag else { return }
+        let selected = activate && drag.isQuickSelection ? contact.drawerSelection?.keycap.key : nil
+        setToolbarDrawerSelection(nil, contact: contact)
+        contact.drawerDrag = nil
+        guard drag.isDragging else { return }
+        let oldHeight = toolbarDrawerHeight
+        if drag.isQuickSelection, let original = contact.originalDrawerState {
+            toolbarDrawerState = original
+            rebuildToolbarDrawers(preservingRows: true).forEach { $0.removeFromSuperview() }
+        }
+        updateModifierAppearance()
+        heightConstraint.constant = desiredHeight
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+        if oldHeight != toolbarDrawerHeight { onHeightChanged?() }
+        if let selected {
+            if case .modifier(let modifier) = selected.action {
+                modifierState.begin(modifier)
+                modifierState.end(modifier, at: ProcessInfo.processInfo.systemUptime)
+                publishModifiers()
+            } else { perform(selected) }
+            feedback()
+        }
     }
 
     private func toggleToolbarDrawer() {
@@ -2268,7 +2395,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             UIView.animate(withDuration: 0.18, delay: 0,
                            options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction],
                            animations: changes) { _ in
-                outgoing.forEach { $0.removeFromSuperview() }
+                outgoing.filter { !self.toolbarDrawerRows.contains($0) }.forEach { $0.removeFromSuperview() }
             }
         } else {
             UIView.performWithoutAnimation(changes)
@@ -2282,6 +2409,11 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     private func rebuildToolbarDrawers(preservingRows: Bool = false) -> [UIScrollView] {
         toolbarDrawerButtons.flatMap { $0 }.forEach { $0.cancelRepeat() }
         let previousRows = Dictionary(uniqueKeysWithValues: zip(toolbarDrawerIndices, zip(toolbarDrawerRows, toolbarDrawerButtons)))
+        if preservingRows {
+            toolbarDrawerCache.merge(previousRows) { _, current in current }
+        } else {
+            toolbarDrawerCache.removeAll()
+        }
         toolbarDrawerState = toolbarDrawerState.clamped(rowCount: toolbarDrawerKeys.count)
         let indices = toolbarDrawerState.visibleRows(rowCount: toolbarDrawerKeys.count)
         let outgoing = toolbarDrawerIndices.compactMap { index -> UIScrollView? in
@@ -2292,7 +2424,13 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         toolbarDrawerButtons.removeAll()
         toolbarDrawerIndices = indices
         for index in indices {
-            if preservingRows, let (row, buttons) = previousRows[index] {
+            if preservingRows, let (row, buttons) = toolbarDrawerCache[index] {
+                if row.superview !== self { addSubview(row) }
+                row.layer.removeAllAnimations()
+                row.alpha = 1
+                row.transform = .identity
+                row.isUserInteractionEnabled = true
+                row.accessibilityElementsHidden = false
                 toolbarDrawerRows.append(row)
                 toolbarDrawerButtons.append(buttons)
                 continue
@@ -2329,6 +2467,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                 buttons.append(button)
             }
             toolbarDrawerButtons.append(buttons)
+            toolbarDrawerCache[index] = (row, buttons)
         }
         setNeedsLayout()
         return outgoing
