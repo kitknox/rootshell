@@ -404,6 +404,7 @@ class KeyboardToolbarView: UIView {
     private var backgroundLeadingConstraint: NSLayoutConstraint?
     private var backgroundTrailingConstraint: NSLayoutConstraint?
     private var backgroundBottomConstraint: NSLayoutConstraint?
+    private var mainToolbarTopConstraint: NSLayoutConstraint?
     private var topBorderLeadingConstraint: NSLayoutConstraint?
     private var topBorderTrailingConstraint: NSLayoutConstraint?
     private var drawerContainerLeadingConstraint: NSLayoutConstraint?
@@ -470,6 +471,10 @@ class KeyboardToolbarView: UIView {
 
     private func currentEdgePadding() -> CGFloat {
         isPhoneLandscape ? 6 : 2
+    }
+
+    private var drawerToolbarGap: CGFloat {
+        displayedAppearance == .separate && visibleDrawerRowCount > 0 ? 2 : 0
     }
 
     /// Embedded previews are already inset by their SwiftUI container.
@@ -610,6 +615,8 @@ class KeyboardToolbarView: UIView {
         self.drawerContainerTrailingConstraint = drawerContainerTrailingConstraint
         let toolbarHeightConstraint = mainToolbarContainer.heightAnchor.constraint(equalToConstant: sizes.toolbar.height)
         mainToolbarHeightConstraint = toolbarHeightConstraint
+        let mainToolbarTop = mainToolbarContainer.topAnchor.constraint(equalTo: drawerContainerView.bottomAnchor)
+        mainToolbarTopConstraint = mainToolbarTop
         let mainToolbarLeadingConstraint = mainToolbarContainer.leadingAnchor.constraint(equalTo: leadingAnchor)
         let mainToolbarTrailingConstraint = mainToolbarContainer.trailingAnchor.constraint(equalTo: trailingAnchor)
         self.mainToolbarLeadingConstraint = mainToolbarLeadingConstraint
@@ -644,7 +651,7 @@ class KeyboardToolbarView: UIView {
             drawerRowsStack.bottomAnchor.constraint(equalTo: drawerContainerView.bottomAnchor),
 
             // Main toolbar container (below drawer)
-            mainToolbarContainer.topAnchor.constraint(equalTo: drawerContainerView.bottomAnchor),
+            mainToolbarTop,
             mainToolbarLeadingConstraint,
             mainToolbarTrailingConstraint,
             mainToolbarContainer.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -733,8 +740,9 @@ class KeyboardToolbarView: UIView {
     private func updateInsetsForCurrentTraits() {
         let edgePadding = currentEdgePadding()
         let chromeInsets = currentChromeHorizontalInsets()
-        backgroundLeadingConstraint?.constant = chromeInsets.left
-        backgroundTrailingConstraint?.constant = -chromeInsets.right
+        let backgroundInset = displayedAppearance == .separate ? edgePadding : 0
+        backgroundLeadingConstraint?.constant = chromeInsets.left + backgroundInset
+        backgroundTrailingConstraint?.constant = -chromeInsets.right - backgroundInset
         topBorderLeadingConstraint?.constant = chromeInsets.left
         topBorderTrailingConstraint?.constant = -chromeInsets.right
         drawerContainerLeadingConstraint?.constant = chromeInsets.left
@@ -916,7 +924,7 @@ class KeyboardToolbarView: UIView {
             plate.contentView.backgroundColor = glassTintColor(for: traitCollection)
         }
         backgroundBlurView.isHidden = separate && visibleDrawerRowCount == 0
-        backgroundBottomConstraint?.constant = separate ? -sizes.toolbar.height : 0
+        backgroundBottomConstraint?.constant = separate ? -sizes.toolbar.height - drawerToolbarGap : 0
         if separate { backgroundBlurView.layer.borderWidth = 0 }
     }
 
@@ -1454,7 +1462,9 @@ class KeyboardToolbarView: UIView {
 
         let newHeight = CGFloat(visibleDrawerRowCount) * sizes.toolbar.drawerHeight
         let heightChanged = drawerHeightConstraint?.constant != newHeight
+            || mainToolbarTopConstraint?.constant != drawerToolbarGap
         drawerHeightConstraint?.constant = newHeight
+        mainToolbarTopConstraint?.constant = drawerToolbarGap
         drawerContainerView.isHidden = (drawerState == .closed)
         applyBottomEdgeKeyDispatchMode(in: self)
         setNeedsUpdateConstraints()
@@ -1566,7 +1576,7 @@ class KeyboardToolbarView: UIView {
 
     override var intrinsicContentSize: CGSize {
         let drawerExtra = CGFloat(visibleDrawerRowCount) * sizes.toolbar.drawerHeight
-        return CGSize(width: UIView.noIntrinsicMetric, height: sizes.toolbar.height + drawerExtra)
+        return CGSize(width: UIView.noIntrinsicMetric, height: sizes.toolbar.height + drawerExtra + drawerToolbarGap)
     }
 
     // MARK: - Public Methods
