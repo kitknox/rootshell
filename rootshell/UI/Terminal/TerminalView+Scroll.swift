@@ -897,6 +897,18 @@ extension Ghostty.TerminalView {
     /// Also drives tab swipe detection — the dedicated trackpadTabSwipeGesture is
     /// disabled in capture mode to avoid dual-recognizer interference.
     @objc private func handleTrackpadScroll(_ gesture: UIPanGestureRecognizer) {
+        // A real end settles an app-tab swipe now; counting it as a zero-delta event
+        // would re-arm the end timer and hold the slide still until it fires.
+        switch gesture.state {
+        case .ended, .cancelled, .failed:
+            if trackpadAppTabSwipeDirection != nil {
+                finishTrackpadTabSwipe()
+                return
+            }
+        default:
+            break
+        }
+
         // Cancel any pending momentum start - we're still receiving events
         iosScrollEndTimer?.invalidate()
         iosScrollEndTimer = nil

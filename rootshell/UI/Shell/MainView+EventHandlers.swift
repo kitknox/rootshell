@@ -435,6 +435,19 @@ extension MainView {
         if let swipe = appTabSwipeState, !swipe.isSettling {
             forceClearAppTabSwipe(reason: "tabSwitchDuringSwipe")
         }
+        var supersededSwipeSourceID: UUID?
+        if var swipe = appTabSwipeState, swipe.awaitsLandingHandoff {
+            // A committed swipe's handoff waits for its slide to land, since it
+            // stalls the settle spring; the commit's `land` replays this change.
+            if swipe.sourceTabID == oldValue, swipe.targetTabID == newValue { return }
+            // A selection that beats the landing supersedes it: the swipe's source
+            // still holds focus, so retire it below and drop the replay.
+            if swipe.targetTabID == oldValue {
+                swipe.awaitsLandingHandoff = false
+                appTabSwipeState = swipe
+                supersededSwipeSourceID = swipe.sourceTabID
+            }
+        }
 
         guard let newValue, tabsModel.selectedTabID == newValue,
               let newTab = tabsModel.tab(withID: newValue) else { return }
@@ -527,7 +540,8 @@ extension MainView {
         // actually became first responder (UIKit already auto-resigned the old one)
         // The old index may now belong to a different tab after a close or
         // reorder. Only retire focus on the old identity if it still exists.
-        if let oldFocus = oldTab?.focusedPane, oldFocus !== paneToFocus {
+        let supersededFocus = supersededSwipeSourceID.flatMap { tabsModel.tab(withID: $0)?.focusedPane }
+        for oldFocus in [oldTab?.focusedPane, supersededFocus].compactMap({ $0 }) where oldFocus !== paneToFocus {
             oldFocus.isLogicallyFocused = false
             oldFocus.asTerminal?.shouldBecomeFirstResponderWhenReady = false
             oldFocus.focusDidChange(false, skipResign: newFocusAcquired || newFocusAwaitsWindow)
