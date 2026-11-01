@@ -131,8 +131,10 @@ extension MainView {
         ZStack {
             roundedPanes ? chromeBackground : theme.tabBarBackground
             VStack(spacing: 0) {
+                // The terminal owns the top band when it extends under it.
                 chromeBackground
-                    .frame(height: chromeTopInset + (showsHorizontalTabHeader ? TabMetrics.tabBarHeight : 0))
+                    .frame(height: terminalExtendsUnderTopSafeArea
+                        ? 0 : chromeTopInset + (showsHorizontalTabHeader ? TabMetrics.tabBarHeight : 0))
                 Spacer()
                 if !visibleContentAllowsTerminalEffects
                     || effectManager.terminalBottomInsetFraction == 0 {

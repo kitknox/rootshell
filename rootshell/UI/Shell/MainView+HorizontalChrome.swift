@@ -42,17 +42,17 @@ extension MainView {
 #endif
 
             if usesCompactTabSpacing {
-                tabBarAddButton(theme: resolvedTheme)
+                if showsTabBarActions { tabBarAddButton(theme: resolvedTheme) }
                 integratedTabBarDragRegion()
                     .layoutPriority(-1)
-                tabBarSettingsButton(theme: resolvedTheme)
+                if showsTabBarActions { tabBarSettingsButton(theme: resolvedTheme) }
             } else {
                 TabStyleContextMenuRegion(
                     selectedStyleRawValue: topTabStyleRawValueBinding
                 )
                 .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
                 .layoutPriority(-1)
-                tabBarActionButtons(theme: resolvedTheme)
+                if showsTabBarActions { tabBarActionButtons(theme: resolvedTheme) }
             }
         }
         .frame(height: TabMetrics.tabBarHeight)

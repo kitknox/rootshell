@@ -172,6 +172,7 @@ final class KeybindManager: ObservableObject {
             Keybind(key: .u, modifiers: [.command, .shift], action: .toggle_file_manager),
             Keybind(key: .i, modifiers: [.command, .shift], action: .toggle_ip_lookup),
             Keybind(key: .h, modifiers: [.command, .control], action: .toggle_http_capture),
+            Keybind(key: .i, modifiers: [.command, .control], action: .toggle_agent_inbox),
             Keybind(key: .b, modifiers: .command, action: .browse_hosts),
             Keybind(key: .p, modifiers: [.command, .shift], action: .browse_profiles),
             Keybind(key: .i, modifiers: .command, action: .toggle_ai_agent),

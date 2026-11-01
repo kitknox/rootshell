@@ -140,7 +140,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
         }
         reconcileTouchKeyboardHosting()
         updateTouchKeyboardInputSuppression()
-        if usesFullTouchKeyboard && (touchSystemFloating || currentTouchKeyboardState.placement == .docked) {
+        if usesFullTouchKeyboard && (touchSystemFloating || touchKeyboardPlacement == .docked) {
             // Release the overlay before reattaching its keyboard. A later
             // overlay teardown must not pull it back out of the input root.
             dismissFloatingTouchKeyboard()
@@ -269,7 +269,14 @@ final class TerminalKeyboardAccessoryController: NSObject {
         if touchSystemFloating {
             return touchKeyboardInputView?.isNativeFloating == true ? .floating : .docked
         }
+        if foldDocksTouchKeyboard { return .docked }
         return currentTouchKeyboardState.placement
+    }
+
+    /// The Duo's laptop pose docks the card below the fold; unfolding restores the saved placement.
+    private var foldDocksTouchKeyboard: Bool {
+        guard let window = host?.keyboardHostView.window else { return false }
+        return TerminalTouchKeyboardWindowState.forWindow(window).foldRegion != nil
     }
 
     private var hidesTouchKeyboardForHardware: Bool {
@@ -404,7 +411,6 @@ final class TerminalKeyboardAccessoryController: NSObject {
             overlay.isHostActive = { [weak scope] in
                 scope?.owner?.touchKeyboardIsActive == true || scope?.parkedOwner != nil
             }
-            overlay.onDock = { [weak scope] in scope?.owner?.setTouchKeyboardPlacement(.docked) }
             overlay.frame = window.bounds
             overlay.inputRegion = scope.inputRegion
             overlay.foldRegion = scope.foldRegion
@@ -424,7 +430,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
         guard !touchSystemFloating, usesFullTouchKeyboard, host?.keyboardIsFirstResponder == true,
               host?.keyboardHostView.window != nil else { return }
         let state = currentTouchKeyboardState
-        guard state.placement != placement else { return }
+        guard state.placement != placement, placement == .docked || !foldDocksTouchKeyboard else { return }
         (host as? Ghostty.TerminalView)?.prepareTouchKeyboardSwitch()
         state.placement = placement
         // Docking relinquishes a manual software-keyboard request when a
@@ -433,8 +439,13 @@ final class TerminalKeyboardAccessoryController: NSObject {
             touchKeyboardRequestedWithHardware = false
             host?.keyboardSetSoftwareKeyboardRequested(!KeyboardTracker.shared.isHardwareKeyboard)
         }
+        applyTouchKeyboardPlacement()
+    }
+
+    /// Moves the keyboard between the input root and the card to match `touchKeyboardPlacement`.
+    private func applyTouchKeyboardPlacement() {
         updateTouchKeyboardInputSuppression()
-        if placement == .docked {
+        if touchKeyboardPlacement == .docked {
             dismissFloatingTouchKeyboard()
             touchKeyboardInputView?.attachKeyboard()
         }
@@ -525,8 +536,12 @@ final class TerminalKeyboardAccessoryController: NSObject {
     /// can still describe an earlier drawer position. Read the requested size
     /// directly during terminal layout, without querying UIKit's input window
     /// (which can still have its old frame or exclude the bottom safe area).
+    /// Only while UIKit presents it: an unfocused split-view app keeps first
+    /// responder after its keyboard hides. The latches cover overlay round trips.
     var dockedTouchKeyboardFrameInScreen: CGRect? {
+        let tracker = KeyboardTracker.shared
         guard usesFullTouchKeyboard, touchKeyboardPlacement == .docked,
+              tracker.isAnyInputViewPresented || tracker.isPreservingSoftwareKeyboardLayout,
               let host, host.keyboardIsFirstResponder,
               let window = host.keyboardHostView.window,
               let keyboard = touchKeyboard, !keyboard.isFloating,
@@ -1187,8 +1202,16 @@ final class TerminalKeyboardAccessoryController: NSObject {
             MainActor.assumeIsolated {
                 guard let self, let host = self.host, host.keyboardIsFirstResponder,
                       notification.object as? UIWindow === host.keyboardHostView.window else { return }
-                // Move the toolbar between UIKit's accessory slot and the fold.
-                host.keyboardReloadInputViews()
+                if self.usesFullTouchKeyboard, !self.touchSystemFloating,
+                   self.currentTouchKeyboardState.placement == .floating,
+                   (self.floatingKeyboardOverlay != nil) != (self.touchKeyboardPlacement == .floating) {
+                    // Entering or leaving the laptop pose; a moved fold keeps the placement.
+                    (host as? Ghostty.TerminalView)?.prepareTouchKeyboardSwitch()
+                    self.applyTouchKeyboardPlacement()
+                } else {
+                    // Move the toolbar between UIKit's accessory slot and the fold.
+                    host.keyboardReloadInputViews()
+                }
                 self.scheduleFoldToolbarUpdate()
             }
         }

@@ -242,7 +242,6 @@ final class TerminalFloatingKeyboardOverlay: UIView {
     private var state: TerminalFloatingKeyboardState
     private var dragOrigin: CGRect?
     private var previousAvailable: CGRect?
-    var onDock: (() -> Void)?
     var isHostActive: (() -> Bool)?
     var inputRegion: CGRect? {
         didSet { if oldValue != inputRegion { dragOrigin = nil; setNeedsLayout() } }
@@ -261,7 +260,7 @@ final class TerminalFloatingKeyboardOverlay: UIView {
         addSubview(keyboard)
         keyboard.onFloatingDrag = { [weak self] translation, ended in self?.move(translation, ended: ended) }
         keyboard.onFloatingDragCancelled = { [weak self] in self?.dragOrigin = nil }
-        keyboard.onFloatingNudge = { [weak self] delta in self?.move(delta, ended: true, allowDock: false) }
+        keyboard.onFloatingNudge = { [weak self] delta in self?.move(delta, ended: true) }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
@@ -312,7 +311,7 @@ final class TerminalFloatingKeyboardOverlay: UIView {
         return keyboard.hitTest(convert(point, to: keyboard), with: event)
     }
 
-    private func move(_ translation: CGPoint, ended: Bool, allowDock: Bool = true) {
+    private func move(_ translation: CGPoint, ended: Bool) {
         guard isHostActive?() == true else { return }
         if dragOrigin == nil { dragOrigin = keyboard.frame; keyboard.cancelInteraction(preservingModifiers: true) }
         guard let origin = dragOrigin else { return }
@@ -328,7 +327,6 @@ final class TerminalFloatingKeyboardOverlay: UIView {
             }
             state.anchor = TerminalTouchKeyboardModel.floatingAnchor(for: settled, in: available)
             state.saveAnchor()
-            if allowDock && TerminalTouchKeyboardModel.shouldDockAfterDrag(proposed, in: available) { onDock?() }
         }
     }
 

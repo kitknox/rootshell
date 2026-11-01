@@ -119,6 +119,8 @@ extension MainView {
         ])
         if newPhase == .active {
             ForegroundWedgeWatchdog.shared.noteMainActorServiced("MainView.scenePhase.active")
+            // An island tap that arrived while another window was active.
+            consumePendingAgentInboxOpen()
         }
         Ghostty.logger.info("Scene phase changed: \(String(describing: oldPhase)) -> \(String(describing: newPhase))")
         LifecycleDebugLogger.shared.checkpoint("Scene.phaseChange", ms: nil, [

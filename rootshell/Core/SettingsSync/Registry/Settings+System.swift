@@ -120,7 +120,7 @@ nonisolated extension Settings {
             Keyboard.all, KeyboardToolbar.all, Keybinds.all, Dictation.all,
             Connections.all, Multiplexer.all, SSHAgent.all, HostTrust.all, Roam.all, ScreenSharing.all, Transfer.all,
             AI.all,
-            Notifications.all, CodingAgents.all, Sounds.all, LiveActivity.all, Privacy.all, Clipboard.all,
+            Notifications.all, AgentInbox.all, CodingAgents.all, Sounds.all, LiveActivity.all, Privacy.all, Clipboard.all,
             System.all, Legacy.all,
         ]
         #if !CHINA_BUILD

@@ -103,6 +103,7 @@ extension MainView {
         #if !CHINA_BUILD
         yieldSlotToFileManager(fileManagerPresentation)
         #endif
+        yieldAgentInboxSlot(to: fileManagerPresentation)
 
         if isPhone {
             resignFirstResponderForSheetPresentation()
@@ -134,6 +135,7 @@ extension MainView {
         #if !CHINA_BUILD
         yieldSlotToFileManager(presentation)
         #endif
+        yieldAgentInboxSlot(to: presentation)
         fileManagerPresentation = presentation
         SettingsStore.shared.set(Settings.Transfer.fileManagerPresentation, presentation)
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented || fileManagerOwnsKeyboard)

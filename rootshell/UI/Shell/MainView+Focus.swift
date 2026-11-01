@@ -354,61 +354,33 @@ extension MainView {
         let animationsDisabled = SettingsStore.shared.value(Settings.Tabs.barAnimationsDisabled)
             || UIAccessibility.isReduceMotionEnabled
 
-        // Commit the selection the instant the swipe is committed — not when the
-        // content-slide spring settles ~280ms later. Updating `selectedTabID` now
-        // lets the top tab-bar indicator slide to the new tab IN PARALLEL with the
-        // content sliding into place, instead of snapping over after the slide
-        // ends (the old behaviour: selection was deferred into `finish`).
-        //
-        // Safe to do mid-slide: the terminal content keeps rendering from
-        // `appTabSwipeState` (source + target sliding beside each other) until
-        // `finish` clears the state, so the early selection change is invisible to
-        // the slide. `displayedTabID` reconciles to the already-rendered target
-        // immediately — and doing it now gives that reveal a head start before the
-        // state is removed, so there's no jump when it clears.
-        //
-        // The indicator animation is back ON for this path (it used to be
-        // suppressed because the late selection would have snapped). Under reduced
-        // motion it must not spring, so suppress it there.
+        // Commit the selection the instant the swipe is committed so the tab-bar
+        // indicator slides IN PARALLEL with the content. The terminal content keeps
+        // rendering from `appTabSwipeState` until it clears, and `displayedTabID`
+        // reconciles to the already-rendered target now, so there's no jump then.
+        // Under reduced motion the indicator must not spring.
         if animationsDisabled {
             selectTabWithoutTabBarAnimation(id: state.targetTabID)
-        } else {
-            applyTabSwitch(toTabID: state.targetTabID)
+            appTabSwipeState = settling
+            finishAppTabSwipeCommit(state)
+            return
         }
+        applyTabSwitch(toTabID: state.targetTabID)
+        settling.awaitsLandingHandoff = true
 
-        // Guarded so it runs at most once: it nils the state, so a second caller
-        // (the fallback timer below, or a stale completion) no-ops. `beginAppTabSwipe`
-        // refuses while `isSettling`, so a never-cleared state would wedge all
-        // swiping — hence both the completion handler AND the fallback.
-        let finish = {
-            guard let current = self.appTabSwipeState,
+        // handleSelectedTabChange holds its focus handoff, occlusion sweep and tmux
+        // select until `land`: run at release they block the main thread and
+        // freeze the spring's first frames. This spring is within ~3pt of rest by
+        // 0.22s, so a stall then lands in its invisible tail. Keys typed before
+        // then still reach the source.
+        let land = {
+            guard var current = self.appTabSwipeState,
                   current.sourceTabID == state.sourceTabID,
                   current.targetTabID == state.targetTabID,
-                  current.isSettling else { return }
-            self.appTabSwipeState = nil
-            LifecycleDebugLogger.shared.checkpoint("FG.appTabSwipe.finish", ms: nil, [
-                ("path", "commit"),
-            ])
-            // A target that revealed mid-settle skipped the source's cleanup.
-            self.occludeTabIfNoLongerShown(state.sourceTabID)
-            #if !targetEnvironment(macCatalyst)
-            // Both tabs have settled at offset 0; recreate selection handles at
-            // their final position. The target (now selected) re-presents any
-            // touch selection's handles; the source is occluded, so its handles
-            // stay hidden — this just clears its swipe-suppressed flag.
-            self.setTabSelectionUISwipeSuppressed(state.sourceTabID, false)
-            self.setTabSelectionUISwipeSuppressed(state.targetTabID, false)
-            #endif
-            #if !os(visionOS) && !targetEnvironment(macCatalyst)
-            // Skip on Catalyst: a no-op on Macs without a Force Touch trackpad.
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            #endif
-        }
-
-        if animationsDisabled {
-            appTabSwipeState = settling
-            finish()
-            return
+                  current.awaitsLandingHandoff else { return }
+            current.awaitsLandingHandoff = false
+            self.appTabSwipeState = current
+            self.handleSelectedTabChange(oldValue: state.sourceTabID, newValue: state.targetTabID)
         }
 
         // Clear the swipe state on animation completion rather than on a fixed
@@ -420,14 +392,44 @@ extension MainView {
         withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
             appTabSwipeState = settling
         } completion: {
-            finish()
+            land()
+            self.finishAppTabSwipeCommit(state)
         }
-        // Safety net in case the completion handler is ever dropped (e.g. the
-        // animation is removed while backgrounded): well past the spring settle.
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(500))
-            finish()
+            try? await Task.sleep(for: .milliseconds(220))
+            land()
+            // Safety net in case the completion handler is ever dropped (e.g. the
+            // animation is removed while backgrounded): well past the spring settle.
+            try? await Task.sleep(for: .milliseconds(280))
+            self.finishAppTabSwipeCommit(state)
         }
+    }
+
+    /// Guarded so it runs at most once: it nils the state, so a later caller no-ops.
+    /// `beginAppTabSwipe` refuses while `isSettling`, so the state must clear.
+    private func finishAppTabSwipeCommit(_ state: AppTabSwipeState) {
+        guard let current = appTabSwipeState,
+              current.sourceTabID == state.sourceTabID,
+              current.targetTabID == state.targetTabID,
+              current.isSettling else { return }
+        appTabSwipeState = nil
+        LifecycleDebugLogger.shared.checkpoint("FG.appTabSwipe.finish", ms: nil, [
+            ("path", "commit"),
+        ])
+        // A target that revealed mid-settle skipped the source's cleanup.
+        occludeTabIfNoLongerShown(state.sourceTabID)
+        #if !targetEnvironment(macCatalyst)
+        // Both tabs have settled at offset 0; recreate selection handles at
+        // their final position. The target (now selected) re-presents any
+        // touch selection's handles; the source is occluded, so its handles
+        // stay hidden — this just clears its swipe-suppressed flag.
+        setTabSelectionUISwipeSuppressed(state.sourceTabID, false)
+        setTabSelectionUISwipeSuppressed(state.targetTabID, false)
+        #endif
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        // Skip on Catalyst: a no-op on Macs without a Force Touch trackpad.
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
     }
 
     private func cancelAppTabSwipe(_ state: AppTabSwipeState) {

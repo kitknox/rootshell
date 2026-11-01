@@ -27,6 +27,11 @@ extension MainView {
     /// Width reserved for action buttons (plus + settings)
     static let actionButtonsWidth: CGFloat = TabMetrics.tabBarHeight * 2
 
+    /// The Duo side rail carries its own new-tab and settings buttons.
+    var showsTabBarActions: Bool { !showsDuoSideRail }
+
+    var tabBarActionsWidth: CGFloat { showsTabBarActions ? Self.actionButtonsWidth : 0 }
+
     static let integratedMaximumTabWidth: CGFloat = 240
     static let catalystWindowDragWidth: CGFloat = 42
 
@@ -35,7 +40,7 @@ extension MainView {
     /// `TabBar`, where reading title/badge/health metadata does not invalidate
     /// `MainView.body`.
     func availableTabBarWidth(in geometry: GeometryProxy) -> CGFloat {
-        max(0, geometry.size.width - Self.actionButtonsWidth - tabBarLeadingPadding)
+        max(0, geometry.size.width - tabBarActionsWidth - tabBarLeadingPadding)
     }
 
     /// Width of the compact tab viewport. Capped tabs leave real flexible
@@ -52,7 +57,7 @@ extension MainView {
             0,
             geometry.size.width
                 - tabBarLeadingPadding
-                - Self.actionButtonsWidth
+                - tabBarActionsWidth
                 - integratedMinimumDragWidth
         )
         if topTabStyle == .integrated {
@@ -115,6 +120,7 @@ extension MainView {
         #if !CHINA_BUILD
         if httpCaptureShowsOverlay && httpCapturePresentation == .full { return true }
         #endif
+        if agentInboxShowsOverlay && agentInboxPresentation == .full { return true }
         return fileManagerShowsOverlay && fileManagerPresentation == .full
     }
 

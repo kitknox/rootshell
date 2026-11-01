@@ -14,6 +14,9 @@ struct DuoLayoutContext: Equatable {
         hasHinge && isFrontDisplay && frontMode == .behindCamera
     }
     var usesSideRail: Bool { verticalEdge != nil && !usesFullWidth }
+    /// The inner display has room for top tabs beside its side rail; the rail
+    /// keeps the new-tab and settings actions.
+    var showsTabsBesideSideRail: Bool { hasHinge && !isFrontDisplay && usesSideRail }
     // The front terminal occupies the column beside the system rail. Its
     // rectangular grid can reach both vertical edges in this mode.
     var extendsTerminalToVerticalEdges: Bool { isFrontDisplay && usesSideRail }
@@ -36,7 +39,7 @@ struct DuoLayoutContext: Equatable {
         if usesFullWidth {
             return frontMode == .belowCamera || (behindCameraShowsTabs && !globallyHidden)
         }
-        return !usesSideRail && !globallyHidden
+        return (!usesSideRail || showsTabsBesideSideRail) && !globallyHidden
     }
 }
 
@@ -44,10 +47,21 @@ private struct DuoLayoutContextKey: EnvironmentKey {
     static let defaultValue = DuoLayoutContext()
 }
 
+private struct TerminalTopSafeEdgeKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
 extension EnvironmentValues {
     var duoLayout: DuoLayoutContext {
         get { self[DuoLayoutContextKey.self] }
         set { self[DuoLayoutContextKey.self] = newValue }
+    }
+
+    /// Window-space y of the workspace's safe-area top while the terminal
+    /// extends under it; 0 otherwise.
+    var terminalTopSafeEdge: CGFloat {
+        get { self[TerminalTopSafeEdgeKey.self] }
+        set { self[TerminalTopSafeEdgeKey.self] = newValue }
     }
 }
 
@@ -57,10 +71,15 @@ struct DuoWorkspaceLayout: Equatable {
     var headerInsets: EdgeInsets = .init()
     var terminalInsets: EdgeInsets = .init()
     var cameraClearance: CGFloat = 0
+    /// The header sits beside the camera/status regions rather than below them.
+    var headerSharesTopBand = false
     var lowerReservation: CGFloat = 0
     var inputRegion: CGRect?
     /// The horizontal fold, reported even while tabletop mode is disabled.
     var fold: CGRect?
+    /// Global y of the safe area's top edge. UIKit's window inset can be zero
+    /// in landscape while the scene's safe area still clears the corner.
+    var safeAreaTop: CGFloat = 0
     var tabletopAvailable: Bool { fold != nil }
 
     static func resolve(
@@ -84,8 +103,13 @@ struct DuoWorkspaceLayout: Equatable {
         result.headerInsets.top = headerHeight > 0 && !underlapsCamera ? headerTop : 0
 
         let sharesTopBand = context.placesHeaderBesideTopRegions && headerHeight > 0
+        let clearsTopRegions = (context.usesFullWidth && context.frontMode == .belowCamera) || sharesTopBand
+        // The portrait front display leaves too little width beside the system
+        // regions for tabs and buttons, so the header takes a row beneath them.
+        let stacksHeader = context.isFrontDisplay && clearsTopRegions && headerHeight > 0
+            && bounds.height > bounds.width
         if context.usesFullWidth || sharesTopBand {
-            if headerHeight > 0 {
+            if headerHeight > 0 && !stacksHeader {
                 // Disabling the system side bar can remove its horizontal
                 // safe inset. The terminal may reclaim that column, but its
                 // header must still stop before the camera's reserved region
@@ -117,12 +141,17 @@ struct DuoWorkspaceLayout: Equatable {
                     result.headerInsets.trailing = rightToLeft ? headerLeft : headerRight
                 }
             }
-            if (context.usesFullWidth && context.frontMode == .belowCamera) || sharesTopBand {
+            if clearsTopRegions {
                 let visibleRegions = (occlusionContentFrames ?? occlusions).filter {
                     !$0.isEmpty && !$0.isNull && $0.intersects(bounds)
                 }
                 let visibleBand = visibleRegions.reduce(CGRect.null) { $0.union($1) }
-                if !visibleBand.isNull, bounds.maxY - visibleBand.maxY >= 120 {
+                if stacksHeader, !visibleBand.isNull, bounds.maxY - visibleBand.maxY >= 120 {
+                    // Clear every visible region, including a system bar that
+                    // grows below the camera, so none of it covers the terminal.
+                    result.headerInsets.top = max(0, visibleBand.maxY - bounds.minY)
+                } else if !visibleBand.isNull, bounds.maxY - visibleBand.maxY >= 120 {
+                    result.headerSharesTopBand = headerHeight > 0
                     // The header owns the free column beside the camera/status
                     // regions, including the area above the rectangular safe
                     // frame. Only its horizontal insets apply there.

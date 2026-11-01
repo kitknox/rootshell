@@ -678,7 +678,7 @@ extension LocalShellSession {
                 self.inlineFailureAnimator = nil
 
                 // Show error message and prompt below the animation
-                let errorMessage = "\r\n\r\nssh: \(error.localizedDescription)\r\n"
+                let errorMessage = "\r\n\r\nssh: \(SSHBanner.terminalSafe(error.localizedDescription))\r\n"
                 self.onOutput?(self.normalizeLineEndings(errorMessage))
                 self.displayPrompt()
             }

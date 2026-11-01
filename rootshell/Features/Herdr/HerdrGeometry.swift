@@ -184,13 +184,17 @@ nonisolated enum HerdrGeometry {
         return CGFloat(pixels) / scale
     }
 
-    static func chrome(paddingX: Int, paddingY: Int, scale: CGFloat, bottomInsetPixels: Double) -> CGSize {
+    static func chrome(
+        paddingX: Int, paddingY: Int, scale: CGFloat, bottomInsetPixels: Double, topInsetPixels: Double = 0
+    ) -> CGSize {
         guard scale > 0 else { return .zero }
-        // Match Surface.setBottomInset's pixel rounding and clamp.
-        let bottom = bottomInsetPixels.isFinite ? min(max(bottomInsetPixels.rounded(), 0), 10_000) : 0
+        // Match Surface.setBottomInset/setTopInset's pixel rounding and clamp.
+        func inset(_ pixels: Double) -> CGFloat {
+            CGFloat(pixels.isFinite ? min(max(pixels.rounded(), 0), 10_000) : 0)
+        }
         return CGSize(
             width: padding(paddingX, scale: scale) * 2,
-            height: padding(paddingY, scale: scale) * 2 + CGFloat(bottom) / scale
+            height: padding(paddingY, scale: scale) * 2 + (inset(topInsetPixels) + inset(bottomInsetPixels)) / scale
         )
     }
 

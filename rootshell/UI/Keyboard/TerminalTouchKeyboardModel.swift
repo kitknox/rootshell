@@ -117,6 +117,11 @@ nonisolated enum TerminalTouchKeyboardModel {
 
         var usesBottomSafeArea: Bool { self != .extraLarge }
 
+        /// The front display keeps its own height once set; until then it follows the inner one.
+        static func resolved(inner: Self, front: Self?, isFrontDisplay: Bool) -> Self {
+            isFrontDisplay ? front ?? inner : inner
+        }
+
         /// Positive steps shrink the keyboard. Clamps at both ends.
         func stepped(by offset: Int) -> Self {
             let all = Self.allCases
@@ -770,7 +775,7 @@ nonisolated enum TerminalTouchKeyboardModel {
 
     /// A detached card moves the Apple Keyboard key to its footer, as Apple's
     /// floating keyboard does with its globe, so the row matches Apple's widths.
-    static func rows(page: Page, floating: Bool = false) -> [[Key]] {
+    static func rows(page: Page, floating: Bool = false, layout: Layout = .us) -> [[Key]] {
         func text(_ string: String) -> [Key] { string.map { Key(title: String($0), action: .text(String($0))) } }
         let shift = Key(title: "Shift", action: .modifier(.shift), symbol: "shift", weight: 1.5)
         let delete = Key(title: "Delete", action: .key("\u{7f}"), symbol: "delete.left", weight: 1.5)
@@ -779,9 +784,13 @@ nonisolated enum TerminalTouchKeyboardModel {
         let third: [Key]
         switch page {
         case .letters:
-            first = text("qwertyuiop")
-            second = text("asdfghjkl")
-            third = [shift] + text("zxcvbnm") + [delete]
+            let letters = layout.letterRows
+            // Shift and Delete fill the third row out to the widest row.
+            let edge = (Double(letters.map(\.count).max() ?? 10) - Double(letters[2].count)) / 2
+            func edged(_ key: Key) -> Key { var key = key; key.weight = edge; return key }
+            first = text(letters[0])
+            second = text(letters[1])
+            third = [edged(shift)] + text(letters[2]) + [edged(delete)]
         case .numbers:
             first = text("1234567890")
             second = text("-/:;()$&@\"")
@@ -797,6 +806,14 @@ nonisolated enum TerminalTouchKeyboardModel {
             Key(title: "space", action: .text(" "), weight: floating ? 5 : 5.8, accessibility: "Space. Hold and drag to move the terminal cursor."),
             Key(title: "return", action: .key("\r"), symbol: "return", weight: floating ? 2.5 : 1.8)
         ]]
+    }
+
+    /// Letter units across the widest of the three typing rows.
+    static func columns(_ rows: [[Key]]) -> Double { rows.prefix(3).map(weight).max() ?? 10 }
+
+    /// Centers a shorter typing row so every letter key keeps one width.
+    static func rowInset(weight: Double, columns: Double, width: Double) -> Double {
+        2 + max(0, columns - weight) / 2 * width / max(1, columns)
     }
 
     /// Full cells are hit targets; the visual caps are inset inside them.
@@ -989,10 +1006,6 @@ nonisolated enum TerminalTouchKeyboardModel {
                        y: travelY > 0 ? min(1, max(0, (frame.minY - available.minY) / travelY)) : 0.5)
     }
 
-    static func shouldDockAfterDrag(_ frame: CGRect, in available: CGRect) -> Bool {
-        frame.maxY >= available.maxY - 18 && abs(frame.midX - available.midX) < available.width * 0.2
-    }
-
     /// Detect an existing native floating input region.
     static func isFloatingInput(width: CGFloat, hostWidth: CGFloat, isPad: Bool) -> Bool {
         isPad && width > 0 && width <= 400 && width < hostWidth - 1
@@ -1044,11 +1057,6 @@ nonisolated enum TerminalTouchKeyboardModel {
             }
         }
     }
-
-    static let accents: [String: String] = [
-        "a": "àáâäæãåā", "e": "èéêëēėę", "i": "ìíîïīį", "o": "òóôöõøœō",
-        "u": "ùúûüū", "c": "çćč", "n": "ñń", "s": "ßśš", "y": "ÿý", "z": "žźż"
-    ]
 
     struct SuggestionContext: Equatable, Sendable {
         let document: String

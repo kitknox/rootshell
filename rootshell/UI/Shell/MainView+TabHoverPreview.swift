@@ -102,7 +102,8 @@ extension MainView {
             shortcutFont: .system(size: 11, weight: .medium),
             textColor: .primary,
             showsBadges: true,
-            showsAttentionDot: SettingsStore.shared.get(Settings.CodingAgents.attentionBadges)
+            showsAttentionDot: SettingsStore.shared.get(Settings.CodingAgents.attentionBadges),
+            logoSize: 12
         )
     }
 }

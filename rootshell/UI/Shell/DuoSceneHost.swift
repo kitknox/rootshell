@@ -1,10 +1,27 @@
 import SwiftUI
 
+extension Notification.Name {
+    /// Posted when the app moves between Duo's inner and front displays.
+    static let duoDisplayDidChange = Notification.Name("duoDisplayDidChange")
+}
+
 /// Counts hinge updates; a terminal may reclaim focus the system took once per fold.
 @MainActor
 enum DuoHingeEvents {
     private(set) static var generation = 0
-    static func noteChange() { generation &+= 1 }
+    /// Lets UIKit views without the `duoLayout` environment pick per-display settings.
+    private(set) static var isFrontDisplay = false
+
+    static func noteChange(isFrontDisplay: Bool) {
+        generation &+= 1
+        setFrontDisplay(isFrontDisplay)
+    }
+
+    static func setFrontDisplay(_ value: Bool) {
+        guard value != isFrontDisplay else { return }
+        isFrontDisplay = value
+        NotificationCenter.default.post(name: .duoDisplayDidChange, object: nil)
+    }
 }
 
 /// The navigation container is installed once for the lifetime of the scene;
@@ -54,14 +71,18 @@ private struct DuoSceneContext<Content: View>: View {
             .onChange(of: layoutContext.requiresImmersiveChrome, initial: true) { _, required in
                 setImmersiveChrome(required)
             }
-            .onAppear { setImmersiveChrome(layoutContext.requiresImmersiveChrome) }
+            .onAppear {
+                setImmersiveChrome(layoutContext.requiresImmersiveChrome)
+                // Pushes disappear this root too; the fold state outlives them.
+                DuoHingeEvents.setFrontDisplay(isClosed)
+            }
             .onDisappear { setImmersiveChrome(false) }
             .onHingeChange { _, update in
                 // Status selects a user preference; layout still comes from
                 // reserved regions, never from the continuous hinge angle.
                 hasHinge = update.hinge != nil
                 isClosed = update.hinge?.status == .closed
-                DuoHingeEvents.noteChange()
+                DuoHingeEvents.noteChange(isFrontDisplay: isClosed)
             }
     }
 
@@ -124,13 +145,15 @@ struct DuoWorkspaceGeometry<Content: View>: View {
             divisions = expanded.reservedRegions(kind: .division, layoutDirectionBehavior: .fixed).map(\.frame)
         }
         #endif
-        return .resolve(
+        var layout = DuoWorkspaceLayout.resolve(
             bounds: CGRect(origin: .zero, size: expanded.size), safeFrame: safeFrame,
             occlusions: occlusions, divisions: divisions, context: context,
             headerHeight: headerHeight, rightToLeft: layoutDirection == .rightToLeft,
             occlusionContentFrames: occlusionContentFrames,
             headerTopLimit: headerTopLimit.map { $0 - frame.minY }
         )
+        layout.safeAreaTop = safe.frame(in: .global).minY
+        return layout
     }
 }
 

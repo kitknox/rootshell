@@ -132,6 +132,10 @@ class LiveActivityManager {
     @ObservationIgnored
     private var stateObserverTask: Task<Void, Never>?
 
+    /// Periodic sweep that moves one-hour-old island rows into the archive.
+    @ObservationIgnored
+    private var agentArchiveSweepTask: Task<Void, Never>?
+
     /// Whether the user explicitly dismissed the Live Activity (swipe-to-dismiss).
     /// Suppresses auto-restart until a meaningful state change occurs.
     @ObservationIgnored
@@ -188,10 +192,19 @@ class LiveActivityManager {
     @ObservationIgnored
     private var lastPublishedState: SessionActivityAttributes.ContentState?
 
-    /// Serializes every ActivityKit publish so an older update cannot land
-    /// after a newer one.
+    /// One in-flight ActivityKit update plus the newest state waiting behind it.
+    /// A burst of session/agent changes must not queue every intermediate
+    /// count: the island should land on the latest state, not replay history.
     @ObservationIgnored
-    private var publishChain: Task<Void, Never>?
+    private var publishTask: Task<Void, Never>?
+    @ObservationIgnored
+    private var pendingPublish: PendingPublish?
+
+    private struct PendingPublish {
+        let state: SessionActivityAttributes.ContentState
+        let activity: Activity<SessionActivityAttributes>
+        let reason: String
+    }
 
     private static let agentPublishCoalesceDelay: Duration = .seconds(1)
 
@@ -283,10 +296,11 @@ class LiveActivityManager {
         self.isWiFiInfoEnabled = store.get(Settings.LiveActivity.wifiInfo)
         self.isNetworkInfoEnabled = store.get(Settings.LiveActivity.networkInfo)
         self.isAgentInfoEnabled = store.get(Settings.LiveActivity.agents)
+        self.agentInboxLayout = store.get(Settings.LiveActivity.agentMessages)
         SettingsRefreshHub.shared.register(keys: [
             Settings.LiveActivity.enabled.name, Settings.LiveActivity.sessionFilter.name,
             Settings.LiveActivity.wifiInfo.name, Settings.LiveActivity.networkInfo.name,
-            Settings.LiveActivity.agents.name,
+            Settings.LiveActivity.agents.name, Settings.LiveActivity.agentMessages.name,
         ]) { [weak self] keys in self?.reload(keys: keys) }
 
         // Reclaim any orphaned Live Activity from a previous app launch.
@@ -358,6 +372,9 @@ class LiveActivityManager {
         }
         if keys.contains(Settings.LiveActivity.agents.name) {
             isAgentInfoEnabled = store.get(Settings.LiveActivity.agents)
+        }
+        if keys.contains(Settings.LiveActivity.agentMessages.name) {
+            agentInboxLayout = store.get(Settings.LiveActivity.agentMessages)
         }
     }
 
@@ -936,6 +953,101 @@ class LiveActivityManager {
         }
     }
 
+    // MARK: - Agent Inbox
+
+    /// How agent messages appear on the island. Off by default.
+    var agentInboxLayout: AgentInboxIslandLayout {
+        didSet {
+            guard ProtectedDataGuard.isAvailable else { return }
+            if !isReloading {
+                SettingsStore.shared.set(Settings.LiveActivity.agentMessages, agentInboxLayout)
+            }
+            guard isEnabled else { return }
+            reconcileActivityLifecycle(reason: "agent messages layout changed")
+        }
+    }
+
+    /// Unread agent events on the island, newest first. Rebuilt from the
+    /// inbox store on every reconcile so the two cannot disagree. Holds no
+    /// message text; see `AgentInboxItem`.
+    @ObservationIgnored
+    private var agentInboxItems: [AgentInboxItem] = []
+
+    @ObservationIgnored
+    private var agentInboxReconcileScheduled = false
+
+    /// Rows past the lock-screen five only keep the counts honest.
+    private static let agentInboxMemoryLimit = 50
+
+    private var showsAgentInbox: Bool {
+        isEnabled && agentInboxLayout != .off && sessionFilter != .vpnOnly
+    }
+
+    private func refreshAgentInboxItems() {
+        guard showsAgentInbox, ProtectedDataGuard.isAvailable else {
+            agentInboxItems = []
+            stopAgentArchiveSweep()
+            return
+        }
+        agentInboxItems = AgentInboxStore.shared.unreadActions
+            .prefix(Self.agentInboxMemoryLimit)
+            .map(\.event)
+        if agentInboxItems.isEmpty {
+            stopAgentArchiveSweep()
+        } else {
+            startAgentArchiveSweepIfNeeded()
+        }
+    }
+
+    /// Idle rows leave the island after an hour; nothing else would trigger
+    /// a reconcile for them.
+    private func startAgentArchiveSweepIfNeeded() {
+        guard agentArchiveSweepTask == nil else { return }
+        agentArchiveSweepTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled, self != nil else { return }
+                AgentInboxStore.shared.sweepExpired()
+            }
+        }
+    }
+
+    private func stopAgentArchiveSweep() {
+        agentArchiveSweepTask?.cancel()
+        agentArchiveSweepTask = nil
+    }
+
+    private func agentInboxCount(_ status: AgentInboxStatus) -> Int {
+        agentInboxItems.reduce(0) { $0 + (AgentInboxStatus(raw: $1.status) == status ? 1 : 0) }
+    }
+
+    /// Rows (inbox layout only) and total for the island.
+    private var displayedAgentInbox: (items: [AgentInboxItem], total: Int) {
+        guard showsAgentInbox, !agentInboxItems.isEmpty else { return ([], 0) }
+        let rows = agentInboxLayout == .inbox
+            ? Array(agentInboxItems.prefix(SessionActivityAttributes.ContentState.lockScreenAgentItemLimit))
+            : []
+        return (rows, agentInboxItems.count)
+    }
+
+    /// Called by `AgentInboxStore` after any change. Coalesced: a burst of
+    /// deliveries or a sweep publishes once.
+    func agentInboxDidChange(newEvent: Bool) {
+        guard isEnabled, agentInboxLayout != .off else { return }
+        // A new message is what a dismissed inbox island comes back for.
+        if newEvent, agentInboxLayout == .inbox {
+            userDismissed = false
+            cancelStartRetry(resetAttempts: true)
+        }
+        guard !agentInboxReconcileScheduled else { return }
+        agentInboxReconcileScheduled = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.agentInboxReconcileScheduled = false
+            self.reconcileActivityLifecycle(reason: "agent inbox changed")
+        }
+    }
+
     // MARK: - Filter Logic
 
     /// Computed filtered session count based on current filter
@@ -952,6 +1064,9 @@ class LiveActivityManager {
 
     /// Build a ContentState based on the current filter
     private func filteredContentState(at date: Date) -> SessionActivityAttributes.ContentState {
+        // Read once: the island and the Lock Screen draw the same prefix, and
+        // the folded total has to agree with the rows it labels.
+        let inbox = displayedAgentInbox
         switch sessionFilter {
         case .vpnOnly:
             return SessionActivityAttributes.ContentState(
@@ -976,7 +1091,13 @@ class LiveActivityManager {
                 networkASName: isNetworkInfoEnabled ? lastNetworkASName : nil,
                 networkCountryFlag: isNetworkInfoEnabled ? lastNetworkCountryFlag : nil,
                 networkType: isNetworkInfoEnabled ? lastNetworkType : nil,
-                appIconVariant: AppIconManager.shared.selectedVariant.rawValue
+                appIconVariant: AppIconManager.shared.selectedVariant.rawValue,
+                agentItems: inbox.items,
+                agentUnreadTotal: inbox.total,
+                agentInboxBlockedCount: agentInboxCount(.blocked),
+                agentInboxFailedCount: agentInboxCount(.failed),
+                agentInboxDoneCount: agentInboxCount(.done),
+                agentInboxLayout: inbox.total > 0 ? agentInboxLayout.rawValue : ""
             )
 
         case .diary:
@@ -1007,7 +1128,13 @@ class LiveActivityManager {
                 agentWorkingCount: shownAgentWorkingCount,
                 agentAttentionCount: shownAgentAttentionCount,
                 agentIdleCount: shownAgentIdleCount,
-                appIconVariant: AppIconManager.shared.selectedVariant.rawValue
+                appIconVariant: AppIconManager.shared.selectedVariant.rawValue,
+                agentItems: inbox.items,
+                agentUnreadTotal: inbox.total,
+                agentInboxBlockedCount: agentInboxCount(.blocked),
+                agentInboxFailedCount: agentInboxCount(.failed),
+                agentInboxDoneCount: agentInboxCount(.done),
+                agentInboxLayout: inbox.total > 0 ? agentInboxLayout.rawValue : ""
             )
 
         case .all, .infoOnly:
@@ -1044,7 +1171,13 @@ class LiveActivityManager {
                 agentWorkingCount: shownAgentWorkingCount,
                 agentAttentionCount: shownAgentAttentionCount,
                 agentIdleCount: shownAgentIdleCount,
-                appIconVariant: AppIconManager.shared.selectedVariant.rawValue
+                appIconVariant: AppIconManager.shared.selectedVariant.rawValue,
+                agentItems: inbox.items,
+                agentUnreadTotal: inbox.total,
+                agentInboxBlockedCount: agentInboxCount(.blocked),
+                agentInboxFailedCount: agentInboxCount(.failed),
+                agentInboxDoneCount: agentInboxCount(.done),
+                agentInboxLayout: inbox.total > 0 ? agentInboxLayout.rawValue : ""
             )
         }
     }
@@ -1073,6 +1206,9 @@ class LiveActivityManager {
         // Coding agents keep the activity alive on their own (a tssh-only
         // user has no diary sessions to do it), except in VPN Only mode.
         if displayedAgentCount > 0 { return true }
+        // Only the inbox layout starts an island on its own; the badge rides
+        // along on one that is already up.
+        if agentInboxLayout == .inbox, displayedAgentInbox.total > 0 { return true }
         // Info Only: keep activity alive on WiFi/Network info alone.
         // Require at least one info source enabled to avoid an empty widget.
         if sessionFilter == .infoOnly && (isWiFiInfoEnabled || isNetworkInfoEnabled) {
@@ -1083,6 +1219,8 @@ class LiveActivityManager {
 
     private func reconcileActivityLifecycle(reason: String) {
         dropInactiveCurrentActivityIfNeeded()
+        // Before eligibility: unread inbox rows can be the reason to exist.
+        refreshAgentInboxItems()
 
         guard hasEligibleActivityContent else {
             cancelStartRetry(resetAttempts: true)
@@ -1203,6 +1341,7 @@ class LiveActivityManager {
             )
             lastPublishedState = state
             isActivityActive = true
+            pendingPublish = nil
             let count = filteredSessionCount
             cancelStartRetry(resetAttempts: true)
             Self.logger.info("Live Activity started with \(count) session(s), reason: \(reason)")
@@ -1223,23 +1362,26 @@ class LiveActivityManager {
         publish(state, to: activity, reason: "update")
     }
 
-    /// Hands one content state to ActivityKit behind every publish before it,
-    /// so a slow earlier update cannot overwrite a newer one; the timestamp
-    /// lets the system drop anything that still arrives out of order.
+    /// Hands the newest content state to ActivityKit. The state replaces any
+    /// older state that has not started sending yet, so a burst of updates
+    /// cannot make the island replay counts that are already obsolete.
     private func publish(
         _ state: SessionActivityAttributes.ContentState,
         to activity: Activity<SessionActivityAttributes>,
         reason: String
     ) {
         lastPublishedState = state
-        let content = ActivityContent(state: state, staleDate: nil)
-        let stamp = Date()
-        let previous = publishChain
-        publishChain = Task {
-            await previous?.value
-            await activity.update(content, alertConfiguration: nil, timestamp: stamp)
-            Self.logger.debug(
-                "Live Activity updated (\(reason, privacy: .public)): \(state.sessionCount) session(s), \(state.agentTotalCount) agent(s)")
+        pendingPublish = PendingPublish(state: state, activity: activity, reason: reason)
+        guard publishTask == nil else { return }
+        publishTask = Task { @MainActor [weak self] in
+            while let next = self?.pendingPublish {
+                self?.pendingPublish = nil
+                let content = ActivityContent(state: next.state, staleDate: nil)
+                await next.activity.update(content, alertConfiguration: nil, timestamp: Date())
+                Self.logger.debug(
+                    "Live Activity updated (\(next.reason, privacy: .public)): \(next.state.sessionCount) session(s), \(next.state.agentTotalCount) agent(s)")
+            }
+            self?.publishTask = nil
         }
     }
 
@@ -1280,7 +1422,10 @@ class LiveActivityManager {
         activityStartDate = nil
         isActivityActive = false
         cancelAgentPublish()
+        stopAgentArchiveSweep()
+        pendingPublish = nil
         lastPublishedState = nil
+        agentInboxItems.removeAll()
 
         // Stop WiFi polling and network bridge, clean up shared favicons
         stopWiFiPolling()

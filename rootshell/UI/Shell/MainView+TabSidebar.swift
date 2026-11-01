@@ -144,6 +144,10 @@ extension MainView {
                 if !tabSidebarIsDocked { dismissTabSidebar() }
                 toggleTabExpose()
             },
+            onOpenAgentInbox: {
+                if !tabSidebarIsDocked { dismissTabSidebar() }
+                openAgentInbox()
+            },
             onTabHover: { id, isHovered in
                 tabHoverPreview.handleHover(tabID: id, source: .sidebar, isHovered: isHovered)
             },

@@ -88,14 +88,14 @@ struct GestureHelpView: View {
                 helpRow(
                     .floatKeyboard,
                     "Float or dock",
-                    "Pinch inward on the docked terminal keyboard to make it float. Spread two fingers apart on the floating keyboard to dock it again. You can also long-press the keyboard switch key and choose Docked or Detached.",
+                    "Pinch inward on the docked terminal keyboard to make it float. Spread two fingers apart on the floating keyboard to dock it again. You can also long-press the keyboard switch key, open Placement, and choose Docked or Detached.",
                     requirement: "Requires the built-in Terminal Keyboard with Use System Detached Keyboard turned off."
                 )
             } else {
                 helpRow(
                     .floatKeyboard,
                     "Float or dock",
-                    "Long-press the keyboard switch key and choose Detached to float a smaller keyboard over the terminal. Choose Docked to put it back.",
+                    "Long-press the keyboard switch key, open Placement, and choose Detached to float a smaller keyboard over the terminal. Choose Docked to put it back.",
                     requirement: "Requires the built-in Terminal Keyboard."
                 )
             }

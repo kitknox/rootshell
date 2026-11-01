@@ -14,6 +14,7 @@ import os
 
 struct TerminalSplitTreeView: UIViewRepresentable {
     @Environment(\.duoLayout) private var duoLayout
+    @Environment(\.terminalTopSafeEdge) private var terminalTopSafeEdge
     @Environment(\.paneCardBackdrop) private var paneCardBackdrop
     @Environment(\.paneCardRimPalette) private var paneCardRimPalette
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -66,6 +67,7 @@ struct TerminalSplitTreeView: UIViewRepresentable {
         uiView.isActiveTab = isActive
         uiView.terminalEffectsEnabled = terminalEffectsEnabled
         uiView.reservesTerminalBottomSafeArea = !duoLayout.extendsTerminalToVerticalEdges
+        uiView.terminalTopSafeEdge = terminalTopSafeEdge
         uiView.routesFocusedProgressToIntegratedEdge = routesFocusedProgressToIntegratedEdge
         uiView.paneUnderlay = paneUnderlay
         uiView.update(tree: tree, focusedPane: focusedPane)
@@ -453,6 +455,12 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
             updateTerminalEffectsEligibility()
         }
     }
+    var terminalTopSafeEdge: CGFloat = 0 {
+        didSet {
+            guard terminalTopSafeEdge != oldValue else { return }
+            updateTerminalEffectsEligibility()
+        }
+    }
     var routesFocusedProgressToIntegratedEdge: Bool = false {
         didSet {
             guard routesFocusedProgressToIntegratedEdge != oldValue else { return }
@@ -646,6 +654,7 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
         for terminal in tree.terminalLeaves {
             terminal.terminalEffectsEnabled = terminalEffectsEnabled
             terminal.reservesBottomSafeArea = reservesTerminalBottomSafeArea
+            terminal.topSafeEdge = terminalTopSafeEdge
         }
     }
 
@@ -1060,7 +1069,7 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
                     let chrome = terminal.herdrLayoutChrome
                     return (h: chrome.width, v: chrome.height)
                 }
-                return (h: padX * 2, v: padY * 2)
+                return (h: padX * 2, v: padY * 2 + (view.asTerminal?.topInsetPoints ?? 0))
             case .split(let split):
                 let left = walk(split.left)
                 let right = walk(split.right)
@@ -2299,6 +2308,7 @@ extension Notification.Name {
     static let toggleFileManager = Notification.Name("com.rootshell.toggleFileManager")
     static let toggleIPLookup = Notification.Name("com.rootshell.toggleIPLookup")
     static let toggleHTTPCapture = Notification.Name("com.rootshell.toggleHTTPCapture")
+    static let toggleAgentInbox = Notification.Name("com.rootshell.toggleAgentInbox")
     static let toggleThemePicker = Notification.Name("com.rootshell.toggleThemePicker")
     static let toggleClipboardManager = Notification.Name("com.rootshell.toggleClipboardManager")
     static let toggleBackgroundEffect = Notification.Name("com.rootshell.toggleBackgroundEffect")

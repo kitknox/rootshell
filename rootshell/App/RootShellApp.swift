@@ -100,6 +100,9 @@ struct RootShellApp: App {
                 .fullScreenLaunchNotice()
                 .alwaysOnDisplay()
                 .task {
+                    #if DEBUG
+                    AgentInboxStore.shared.seedDemoIfRequested()
+                    #endif
                     guard ProtectedDataGuard.isAvailable else { return }
 
                     // App-level startup work: run ONCE per launch, not on every
@@ -189,6 +192,10 @@ struct RootShellApp: App {
                     LaunchSignposts.event("app.startupTask.end")
                 }
                 .onOpenURL { url in
+                    // Live Activity inbox rows and the inbox itself.
+                    if PushNotificationRouter.handleLiveActivityURL(url) {
+                        return
+                    }
                     // Handle rootshell://vpn/connect/<profileID>
                     if url.scheme == "rootshell" && url.host == "vpn",
                        url.pathComponents.count >= 2 && url.pathComponents[1] == "connect",

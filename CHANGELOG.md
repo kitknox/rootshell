@@ -3,6 +3,51 @@
 All notable changes to the rootshell app for iPhone, iPad, Vision Pro, and Mac, newest first.
 Versions are listed as `release-build`, matching the version shown in Settings, About.
 
+## 1.0.16-173 - October 31, 2026
+
+### Terminal Layout and iPhone Duo
+
+- **Hidden Top Tab Bar:** With Show Top Tab Bar off, scrollback fills behind the status bar while the first row stays clear. tmux and herdr panes resize to match.
+- **Duo Tab Layout:** Front-display portrait tabs get a full-width row below the status area. Inner-display tabs sit beside the status area, with the side rail still available.
+- **Side Rail Controls:** Fixed the side rail's tab button disappearing after folding or resizing. The front-display tab sidebar leaves the rail accessible so the button can close it.
+- **Tab Previews and Logos:** Side rail tab switching shows the tab-name overlay. The overlay, hover previews, and Tab Exposé now show app logos.
+- **Keyboard Heights:** The Terminal Keyboard remembers separate inner- and front-display heights, adjustable in Settings or by swiping.
+- **Laptop Pose:** The detached keyboard docks below the fold in laptop pose. Unfolding restores its saved placement and floating position.
+
+### Agent Inbox
+
+- **Agent Messages:** Coding-agent hook messages collect in an inbox with Needs You, Working, Done, Failed, and Archived sections. Select an actionable message to open its terminal pane and archive it.
+- **Inbox Access and Layout:** Open the inbox from the terminal menu, sidebar agent summary, or Ctrl+Command+I. Choose a sidebar, floating, or full-size panel; iPhone uses a sheet.
+- **Live Activity:** Agent Messages offers Off (default), Unread Count (a badge on an existing activity), or Inbox (unread statuses replacing sessions, without message text). Tap to open the inbox.
+- **History and Cleanup:** History survives relaunch. Inactive messages archive after an hour and expire two hours later. Opening the inbox dismisses the floating tab switcher.
+
+### Installed Fonts
+
+- **System Font Picker:** Choose Installed Font... under System Fonts to access monospace fonts installed by other apps. Synced font choices load more reliably and replace fallback fonts.
+
+### Keyboard and Dictation
+
+- **Toolbar Modifier Gestures:** Swipe across toolbar modifiers to combine them; pause to lock them. A quick swipe from an active modifier clears them. Works with system and Terminal Keyboard toolbars.
+- **Detached Keyboard Docking:** Dragging the detached keyboard to the bottom no longer docks it accidentally. Use Docked in its menu, double-tap the handle, or pinch.
+- **Keyboard Layout Fixes:** Fixed the iPhone landscape hide-keyboard button and unused keyboard space after switching apps in split view.
+- **Dictation Submission:** Fixed Hands-Free, Insert & Return, and spoken "send" inserting a newline instead of submitting in Claude Code and Codex. Return follows dictated text after a short pause; subsequent input stays in order.
+
+### SSH, SFTP, and Security
+
+- **SSH Certificates:** Fixed crashes with no-expiry SSH certificates and added RSA/SHA-512 certificate verification. CA trust rejects SHA-1 signatures and host certificates without hostnames. RSA key sizes are checked.
+- **SSH Connection Handling:** Refused forwards and unsupported channel types no longer tear down a working SSH connection or tunnel. Invalid transport data closes the connection; queued protocol replies are bounded.
+- **Agent Forwarding:** Forwarded-agent replies stay in order, unsupported requests get failure replies, and queued requests stop on disconnect. The Mac agent verifies session-binding signatures and retains the original destination across forwarding hops.
+- **File Transfer Safety:** File copies set metadata through open handles where available, update directory modes more safely, and strip setuid/setgid bits. SFTP handles malformed paths, early EOF, and extreme file sizes more safely.
+- **Terminal Output:** SSH errors and SFTP filenames printed in the terminal are stripped of terminal control sequences.
+
+### Reliability and Updates
+
+- **Local Shell Archive Tools:** Updated to libarchive 3.8.11, fixing crashes on crafted Joliet ISO images. Fixed tar, cpio, bsdcat, and unzip pipes/redirection and a possible exit hang with concurrent sessions.
+- **Agent Usage Labels:** Ultra and Max 20x plans are labeled Claude Ultra.
+- **Scrolling During ping:** Fixed scrolling stutter while ping waits for an unreachable host.
+- **Vim Update:** Updated Vim to 9.2.1252, fixing Vim9 tuple and clipboard-provider crashes.
+- **Tailscale Update:** Updated Tailscale to 1.104.4 for ping attribution fixes, plus a zstd decoder crash fix for malformed control-server data.
+
 ## 1.0.15-172 - October 25, 2026
 
 ### Detached Terminal Keyboard

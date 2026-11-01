@@ -1,12 +1,23 @@
 {
-  "images" : [
+  "images": [
     {
-      "filename" : "AppIconRadicalCatppuccin.png",
-      "idiom" : "universal"
+      "filename": "AppIconRadicalCatppuccin@1x.png",
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "AppIconRadicalCatppuccin@2x.png",
+      "idiom": "universal",
+      "scale": "2x"
+    },
+    {
+      "filename": "AppIconRadicalCatppuccin@3x.png",
+      "idiom": "universal",
+      "scale": "3x"
     }
   ],
-  "info" : {
-    "author" : "xcode",
-    "version" : 1
+  "info": {
+    "author": "xcode",
+    "version": 1
   }
 }

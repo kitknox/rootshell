@@ -380,6 +380,9 @@ extension Ghostty {
         /// Subscription to font family changes
         private var fontFamilySubscription: AnyCancellable?
 
+        /// Subscription to the selected family becoming available
+        private var fontFamilyAvailableSubscription: AnyCancellable?
+
         /// Subscription to ligatures changes
         private var ligaturesSubscription: AnyCancellable?
 
@@ -1120,6 +1123,22 @@ extension Ghostty {
                 .sink { [weak self] fontFamily in
                     self?.applyCurrentFontFamily()
                 }
+            fontFamilyAvailableSubscription = FontManager.shared.fontFamilyDidBecomeAvailable
+                .sink { [weak self] in
+                    self?.reloadCurrentFontFamily()
+                }
+        }
+
+        /// Resolve the current family again once it can be found. Ghostty shares
+        /// font grids between surfaces by config, so pushing the same family would
+        /// keep the grid built while it was missing. Push an empty family list
+        /// first so every surface lets go of that grid.
+        private func reloadCurrentFontFamily() {
+            guard !SettingsStore.shared.isApplyingBatch,
+                  let app, FontManager.shared.currentFontFamily != nil else { return }
+            guard config.setFontFamily(""), let cleared = config.config else { return }
+            pushConfig(app: app, globalConfig: cleared)
+            applyCurrentFontFamily()
         }
 
         /// Apply the current font family from FontManager

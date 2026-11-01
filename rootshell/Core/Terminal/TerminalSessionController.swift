@@ -1069,7 +1069,8 @@ final class TerminalSessionController {
                    let config = connectionConfig.sshConfig {
                     host.terminalRequestAuthentication(config)
                 } else {
-                    host.terminalWriteToGhostty("\r\n❌ Connection failed: \(error.localizedDescription)\r\n")
+                    // The description can carry server text (e.g. a channel-open refusal).
+                    host.terminalWriteToGhostty("\r\n❌ Connection failed: \(SSHBanner.terminalSafe(error.localizedDescription))\r\n")
                 }
             }
         }

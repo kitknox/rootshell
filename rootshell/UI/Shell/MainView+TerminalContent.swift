@@ -320,6 +320,8 @@ extension MainView {
             httpCaptureOverlays(fullSize: true)
             #endif
 
+            agentInboxOverlays(fullSize: true)
+
             // Compose text overlay
             composeOverlay(composeStateVersion: composeStateVersion)
 
@@ -361,6 +363,8 @@ extension MainView {
             #if !CHINA_BUILD
             httpCaptureOverlays(fullSize: false)
             #endif
+
+            agentInboxOverlays(fullSize: false)
 
             // Theme picker overlay
             themePickerOverlayView(isPresented: $showThemePickerOverlay)
@@ -1093,10 +1097,15 @@ extension MainView {
                     width: width,
                     keyboardFrame: keyboardFrame,
                     keyboardHeight: keyboardHeight,
-                    containerBottomSafeAreaExpansion: max(0, expanded.size.height - inner.size.height),
+                    // Only the bottom escape; the top one is the surface's top inset.
+                    containerBottomSafeAreaExpansion: max(
+                        0, expanded.frame(in: .global).maxY - inner.frame(in: .global).maxY),
                     layer: layer
                 )
             }
+            // The top escape lets scrollback fill the band above the grid,
+            // which ghostty_surface_set_top_inset keeps below the safe area.
+            .ignoresSafeArea(.container, edges: terminalExtendsUnderTopSafeArea ? .top : [])
             // A floating keyboard still reports a keyboard region the size of
             // the strip, which would otherwise cancel the escape.
             .ignoresSafeArea([.container, .keyboard], edges: (duoTabletopAvailable && !duoTabletopDisabled) || roundedPanes ? [] : .bottom)
@@ -1334,6 +1343,7 @@ extension MainView {
         #if !CHINA_BUILD
         if httpCaptureShowsOverlay && httpCapturePresentation == .full { return true }
         #endif
+        if agentInboxShowsOverlay && agentInboxPresentation == .full { return true }
         return fileManagerShowsOverlay && fileManagerPresentation == .full
     }
 
@@ -1456,6 +1466,7 @@ extension MainView {
         let aiSidebar: CGFloat
         let fileManager: CGFloat
         let httpCapture: CGFloat
+        let agentInbox: CGFloat
         let terminal: CGFloat
     }
 
@@ -1483,12 +1494,16 @@ extension MainView {
         #else
         let httpCaptureWidth: CGFloat = 0
         #endif
+        let agentInboxWidth = agentInboxShowsSidebar
+            ? min(agentInboxSidebarWidth, max(AgentInboxSidebarView.minWidth, rowWidth - dockedWidth - sidebarWidth - 320))
+            : 0
         return TerminalRowColumns(
             docked: dockedWidth,
             aiSidebar: sidebarWidth,
             fileManager: fileManagerWidth,
             httpCapture: httpCaptureWidth,
-            terminal: rowWidth - sidebarWidth - dockedWidth - fileManagerWidth - httpCaptureWidth)
+            agentInbox: agentInboxWidth,
+            terminal: rowWidth - sidebarWidth - dockedWidth - fileManagerWidth - httpCaptureWidth - agentInboxWidth)
     }
 
     /// The complete terminal and AI sidebar content.
@@ -1523,6 +1538,7 @@ extension MainView {
         let sidebarWidth = columns.aiSidebar
         let fileManagerWidth = columns.fileManager
         let httpCaptureWidth = columns.httpCapture
+        let agentInboxWidth = columns.agentInbox
         let terminalWidth = columns.terminal
         let portsTerminal = terminals.indices.contains(selectedTabIndex)
             ? terminals[selectedTabIndex].focusedPane?.asTerminal
@@ -1573,6 +1589,8 @@ extension MainView {
             }
 
             fileManagerSidebarColumn(width: fileManagerWidth, totalWidth: geometry.size.width)
+
+            agentInboxSidebarColumn(width: agentInboxWidth, totalWidth: geometry.size.width)
 
             #if !CHINA_BUILD
             httpCaptureSidebarColumn(width: httpCaptureWidth, totalWidth: geometry.size.width)
@@ -1653,6 +1671,7 @@ extension MainView {
         // CHINA gate — the docked path ships on China builds too.
         .animation(tabSidebarIsDragging ? .none : .interactiveSpring(), value: dockedWidth)
         .animation(fileManagerSidebarIsDragging ? .none : .spring(response: 0.3, dampingFraction: 0.85), value: fileManagerWidth)
+        .animation(agentInboxSidebarIsDragging ? .none : .spring(response: 0.3, dampingFraction: 0.85), value: agentInboxWidth)
         #if !CHINA_BUILD
         .animation(httpCaptureSidebarIsDragging ? .none : .spring(response: 0.3, dampingFraction: 0.85), value: httpCaptureWidth)
         .animation(

@@ -295,6 +295,7 @@ class SidePanelOverlayViewController: UIViewController {
 
     override func viewSafeAreaInsetsDidChange() {
         super.viewSafeAreaInsetsDidChange()
+        updateEffectiveWidth()
         if clearsWindowControls {
             updateWindowControlsClearance()
         }
@@ -330,7 +331,16 @@ class SidePanelOverlayViewController: UIViewController {
     }
 
     var effectiveWidth: CGFloat {
-        min(panelWidth, view.bounds.width)
+        max(0, min(panelWidth, view.bounds.width - oppositeSafeAreaInset))
+    }
+
+    /// The panel stops at the safe area on its far side, so a tap on a toolbar
+    /// rail there (iPhone Duo's front display) lands on the dismissing backdrop.
+    private var oppositeSafeAreaInset: CGFloat {
+        let rightToLeft = view.effectiveUserInterfaceLayoutDirection == .rightToLeft
+        let farSideIsRight = (edge == .leading) != rightToLeft
+        let insets = [view.safeAreaInsets, windowControlsClearanceSourceView?.safeAreaInsets ?? .zero]
+        return insets.map { farSideIsRight ? $0.right : $0.left }.max() ?? 0
     }
 
     private func updateEffectiveWidth() {

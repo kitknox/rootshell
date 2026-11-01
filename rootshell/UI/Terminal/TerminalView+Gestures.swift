@@ -1459,20 +1459,23 @@ extension Ghostty.TerminalView {
     /// applies bracketed-paste markers when the running program requests them.
     @discardableResult
     func insertPastedText(_ text: String, recordHistory: Bool = true) -> Bool {
-        userInputGeneration &+= 1
+        noteUserInput()
         invalidateWritingAssistance(resetDocument: true)
-        guard let surface, !text.isEmpty else { return false }
+        guard surface != nil, !text.isEmpty else { return false }
 
         if recordHistory {
             ClipboardHistoryManager.shared.record(text, source: .paste)
         }
         if let state = herdrEndpointPane {
-            state.sendText(text, paste: true)
+            emitAfterDictation { _ in state.sendText(text, paste: true) }
             NotificationCenter.default.post(name: .ghosttyDidReceiveInput, object: self)
             return true
         }
-        text.withCString { ptr in
-            ghostty_surface_text(surface, ptr, UInt(text.utf8.count))
+        emitAfterDictation { view in
+            guard let surface = view.surface else { return }
+            text.withCString { ptr in
+                ghostty_surface_text(surface, ptr, UInt(text.utf8.count))
+            }
         }
         NotificationCenter.default.post(name: .ghosttyDidReceiveInput, object: self)
         return true
@@ -1601,9 +1604,22 @@ extension Ghostty.TerminalView {
 
 extension Ghostty.TerminalView {
 
+    /// Every input path calls this first; dictation's own delivery doesn't count.
+    func noteUserInput() {
+        guard !dictationDelivering else { return }
+        userInputGeneration &+= 1
+    }
+
+    /// Sends now, or behind a delayed dictation Return so it keeps both its
+    /// order and its gap from the dictated text.
+    func emitAfterDictation(_ work: @escaping @MainActor (Ghostty.TerminalView) -> Void) {
+        guard dictationDrainTask != nil, !dictationDelivering else { return work(self) }
+        dictationPending.append((false, work))
+    }
+
     /// Sends user input to the appropriate destination based on platform
     func sendUserInput(_ data: Data, documentMutation: TerminalCorrectionContext.Mutation? = nil) {
-        userInputGeneration &+= 1
+        noteUserInput()
         // herdr gateway: lone ESC detaches; anything else typed at the covered
         // shell is dropped rather than landing in a pane the user cannot see.
         if herdrController?.showsGatewayStatus == true {
@@ -1635,7 +1651,7 @@ extension Ghostty.TerminalView {
             endDictationSession()
             invalidateWritingAssistance()
         }
-        forwardUserInput(data)
+        emitAfterDictation { $0.forwardUserInput(data) }
     }
 
     private func forwardUserInput(_ data: Data) {
@@ -2756,6 +2772,14 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
             NotificationCenter.default.post(name: .toggleHTTPCapture, object: self)
         })
         #endif
+
+        menuItems.append(UIAction(
+            title: String(localized: "Agent Inbox"),
+            image: UIImage(systemName: "tray")
+        ) { [weak self] _ in
+            guard let self else { return }
+            NotificationCenter.default.post(name: .toggleAgentInbox, object: self)
+        })
 
         // Split actions menu
         let splitRight = UIAction(

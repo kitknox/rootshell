@@ -237,6 +237,14 @@ struct FileCommands: Commands {
             }
             .modifier(DynamicShortcut(action: .toggle_http_capture, shortcuts: shortcutState.shortcuts))
             #endif
+
+            Button("Agent Inbox") {
+                UIApplication.shared.sendMenuAction(
+                    #selector(Ghostty.TerminalView.menuToggleAgentInbox(_:)),
+                    from: nil
+                )
+            }
+            .modifier(DynamicShortcut(action: .toggle_agent_inbox, shortcuts: shortcutState.shortcuts))
         }
     }
 }

@@ -202,9 +202,9 @@ nonisolated struct FontCatalogLoader: Sendable {
         var systemFonts: [FontFamilyInfo] = []
         var seenFamilies = Set<String>()
 
-        // Use UIFontDescriptor matching to discover all monospace fonts system-wide.
-        // This finds fonts from UIFont.familyNames AND user-installed fonts (Font Case etc.)
-        // when the com.apple.developer.user-fonts entitlement is present.
+        // Use descriptor matching to discover monospace fonts system-wide. On iOS this
+        // sees fonts another app installed (Font Case etc.) only once this app has
+        // been granted access to them: see FontManager.selectInstalledFont(_:).
         // Read family names off descriptors so discovery never instantiates a font.
         let monoDescriptor = CTFontDescriptorCreateWithAttributes([
             kCTFontTraitsAttribute: [kCTFontSymbolicTrait: CTFontSymbolicTraits.traitMonoSpace.rawValue]
@@ -252,38 +252,6 @@ nonisolated struct FontCatalogLoader: Sendable {
                 displayName: familyName,
                 configName: familyName,
                 sampleSource: .postScriptName(faceName)
-            ))
-            seenFamilies.insert(familyName)
-        }
-
-        // Check CoreText registered font descriptors for user-installed fonts
-        // that may not appear in UIFont.familyNames or descriptor matching
-        let descriptors = CTFontManagerCopyRegisteredFontDescriptors(.user, true) as? [CTFontDescriptor] ?? []
-        let ctCount = descriptors.count
-        logger.info("[SystemFonts] CTFontManager .user scope: \(ctCount) descriptors")
-
-        for descriptor in descriptors {
-            guard let familyName = CTFontDescriptorCopyAttribute(descriptor, kCTFontFamilyNameAttribute) as? String else {
-                continue
-            }
-            guard !seenFamilies.contains(familyName),
-                  !bundledConfigNames.contains(familyName),
-                  !customConfigNames.contains(familyName),
-                  !hiddenUtilityFontFamilies.contains(familyName) else { continue }
-
-            let ctFont = CTFontCreateWithFontDescriptor(descriptor, 16, nil)
-            let uiFont = ctFont as UIFont
-            let traits = uiFont.fontDescriptor.symbolicTraits
-            let isMono = traits.contains(.traitMonoSpace) || Self.isMonospaceByGlyphAdvance(uiFont)
-
-            logger.info("[SystemFonts] CT user font: '\(familyName)' mono=\(isMono)")
-            guard isMono else { continue }
-
-            systemFonts.append(FontFamilyInfo(
-                id: familyName,
-                displayName: familyName,
-                configName: familyName,
-                sampleSource: .postScriptName(CTFontCopyPostScriptName(ctFont) as String)
             ))
             seenFamilies.insert(familyName)
         }

@@ -118,3 +118,15 @@ struct AgentBrandMark: View {
         }
     }
 }
+
+extension TabModel {
+    /// The focused pane's agent mark under the agent-badge setting, else its
+    /// shell or program mark under its own toggle.
+    func logoMark(agentMarks: Bool, programIcons: Bool) -> BrandMark? {
+        if agentMarks, let asset = AgentBrandMark.assetName(for: agentID) {
+            return .asset(asset)
+        }
+        guard programIcons else { return nil }
+        return (focusedPane ?? splitTree.first)?.presentation.foregroundProgram?.mark
+    }
+}

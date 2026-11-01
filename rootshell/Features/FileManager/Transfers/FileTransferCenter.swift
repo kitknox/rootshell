@@ -46,9 +46,9 @@ final class FileTransferCenter {
     var aggregateFraction: Double? {
         let active = activeJobs
         guard !active.isEmpty else { return nil }
-        let total = active.reduce(Int64(0)) { $0 + $1.totalBytes }
+        let total = active.reduce(Int64(0)) { $0.addingSaturating($1.totalBytes) }
         if total > 0 {
-            return min(1, Double(active.reduce(Int64(0)) { $0 + $1.completedBytes }) / Double(total))
+            return min(1, Double(active.reduce(Int64(0)) { $0.addingSaturating($1.completedBytes) }) / Double(total))
         }
         let items = active.reduce(0) { $0 + $1.totalItems }
         guard items > 0 else { return nil }
@@ -464,7 +464,7 @@ private struct TransferExecutor {
 
         let allItems = roots.flatMap(\.items)
         job.setTotals(
-            bytes: allItems.reduce(0) { $0 + ($1.isFile ? $1.size : 0) },
+            bytes: allItems.reduce(Int64(0)) { $0.addingSaturating($1.isFile ? $1.size : 0) },
             items: allItems.count + roots.filter(\.renamed).count
         )
         job.setState(.running)

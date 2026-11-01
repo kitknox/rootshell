@@ -190,23 +190,31 @@ final class LocalSSHAgentServer: @unchecked Sendable {
         }
 
         let peer = LocalAgentPeerResolver.resolve(fd: fd)
+        var sessionBinds = LocalAgentSessionBinds()
         var boundDestination: LocalAgentBoundDestination?
         var cachedGate: LocalAgentClientGateDecision?
 
         while let frame = SSHAgentWireCodec.readFrame(fd: fd) {
             let request = SSHAgentWireCodec.parse(frame: frame)
-            if case .sessionBind(let hostKeyBlob, _, let forwarding) = request {
-                let sem = DispatchSemaphore(value: 0)
-                nonisolated(unsafe) var destination: LocalAgentBoundDestination?
-                Task { @MainActor in
-                    destination = LocalSSHAgentManager.shared.makeBoundDestination(
-                        hostKeyBlob: hostKeyBlob,
-                        isForwarding: forwarding
-                    )
-                    sem.signal()
+            if case .sessionBind(let hostKeyBlob, let sessionID, let signature, let forwarding) = request {
+                guard sessionBinds.record(hostKeyBlob: hostKeyBlob, sessionID: sessionID, signature: signature, isForwarding: forwarding) else {
+                    logger.warning("Refused session-bind: bad signature, rebind after authentication, or too many binds")
+                    SSHAgentWireCodec.writeFrame(fd: fd, frame: SSHAgentWireCodec.failureFrame)
+                    continue
                 }
-                sem.wait()
-                boundDestination = destination
+                if boundDestination == nil, let first = sessionBinds.first {
+                    let sem = DispatchSemaphore(value: 0)
+                    nonisolated(unsafe) var destination: LocalAgentBoundDestination?
+                    Task { @MainActor in
+                        destination = LocalSSHAgentManager.shared.makeBoundDestination(
+                            hostKeyBlob: first.hostKeyBlob,
+                            isForwarding: first.isForwarding
+                        )
+                        sem.signal()
+                    }
+                    sem.wait()
+                    boundDestination = destination
+                }
             }
 
             let sem = DispatchSemaphore(value: 0)

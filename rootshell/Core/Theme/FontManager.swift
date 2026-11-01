@@ -205,6 +205,8 @@ class FontManager: ObservableObject {
 
     let fontSizeDidChange = PassthroughSubject<Double, Never>()
     let fontFamilyDidChange = PassthroughSubject<String?, Never>()
+    /// The selected family became resolvable after surfaces may have fallen back.
+    let fontFamilyDidBecomeAvailable = PassthroughSubject<Void, Never>()
     let ligaturesDidChange = PassthroughSubject<Bool, Never>()
     let fontFeaturesDidChange = PassthroughSubject<Void, Never>()
     let cellAdjustmentsDidChange = PassthroughSubject<Void, Never>()
@@ -290,6 +292,7 @@ class FontManager: ObservableObject {
             // Bundled or system-installed. System fonts need no registration;
             // bundled registration is a no-op when the family isn't in the bundle.
             registerBundledFonts(matching: Set([selected]))
+            requestInstalledFontIfMissing(selected)
         }
     }
 
@@ -362,6 +365,7 @@ class FontManager: ObservableObject {
                     registerBundledFonts(matching: Set([family]))
                 }
             }
+            if let family = currentFontFamily { requestInstalledFontIfMissing(family) }
         }
         if keys.contains(Settings.Font.ligatures.name) { ligaturesEnabled = store.get(Settings.Font.ligatures) }
         if keys.contains(Settings.Font.featurePrefs.name) {
@@ -718,6 +722,77 @@ class FontManager: ObservableObject {
         loader.availableFamilies = availableFamilies
         loader.loadSystemFonts()
         systemFontFamilies = loader.systemFontFamilies
+    }
+
+    // MARK: - Installed Font Access
+
+    /// Outcome of choosing a font in the system font picker.
+    enum InstalledFontSelection {
+        case selected
+        case notMonospace(family: String)
+    }
+
+    /// Select a font chosen in `UIFontPickerViewController`. iOS hides fonts
+    /// another app installed (Font Case etc.) until this app asks for them.
+    /// Request the whole family so bold and italic resolve too.
+    func selectInstalledFont(_ descriptor: UIFontDescriptor) async -> InstalledFontSelection {
+        let family = descriptor.object(forKey: .family) as? String
+            ?? UIFont(descriptor: descriptor, size: 16).familyName
+        await Self.requestFonts([Self.familyDescriptor(family)])
+        refreshSystemFonts()
+
+        let isListed = availableFamilies.contains { $0.configName == family }
+            || systemFontFamilies.contains { $0.configName == family }
+            || customFontFamilies.contains { $0.configName == family }
+        guard isListed else { return .notMonospace(family: family) }
+        // Reselecting the same family would keep Ghostty's fallback grid.
+        if currentFontFamily == family {
+            fontFamilyDidBecomeAvailable.send()
+        } else {
+            currentFontFamily = family
+        }
+        return .selected
+    }
+
+    /// Ask for a selected family Core Text can't find, e.g. one chosen on
+    /// another device. Access, once granted, survives relaunches.
+    private func requestInstalledFontIfMissing(_ family: String) {
+        #if !targetEnvironment(macCatalyst)
+        let descriptor = Self.familyDescriptor(family)
+        let mandatory = Set([kCTFontFamilyNameAttribute as String]) as CFSet
+        let matches = CTFontDescriptorCreateMatchingFontDescriptors(descriptor, mandatory) as? [CTFontDescriptor]
+        guard matches?.isEmpty ?? true else { return }
+
+        Task { [weak self] in
+            guard await Self.requestFonts([descriptor]),
+                  let self, self.currentFontFamily == family else { return }
+            self.logger.info("Granted access to installed font family '\(family)'")
+            if self.isCatalogLoaded { self.refreshSystemFonts() }
+            self.fontFamilyDidBecomeAvailable.send()
+        }
+        #endif
+    }
+
+    /// Rescan after a grant: gaining access to a font isn't known to post
+    /// kCTFontManagerRegisteredFontsChangedNotification.
+    private func refreshSystemFonts() {
+        completeCatalogLoadIfNeeded()
+        FontCatalogLoader.invalidateMonospaceCache()
+        loadSystemFonts()
+    }
+
+    private nonisolated static func familyDescriptor(_ family: String) -> CTFontDescriptor {
+        CTFontDescriptorCreateWithAttributes([kCTFontFamilyNameAttribute: family] as CFDictionary)
+    }
+
+    /// Returns true when every descriptor resolved.
+    @discardableResult
+    private nonisolated static func requestFonts(_ descriptors: [CTFontDescriptor]) async -> Bool {
+        await withCheckedContinuation { continuation in
+            CTFontManagerRequestFonts(descriptors as CFArray) { unresolved in
+                continuation.resume(returning: CFArrayGetCount(unresolved) == 0)
+            }
+        }
     }
 
     private func setupFontRegistrationObserver() {

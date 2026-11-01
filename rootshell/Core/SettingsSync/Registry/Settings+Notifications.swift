@@ -14,6 +14,7 @@ extension NotificationSoundPreset: SettingValue {}
 #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
 extension LiveActivitySessionFilter: SettingValue {}
 #endif
+extension AgentInboxIslandLayout: SettingValue {}
 extension GeoProviderType: SettingValue {}
 extension ClipboardHistoryManager.Retention: SettingValue {}
 
@@ -147,9 +148,34 @@ nonisolated extension Settings {
             "live_activity_agents_enabled", default: false, group: .liveActivity,
             configKey: "live-activity-agents-enabled",
             title: String(localized: "Live Activity Coding Agents", comment: "Setting title"))
+        static let agentMessages = SettingKey(
+            "live_activity_agent_messages", default: AgentInboxIslandLayout.off, group: .liveActivity,
+            configKey: "live-activity-agent-messages",
+            title: String(localized: "Live Activity Agent Messages", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
             enabled.erased, sessionFilter.erased, networkInfo.erased, wifiInfo.erased, agents.erased,
+            agentMessages.erased,
+        ]
+    }
+
+    enum AgentInbox {
+        static let presentation = SettingKey(
+            "agentInbox.presentation", default: PanelPresentation.sidebar, group: .notifications,
+            configKey: "agent-inbox-presentation",
+            title: String(localized: "Agent Inbox Presentation", comment: "Setting title"))
+        static let sidebarWidth = SettingKey(
+            "agentInbox.sidebar.width", default: 400.0, group: .notifications, policy: .deviceOnly,
+            title: String(localized: "Agent Inbox Sidebar Width", comment: "Setting title"))
+        static let hudWidth = SettingKey(
+            "agentInbox.hud.width", default: 520.0, group: .notifications, policy: .deviceOnly,
+            title: String(localized: "Agent Inbox Overlay Width", comment: "Setting title"))
+        static let hudHeight = SettingKey(
+            "agentInbox.hud.height", default: 640.0, group: .notifications, policy: .deviceOnly,
+            title: String(localized: "Agent Inbox Overlay Height", comment: "Setting title"))
+
+        static let all: [AnySettingDefinition] = [
+            presentation.erased, sidebarWidth.erased, hudWidth.erased, hudHeight.erased,
         ]
     }
 

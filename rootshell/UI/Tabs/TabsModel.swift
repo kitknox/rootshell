@@ -161,6 +161,17 @@ struct TabGroup: Identifiable, Hashable {
     let tabIDs: [UUID]
 }
 
+/// How a tmux or herdr gateway is named. Local gateways have no machine name.
+struct GatewayNaming: Equatable {
+    let machine: String?
+    let isLocal: Bool
+
+    /// One-line form; menus have room to name a local gateway.
+    func menuComponents(session: String?) -> [String?] {
+        [isLocal ? String(localized: "Local Shell", comment: "Connection type: local terminal shell") : machine, session]
+    }
+}
+
 /// The label is not part of the identity, so same-named projects stay separate.
 nonisolated struct ProjectGroupID: Hashable, Codable, Sendable, Identifiable {
     let hostKey: String
@@ -1682,27 +1693,42 @@ final class TabsModel {
 
     private func groupTitle(for id: TabGroupID, tabIDs: [UUID], byID: [UUID: TabModel]) -> String {
         if id.kind == .herdr {
-            // Session name, then host: the same shape as a tmux family.
             let tabs = tabIDs.compactMap { byID[$0] }
             let gateway = tabs.first(where: { $0.isHerdrGateway })
             let session = gateway?.herdrSessionName
                 ?? tabs.first?.owningGatewayTerminalUUID
                     .flatMap { HerdrController.controller(forGateway: $0)?.sessionName }
-            let host = gateway.flatMap { groupHostLabel(for: $0) }
-            return TabOrderRules.scopeTitle(components: [session, host], fallback: id.title)
+            let components = gateway.map { gatewayNaming(for: $0).menuComponents(session: session) } ?? [session]
+            return TabOrderRules.scopeTitle(components: components, fallback: id.title)
         }
         guard id.kind == .tmux else { return id.title }
         if let gateway = tabIDs.compactMap({ byID[$0] }).first(where: { $0.isTmuxGateway }) {
-            let controller = gateway.splitTree.terminalLeaves
-                .first(where: { $0.tmuxController != nil })?
-                .tmuxController
-            let host = controller?.connectionKey ?? controller?.gatewaySourceDisplayName
             return TabOrderRules.scopeTitle(
-                components: [gateway.tmuxSessionName, host],
+                components: gatewayNaming(for: gateway).menuComponents(session: gateway.tmuxSessionName),
                 fallback: id.title
             )
         }
         return id.title
+    }
+
+    func gatewayNaming(for gateway: TabModel) -> GatewayNaming {
+        let isLocal = Self.isLocal(gateway)
+        return GatewayNaming(machine: isLocal ? nil : gatewayMachineName(for: gateway), isLocal: isLocal)
+    }
+
+    /// Profile name, else the host without an mDNS suffix.
+    private func gatewayMachineName(for gateway: TabModel) -> String? {
+        let pane = Self.groupingPane(for: gateway)
+        if let profileID = pane?.asTerminal?.sourceProfileID,
+           let name = ConnectionProfileManager.shared.profile(for: profileID)?.name
+               .trimmingCharacters(in: .whitespacesAndNewlines),
+           !name.isEmpty {
+            return name
+        }
+        guard let host = groupHostLabel(for: gateway) else {
+            return pane.flatMap(Self.groupingConnectionConfig)?.displayName
+        }
+        return host.hasSuffix(".local") ? String(host.dropLast(".local".count)) : host
     }
 
     func effectiveGroupID(for tab: TabModel?) -> TabGroupID? {

@@ -24,6 +24,12 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         XCTAssertEqual(second.presentation.toolbarDrawer, .stacked(2))
     }
 
+    func testDuoFrontDisplayHeightFollowsInnerUntilSet() {
+        XCTAssertEqual(Model.Height.resolved(inner: .large, front: .small, isFrontDisplay: false), .large)
+        XCTAssertEqual(Model.Height.resolved(inner: .large, front: nil, isFrontDisplay: true), .large)
+        XCTAssertEqual(Model.Height.resolved(inner: .large, front: .small, isFrontDisplay: true), .small)
+    }
+
     func testSeparateKeyboardStateFollowsTabsRatherThanPanes() {
         var store = Model.StateStore<KeyboardState>()
         let tab = UUID()
@@ -93,10 +99,7 @@ final class TerminalTouchKeyboardTests: XCTestCase {
     private func geometry(width: Double = 390, page: Model.Page = .letters, typingTop: Double = 0,
                           overhang: CGFloat = 0, touchCorrection: Bool = true) -> Model.TypingGeometry {
         let keys = Model.rows(page: page)
-        let frames = keys.enumerated().map { index, row in
-            Model.frames(keys: row, width: width, y: typingTop + Double(index) * 54, height: 54,
-                inset: page == .letters && index == 1 ? width / 20 + 2 : 2)
-        }
+        let frames = rowFrames(keys, width: width, top: typingTop)
         return Model.typingGeometry(keys: keys, frames: frames, minX: 0, width: width, overhang: overhang,
                                     touchCorrection: touchCorrection)
     }
@@ -583,15 +586,6 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         XCTAssertEqual(Model.floatingAnchor(for: moved, in: available), CGPoint(x: 1, y: 0))
         let resized = CGRect(x: 12, y: 36, width: 330, height: 480)
         XCTAssertTrue(resized.contains(Model.floatingFrame(in: resized, height: 376, anchor: anchor)))
-    }
-
-    func testDraggingToBottomCenterDocksButBottomCornerDoesNot() {
-        let available = CGRect(x: 12, y: 36, width: 1000, height: 700)
-        let centered = Model.floatingFrame(in: available, height: 252, anchor: CGPoint(x: 0.5, y: 1))
-        XCTAssertTrue(Model.shouldDockAfterDrag(centered, in: available))
-        XCTAssertFalse(Model.shouldDockAfterDrag(centered.offsetBy(dx: 0, dy: -80), in: available))
-        let corner = Model.floatingFrame(in: available, height: 252, anchor: CGPoint(x: 1, y: 1))
-        XCTAssertFalse(Model.shouldDockAfterDrag(corner, in: available))
     }
 
     func testFloatingCardSettlesBesideTheFold() {
@@ -1273,6 +1267,137 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         let snapshot = context(document)!
         XCTAssertEqual(snapshot.range, NSRange(location: 3, length: 3))
         XCTAssertNotNil(document.replacement(in: snapshot.range, with: "the", generation: snapshot.generation))
+    }
+
+    func testEveryLayoutKeepsTypingRowsConsistent() {
+        for layout in Model.Layout.allCases {
+            let rows = Model.rows(page: .letters, layout: layout)
+            let columns = Model.columns(rows)
+            let letters = rows.prefix(3).flatMap { $0 }.filter(\.isText)
+            let titles = letters.map(\.title)
+            XCTAssertEqual(Set(titles).count, titles.count, "\(layout) repeats a key")
+            XCTAssertTrue(letters.allSatisfy { $0.weight == 1 && $0.title.count == 1 }, "\(layout)")
+            for row in rows.prefix(3) {
+                XCTAssertLessThanOrEqual(row.reduce(0) { $0 + $1.weight }, columns + 0.001, "\(layout)")
+            }
+            XCTAssertEqual(rows[2].first?.action, .modifier(.shift), "\(layout)")
+            XCTAssertEqual(rows[2].last?.action, .key("\u{7f}"), "\(layout)")
+            // Shell commands need every ASCII letter.
+            for letter in "abcdefghijklmnopqrstuvwxyz" {
+                XCTAssertTrue(titles.contains(String(letter)), "\(layout) is missing \(letter)")
+            }
+            let widths = rowFrames(rows, width: 390, top: 0).prefix(3).enumerated().flatMap { index, frames in
+                zip(rows[index], frames).filter { $0.0.isText }.map(\.1.width)
+            }
+            XCTAssertLessThan((widths.max() ?? 0) - (widths.min() ?? 0), 0.5, "\(layout) letter widths differ")
+            let split = Model.splitRows(rows).prefix(3).flatMap { $0.left + $0.right }.filter(\.isText).map(\.title)
+            XCTAssertEqual(Set(split), Set(titles), "\(layout) split drops a key")
+        }
+    }
+
+    func testNationalLetterRows() {
+        func row(_ layout: Model.Layout, _ index: Int) -> String {
+            Model.rows(page: .letters, layout: layout)[index].filter(\.isText).map(\.title).joined()
+        }
+        XCTAssertEqual(row(.german, 0), "qwertzuiopü")
+        XCTAssertEqual(row(.german, 1), "asdfghjklöä")
+        XCTAssertEqual(row(.german, 2), "yxcvbnm")
+        XCTAssertEqual(row(.french, 0), "azertyuiop")
+        XCTAssertEqual(row(.french, 1), "qsdfghjklm")
+        // Apple's Portuguese keyboards are plain QWERTY; ç is on long-press.
+        XCTAssertEqual(row(.portuguese, 1), "asdfghjkl")
+        XCTAssertEqual(row(.brazilianPortuguese, 1), "asdfghjkl")
+        for layout in [Model.Layout.englishQWERTZ, .croatian, .hungarian, .slovenian] {
+            XCTAssertEqual(row(layout, 0), "qwertzuiop", "\(layout)")
+            XCTAssertEqual(row(layout, 2), "yxcvbnm", "\(layout)")
+        }
+        XCTAssertEqual(row(.turkish, 0), "qwertyuıopğü")
+        XCTAssertEqual(row(.turkish, 2), "zxcvbnmöç")
+        // Shift and Delete fill out the shorter third row.
+        XCTAssertEqual(Model.rows(page: .letters, layout: .german)[2].first?.weight, 2)
+        XCTAssertEqual(Model.rows(page: .letters)[2].first?.weight, 1.5)
+    }
+
+    func testRowInsetCentersShorterRows() {
+        XCTAssertEqual(Model.rowInset(weight: 9, columns: 10, width: 390), 390 / 20 + 2, accuracy: 0.001)
+        XCTAssertEqual(Model.rowInset(weight: 10, columns: 10, width: 390), 2, accuracy: 0.001)
+        XCTAssertEqual(Model.rowInset(weight: 11, columns: 11, width: 390), 2, accuracy: 0.001)
+    }
+
+    func testLayoutShiftKeepsOneCharacter() {
+        XCTAssertEqual(Model.Layout.us.shifted("i"), "I")
+        XCTAssertEqual(Model.Layout.us.shifted("é"), "É")
+        XCTAssertEqual(Model.Layout.german.shifted("ß"), "ẞ")
+        XCTAssertEqual(Model.Layout.german.shifted("ü"), "Ü")
+        XCTAssertEqual(Model.Layout.turkish.shifted("i"), "İ")
+        XCTAssertEqual(Model.Layout.turkish.shifted("ı"), "I")
+        XCTAssertEqual(Model.Layout.us.shifted("'"), "'")
+    }
+
+    func testSpaceTagsEveryLayoutButUSEnglish() {
+        XCTAssertNil(Model.Layout.us.spaceBadge)
+        XCTAssertEqual(Model.Layout.englishQWERTZ.spaceBadge, "EN")
+        XCTAssertEqual(Model.Layout.german.spaceBadge, "DE")
+        XCTAssertEqual(Model.Layout.french.spaceBadge, "FR")
+        XCTAssertEqual(Model.Layout.brazilianPortuguese.spaceBadge, "PT")
+        XCTAssertEqual(Model.Layout.norwegian.spaceBadge, "NB")
+        for layout in Model.Layout.allCases where layout != .us {
+            XCTAssertEqual(layout.spaceBadge?.count, 2, "\(layout)")
+        }
+    }
+
+    func testShiftChordTextFollowsLayoutForLettersOnly() {
+        XCTAssertEqual(Model.Layout.turkish.shiftedLetter("i"), "İ")
+        XCTAssertEqual(Model.Layout.german.shiftedLetter("ß"), "ẞ")
+        XCTAssertEqual(Model.Layout.us.shiftedLetter("a"), "A")
+        // Digits and punctuation keep the encoder's US Shift mapping.
+        XCTAssertNil(Model.Layout.us.shiftedLetter("1"))
+        XCTAssertNil(Model.Layout.french.shiftedLetter("'"))
+    }
+
+    func testLongPressListsFollowApple() {
+        func list(_ layout: Model.Layout, _ text: String, shifted: Bool = false) -> [String]? {
+            layout.variants(for: text, shifted: shifted)
+        }
+        XCTAssertEqual(list(.us, "e")?.first, "e")
+        XCTAssertEqual(list(.french, "e")?.first, "é")
+        XCTAssertEqual(list(.german, "a")?.first, "ä")
+        XCTAssertEqual(list(.romanian, "s")?.first, "ș")
+        XCTAssertEqual(list(.portuguese, "c"), ["ç", "c", "č", "ć"])
+        XCTAssertEqual(list(.brazilianPortuguese, "c"), ["ç", "c"])
+        XCTAssertEqual(list(.brazilianPortuguese, "1"), ["1º", "1ª", "1"])
+        XCTAssertEqual(list(.portuguese, "1"), ["1.º", "1.ª", "1"])
+        // Languages don't inherit English letters, as on Apple's keyboards.
+        XCTAssertNil(list(.german, "z"))
+        XCTAssertNil(list(.us, "q"))
+        XCTAssertEqual(list(.englishQWERTZ, "a"), list(.us, "a"))
+        // Capitals use Apple's own order where it differs.
+        XCTAssertEqual(list(.us, "s", shifted: true), ["S", "ẞ", "Ś", "Š", "Ş", "Ș"])
+        XCTAssertEqual(list(.us, "e", shifted: true)?.first, "E")
+        XCTAssertEqual(list(.turkish, "i", shifted: true)?.contains("İ"), true)
+        // Punctuation falls back to the shared lists.
+        XCTAssertEqual(list(.spanish, "?"), ["¿", "?"])
+        XCTAssertEqual(list(.us, "$"), ["$", "¢"])
+        XCTAssertEqual(list(.german, "\"")?.first, "„")
+        for layout in Model.Layout.allCases {
+            let keys = Model.Page.allCases.flatMap { Model.rows(page: $0, layout: layout).flatMap { $0 } }
+            for case .text(let text) in keys.map(\.action) {
+                for shifted in [false, true] {
+                    guard let choices = list(layout, text, shifted: shifted) else { continue }
+                    XCTAssertEqual(Set(choices).count, choices.count, "\(layout) \(text) repeats a choice")
+                    XCTAssertFalse(choices.contains(""), "\(layout) \(text)")
+                }
+            }
+        }
+    }
+
+    /// Production row frames for the three typing rows plus the bottom row.
+    private func rowFrames(_ rows: [[Model.Key]], width: Double, top: Double) -> [[CGRect]] {
+        let columns = Model.columns(rows)
+        return rows.enumerated().map { index, row in
+            let inset = index < 3 ? Model.rowInset(weight: row.reduce(0) { $0 + $1.weight }, columns: columns, width: width) : 2
+            return Model.frames(keys: row, width: width, y: top + Double(index) * 54, height: 54, inset: inset)
+        }
     }
 
     private func context(_ document: TerminalCorrectionContext) -> Model.SuggestionContext? {

@@ -95,6 +95,33 @@ class TerminalTouchKeycap: UIView {
         icon.image = name.flatMap { UIImage(systemName: $0) }
         label.isHidden = icon.image != nil
     }
+
+    private var badge: UILabel?
+
+    /// A small muted tag pinned to the plate's bottom-right corner, like the
+    /// language code on Space. Callers refresh it after `updateColor()`.
+    func setBadge(_ text: String?) {
+        guard let text else {
+            badge?.removeFromSuperview()
+            badge = nil
+            return
+        }
+        let badge = self.badge ?? {
+            let badge = UILabel()
+            badge.font = .systemFont(ofSize: 11, weight: .medium, width: .condensed)
+            badge.isAccessibilityElement = false
+            badge.autoresizingMask = [.flexibleLeftMargin, .flexibleTopMargin]
+            plate.addSubview(badge)
+            self.badge = badge
+            return badge
+        }()
+        badge.text = text
+        badge.textColor = label.textColor.withAlphaComponent(0.45)
+        badge.sizeToFit()
+        // Flexible left/top margins keep it in the corner as the plate resizes.
+        badge.frame.origin = CGPoint(x: plate.bounds.width - badge.frame.width - 8,
+                                     y: plate.bounds.height - badge.frame.height - 3)
+    }
     func updateColor() {}
     func finishVisualTransition() {}
     override func accessibilityActivate() -> Bool { activate?(); return true }

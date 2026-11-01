@@ -193,6 +193,8 @@ private final class TabSidebarOverlayInstallerViewController: UIViewController {
     override func viewSafeAreaInsetsDidChange() {
         super.viewSafeAreaInsetsDidChange()
         overlayController.updateWindowControlsClearance()
+        // The panel's width clears this view's safe area too (Duo rail).
+        overlayController.view.setNeedsLayout()
     }
 
     func installIfNeeded() {

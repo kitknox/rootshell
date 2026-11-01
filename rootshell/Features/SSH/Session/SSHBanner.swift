@@ -83,6 +83,12 @@ nonisolated enum SSHBanner {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// A server-supplied name or message interpolated into terminal output (error text, remote
+    /// file names): `plainText` on one line, so it can't drive the terminal (cf. OpenSSH e3c9ed5ad).
+    static func terminalSafe(_ raw: String) -> String {
+        plainText(raw).replacingOccurrences(of: "\n", with: " ")
+    }
+
     /// Extracts http/https URLs from sanitized plain text (the output of
     /// `plainText`), in order of first appearance, deduplicated, capped at 8.
     /// A deliberate manual scan rather than NSDataDetector: only explicit
