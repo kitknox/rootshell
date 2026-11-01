@@ -135,7 +135,8 @@ extension EKSDescribeClusterResponse: Decodable {
 struct EKSCluster: Sendable {
     let name: String?
     let arn: String?
-    let createdAt: String?
+    /// Seconds since 1970; EKS sends timestamps as JSON numbers
+    let createdAt: Date?
     let version: String?
     let endpoint: String?
     let roleArn: String?
@@ -189,7 +190,8 @@ extension EKSCluster: Decodable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decodeIfPresent(String.self, forKey: .name)
         arn = try container.decodeIfPresent(String.self, forKey: .arn)
-        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+        createdAt = try container.decodeIfPresent(Double.self, forKey: .createdAt)
+            .map { Date(timeIntervalSince1970: $0) }
         version = try container.decodeIfPresent(String.self, forKey: .version)
         endpoint = try container.decodeIfPresent(String.self, forKey: .endpoint)
         roleArn = try container.decodeIfPresent(String.self, forKey: .roleArn)
