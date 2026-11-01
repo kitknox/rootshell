@@ -11,6 +11,30 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         var presentation = Model.PresentationState()
     }
 
+    func testToolbarPagesFitCompleteKeysAndKeepTheLastPageAligned() {
+        let layout = ToolbarPageLayout(viewportWidth: 250, buttonWidth: 40, spacing: 4, itemCount: 12)
+        XCTAssertEqual(layout.capacity, 5)
+        XCTAssertEqual(layout.cellWidth, 50)
+        XCTAssertEqual(layout.pageCount, 3)
+        XCTAssertEqual(layout.contentWidth, 750)
+        XCTAssertEqual(layout.offset(containing: 4), 0)
+        XCTAssertEqual(layout.offset(containing: 5), 250)
+        XCTAssertEqual(layout.offset(containing: 11), 500)
+        let resized = ToolbarPageLayout(viewportWidth: 150, buttonWidth: 40, spacing: 4, itemCount: 12)
+        XCTAssertEqual(resized.capacity, 3)
+        XCTAssertEqual(resized.offset(containing: 5), 150)
+    }
+
+    func testToolbarPagesHandleEmptyAndNarrowSections() {
+        let empty = ToolbarPageLayout(viewportWidth: 0, buttonWidth: 40, spacing: 4, itemCount: 0)
+        XCTAssertEqual(empty.capacity, 1)
+        XCTAssertEqual(empty.pageCount, 1)
+        XCTAssertEqual(empty.offset(containing: -1), 0)
+        let narrow = ToolbarPageLayout(viewportWidth: 20, buttonWidth: 40, spacing: 4, itemCount: 3)
+        XCTAssertEqual(narrow.capacity, 1)
+        XCTAssertEqual(narrow.offset(containing: 100), 40)
+    }
+
     func testKeyboardStateIsSharedAcrossTabsByDefault() {
         var store = Model.StateStore<KeyboardState>()
         let first = store.state(tabID: UUID(), perTab: false) { KeyboardState() }
