@@ -247,6 +247,8 @@ struct MainView: View {
     @State var tabExpose = TabExposeController()
     /// Serves the exposé's multiplexer page (herdr / tmux / zellij tabs).
     @State var muxExposeFeed = MultiplexerExposeFeed()
+    @State var muxPanelRevision: UInt64 = 0
+    @State var followedFileManagerLocation: String?
     
     
     // Unified main-alert queue: host-key validation, SSH/GPG agent
@@ -554,6 +556,19 @@ struct MainView: View {
                     if !available { duoTabletopDisabled = false }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+                .onChange(of: panelMultiplexerTerminalID, initial: true) { _, _ in
+                    updatePanelMultiplexerFeed()
+                }
+                .onChange(of: showFileManager) { _, shown in
+                    if shown { followFileManagerDirectory() }
+                    else { followedFileManagerLocation = nil }
+                }
+                .onChange(of: muxPanelRevision) { _, _ in
+                    followFileManagerDirectory()
+                }
+                .task(id: fileManagerControlTerminalID) {
+                    await followControlFileManagerDirectory()
+                }
                 .background(WindowSceneReporter(onUpdate: { scene, safeAreaInsets, isKeyWindow, newStatusBarBottom in
                     let cameraOnLeft: Bool?
                     #if !targetEnvironment(macCatalyst) && !os(visionOS)
