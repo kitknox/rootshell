@@ -7079,7 +7079,7 @@
 			repositoryURL = "https://github.com/kitknox/libarchive_ios-rootshell.git";
 			requirement = {
 				kind = exactVersion;
-				version = 0.1.1;
+				version = 0.1.2;
 			};
 		};
 		47NWPKG02FF10000AABB0000 /* XCRemoteSwiftPackageReference "network_ios-rootshell" */ = {

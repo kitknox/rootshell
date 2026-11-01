@@ -114,8 +114,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kitknox/libarchive_ios-rootshell.git",
       "state" : {
-        "revision" : "2b14c22b946b899f00be1e6ec1f346a82615df1b",
-        "version" : "0.1.1"
+        "revision" : "ed7b15d1ecd3e48e7c2d343d422df3a496c6f9b0",
+        "version" : "0.1.2"
       }
     },
     {
