@@ -5898,7 +5898,7 @@ extension Ghostty.TerminalView {
     ///   - char: The character being pressed (lowercase for letters)
     ///   - modifiers: Active keyboard modifiers from toolbar
     /// - Returns: `true` if the key was handled via Ghostty, `false` if no mapping exists
-    private func sendViaGhosttyKeyEvent(_ char: Character, modifiers: KeyModifiers) -> Bool {
+    private func sendViaGhosttyKeyEvent(_ char: Character, modifiers: KeyModifiers, shifted: Character? = nil) -> Bool {
         let lookupChar = char.lowercased().first ?? char
         guard let hidUsage = Self.characterHIDUsageMap[lookupChar] else { return false }
         let mods = Self.ghosttyMods(modifiers)
@@ -5906,7 +5906,7 @@ extension Ghostty.TerminalView {
         // Build the text payload: apply shift transformation so legacy mode
         // sends the correct character (e.g., 'A' instead of 'a').
         let shiftActive = modifiers.contains(.shift)
-        let effectiveChar = shiftActive ? Self.shiftedCharacter(char) : char
+        let effectiveChar = shiftActive ? shifted ?? Self.shiftedCharacter(char) : char
         let text = String(effectiveChar)
 
         // Determine the unshifted codepoint (what the key produces without Shift)
@@ -6003,6 +6003,11 @@ extension Ghostty.TerminalView {
 
 extension Ghostty.TerminalView: KeyboardButtonDelegate {
     func keyPressed(_ key: String, modifiers: KeyModifiers) {
+        keyPressed(key, modifiers: modifiers, shifted: nil)
+    }
+
+    /// `shifted` is the touch keyboard layout's Shift output for a letter; nil keeps US casing.
+    func keyPressed(_ key: String, modifiers: KeyModifiers, shifted: Character?) {
         // Debug logging
         Ghostty.logger.debug("TerminalView.keyPressed: key=\(key), modifiers rawValue=\(modifiers.rawValue)")
 
@@ -6025,7 +6030,7 @@ extension Ghostty.TerminalView: KeyboardButtonDelegate {
             let hasModifier = modifiers.contains(.control) || modifiers.contains(.alt) || modifiers.contains(.command)
             if !hasModifier && key.count == 1 && !key.hasPrefix("\u{1B}") {
                 let effectiveKey = modifiers.contains(.shift)
-                    ? String(Self.shiftedCharacter(key.first!))
+                    ? String(shifted ?? Self.shiftedCharacter(key.first!))
                     : key
                 composeTV.insertText(effectiveKey)
                 return
@@ -6072,7 +6077,7 @@ extension Ghostty.TerminalView: KeyboardButtonDelegate {
         #endif
 
         if !modifiers.isEmpty, key.count == 1, let char = key.first {
-            if sendViaGhosttyKeyEvent(char, modifiers: modifiers) {
+            if sendViaGhosttyKeyEvent(char, modifiers: modifiers, shifted: shifted) {
                 return
             }
         }
@@ -6128,7 +6133,7 @@ extension Ghostty.TerminalView: KeyboardButtonDelegate {
 
         // Shift modifier for regular single characters
         if modifiers.contains(.shift) && key.count == 1 && key != "\t" {
-            keySequence = String(key.map { Self.shiftedCharacter($0) })
+            keySequence = shifted.map(String.init) ?? String(key.map { Self.shiftedCharacter($0) })
         }
 
         // Control modifier

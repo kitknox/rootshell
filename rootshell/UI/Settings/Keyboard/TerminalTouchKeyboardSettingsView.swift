@@ -3,6 +3,7 @@ import SwiftUI
 
 struct TerminalTouchKeyboardSettingsView: View {
     @Setting(Settings.Keyboard.touchStyle) private var keyboardStyle
+    @Setting(Settings.Keyboard.touchLayout) private var keyboardLayout
     @Setting(Settings.Keyboard.touchThemeAware) private var themeAware
     @Setting(Settings.Keyboard.touchPhosphorColor) private var phosphorColor
     @Setting(Settings.Keyboard.touchHeight) private var keyboardHeight
@@ -47,8 +48,15 @@ struct TerminalTouchKeyboardSettingsView: View {
             Section {
                 SettingToggle(Settings.Keyboard.touchEnabled, title: "Terminal Keyboard", icon: "keyboard.badge.ellipsis")
                     .themedRow()
+                Picker("Keyboard Layout", selection: $keyboardLayout) {
+                    ForEach(TerminalTouchKeyboardModel.Layout.allCases, id: \.self) { layout in
+                        Text(layout.displayName).tag(layout)
+                    }
+                }
+                .settingContextMenu(Settings.Keyboard.touchLayout)
+                .themedRow()
             } footer: {
-                Text("An optional English QWERTY keyboard for terminal sessions. Switch to Apple's keyboard for other languages, swipe typing, emoji, or dictation.")
+                Text("An optional terminal keyboard with layouts for English and most European languages, and long-press accents that match Apple's keyboards. Long-press the keyboard switch key to change the layout, style, or placement. Switch to Apple's keyboard for other languages, swipe typing, emoji, or dictation.")
             }
             Section {
                 Picker("Preview Placement", selection: $previewFloating) {
@@ -92,8 +100,10 @@ struct TerminalTouchKeyboardSettingsView: View {
             }
             Section {
                 SettingToggle(Settings.Keyboard.touchLetterPrediction, title: "Letter Prediction", icon: "textformat.abc")
+                    .disabled(!keyboardLayout.usesEnglishTextModels)
                     .themedRow()
                 SettingToggle(Settings.Keyboard.touchSuggestions, title: "Suggestions", icon: "textformat.abc")
+                    .disabled(!keyboardLayout.usesEnglishTextModels)
                     .themedRow()
                 SettingToggle(Settings.Keyboard.touchHaptics, title: "Haptic Feedback", icon: "hand.tap")
                     .themedRow()
@@ -104,7 +114,7 @@ struct TerminalTouchKeyboardSettingsView: View {
             } header: {
                 Text("Typing")
             } footer: {
-                Text("Letter Prediction uses recent English typing to help choose between nearby letters. Turn it off for literal key targeting. Suggestions are local spelling guesses and completions; tap to apply one. Words are never automatically replaced. The double-space period shortcut follows your Terminal keyboard setting. Key Click Sounds match the keyboard style and are muted in Silent Mode. Character Preview shows the pressed letter above your finger; turn it off to only highlight the key.")
+                Text("Letter Prediction uses recent English typing to help choose between nearby letters. Turn it off for literal key targeting. Suggestions are local spelling guesses and completions; tap to apply one. Words are never automatically replaced. Both are English-only and stay off with other layouts. The double-space period shortcut follows your Terminal keyboard setting. Key Click Sounds match the keyboard style and are muted in Silent Mode. Character Preview shows the pressed letter above your finger; turn it off to only highlight the key.")
             }
             Section {
                 if showsDuoHeights {
@@ -209,9 +219,9 @@ struct TerminalTouchKeyboardSettingsView: View {
             Section("Terminal tools") {
                 Group {
                     if UIDevice.current.userInterfaceIdiom == .pad {
-                        Text("With Use System Detached Keyboard off, pinch inward or long-press the keyboard switch key and choose Detached to float the keyboard. Drag the … handle to move it. Spread two fingers, double-tap the handle, or choose Docked to dock. Docking hides the keys when a hardware keyboard is connected.")
+                        Text("With Use System Detached Keyboard off, pinch inward, or long-press the keyboard switch key and choose Placement, then Detached, to float the keyboard. Drag the … handle to move it. Spread two fingers, double-tap the handle, or choose Docked to dock. Docking hides the keys when a hardware keyboard is connected.")
                     } else {
-                        Text("Long-press the keyboard switch key and choose Detached to float a smaller keyboard over the terminal, freeing the rest of the screen. Drag the … handle to move it. Double-tap the handle or choose Docked to dock.")
+                        Text("Long-press the keyboard switch key and choose Placement, then Detached, to float a smaller keyboard over the terminal, freeing the rest of the screen. Drag the … handle to move it. Double-tap the handle or choose Docked to dock.")
                     }
                 }
                 .font(.footnote)
@@ -253,7 +263,7 @@ struct TerminalTouchKeyboardPreview: UIViewRepresentable {
             lastSample = parent.sample
             predictionContext.append(text)
         }
-        func touchKeyboardSend(_ key: String, modifiers: KeyModifiers) {
+        func touchKeyboardSend(_ key: String, modifiers: KeyModifiers, shifted: Character?) {
             if key == "\u{7f}", modifiers.isEmpty {
                 if !parent.sample.isEmpty { parent.sample.removeLast() }
                 lastSample = parent.sample

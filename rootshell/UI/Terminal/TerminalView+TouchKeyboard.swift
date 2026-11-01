@@ -27,7 +27,7 @@ extension Ghostty.TerminalView: TerminalTouchKeyboardHost {
         insertText(text)
     }
 
-    func touchKeyboardSend(_ key: String, modifiers: KeyModifiers) {
+    func touchKeyboardSend(_ key: String, modifiers: KeyModifiers, shifted: Character?) {
         guard touchKeyboardCanSend else { return }
         // Special keys bypass insertText, but still interrupt consecutive spaces.
         resetDoubleSpaceTracking()
@@ -68,7 +68,7 @@ extension Ghostty.TerminalView: TerminalTouchKeyboardHost {
             keyPressed(fallback[index - 1], modifiers: modifiers)
         } else {
             // This path also preserves local-shell Ctrl-C and Escape overlays.
-            keyPressed(key, modifiers: modifiers)
+            keyPressed(key, modifiers: modifiers, shifted: shifted)
         }
     }
 

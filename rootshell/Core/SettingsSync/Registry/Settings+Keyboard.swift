@@ -14,6 +14,7 @@ extension KeyboardArrowJoystickButton.Mode: SettingValue {}
 extension TerminalTouchKeyboardModel.FloatingGlassStyle: SettingValue {}
 extension TerminalTouchKeyboardModel.Height: SettingValue {}
 extension TerminalTouchKeyboardModel.Style: SettingValue {}
+extension TerminalTouchKeyboardModel.Layout: SettingValue {}
 extension TerminalTouchKeyboardModel.PhosphorColor: SettingValue {}
 
 nonisolated extension Settings {
@@ -21,6 +22,10 @@ nonisolated extension Settings {
         static let touchEnabled = SettingKey(
             "terminalTouchKeyboardEnabled", default: false, group: .keyboard, policy: .localByDefault,
             configKey: "terminal-touch-keyboard", title: String(localized: "Terminal Keyboard"))
+        static let touchLayout = SettingKey(
+            "terminalTouchKeyboardLayout", default: TerminalTouchKeyboardModel.Layout.us,
+            group: .keyboard, policy: .localByDefault,
+            configKey: "terminal-touch-keyboard-layout", title: String(localized: "Keyboard Layout"))
         static let touchStatePerTab = SettingKey(
             "terminalTouchKeyboardStatePerTab", default: false, group: .keyboard, policy: .localByDefault,
             configKey: "terminal-touch-keyboard-state-per-tab", title: String(localized: "Separate Keyboard State per Tab"))
@@ -98,7 +103,7 @@ nonisolated extension Settings {
 
         static let all: [AnySettingDefinition] = [
             optionKeyAsAlt.erased, forceASCIIKeyboard.erased, doubleSpaceForPeriod.erased, composeAutocorrect.erased,
-            writingAssistance.erased, touchEnabled.erased, touchSuggestions.erased, touchHaptics.erased, touchCharacterPreview.erased,
+            writingAssistance.erased, touchEnabled.erased, touchLayout.erased, touchSuggestions.erased, touchHaptics.erased, touchCharacterPreview.erased,
             touchHeight.erased, touchHeightDuoFront.erased, touchGlyphs.erased, touchStyle.erased, touchThemeAware.erased, touchLetterPrediction.erased,
             touchSteampunkThemeAwareKeycaps.erased, touchPhosphorColor.erased, touchClickSound.erased,
             touchStatePerTab.erased, touchSystemFloating.erased, touchFloatingGlassStyle.erased, touchFloatingGlassTintOpacity.erased,
