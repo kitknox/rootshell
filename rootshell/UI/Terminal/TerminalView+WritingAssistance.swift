@@ -50,7 +50,8 @@ extension Ghostty.TerminalView {
         #else
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
         if keyboardAccessoryController?.usesTouchKeyboard == true {
-            guard SettingsStore.shared.value(Settings.Keyboard.touchSuggestions), touchKeyboardCanSend,
+            guard SettingsStore.shared.value(Settings.Keyboard.touchSuggestions),
+                  SettingsStore.shared.value(Settings.Keyboard.touchLayout).usesEnglishTextModels, touchKeyboardCanSend,
                   keyboardAccessoryController?.touchKeyboard?.window != nil,
                   (keyboardAccessoryController?.touchKeyboard?.isFloating == true || KeyboardTracker.shared.isSoftwareKeyboardVisible),
                   markedTextString == nil, !koreanCompositionModel.hasActiveComposition,

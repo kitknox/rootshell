@@ -30,7 +30,8 @@ protocol TerminalTouchKeyboardHost: AnyObject {
     var touchKeyboardSuggestionContext: TerminalTouchKeyboardModel.SuggestionContext? { get }
     var touchKeyboardPredictionContext: TerminalTouchKeyboardModel.PredictionSnapshot? { get }
     func touchKeyboardInsert(_ text: String)
-    func touchKeyboardSend(_ key: String, modifiers: KeyModifiers)
+    /// `shifted` is the layout's Shift output for a letter key; nil keeps US casing.
+    func touchKeyboardSend(_ key: String, modifiers: KeyModifiers, shifted: Character?)
     func touchKeyboardAccept(_ text: String, context: TerminalTouchKeyboardModel.SuggestionContext)
     func touchKeyboardInvalidateSuggestions()
 }
@@ -38,6 +39,9 @@ protocol TerminalTouchKeyboardHost: AnyObject {
 extension TerminalTouchKeyboardHost {
     var touchKeyboardThemeColors: ThemeManager.ThemeInfo.ThemeColors? { nil }
     var touchKeyboardPredictionContext: TerminalTouchKeyboardModel.PredictionSnapshot? { nil }
+    func touchKeyboardSend(_ key: String, modifiers: KeyModifiers) {
+        touchKeyboardSend(key, modifiers: modifiers, shifted: nil)
+    }
 }
 
 /// UIKit cancels the ordinary button tap when this recognizer starts repeating.
@@ -312,7 +316,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         -> (rows: [Model.SplitRow], metrics: Model.SplitMetrics, fold: ClosedRange<Double>)? {
         guard !isFloating, !isEmbeddedPreview, window != nil, let fold = splitFoldFrame else { return nil }
         guard fold.minX - leading > 0, fold.maxX - leading < width else { return nil }
-        let rows = Model.splitRows(Model.rows(page: page))
+        let rows = Model.splitRows(Model.rows(page: page, layout: layout))
         let span = Double(fold.minX - leading)...Double(fold.maxX - leading)
         return Model.splitMetrics(rows, width: Double(width), fold: span).map { (rows, $0, span) }
     }
@@ -488,8 +492,12 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     private var observations = Set<AnyCancellable>()
     private var heightConstraint: NSLayoutConstraint!
     private var previousWidth: CGFloat = 0
+    private var layout = SettingsStore.shared.value(Settings.Keyboard.touchLayout)
+    // English-only text models stay off for other layouts.
     private var suggestionsEnabled = SettingsStore.shared.value(Settings.Keyboard.touchSuggestions)
+        && SettingsStore.shared.value(Settings.Keyboard.touchLayout).usesEnglishTextModels
     private var predictionEnabled = SettingsStore.shared.value(Settings.Keyboard.touchLetterPrediction)
+        && SettingsStore.shared.value(Settings.Keyboard.touchLayout).usesEnglishTextModels
     private var predictionTask: Task<Void, Never>?
     private var pendingPrediction: Model.PredictionSnapshot?
     private var predictionCache = Model.PredictionCache()
@@ -870,14 +878,19 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             preview.isHidden = true
             addSubview(preview)
         }
-        let prediction = SettingsStore.shared.value(Settings.Keyboard.touchLetterPrediction)
+        let layout = SettingsStore.shared.value(Settings.Keyboard.touchLayout)
+        if self.layout != layout {
+            cancelInteraction()
+            self.layout = layout
+        }
+        let prediction = SettingsStore.shared.value(Settings.Keyboard.touchLetterPrediction) && layout.usesEnglishTextModels
         if predictionEnabled != prediction {
             cancelInteraction()
             predictionEnabled = prediction
             predictionCache.removeAll()
         }
         updatePrediction()
-        let enabled = SettingsStore.shared.value(Settings.Keyboard.touchSuggestions)
+        let enabled = SettingsStore.shared.value(Settings.Keyboard.touchSuggestions) && layout.usesEnglishTextModels
         if suggestionsEnabled != enabled {
             suggestionsEnabled = enabled
             lastSuggestionContext = nil
@@ -1103,7 +1116,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                 self.showPage(.navigation)
             } else { self.perform(cap.key) }
         }
-        if case .text(let text) = key.action, let variants = Model.accents[text] {
+        if case .text(let text) = key.action, let variants = layout.variants(for: text) {
             cap.accessibilityCustomActions = variants.map { variant in
                 UIAccessibilityCustomAction(name: String(variant)) { [weak self] _ in
                     guard let self, self.canSend else { return false }
@@ -1170,7 +1183,9 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             cap.isAccessibilityElement = false
         }
         bringSubviewToFront(writingAssistanceButton)
-        let typingRows = splitActive ? Model.splitRows(Model.rows(page: page)).map { $0.left + $0.right } : Model.rows(page: page, floating: isFloating)
+        let typingRows = splitActive
+            ? Model.splitRows(Model.rows(page: page, layout: layout)).map { $0.left + $0.right }
+            : Model.rows(page: page, floating: isFloating, layout: layout)
         // In the detached footer the switch key draws plain, like Apple's globe.
         rows = typingRows.map { $0.map { makeCap($0, small: isFloating && $0.action == .switchKeyboard) } }
         bringSubviewToFront(styleMenuButton)
@@ -1299,8 +1314,10 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             y += 36
         }
         rows.flatMap { $0 }.forEach { $0.isHidden = isToolbarOnly || drawerOpen }
+        let columns = Model.columns(rows.map { $0.map(\.key) })
         for (index, row) in rows.enumerated() {
-            var inset: CGFloat = index == 1 && page == .letters ? width / 20 + 2 : 2
+            let rowWeight = row.reduce(0) { $0 + $1.key.weight }
+            var inset: CGFloat = index < 3 ? Model.rowInset(weight: rowWeight, columns: columns, width: width) : 2
             if index == 3, extendsIntoBottomSafeArea, !isFloating, traitCollection.userInterfaceIdiom == .phone {
                 // Keep the entire bottom row at its normal height while fitting
                 // its end keys inside the rounded screen corners.
@@ -1476,7 +1493,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                     key.label.text = "↔  cursor  ↕"
                     self.feedback()
                 case .text(let text) where !self.isToolbarOnly:
-                    if let variants = Model.accents[text] { self.showAccents(variants, contact: contact) }
+                    if let variants = self.layout.variants(for: text) { self.showAccents(variants, contact: contact) }
                 case .dismiss:
                     contact.consumed = true
                     self.cancelInteraction()
@@ -1840,7 +1857,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                 }
             } else if case .text(let text) = cap.key.action {
                 cap.updateColor()
-                cap.setLegend(text == " " ? "space" : (modifierState.isActive(.shift) ? text.uppercased() : text))
+                cap.setLegend(text == " " ? "space" : (modifierState.isActive(.shift) ? layout.shifted(text) : text))
             }
         }
         for button in toolbarDrawerButtons.flatMap({ $0 }) {
@@ -1855,8 +1872,11 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             let mods = modifiers ?? KeyModifiers(rawValue: modifierState.rawValue)
             if mods.subtracting(.shift).isEmpty {
                 // Shift changes letters without invoking terminal shortcut encoding.
-                host?.touchKeyboardInsert(mods.contains(.shift) ? text.uppercased() : text)
-            } else { host?.touchKeyboardSend(text, modifiers: mods) }
+                host?.touchKeyboardInsert(mods.contains(.shift) ? layout.shifted(text) : text)
+            } else {
+                // Chords keep the base key; only the text payload follows the layout's Shift.
+                host?.touchKeyboardSend(text, modifiers: mods, shifted: mods.contains(.shift) ? layout.shiftedLetter(text) : nil)
+            }
             modifierState.consume(mods.rawValue); publishModifiers(); updateSuggestions(); updatePrediction()
         case .key(let value): keyPressed(value, modifiers: [])
         case .page:
@@ -1908,7 +1928,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             || traitCollection.userInterfaceIdiom == .pad
         guard !isToolbarOnly, showsPreview, characterPreviewEnabled, case .text(let text) = cap.key.action, text != " ", !UIAccessibility.isVoiceOverRunning else { return }
         let shifted = (modifiers ?? modifierState.rawValue) & Model.Modifier.shift.rawValue != 0
-        preview.text = shifted ? text.uppercased() : text
+        preview.text = shifted ? layout.shifted(text) : text
         preview.frame = CGRect(x: min(max(2, cap.frame.midX - 26), bounds.width - 54), y: max(0, cap.frame.minY - 49), width: 52, height: 55)
         preview.isHidden = false
         bringSubviewToFront(preview)
@@ -1917,7 +1937,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         contact.accent = true; contact.consumed = true
         preview.isHidden = true
         let shifted = (contact.selection?.modifiers ?? modifierState.rawValue) & Model.Modifier.shift.rawValue != 0
-        accentChoices = variants.map { shifted ? String($0).uppercased() : String($0) }
+        accentChoices = variants.map { shifted ? layout.shifted(String($0)) : String($0) }
         accents.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for value in accentChoices {
             let label = UILabel(); label.text = value; label.textAlignment = .center
@@ -2113,8 +2133,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     }
     private func refreshWritingAssistance() {
         let enabled = [
-            (SettingsStore.shared.value(Settings.Keyboard.touchLetterPrediction), String(localized: "Letter Prediction")),
-            (SettingsStore.shared.value(Settings.Keyboard.touchSuggestions), String(localized: "Suggestions")),
+            (predictionEnabled, String(localized: "Letter Prediction")),
+            (suggestionsEnabled, String(localized: "Suggestions")),
             (SettingsStore.shared.value(Settings.Keyboard.doubleSpaceForPeriod), String(localized: "Double-Space Period Shortcut"))
         ].filter { $0.0 }.map { $0.1 }
         writingAssistanceButton.accessibilityValue = enabled.isEmpty ? String(localized: "Off") : enabled.joined(separator: ", ")
@@ -2157,16 +2177,17 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     }
 
     private func writingAssistanceMenu() -> UIMenu {
-        func toggle(_ setting: SettingKey<Bool>, title: String, icon: String) -> UIAction {
-            UIAction(title: title, image: UIImage(systemName: icon),
-                     state: SettingsStore.shared.value(setting) ? .on : .off) { _ in
+        func toggle(_ setting: SettingKey<Bool>, title: String, icon: String, available: Bool = true) -> UIAction {
+            UIAction(title: title, image: UIImage(systemName: icon), attributes: available ? [] : .disabled,
+                     state: available && SettingsStore.shared.value(setting) ? .on : .off) { _ in
                 let store = SettingsStore.shared
                 store.set(setting, !store.value(setting))
             }
         }
+        let english = layout.usesEnglishTextModels
         return UIMenu(children: [
-            toggle(Settings.Keyboard.touchLetterPrediction, title: String(localized: "Letter Prediction"), icon: "textformat.abc"),
-            toggle(Settings.Keyboard.touchSuggestions, title: String(localized: "Suggestions"), icon: "text.bubble"),
+            toggle(Settings.Keyboard.touchLetterPrediction, title: String(localized: "Letter Prediction"), icon: "textformat.abc", available: english),
+            toggle(Settings.Keyboard.touchSuggestions, title: String(localized: "Suggestions"), icon: "text.bubble", available: english),
             toggle(Settings.Keyboard.doubleSpaceForPeriod, title: String(localized: "Double-Space Period Shortcut"), icon: "character.cursor.ibeam")
         ])
     }
