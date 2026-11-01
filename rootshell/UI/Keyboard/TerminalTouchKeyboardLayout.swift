@@ -59,6 +59,37 @@ nonisolated extension TerminalTouchKeyboardModel {
         /// Letter prediction, suggestions, and writing assistance are English only.
         var usesEnglishTextModels: Bool { self == .us || self == .englishQWERTZ }
 
+        /// The language code tagged on Space ("DE", "FR"); US English shows none.
+        var spaceBadge: String? {
+            self == .us ? nil : languageIdentifier.prefix(2).uppercased()
+        }
+
+        private var languageIdentifier: String {
+            switch self {
+            case .us, .englishQWERTZ: "en"
+            case .croatian: "hr"
+            case .danish: "da"
+            case .dutch: "nl"
+            case .estonian: "et"
+            case .finnish: "fi"
+            case .french: "fr"
+            case .german: "de"
+            case .hungarian: "hu"
+            case .italian: "it"
+            case .latvian: "lv"
+            case .lithuanian: "lt"
+            case .norwegian: "nb"
+            case .polish: "pl"
+            case .brazilianPortuguese: "pt_BR"
+            case .portuguese: "pt_PT"
+            case .romanian: "ro"
+            case .slovenian: "sl"
+            case .spanish: "es"
+            case .swedish: "sv"
+            case .turkish: "tr"
+            }
+        }
+
         private var locale: Locale? { self == .turkish ? Locale(identifier: "tr") : nil }
 
         /// One character in, one out: ß becomes ẞ, never "SS".

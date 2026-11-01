@@ -45,8 +45,9 @@ extension TerminalTouchKeyboardHost {
 }
 
 /// UIKit cancels the ordinary button tap when this recognizer starts repeating.
-/// The switch key's style menu. Outside the keyboard window UIKit no longer
-/// cancels the touch when the menu opens, so lifting would also tap the key.
+/// The switch key's placement, style, and layout menu. Outside the keyboard
+/// window UIKit no longer cancels the touch when the menu opens, so lifting
+/// would also tap the key.
 private final class TerminalTouchMenuKeyButton: UIButton {
     private(set) var showedMenu = false
 
@@ -668,8 +669,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         writingAssistanceButton.accessibilityLabel = String(localized: "Writing Assistance")
         addSubview(writingAssistanceButton)
         // Built on open, so nothing observes settings and a pick writes once.
-        styleMenuButton.menu = UIMenu(title: String(localized: "Keyboard Style"), children: [
-            UIDeferredMenuElement.uncached { [weak self] completion in completion(self?.keyboardStyleMenuItems() ?? []) }
+        styleMenuButton.menu = UIMenu(title: String(localized: "Terminal Keyboard"), children: [
+            UIDeferredMenuElement.uncached { [weak self] completion in completion(self?.keyboardMenuItems() ?? []) }
         ])
         styleMenuButton.isAccessibilityElement = false
         styleMenuButton.addAction(UIAction { [weak self] _ in self?.pressKeyboardSwitch(true) }, for: .touchDown)
@@ -1857,7 +1858,14 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                 }
             } else if case .text(let text) = cap.key.action {
                 cap.updateColor()
-                cap.setLegend(text == " " ? "space" : (modifierState.isActive(.shift) ? layout.shifted(text) : text))
+                if text == " " {
+                    // Any layout other than US English tags Space with its language code.
+                    cap.setLegend("space")
+                    cap.setBadge(layout.spaceBadge)
+                    cap.accessibilityValue = layout == .us ? nil : layout.displayName
+                } else {
+                    cap.setLegend(modifierState.isActive(.shift) ? layout.shifted(text) : text)
+                }
             }
         }
         for button in toolbarDrawerButtons.flatMap({ $0 }) {
@@ -2153,28 +2161,43 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         if clickSoundEnabled { TerminalTouchKeyClick.shared.play(keyboardStyle.clickProfile) }
     }
 
-    private func keyboardStyleMenuItems() -> [UIMenuElement] {
-        let current = keyboardStyle
-        let styles: [UIMenuElement] = Model.Style.allCases.map { style in
-            UIAction(title: style.displayName, state: style == current ? .on : .off) { _ in
+    /// Placement (when this host can move the keyboard), Style, and Layout submenus.
+    private func keyboardMenuItems() -> [UIMenuElement] {
+        var menus: [UIMenuElement] = []
+        // UIKit places the system container; only the in-app card can be requested.
+        // The Duo's laptop pose keeps it docked below the fold.
+        if !isToolbarOnly, !usesSystemPlacement, !isEmbeddedPreview, !fillsHostHeight, onPlacementRequested != nil {
+            let docked = String(localized: "Docked"), detached = String(localized: "Detached")
+            let placements = [(Model.Placement.docked, docked), (Model.Placement.floating, detached)].map { placement, title in
+                UIAction(title: title, state: (placement == .floating) == isFloating ? .on : .off) { [weak self] _ in
+                    guard let self, (placement == .floating) != self.isFloating else { return }
+                    self.cancelInteraction()
+                    // Move containers after the menu has finished dismissing.
+                    DispatchQueue.main.async { [weak self] in self?.onPlacementRequested?(placement) }
+                }
+            }
+            menus.append(UIMenu(title: String(localized: "Placement"), subtitle: isFloating ? detached : docked,
+                                image: UIImage(systemName: "keyboard.badge.ellipsis"), children: placements))
+        }
+        let currentStyle = keyboardStyle
+        let styles = Model.Style.allCases.map { style in
+            UIAction(title: style.displayName, state: style == currentStyle ? .on : .off) { _ in
                 guard SettingsStore.shared.value(Settings.Keyboard.touchStyle) != style else { return }
                 SettingsStore.shared.set(Settings.Keyboard.touchStyle, style)
             }
         }
-        // UIKit places the system container; only the in-app card can be requested.
-        // The Duo's laptop pose keeps it docked below the fold.
-        guard !isToolbarOnly, !usesSystemPlacement, !isEmbeddedPreview, !fillsHostHeight,
-              onPlacementRequested != nil else { return styles }
-        let placements = [(Model.Placement.docked, String(localized: "Docked")),
-                          (Model.Placement.floating, String(localized: "Detached"))].map { placement, title in
-            UIAction(title: title, state: (placement == .floating) == isFloating ? .on : .off) { [weak self] _ in
-                guard let self, (placement == .floating) != self.isFloating else { return }
-                self.cancelInteraction()
-                // Move containers after the menu has finished dismissing.
-                DispatchQueue.main.async { [weak self] in self?.onPlacementRequested?(placement) }
+        menus.append(UIMenu(title: String(localized: "Style"), subtitle: currentStyle.displayName,
+                            image: UIImage(systemName: "paintpalette"), children: styles))
+        let currentLayout = layout
+        let layouts = Model.Layout.allCases.map { layout in
+            UIAction(title: layout.displayName, state: layout == currentLayout ? .on : .off) { _ in
+                guard SettingsStore.shared.value(Settings.Keyboard.touchLayout) != layout else { return }
+                SettingsStore.shared.set(Settings.Keyboard.touchLayout, layout)
             }
         }
-        return styles + [UIMenu(options: .displayInline, children: placements)]
+        menus.append(UIMenu(title: String(localized: "Layout"), subtitle: currentLayout.displayName,
+                            image: UIImage(systemName: "globe"), children: layouts))
+        return menus
     }
 
     private func writingAssistanceMenu() -> UIMenu {

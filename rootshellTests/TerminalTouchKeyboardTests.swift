@@ -1299,6 +1299,18 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         XCTAssertEqual(Model.Layout.us.shifted("'"), "'")
     }
 
+    func testSpaceTagsEveryLayoutButUSEnglish() {
+        XCTAssertNil(Model.Layout.us.spaceBadge)
+        XCTAssertEqual(Model.Layout.englishQWERTZ.spaceBadge, "EN")
+        XCTAssertEqual(Model.Layout.german.spaceBadge, "DE")
+        XCTAssertEqual(Model.Layout.french.spaceBadge, "FR")
+        XCTAssertEqual(Model.Layout.brazilianPortuguese.spaceBadge, "PT")
+        XCTAssertEqual(Model.Layout.norwegian.spaceBadge, "NB")
+        for layout in Model.Layout.allCases where layout != .us {
+            XCTAssertEqual(layout.spaceBadge?.count, 2, "\(layout)")
+        }
+    }
+
     func testShiftChordTextFollowsLayoutForLettersOnly() {
         XCTAssertEqual(Model.Layout.turkish.shiftedLetter("i"), "İ")
         XCTAssertEqual(Model.Layout.german.shiftedLetter("ß"), "ẞ")

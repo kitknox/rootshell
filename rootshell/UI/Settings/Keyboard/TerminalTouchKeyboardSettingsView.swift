@@ -56,7 +56,7 @@ struct TerminalTouchKeyboardSettingsView: View {
                 .settingContextMenu(Settings.Keyboard.touchLayout)
                 .themedRow()
             } footer: {
-                Text("An optional terminal keyboard with layouts for English and most European languages, and long-press accents that match Apple's keyboards. Switch to Apple's keyboard for other languages, swipe typing, emoji, or dictation.")
+                Text("An optional terminal keyboard with layouts for English and most European languages, and long-press accents that match Apple's keyboards. Long-press the keyboard switch key to change the layout, style, or placement. Switch to Apple's keyboard for other languages, swipe typing, emoji, or dictation.")
             }
             Section {
                 Picker("Preview Placement", selection: $previewFloating) {
@@ -219,9 +219,9 @@ struct TerminalTouchKeyboardSettingsView: View {
             Section("Terminal tools") {
                 Group {
                     if UIDevice.current.userInterfaceIdiom == .pad {
-                        Text("With Use System Detached Keyboard off, pinch inward or long-press the keyboard switch key and choose Detached to float the keyboard. Drag the … handle to move it. Spread two fingers, double-tap the handle, or choose Docked to dock. Docking hides the keys when a hardware keyboard is connected.")
+                        Text("With Use System Detached Keyboard off, pinch inward, or long-press the keyboard switch key and choose Placement, then Detached, to float the keyboard. Drag the … handle to move it. Spread two fingers, double-tap the handle, or choose Docked to dock. Docking hides the keys when a hardware keyboard is connected.")
                     } else {
-                        Text("Long-press the keyboard switch key and choose Detached to float a smaller keyboard over the terminal, freeing the rest of the screen. Drag the … handle to move it. Double-tap the handle or choose Docked to dock.")
+                        Text("Long-press the keyboard switch key and choose Placement, then Detached, to float a smaller keyboard over the terminal, freeing the rest of the screen. Drag the … handle to move it. Double-tap the handle or choose Docked to dock.")
                     }
                 }
                 .font(.footnote)
