@@ -7,6 +7,11 @@
 //
 
 import SwiftUI
+
+nonisolated private struct TerminalToolbarViewport: Equatable {
+    let frame: CGRect
+    let paneID: UUID?
+}
 import GhosttyKit
 import os
 import UIKit
@@ -946,7 +951,7 @@ extension MainView {
         // A toolbar in the lower tabletop input region must not consume a
         // second toolbar-height strip from the upper terminal workspace.
         let toolbarIntersectsContainer = accessoryFrame.map {
-            TerminalKeyboardGeometry.overlapHeight(keyboard: $0, container: containerFrame) > 0
+            TerminalKeyboardGeometry.overlapHeight(keyboard: $0, container: containerFrame, requireFullWidth: false) > 0
         } ?? window.map {
             containerFrame.maxY >= $0.bounds.maxY - $0.safeAreaInsets.bottom - 2
         } ?? false
@@ -1540,9 +1545,8 @@ extension MainView {
         let httpCaptureWidth = columns.httpCapture
         let agentInboxWidth = columns.agentInbox
         let terminalWidth = columns.terminal
-        let portsTerminal = terminals.indices.contains(selectedTabIndex)
-            ? terminals[selectedTabIndex].focusedPane?.asTerminal
-            : nil
+        let toolbarTab = terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex] : nil
+        let portsTerminal = toolbarTab?.focusedPane?.asTerminal
         // The terminal column ignores the keyboard, so the pill must lift
         // itself above it; otherwise the globe sits under the software
         // keyboard on iPhone and cannot be tapped.
@@ -1570,6 +1574,13 @@ extension MainView {
                     ? dockedWidth
                     : 0
             )
+            .frame(width: terminalWidth)
+            .onGeometryChange(for: TerminalToolbarViewport.self) { [weak toolbarTab] proxy in
+                let pane = toolbarTab?.focusedPane?.asTerminal
+                return TerminalToolbarViewport(frame: proxy.frame(in: .global), paneID: pane?.window == nil ? nil : pane?.uuid)
+            } action: { [weak toolbarTab] viewport in
+                toolbarTab?.focusedPane?.asTerminal?.keyboardAccessoryController.setToolbarViewport(viewport.frame)
+            }
             .overlay(alignment: .bottomTrailing) {
                 if showRemotePorts, let portsTerminal {
                     ListeningPortsPill(
@@ -1786,6 +1797,7 @@ extension MainView {
         // Not gated on the keyboard: the reservation itself requires the
         // pane to hold first responder, so it is 0 whenever no toolbar is
         // docked at the bottom edge.
+        if pane.asTerminal?.keyboardAccessoryController.toolbarFollowsTerminalViewport == true { return 0 }
         guard terminals.indices.contains(selectedTabIndex) else { return 0 }
         return terminals[selectedTabIndex].focusedPane?.reservedKeyboardToolbarHeightAtBottom ?? 0
         #endif
