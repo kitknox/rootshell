@@ -37,6 +37,7 @@ struct FileManagerView: View {
 
     @State private var highlightsShortcutsTip = false
     @Environment(\.sheetThemeColors) private var sheetThemeColors
+    @Environment(\.edgeSidebarTitleContext) private var edgeSidebarTitleContext
 
     private static let dualPaneMinWidth: CGFloat = 640
     private static let detailedColumnsMinPaneWidth: CGFloat = 520
@@ -55,12 +56,16 @@ struct FileManagerView: View {
                         paneView(.right, width: paneWidth)
                     }
                 } else {
-                    paneSwitcher
-                    Divider()
-                    paneView(manager.activeSide, width: paneWidth)
+                    if style != .sidebar {
+                        paneSwitcher
+                        Divider()
+                    }
+                    paneView(manager.activeSide, width: paneWidth, embedsPaneSwitcher: style == .sidebar)
                 }
                 TransferQueueView(manager: manager)
-                hintBar
+                if style != .sidebar {
+                    hintBar
+                }
             }
         }
         // The sidebar paints its own themed fill; the iPhone sheet needs one here.
@@ -103,7 +108,7 @@ struct FileManagerView: View {
         }
     }
 
-    private func paneView(_ side: FilePaneModel.Side, width: CGFloat) -> some View {
+    private func paneView(_ side: FilePaneModel.Side, width: CGFloat, embedsPaneSwitcher: Bool = false) -> some View {
         FilePaneView(
             pane: manager.pane(side),
             manager: manager,
@@ -111,7 +116,8 @@ struct FileManagerView: View {
             canFocus: canFocus && manager.sheet == nil,
             columns: width >= Self.detailedColumnsMinPaneWidth ? .detailed : .compact,
             otherPaneName: manager.pane(side.other).endpoint.displayName,
-            onClose: onClose
+            onClose: onClose,
+            embedsPaneSwitcher: embedsPaneSwitcher
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
@@ -120,10 +126,26 @@ struct FileManagerView: View {
 
     // MARK: - Header
 
+    @ViewBuilder
     private var header: some View {
+        if edgeSidebarTitleContext != nil {
+            EdgeSidebarHeader(
+                title: String(localized: "File Manager"),
+                systemImage: "folder.badge.gearshape",
+                onClose: onClose
+            ) {
+                FileManagerMoreMenu(manager: manager, presentation: style.presentation, onSwitchPresentation: onSwitchPresentation)
+                    .equatable()
+                    .edgeSidebarHeaderActionTarget()
+            }
+        } else {
+            standaloneHeader
+        }
+    }
+
+    private var standaloneHeader: some View {
         HStack(spacing: 10) {
-            Image(systemName: "folder.badge.gearshape").foregroundStyle(Color.accentColor)
-            Text("Files").font(.headline)
+            EdgeSidebarTitleMenu(title: String(localized: "File Manager"), systemImage: "folder.badge.gearshape")
             Spacer()
             if let onSwitchPresentation, let current = style.presentation {
                 PanelPresentationMenu(current: current, onSwitch: onSwitchPresentation)
@@ -347,14 +369,21 @@ struct FileManagerView: View {
 /// menu. The items read live pane/transfer state in their own child scope.
 private struct FileManagerMoreMenu: View, Equatable {
     let manager: FileManagerModel
+    var presentation: PanelPresentation? = nil
+    var onSwitchPresentation: ((PanelPresentation) -> Void)? = nil
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.manager === rhs.manager
+        lhs.manager === rhs.manager && lhs.presentation == rhs.presentation
     }
 
     var body: some View {
         Menu {
             FileManagerMoreMenuItems(manager: manager)
+            if let presentation, let onSwitchPresentation {
+                Divider()
+                PanelPresentationMenu(current: presentation, onSwitch: onSwitchPresentation, showsTitle: true)
+                    .equatable()
+            }
         } label: {
             Image(systemName: "ellipsis.circle")
         }
@@ -369,6 +398,23 @@ struct FileManagerMoreMenuItems: View {
 
     var body: some View {
         let pane = side.map { manager.pane($0) } ?? manager.activePane
+        if side == nil {
+            Button {
+                activate()
+                pane.goForward()
+            } label: {
+                Label(FileManagerShortcut.shortcut(for: .forward).title, systemImage: "chevron.right")
+            }
+            .disabled(!pane.canGoForward)
+            Button {
+                activate()
+                pane.refresh()
+            } label: {
+                Label(FileManagerShortcut.shortcut(for: .refresh).title, systemImage: "arrow.clockwise")
+            }
+            .disabled(pane.isBusy)
+            Divider()
+        }
         Button { activate(); manager.perform(.paste) } label: {
             Label(FileManagerShortcut.shortcut(for: .paste).title, systemImage: "doc.on.clipboard")
         }

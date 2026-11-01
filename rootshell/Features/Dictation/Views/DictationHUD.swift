@@ -28,8 +28,9 @@ struct DictationHUD: View {
     }
 }
 
-private struct DictationPanel: View {
+struct DictationPanel: View {
     @Binding var isPresented: Bool
+    @Environment(\.edgeSidebarTitleContext) private var edgeSidebarTitleContext
     let target: () -> DictationTarget?
     let width: CGFloat
 
@@ -62,7 +63,37 @@ private struct DictationPanel: View {
 
     // MARK: - Header
 
+    @ViewBuilder
     private var header: some View {
+        if edgeSidebarTitleContext != nil {
+            EdgeSidebarHeader(
+                title: String(localized: "Dictation", comment: "Dictation HUD title"),
+                systemImage: "mic",
+                status: statusText,
+                statusColor: statusIsError ? .red : .secondary,
+                onClose: { isPresented = false }
+            ) {
+                Menu {
+                    Picker("Formatting", selection: $formatting) {
+                        ForEach(DictationFormatting.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                    }
+                    Picker("Insert Text", selection: $commitMode) {
+                        ForEach(DictationCommitMode.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                    }
+                } label: {
+                    Image(systemName: "slider.horizontal.3").font(.title3).foregroundStyle(.secondary)
+                }
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel(Text("Dictation Options"))
+                .edgeSidebarHeaderActionTarget()
+            }
+        } else {
+            standaloneHeader
+        }
+    }
+
+    private var standaloneHeader: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Dictation", comment: "Dictation HUD title").font(.headline)

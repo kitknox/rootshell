@@ -161,6 +161,22 @@ nonisolated extension Settings {
             "tabSidebarPinned", default: false, group: .sidebar, policy: .localByDefault,
             configKey: "tab-sidebar-pinned",
             title: String(localized: "Pin Tab Sidebar", comment: "Setting title"))
+        static let leadingEdgePinned = SettingKey(
+            "edgeSidebarLeadingPinned", default: false, group: .sidebar, policy: .localByDefault,
+            configKey: "edge-sidebar-leading-pinned",
+            title: String(localized: "Pin Left Sidebar", comment: "Setting title"))
+        static let trailingEdgePinned = SettingKey(
+            "edgeSidebarTrailingPinned", default: false, group: .sidebar, policy: .localByDefault,
+            configKey: "edge-sidebar-trailing-pinned",
+            title: String(localized: "Pin Right Sidebar", comment: "Setting title"))
+        static let leadingPortraitWidth = SettingKey("edgeSidebarLeadingPortraitWidth", default: 0.0, group: .sidebar, policy: .deviceOnly, title: String(localized: "Left Sidebar Portrait Width", comment: "Setting title"))
+        static let leadingLandscapeWidth = SettingKey("edgeSidebarLeadingLandscapeWidth", default: 0.0, group: .sidebar, policy: .deviceOnly, title: String(localized: "Left Sidebar Landscape Width", comment: "Setting title"))
+        static let trailingPortraitWidth = SettingKey("edgeSidebarTrailingPortraitWidth", default: 0.0, group: .sidebar, policy: .deviceOnly, title: String(localized: "Right Sidebar Portrait Width", comment: "Setting title"))
+        static let trailingLandscapeWidth = SettingKey("edgeSidebarTrailingLandscapeWidth", default: 0.0, group: .sidebar, policy: .deviceOnly, title: String(localized: "Right Sidebar Landscape Width", comment: "Setting title"))
+        static let openRightInWideLayout = SettingKey(
+            "edgeSidebarOpenRightInWideLayout", default: false, group: .sidebar, policy: .localByDefault,
+            configKey: "edge-sidebar-open-right-in-wide-layout",
+            title: String(localized: "Open Right Sidebar Automatically", comment: "Setting title"))
         static let translucent = SettingKey(
             "tabSidebarTranslucent", default: true, group: .transparency, policy: .localByDefault,
             configKey: "tab-sidebar-translucent",
@@ -174,10 +190,24 @@ nonisolated extension Settings {
         static let collapsedGroups = SettingKey(
             "tabSidebarCollapsedGroups", default: [String](), group: .sidebar, policy: .deviceOnly,
             title: String(localized: "Collapsed Tab Groups", comment: "Setting title"))
+        /// `page:side` tokens. See `EdgeSidebarAssignment`.
+        static let pageSides = SettingKey(
+            "edgeSidebarPageSides", default: EdgeSidebarAssignment.stock.storedTokens, group: .sidebar,
+            configKey: "edge-sidebar-page-sides",
+            title: String(localized: "Sidebar Pages", comment: "Setting title"))
+        static let edgeSidebarButtons = SettingKey(
+            "edgeSidebarButtonsEnabled", default: false, group: .sidebar,
+            configKey: "edge-sidebar-buttons-enabled",
+            title: String(localized: "Sidebar Buttons", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
-            autoHideOnSelect.erased, rowLines.erased, largeControls.erased, pinned.erased, translucent.erased,
-            dockedWidth.erased, collapsedGateways.erased, collapsedGroups.erased,
+            autoHideOnSelect.erased, rowLines.erased, largeControls.erased, pinned.erased,
+            leadingEdgePinned.erased, trailingEdgePinned.erased,
+            leadingPortraitWidth.erased, leadingLandscapeWidth.erased,
+            trailingPortraitWidth.erased, trailingLandscapeWidth.erased,
+            openRightInWideLayout.erased, translucent.erased,
+            dockedWidth.erased, collapsedGateways.erased, collapsedGroups.erased, pageSides.erased,
+            edgeSidebarButtons.erased,
         ]
     }
 

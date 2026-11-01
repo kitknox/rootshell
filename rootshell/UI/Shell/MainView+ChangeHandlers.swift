@@ -80,6 +80,9 @@ extension MainView {
                 Ghostty.logger.info("onChange(isAnySheetPresented) \(oldValue) -> \(newValue) showingTabSwitcher=\(showingTabSwitcher)")
                 setOverlayOwnsKeyboardForAllTerminals(newValue)
             }
+            .onChange(of: edgeSidebarModalPresented) { _, _ in
+                updateSidebarToolbarRetention()
+            }
             .onChange(of: terminals.count) { oldCount, newCount in
                 if newCount > 0 {
                     windowClosingAfterTabTransfer = false
@@ -95,6 +98,7 @@ extension MainView {
             // Focus follows identity; reordering the same tab needs no handoff.
             .onChange(of: tabsModel.selectedTabID) { oldValue, newValue in
                 handleSelectedTabChange(oldValue: oldValue, newValue: newValue)
+                updateSidebarToolbarRetention()
             }
             .onChange(of: tabsModel.displayedTabID) { oldValue, newValue in
                 handleDisplayedTabChange(oldValue: oldValue, newValue: newValue)
@@ -140,8 +144,16 @@ extension MainView {
                     } else {
                         resignFirstResponderForSheetPresentation()
                     }
-                } else if oldValue {
+                } else if oldValue, !isAnySheetPresented {
                     restoreFirstResponderAfterSheetDismissal()
+                }
+            }
+            .onChange(of: edgeSidebarPageSides) { _, _ in
+                for side in EdgeSidebarSide.allCases {
+                    let open = edgeSidebarAssignment.pages(on: side).filter(edgeSidebarPageIsOpen)
+                    if let page = open.first(where: { $0 == selectedEdgePage(on: side) }) ?? open.first {
+                        adoptEdgeSidebarPage(page)
+                    }
                 }
             }
             .onChange(of: connectionInfoToShow != nil) { oldValue, newValue in

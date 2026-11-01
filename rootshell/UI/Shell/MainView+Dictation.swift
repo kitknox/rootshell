@@ -19,8 +19,7 @@ extension MainView {
         let controller = DictationController.shared
         let terminal = terminal ?? (terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].focusedTerminal : nil)
         let target: DictationTarget? = terminal
-        // Keybinds arrive here directly; prefer the keyboard's page when it is showing.
-        if terminal?.keyboardAccessoryController?.openTouchKeyboardDictation() == true { return }
+        adoptEdgeSidebarPage(.dictation)
         showDictationHUD = true
         guard let target, controller.modelReady, !controller.isActive else { return }
         controller.dismissError()

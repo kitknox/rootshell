@@ -1276,11 +1276,10 @@ extension Ghostty {
 
     // MARK: - SSH Auth Banner Card Handling
 
-    /// Re-homes the auth-banner card's hosting controller under a new parent
-    /// view controller. Called from the pane's `prepareForAttachment` during
-    /// window transfer, before the split tree inserts the pane into the
-    /// destination hierarchy.
-    func refreshAuthBannerParentViewController(_ viewController: UIViewController?) {
+    /// Re-home every banner before UIKit validates the destination hierarchy.
+    func refreshBannerParentViewController(_ viewController: UIViewController?) {
+        roamBannerHostView?.setParentViewController(viewController)
+        uploadBannerHostView?.setParentViewController(viewController)
         authBannerCardHostView?.setParentViewController(viewController)
     }
 

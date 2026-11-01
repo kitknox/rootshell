@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import os
 
 /// Search bar with magnifying glass, text field, clear button, and optional trailing filter button.
 /// Used by ProfilesBrowseSheet and SSHHostBrowseSheet.
@@ -180,7 +181,7 @@ private struct FocusableSearchTextField: UIViewRepresentable {
     var onSubmit: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, isFocused: $isFocused, onSubmit: onSubmit)
+        Coordinator(self)
     }
 
     func makeUIView(context: Context) -> EscapeAwareTextField {
@@ -216,54 +217,49 @@ private struct FocusableSearchTextField: UIViewRepresentable {
         uiView.onMoveDown = onMoveDown
         uiView.onStopMoveUp = onStopMoveUp
         uiView.onStopMoveDown = onStopMoveDown
-        context.coordinator.onSubmit = onSubmit
-
-        if isFocused && focusRequestID > 0 && context.coordinator.lastAppliedFocusRequestID != focusRequestID {
-            if uiView.isFirstResponder {
-                context.coordinator.lastAppliedFocusRequestID = focusRequestID
-            } else if uiView.window != nil {
-                let didBecomeFirstResponder = uiView.becomeFirstResponder()
-                if didBecomeFirstResponder || uiView.isFirstResponder {
-                    context.coordinator.lastAppliedFocusRequestID = focusRequestID
-                }
-            }
-        }
-
-        if !isFocused && uiView.isFirstResponder {
-            uiView.resignFirstResponder()
+        context.coordinator.parent = self
+        // First-responder changes ask SwiftUI to update its responder graph.
+        // Apply them after this representable update has left that graph.
+        DispatchQueue.main.async { [weak uiView, weak coordinator = context.coordinator] in
+            guard let uiView, let coordinator else { return }
+            coordinator.applyFocus(to: uiView)
         }
     }
 
     final class Coordinator: NSObject, UITextFieldDelegate {
-        @Binding private var text: String
-        @Binding private var isFocused: Bool
+        var parent: FocusableSearchTextField
         var lastAppliedFocusRequestID: Int = -1
-        var onSubmit: (() -> Void)?
 
-        init(
-            text: Binding<String>,
-            isFocused: Binding<Bool>,
-            onSubmit: (() -> Void)?
-        ) {
-            self._text = text
-            self._isFocused = isFocused
-            self.onSubmit = onSubmit
+        init(_ parent: FocusableSearchTextField) {
+            self.parent = parent
+        }
+
+        func applyFocus(to field: UITextField) {
+            guard field.window != nil else { return }
+            if parent.isFocused && parent.focusRequestID > 0 && lastAppliedFocusRequestID != parent.focusRequestID {
+                if field.isFirstResponder || field.becomeFirstResponder() {
+                    lastAppliedFocusRequestID = parent.focusRequestID
+                    Ghostty.logger.info("Browse search applied focus request=\(self.lastAppliedFocusRequestID)")
+                }
+            } else if !parent.isFocused && field.isFirstResponder {
+                field.resignFirstResponder()
+            }
         }
 
         @objc func textDidChange(_ textField: UITextField) {
-            text = textField.text ?? ""
+            parent.text = textField.text ?? ""
         }
 
         @objc func editingDidBegin() {
-            isFocused = true
+            parent.isFocused = true
         }
 
         @objc func editingDidEnd() {
-            isFocused = false
+            parent.isFocused = false
         }
 
         func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-            onSubmit?()
+            parent.onSubmit?()
             return false
         }
     }

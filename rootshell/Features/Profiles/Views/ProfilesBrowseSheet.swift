@@ -712,6 +712,7 @@ struct FolderRow: View {
 // MARK: - Profile Row
 
 struct ProfileRow: View {
+    @Environment(\.edgeSidebarTitleContext) private var edgeSidebarTitleContext
     let profile: ConnectionProfile
     var action: (() -> Void)? = nil
 
@@ -732,6 +733,7 @@ struct ProfileRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(profile.name)
                     .foregroundColor(.primary)
+                    .lineLimit(edgeSidebarTitleContext == nil ? nil : 2)
 
                 if profile.connectionProtocol == .local {
                     Text(profile.localConfig?.platform.displayName ?? String(localized: "Unavailable"))
@@ -746,6 +748,8 @@ struct ProfileRow: View {
                 Text(profile.displayString)
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .lineLimit(edgeSidebarTitleContext == nil ? nil : 1)
+                    .truncationMode(.middle)
             }
 
             Spacer(minLength: 8)

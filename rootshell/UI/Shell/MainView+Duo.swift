@@ -48,10 +48,14 @@ extension MainView {
     }
 
     @ViewBuilder
-    func applyDuoChrome<Content: View>(_ content: Content) -> some View {
+    func applyDuoChrome<Content: View>(_ content: Content, inTerminalColumn: Bool = false) -> some View {
         #if !targetEnvironment(macCatalyst) && !os(visionOS)
-        if #available(iOS 27.1, *) {
-            content
+        if #available(iOS 27.1, *), isPhone, duoLayout.hasHinge,
+           inTerminalColumn {
+            // Keep the stack around the terminal in every size class. Moving it
+            // between the scene and column reparents live input views during rotation.
+            NavigationStack {
+                content
                 .toolbarVisibility(showsDuoSideRail ? .visible : .hidden, for: .navigationBar)
                 .toolbar {
                     if showsDuoSideRail {
@@ -81,6 +85,7 @@ extension MainView {
                         }
                     }
                 }
+            }
         } else {
             content
         }
@@ -101,12 +106,12 @@ extension MainView {
                     onClose: {
                         if let position = tabsModel.index(of: tab.id) { requestUserCloseTab(at: position) }
                     },
-                    onManage: { showingTabSwitcher = true },
+                    onManage: { openEdgeSidebarPage(.tabSwitcher) },
                     onMountChange: noteDuoTabButtonMounted
                 )
             } else {
                 Button("Tabs", systemImage: "square.on.square") {
-                    showingTabSwitcher = true
+                    openEdgeSidebarPage(.tabSwitcher)
                 }
                 .labelStyle(.iconOnly)
                 .disabled(true)

@@ -74,6 +74,7 @@ extension MainView {
             } else if let terminal = pane.asTerminal, terminal.isHerdrPane {
                 terminal.requestHerdrSelectPane()
             }
+            updateSidebarToolbarRetention()
             return
         }
 
@@ -83,6 +84,7 @@ extension MainView {
         // focusDidChange returns true only when becomeFirstResponder() succeeded
         // synchronously, meaning UIKit already auto-resigned the old pane.
         terminals[tabIndex].focusedPane = pane
+        updateSidebarToolbarRetention()
         pane?.isLogicallyFocused = true
         let newFocusAcquired = pane?.focusDidChange(true) ?? false
 
@@ -591,6 +593,9 @@ extension MainView {
     /// when the gate drops. Scoped to this scene's `terminals`, so multi-window
     /// stays correct. Driven by the single `onChange(of: isAnySheetPresented)`.
     func setOverlayOwnsKeyboardForAllTerminals(_ owns: Bool) {
+        // Keep the mounted row through the asynchronous focus handoff on close.
+        // TerminalView releases retention when that handoff finishes.
+        if owns { updateSidebarToolbarRetention() }
         // Freeze the reported software-keyboard layout before the resign below
         // hides the keyboard, so terminal bounds hold steady across the overlay
         // round trip (zero PTY resizes when nothing changed). Owner-scoped per
@@ -613,6 +618,23 @@ extension MainView {
         for tab in terminals {
             for terminal in tab.splitTree {
                 terminal.setOverlayOwnsKeyboard(owns)
+            }
+        }
+    }
+
+    func updateSidebarToolbarRetention() {
+        let floatingSidebarOpen = floatingEdgeSidebarPresented(.leading)
+            || floatingEdgeSidebarPresented(.trailing)
+        let shouldRetain = UIDevice.current.userInterfaceIdiom == .phone
+            && floatingSidebarOpen
+            && !edgeSidebarModalPresented
+        let focusedTerminal: Ghostty.TerminalView? = shouldRetain && terminals.indices.contains(selectedTabIndex)
+            ? terminals[selectedTabIndex].focusedPane?.asTerminal
+            : nil
+
+        for tab in terminals {
+            for terminal in tab.splitTree.terminalLeaves {
+                terminal.keyboardAccessoryController.setSidebarToolbarRetention(terminal === focusedTerminal)
             }
         }
     }

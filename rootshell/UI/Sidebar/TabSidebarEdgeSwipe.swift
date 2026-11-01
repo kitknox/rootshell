@@ -2,21 +2,18 @@
 //  TabSidebarEdgeSwipe.swift
 //  rootshell
 //
-//  Pull the vertical tab sidebar in from the left screen edge on iPad, like a
-//  native drawer. Built on `InteractiveEdgePanRecognizer` (a window-level pan,
-//  since the sidebar overlay is `isUserInteractionEnabled = false` while closed
-//  and cannot catch the edge touch itself); the iPad system multitasking edge
-//  is yielded to us via `.defersSystemGestures(on: .leading)` on `MainView`.
+//  Pull a sidebar in from a screen edge on iPhone and iPad. Built on
+//  `InteractiveEdgePanRecognizer` (a window-level pan, since the overlay is
+//  `isUserInteractionEnabled = false` while closed and cannot catch the edge
+//  touch itself). iPhone and iPad defer the system edge via `.defersSystemGestures`.
 //
-//  For the floating (unpinned) sidebar the drag is interactive: the panel
-//  tracks the finger via the `tabSidebarOpenDrag*` notifications that
-//  `TabSidebarOverlayViewController` listens for. For the pinned (docked)
-//  preference the column can't be finger-tracked (SwiftUI layout), so the
-//  gesture just opens it and lets the docked `.move(edge: .leading)`
-//  transition play.
+//  A floating drawer tracks the finger through the `tabSidebarOpenDrag*`
+//  notifications. A docked column, and a file manager that is not a drawer,
+//  cannot track the finger. Their outward close swipe commits on release.
 //
 
 import SwiftUI
+import os
 
 #if canImport(UIKit)
 import UIKit
@@ -24,25 +21,33 @@ import UIKit
 
 #if !os(visionOS)
 
-/// How far in from the left edge a drag may start and still open the drawer.
+/// How far inside the safe content edge a drag may start and open the drawer.
 private let edgeActivationWidth: CGFloat = 32
+private let edgeCompactPeek: CGFloat = 48
 
 struct TabSidebarEdgeSwipe: UIViewRepresentable {
-    @Binding var showingTabSwitcher: Bool
-    /// True only when an edge swipe is currently allowed to open the sidebar
-    /// (sidebar closed and no blocking sheet/settings presented).
+    var edge: SidePanelEdge
+    /// True only when an edge swipe may open this side.
     var canOpen: () -> Bool
-    /// The user's pin preference resolves to a docked column: open it directly
-    /// instead of running the interactive floating drawer.
-    var opensDocked: Bool
+    var canClose: (CGPoint) -> Bool
+    /// The open is a floating drawer that tracks the finger. A docked column
+    /// or a non-drawer panel opens without tracking.
+    var tracksFinger: Bool
     var panelWidth: CGFloat
+    var onOpen: () -> Void
+    var onClose: () -> Void
+    var onCancel: () -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
-            showingTabSwitcher: $showingTabSwitcher,
+            edge: edge,
             canOpen: canOpen,
-            opensDocked: opensDocked,
-            panelWidth: panelWidth
+            canClose: canClose,
+            tracksFinger: tracksFinger,
+            panelWidth: panelWidth,
+            onOpen: onOpen,
+            onClose: onClose,
+            onCancel: onCancel
         )
     }
 
@@ -53,49 +58,72 @@ struct TabSidebarEdgeSwipe: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: EdgeSwipeInstallerView, context: Context) {
-        // Refresh the captured inputs each render so the gesture reads current
-        // state (open/closed, presented sheets, pin preference).
-        context.coordinator.showingTabSwitcher = $showingTabSwitcher
+        context.coordinator.edge = edge
         context.coordinator.canOpen = canOpen
-        context.coordinator.opensDocked = opensDocked
+        context.coordinator.canClose = canClose
+        context.coordinator.tracksFinger = tracksFinger
         context.coordinator.panelWidth = panelWidth
+        context.coordinator.onOpen = onOpen
+        context.coordinator.onClose = onClose
+        context.coordinator.onCancel = onCancel
         uiView.coordinator = context.coordinator
         uiView.installIfNeeded()
     }
 
     @MainActor
     final class Coordinator {
-        var showingTabSwitcher: Binding<Bool>
+        var edge: SidePanelEdge
         var canOpen: () -> Bool
-        var opensDocked: Bool
+        var canClose: (CGPoint) -> Bool
+        var tracksFinger: Bool
         var panelWidth: CGFloat
+        var onOpen: () -> Void
+        var onClose: () -> Void
+        var onCancel: () -> Void
 
         private var interactiveOpenInProgress = false
+        private var closingColumn = false
+        private weak var window: UIWindow?
         private(set) lazy var recognizer: InteractiveEdgePanRecognizer = makeRecognizer()
 
         private func makeRecognizer() -> InteractiveEdgePanRecognizer {
             var configuration = InteractiveEdgePanRecognizer.Configuration(
                 axis: .horizontal,
-                // iPad only: the phone keeps its bottom-rising panel.
-                idioms: [.pad]
+                idioms: [.phone, .pad]
             )
             configuration.touchCounts = [1]
-            // Our edge pan should beat the terminal's tab-swipe recognizers: a
-            // left-edge swipe-in reads as a `.right` swipe.
             configuration.beatsSiblingRecognizers = { $0 is UISwipeGestureRecognizer }
 
-            let isInBand: (CGPoint, UIWindow, Int) -> Bool = { start, _, _ in
-                start.x <= edgeActivationWidth
-            }
-            let shouldBegin: (CGPoint, CGPoint, UIWindow, Int) -> Bool = { [weak self] _, translation, _, _ in
+            let isInBand: (CGPoint, UIWindow, Int) -> Bool = { [weak self] start, window, _ in
                 guard let self else { return false }
-                let headingRight = translation.x > 0 && abs(translation.x) >= abs(translation.y)
-                return self.canOpen() && headingRight
+                if self.canClose(start) { return true }
+                switch self.edge {
+                case .leading:
+                    return start.x <= window.safeAreaInsets.left + edgeActivationWidth
+                case .trailing:
+                    return start.x >= window.bounds.width - window.safeAreaInsets.right - edgeActivationWidth
+                }
+            }
+            let shouldBegin: (CGPoint, CGPoint, UIWindow, Int) -> Bool = { [weak self] start, translation, window, _ in
+                guard let self else { return false }
+                let canOpen = self.canOpen()
+                let inward = self.openAmount(translation.x) > 0
+                let outsideOppositeEdge: Bool
+                switch self.edge {
+                case .leading:
+                    outsideOppositeEdge = start.x < window.bounds.width - window.safeAreaInsets.right - edgeActivationWidth
+                case .trailing:
+                    outsideOppositeEdge = start.x > window.safeAreaInsets.left + edgeActivationWidth
+                }
+                self.closingColumn = !inward && outsideOppositeEdge && self.canClose(start)
+                Ghostty.logger.debug("Sidebar edge gate edge=\(self.edge == .leading ? "leading" : "trailing", privacy: .public) x=\(start.x) dx=\(translation.x) dy=\(translation.y) width=\(window.bounds.width) safeLeft=\(window.safeAreaInsets.left) safeRight=\(window.safeAreaInsets.right) canOpen=\(canOpen) closingColumn=\(self.closingColumn)")
+                let horizontal = abs(translation.x) >= abs(translation.y)
+                return horizontal && ((canOpen && inward) || self.closingColumn)
             }
             let callbacks = InteractiveEdgePanRecognizer.Callbacks(
                 isInActivationBand: isInBand,
                 shouldBegin: shouldBegin,
-                length: { [weak self] in max(self?.panelWidth ?? 1, 1) },
+                length: { [weak self] in self?.openLength() ?? 1 },
                 onBegin: { [weak self] window in self?.begin(window: window) },
                 onChange: { [weak self] progress in self?.change(progress: progress) },
                 onEnd: { [weak self] progress, velocity in self?.end(progress: progress, velocity: velocity) },
@@ -105,73 +133,105 @@ struct TabSidebarEdgeSwipe: UIViewRepresentable {
         }
 
         init(
-            showingTabSwitcher: Binding<Bool>,
+            edge: SidePanelEdge,
             canOpen: @escaping () -> Bool,
-            opensDocked: Bool,
-            panelWidth: CGFloat
+            canClose: @escaping (CGPoint) -> Bool,
+            tracksFinger: Bool,
+            panelWidth: CGFloat,
+            onOpen: @escaping () -> Void,
+            onClose: @escaping () -> Void,
+            onCancel: @escaping () -> Void
         ) {
-            self.showingTabSwitcher = showingTabSwitcher
+            self.edge = edge
             self.canOpen = canOpen
-            self.opensDocked = opensDocked
+            self.canClose = canClose
+            self.tracksFinger = tracksFinger
             self.panelWidth = panelWidth
+            self.onOpen = onOpen
+            self.onClose = onClose
+            self.onCancel = onCancel
         }
 
-        // Every post is scoped to the window so a swipe in one scene never
-        // drives another window's overlay.
-        private weak var window: UIWindow?
+        private func openLength() -> CGFloat {
+            let width = window?.bounds.width ?? panelWidth
+            let compact = window?.traitCollection.horizontalSizeClass != .regular
+            let available = compact == true ? max(0, width - edgeCompactPeek) : width
+            return max(min(panelWidth, available > 0 ? available : panelWidth), 1)
+        }
+
+        /// The recognizer's progress is positive to the right. The overlay
+        /// wants 0 at hidden and 1 at open, for either edge.
+        private func openAmount(_ signed: CGFloat) -> CGFloat {
+            switch edge {
+            case .leading: return signed
+            case .trailing: return -signed
+            }
+        }
+
+        private func post(_ name: Notification.Name, extra: [String: Any] = [:]) {
+            var info = extra
+            info["edge"] = edge == .leading ? "leading" : "trailing"
+            NotificationCenter.default.post(name: name, object: window, userInfo: info)
+        }
 
         private func begin(window: UIWindow) {
             self.window = window
-            // `shouldBegin` already gated on `canOpen()`; re-check defensively.
+            if closingColumn {
+                Ghostty.logger.debug("Edge sidebar column close begin edge=\(String(describing: self.edge), privacy: .public)")
+                return
+            }
             guard canOpen() else {
                 interactiveOpenInProgress = false
                 return
             }
-            if opensDocked {
-                // Docked column: no finger-tracking, just open.
-                interactiveOpenInProgress = false
-                showingTabSwitcher.wrappedValue = true
-            } else {
-                // Floating drawer: arm the overlay to sit hidden, then flip the
-                // binding true so it mounts without auto-springing. The
-                // synchronous post lands before SwiftUI's update cycle.
+            Ghostty.logger.debug("Edge sidebar gesture begin edge=\(String(describing: self.edge), privacy: .public) tracksFinger=\(self.tracksFinger) window=\(String(describing: ObjectIdentifier(window)), privacy: .public)")
+            if tracksFinger {
                 interactiveOpenInProgress = true
-                NotificationCenter.default.post(name: .tabSidebarBeginInteractiveOpen, object: window)
-                showingTabSwitcher.wrappedValue = true
+                post(.tabSidebarBeginInteractiveOpen)
+                onOpen()
+            } else {
+                interactiveOpenInProgress = false
+                onOpen()
             }
         }
 
         private func change(progress: CGFloat) {
             guard interactiveOpenInProgress else { return }
-            NotificationCenter.default.post(
-                name: .tabSidebarOpenDragChanged,
-                object: window,
-                userInfo: ["progress": max(0, min(1, progress))]
-            )
+            post(.tabSidebarOpenDragChanged, extra: ["progress": max(0, min(1, openAmount(progress)))])
         }
 
         private func end(progress: CGFloat, velocity: CGFloat) {
+            Ghostty.logger.debug("Edge sidebar gesture end edge=\(String(describing: self.edge), privacy: .public) progress=\(self.openAmount(progress)) velocity=\(self.openAmount(velocity))")
+            if closingColumn {
+                closingColumn = false
+                if -openAmount(progress) > 1 / 3 || -openAmount(velocity) > 800 {
+                    Ghostty.logger.info("Edge sidebar column swipe close edge=\(String(describing: self.edge), privacy: .public)")
+                    onClose()
+                }
+                return
+            }
             guard interactiveOpenInProgress else { return }
             interactiveOpenInProgress = false
-            if progress > 1 / 3 || velocity > 800 {
-                NotificationCenter.default.post(name: .tabSidebarOpenDragCommit, object: window)
+            if openAmount(progress) > 1 / 3 || openAmount(velocity) > 800 {
+                Ghostty.logger.debug("Edge sidebar gesture commit")
+                post(.tabSidebarOpenDragCommit)
             } else {
-                NotificationCenter.default.post(name: .tabSidebarOpenDragCancel, object: window)
-                showingTabSwitcher.wrappedValue = false
+                Ghostty.logger.debug("Edge sidebar gesture cancel")
+                post(.tabSidebarOpenDragCancel)
+                onCancel()
             }
         }
 
         private func cancel() {
+            Ghostty.logger.debug("Edge sidebar gesture interrupted edge=\(String(describing: self.edge), privacy: .public)")
+            closingColumn = false
             guard interactiveOpenInProgress else { return }
             interactiveOpenInProgress = false
-            NotificationCenter.default.post(name: .tabSidebarOpenDragCancel, object: window)
-            showingTabSwitcher.wrappedValue = false
+            post(.tabSidebarOpenDragCancel)
+            onCancel()
         }
     }
 
-    /// A zero-cost passthrough view whose only job is to install the
-    /// window-level edge recognizer once it has a window, and to remove it when
-    /// it leaves the hierarchy.
     final class EdgeSwipeInstallerView: UIView {
         weak var coordinator: Coordinator?
 

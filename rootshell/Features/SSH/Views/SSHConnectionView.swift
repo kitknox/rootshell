@@ -6,6 +6,7 @@ import UIKit
 
 /// View for creating a new SSH connection
 struct SSHConnectionView: View {
+    @Environment(\.edgeSidebarTitleContext) private var edgeSidebarTitleContext
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.sheetThemeColors) private var sheetThemeColors
@@ -397,6 +398,14 @@ struct SSHConnectionView: View {
             case .splitDown: return String(localized: "Split Down")
             }
         }
+
+        var compactDisplayName: String {
+            switch self {
+            case .newTab: String(localized: "Tab")
+            case .splitRight: String(localized: "Right")
+            case .splitDown: String(localized: "Down")
+            }
+        }
     }
     
     enum AuthType: String, CaseIterable {
@@ -488,7 +497,12 @@ struct SSHConnectionView: View {
                 updateFieldsFromQuickConnect(newValue)
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { connectionToolbar }
+            .navigationTitle(edgeSidebarTitleContext?.selection.title ?? navigationTitleForConnectionType)
+            .toolbar {
+                if edgeSidebarTitleContext == nil {
+                    connectionToolbar
+                }
+            }
             .onChange(of: jumpHops.isEmpty) { _, isEmpty in
                 if !isEmpty {
                     isJumpHostExpanded = true
@@ -547,6 +561,7 @@ struct SSHConnectionView: View {
 #endif
             .navigationDestination(isPresented: $showProfileEditorSheet) {
                 ProfileEditorSheet(historyEntry: buildHistoryEntryFromForm(), embedded: true)
+                    .toolbar(.visible, for: .navigationBar)
             }
     }
     
@@ -554,42 +569,68 @@ struct SSHConnectionView: View {
     private var connectionToolbar: some ToolbarContent {
         if !preventDismissal {
             ToolbarItem(placement: .topBarLeading) {
-                Button(onClose != nil ? "Done" : "Cancel") {
-                    if let onClose {
-                        onClose()
-                    } else {
-                        close()
-                    }
+                Button {
+                    close()
+                } label: {
+                    Text(onClose != nil ? "Done" : "Cancel")
                 }
+                .accessibilityLabel(onClose != nil ? String(localized: "Done") : String(localized: "Cancel"))
                 .disabled(isConnecting)
             }
         }
-        
+
         ToolbarItem(placement: .principal) {
             Text(navigationTitleForConnectionType)
                 .fontWeight(.semibold)
         }
-        
-        ToolbarItem(placement: .confirmationAction) {
-            if connectionType == .console || connectionType == .profiles || connectionType == .browse || connectionType == .files {
-                EmptyView()
-            } else if isConnecting {
-                ProgressView()
-            } else {
-                Button(connectionType == .local ? "Open" : "Connect") {
-                    connect()
-                }
-                .disabled(!isFormValid)
+
+        if connectionShowsPrimaryAction {
+            ToolbarItem(placement: .confirmationAction) {
+                connectionPrimaryAction
             }
+        }
+    }
+
+    private var connectionShowsPrimaryAction: Bool {
+        connectionType != .console && connectionType != .profiles && connectionType != .browse && connectionType != .files
+    }
+
+    @ViewBuilder
+    private var connectionPrimaryAction: some View {
+        if isConnecting {
+            ProgressView()
+        } else {
+            Button(connectionType == .local ? "Open" : "Connect") {
+                connect()
+            }
+            .disabled(!isFormValid)
         }
     }
     
     @ViewBuilder
     private var connectionContent: some View {
         VStack(spacing: 0) {
-            connectionTypeSwitcher
-            
-            Divider()
+            if let context = edgeSidebarTitleContext, connectionType != .profiles {
+                EdgeSidebarHeader(
+                    title: context.selection.title,
+                    systemImage: context.selection.systemImage,
+                    showsClose: !preventDismissal,
+                    isCloseEnabled: !isConnecting,
+                    onClose: close
+                ) {
+                    if connectionShowsPrimaryAction {
+                        connectionPrimaryAction.edgeSidebarHeaderActionTarget()
+                    }
+                }
+            }
+
+            if edgeSidebarTitleContext == nil {
+                connectionTypeSwitcher
+                Divider()
+            } else if connectionType != .profiles {
+                connectionNavigationRow
+                Divider()
+            }
             
             switch connectionType {
             case .ssh:
@@ -610,6 +651,7 @@ struct SSHConnectionView: View {
                 filesConnectionContent
             }
         }
+        .toolbar(edgeSidebarTitleContext == nil ? .visible : .hidden, for: .navigationBar)
     }
     
     private var sshConnectionContent: some View {
@@ -1222,7 +1264,9 @@ struct SSHConnectionView: View {
     
     private var profilesConnectionContent: some View {
         VStack(spacing: 0) {
-            compactOpenAsHeader
+            if edgeSidebarTitleContext == nil {
+                compactOpenAsHeader
+            }
             
             InlineProfilesView(
                 splitOption: $splitOption,
@@ -1230,12 +1274,11 @@ struct SSHConnectionView: View {
                 onProfileSelected: { profile, selectedSplitOption in
                     onProfileConnect?(profile, selectedSplitOption)
                 },
-                onCancel: {
-                    if let onClose {
-                        onClose()
-                    } else {
-                        close()
-                    }
+                onCancel: close,
+                showsClose: !preventDismissal,
+                isCloseEnabled: !isConnecting,
+                connectionSwitcher: {
+                    connectionNavigationRow
                 }
             )
         }
@@ -1374,22 +1417,62 @@ struct SSHConnectionView: View {
     }
 
     // Shared with the Screen Sharing form (SSHConnectionView+VNC.swift).
+    @ViewBuilder
     var compactOpenAsHeader: some View {
-        VStack(spacing: 0) {
+        if edgeSidebarTitleContext == nil {
             VStack(spacing: 0) {
-                Picker("Open As", selection: $splitOption) {
-                    ForEach(SplitOption.allCases, id: \.self) { option in
-                        Text(option.displayName).tag(option)
+                splitDestinationPicker
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                Divider()
+            }
+            .background(sheetThemeColors?.background ?? Color(.systemGroupedBackground))
+        }
+    }
+
+    private var splitDestinationPicker: some View {
+        Picker("Open As", selection: $splitOption) {
+            ForEach(SplitOption.allCases, id: \.self) { option in
+                Text(edgeSidebarTitleContext == nil ? option.displayName : option.compactDisplayName)
+                    .tag(option)
+                    .accessibilityLabel(option.displayName)
+            }
+        }
+    }
+
+    private var connectionNavigationRow: some View {
+        HStack(spacing: 8) {
+            Menu {
+                Picker("Connection Type", selection: Binding(get: { connectionType }, set: selectConnectionType)) {
+                    ForEach(visibleConnectionTypes, id: \.self) { type in
+                        Label(type.displayName, systemImage: type.iconName).tag(type)
                     }
                 }
-                .pickerStyle(.segmented)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: connectionType.iconName)
+                    Image(systemName: "chevron.down").font(.caption2)
+                }
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(sheetThemeColors?.background ?? Color(.systemGroupedBackground))
-            
-            Divider()
+            .accessibilityLabel("Connection Type")
+            .accessibilityValue(connectionType.displayName)
+            if connectionType != .files {
+                ViewThatFits(in: .horizontal) {
+                    splitDestinationPicker
+                        .pickerStyle(.segmented)
+                        .fixedSize(horizontal: true, vertical: false)
+                    splitDestinationPicker
+                        .pickerStyle(.menu)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
+        .padding(.horizontal, 12)
+        .frame(height: 44)
     }
     
     private var connectionTypeSwitcher: some View {
@@ -1402,7 +1485,7 @@ struct SSHConnectionView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.vertical, 2)
             }
             .onAppear {
                 proxy.scrollTo(connectionType, anchor: .center)
@@ -1443,6 +1526,7 @@ struct SSHConnectionView: View {
             .font(.subheadline.weight(.medium))
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .frame(minHeight: 44)
             .modifier(
                 GlassTabBackgroundModifier(
                     isSelected: isSelected,
@@ -3693,8 +3777,9 @@ extension SSHConnectionView {
     // MARK: - Inline Profiles View
     
     /// Inline profile browser for the connection type menu
-    struct InlineProfilesView: View {
+    struct InlineProfilesView<ConnectionSwitcher: View>: View {
         @Environment(\.sheetThemeColors) private var sheetThemeColors
+        @Environment(\.edgeSidebarTitleContext) private var edgeSidebarTitleContext
         
         // Manager
         private var profileManager: ConnectionProfileManager { ConnectionProfileManager.shared }
@@ -3731,6 +3816,27 @@ extension SSHConnectionView {
         
         let onProfileSelected: (ConnectionProfile, SSHConnectionView.SplitOption) -> Void
         var onCancel: (() -> Void)? = nil
+        let showsClose: Bool
+        let isCloseEnabled: Bool
+        let connectionSwitcher: () -> ConnectionSwitcher
+
+        init(
+            splitOption: Binding<SSHConnectionView.SplitOption>,
+            navigationPath: Binding<[SSHConnectionView.InlineProfilesRoute]>,
+            onProfileSelected: @escaping (ConnectionProfile, SSHConnectionView.SplitOption) -> Void,
+            onCancel: (() -> Void)? = nil,
+            showsClose: Bool = true,
+            isCloseEnabled: Bool = true,
+            @ViewBuilder connectionSwitcher: @escaping () -> ConnectionSwitcher
+        ) {
+            self._splitOption = splitOption
+            self._navigationPath = navigationPath
+            self.onProfileSelected = onProfileSelected
+            self.onCancel = onCancel
+            self.showsClose = showsClose
+            self.isCloseEnabled = isCloseEnabled
+            self.connectionSwitcher = connectionSwitcher
+        }
         
         private var currentFolder: String {
             navigationPath.last?.folderPath ?? ""
@@ -3812,26 +3918,22 @@ extension SSHConnectionView {
                 }
                 .navigationDestination(isPresented: $showingNewProfileSheet) {
                     ProfileEditorSheet(folderPath: currentFolder, embedded: true)
+                        .toolbar(.visible, for: .navigationBar)
                 }
                 .navigationDestination(item: $editingProfile) { profile in
                     ProfileEditorSheet(profile: profile, embedded: true)
+                        .toolbar(.visible, for: .navigationBar)
                 }
                 .toolbar {
-                    if profileManager.hasUnavailableProfiles {
-                        ToolbarItem(placement: .primaryAction) {
-                            Menu {
-                                Toggle("Show All Platforms", isOn: $showAllPlatforms)
-                            } label: {
-                                Image(systemName: "line.3.horizontal.decrease.circle")
+                    if edgeSidebarTitleContext == nil {
+                        if profileManager.hasUnavailableProfiles {
+                            ToolbarItem(placement: .primaryAction) {
+                                profilePlatformFilterAction
                             }
-                            .accessibilityLabel("Platform Filter")
                         }
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            presentNewProfileSheet(in: currentFolder)
-                        } label: {
-                            Image(systemName: "plus")
+
+                        ToolbarItem(placement: .primaryAction) {
+                            addProfileAction
                         }
                     }
                 }
@@ -3841,24 +3943,60 @@ extension SSHConnectionView {
         
         @ViewBuilder
         private func profileListView(folder: String) -> some View {
-            ScrollViewReader { scrollProxy in
-                List {
-                    // Search section at top
-                    searchSection(in: folder)
-                    
-                    // Folders in current location
-                    foldersSection(in: folder)
-                    
-                    // Profiles in current location
-                    profilesSection(in: folder)
-                    
-                    // No results message
-                    noResultsSection(in: folder)
+            VStack(spacing: 0) {
+                if let context = edgeSidebarTitleContext {
+                    EdgeSidebarHeader(
+                        title: context.selection.title,
+                        systemImage: context.selection.systemImage,
+                        status: folder.isEmpty ? nil : folderName(from: folder),
+                        onBack: navigationPath.isEmpty ? nil : navigateToParentFolder,
+                        showsClose: showsClose,
+                        isCloseEnabled: isCloseEnabled,
+                        onClose: { onCancel?() }
+                    ) {
+                        addProfileAction.edgeSidebarHeaderActionTarget()
+                    }
+                    connectionSwitcher()
                 }
-                .themedList()
-                .onChange(of: scrollTargetID) { _, target in
-                    guard folder == currentFolder, let target else { return }
-                    scrollProxy.scrollTo(target, anchor: .center)
+
+                VStack(spacing: 6) {
+                    searchBar(in: folder)
+                        .frame(height: 44)
+                        .padding(.horizontal, 10)
+                        .background(
+                            sheetThemeColors?.rowBackground ?? Color(uiColor: .secondarySystemBackground),
+                            in: RoundedRectangle(cornerRadius: 12)
+                        )
+                    if !selectedTags.isEmpty {
+                        activeTagChips
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+
+                ScrollViewReader { scrollProxy in
+                    List {
+                        // Folders in current location
+                        foldersSection(in: folder)
+
+                        // Profiles in current location
+                        profilesSection(in: folder)
+
+                        // No results message
+                        noResultsSection(in: folder)
+                    }
+                    .themedList()
+                    .listStyle(.plain)
+                    .environment(\.defaultMinListRowHeight, edgeSidebarTitleContext == nil ? 44 : 24)
+                    .listSectionSpacing(.compact)
+                    .contentMargins(.top, 0, for: .scrollContent)
+                    .transformEnvironment(\.defaultMinListHeaderHeight) { height in
+                        if edgeSidebarTitleContext != nil { height = 24 }
+                    }
+                    .onChange(of: scrollTargetID) { _, target in
+                        guard folder == currentFolder, let target else { return }
+                        scrollProxy.scrollTo(target, anchor: .center)
+                    }
                 }
             }
             .confirmationDialog(
@@ -3880,8 +4018,8 @@ extension SSHConnectionView {
             } message: { profile in
                 Text("Are you sure you want to delete \"\(profile.name)\"?")
             }
-            .listStyle(.insetGrouped)
-            .navigationTitle(folder.isEmpty ? "Profiles" : folderName(from: folder))
+            .toolbar(edgeSidebarTitleContext == nil ? .visible : .hidden, for: .navigationBar)
+            .navigationTitle(folder.isEmpty ? (edgeSidebarTitleContext?.selection.title ?? "Profiles") : folderName(from: folder))
             .navigationBarTitleDisplayMode(.inline)
             .onKeyPress(.downArrow, phases: .down) { _ in
                 moveHighlightDown()
@@ -3920,20 +4058,6 @@ extension SSHConnectionView {
         
         // MARK: - Search Section
         
-        @ViewBuilder
-        private func searchSection(in folder: String) -> some View {
-            Section {
-                Group {
-                    searchBar(in: folder)
-                    
-                    if !selectedTags.isEmpty {
-                        activeTagChips
-                    }
-                }
-                .themedRow()
-            }
-        }
-        
         private func searchFocusBinding(for folder: String) -> Binding<Bool> {
             Binding(
                 get: { folder == currentFolder && isSearchFocused },
@@ -3949,7 +4073,7 @@ extension SSHConnectionView {
         private func searchBar(in folder: String) -> some View {
             BrowseSearchBar(
                 searchQuery: $searchQuery,
-                placeholder: String(localized: "Search profiles..."),
+                placeholder: edgeSidebarTitleContext == nil ? String(localized: "Search profiles...") : String(localized: "Search"),
                 focusedBinding: searchFocusBinding(for: folder),
                 focusRequestID: searchFocusRequestID,
                 onEscape: { handleEscapeKey() },
@@ -3994,6 +4118,10 @@ extension SSHConnectionView {
                 }
 
                 Menu {
+                    if edgeSidebarTitleContext != nil, profileManager.hasUnavailableProfiles {
+                        profilePlatformFilterToggle
+                        Divider()
+                    }
                     Picker("Sort By", selection: $sortOrder) {
                         ForEach(ProfileSortOrder.allCases, id: \.rawValue) { order in
                             Text(order.displayName).tag(order)
@@ -4049,72 +4177,92 @@ extension SSHConnectionView {
         private func foldersSection(in folder: String) -> some View {
             let subfolders = filteredFolders(in: folder)
             if !subfolders.isEmpty && searchQuery.isEmpty && selectedTags.isEmpty {
-                Section("Folders") {
-                    ForEach(subfolders) { subfolder in
-                        Button {
-                            navigateIntoFolder(subfolder.path)
-                        } label: {
-                            FolderRow(folder: subfolder)
-                        }
-                        .id("folder:\(subfolder.id)")
-                        .listRowBackground(
-                            isItemHighlighted(.folder(subfolder), in: folder)
-                            ? Color.accentColor.opacity(0.15) : sheetThemeColors?.rowBackground
-                        )
+                let rows = ForEach(subfolders) { subfolder in
+                    Button {
+                        navigateIntoFolder(subfolder.path)
+                    } label: {
+                        FolderRow(folder: subfolder)
+                            .frame(minHeight: 44)
                     }
+                    .id("folder:\(subfolder.id)")
+                    .listRowBackground(
+                        isItemHighlighted(.folder(subfolder), in: folder)
+                        ? Color.accentColor.opacity(0.15) : sheetThemeColors?.rowBackground
+                    )
+                }
+                if edgeSidebarTitleContext != nil {
+                    compactProfileSectionHeader("Folders")
+                    rows
+                } else {
+                    Section("Folders") { rows }
                 }
             }
         }
-        
+
         // MARK: - Profiles Section
-        
+
         @ViewBuilder
         private func profilesSection(in folder: String) -> some View {
             let profiles = filteredProfiles(in: folder)
             if !profiles.isEmpty {
-                Section(searchQuery.isEmpty && selectedTags.isEmpty ? "Profiles" : "Results") {
-                    ForEach(profiles) { profile in
-                        ProfileRow(profile: profile)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    profileToDelete = profile
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
+                let title = searchQuery.isEmpty && selectedTags.isEmpty ? "Profiles" : "Results"
+                let rows = ForEach(profiles) { profile in
+                    ProfileRow(profile: profile)
+                        .frame(minHeight: 44)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                profileToDelete = profile
+                            } label: {
+                                Label("Delete", systemImage: "trash")
                             }
-                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                Button {
-                                    editingProfile = profile
-                                } label: {
-                                    Label("Edit", systemImage: "pencil")
-                                }
-                                .tint(.blue)
-                                
-                                Button {
-                                    duplicateProfile(profile)
-                                } label: {
-                                    Label("Duplicate", systemImage: "doc.on.doc")
-                                }
-                                .tint(.orange)
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            Button {
+                                editingProfile = profile
+                            } label: {
+                                Label("Edit", systemImage: "pencil")
                             }
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                selectProfile(profile)
+                            .tint(.blue)
+
+                            Button {
+                                duplicateProfile(profile)
+                            } label: {
+                                Label("Duplicate", systemImage: "doc.on.doc")
                             }
-                            .contextMenu {
-                                profileContextMenu(profile)
-                            }
-                            .id("profile:\(profile.id.uuidString)")
-                            .listRowBackground(
-                                isItemHighlighted(.profile(profile), in: folder)
-                                ? Color.accentColor.opacity(0.15) : sheetThemeColors?.rowBackground
-                            )
-                    }
+                            .tint(.orange)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectProfile(profile)
+                        }
+                        .contextMenu {
+                            profileContextMenu(profile)
+                        }
+                        .id("profile:\(profile.id.uuidString)")
+                        .listRowBackground(
+                            isItemHighlighted(.profile(profile), in: folder)
+                            ? Color.accentColor.opacity(0.15) : sheetThemeColors?.rowBackground
+                        )
+                }
+                if edgeSidebarTitleContext != nil {
+                    compactProfileSectionHeader(title)
+                    rows
+                } else {
+                    Section(title) { rows }
                 }
             }
         }
-        
-        // MARK: - No Results Section
+
+        private func compactProfileSectionHeader(_ title: String) -> some View {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+        }
+
+// MARK: - No Results Section
         
         @ViewBuilder
         private func noResultsSection(in folder: String) -> some View {
@@ -4250,6 +4398,28 @@ extension SSHConnectionView {
                 return path
             }
             return String(path[path.index(after: lastSlash)...])
+        }
+
+        @ViewBuilder
+        private var profilePlatformFilterAction: some View {
+            Menu {
+                profilePlatformFilterToggle
+            } label: {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+            }
+            .accessibilityLabel("Platform Filter")
+        }
+
+        private var profilePlatformFilterToggle: some View {
+            Toggle("Show All Platforms", isOn: $showAllPlatforms)
+        }
+
+        private var addProfileAction: some View {
+            Button {
+                presentNewProfileSheet(in: currentFolder)
+            } label: {
+                Image(systemName: "plus")
+            }
         }
         
         private func handleEscapeKey() {

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import os
 
 /// Navigation destinations for programmatic push (e.g., from Shortcuts intents).
 enum SettingsDestination: Hashable {
@@ -54,7 +55,11 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 }
 
 struct SettingsHomeList: View {
+    @Environment(\.sheetThemeColors) private var sheetThemeColors
     @Binding var showDebugSettings: Bool
+    var selection: Binding<SettingsSection?>? = nil
+    var showsAboutInformation = true
+    var onOpenDestination: ((SettingsSearchDestination) -> Void)? = nil
     @Setting(Settings.System.screenshotMode) private var screenshotMode
 
     #if !CHINA_BUILD
@@ -73,13 +78,16 @@ struct SettingsHomeList: View {
     #endif
 
     var body: some View {
-        List {
+        List(selection: selection) {
             Section {
-                ForEach(SettingsSection.allCases.filter { $0 != .about && $0.isAvailable }) { section in
+                ForEach(SettingsSection.allCases.filter {
+                    ($0 != .about || !showsAboutInformation) && $0.isAvailable
+                }) { section in
                     NavigationLink(value: section) {
                         HStack(spacing: 12) {
                             SettingsIcon(systemName: section.icon)
                             Text(section.title)
+                                .fontWeight(selection?.wrappedValue == section ? .semibold : .regular)
                             #if !CHINA_BUILD
                             if section == .vpn {
                                 Spacer()
@@ -91,66 +99,84 @@ struct SettingsHomeList: View {
                         }
                     }
                     .themedRow()
+                    .listRowBackground(selection?.wrappedValue == section
+                        ? (sheetThemeColors?.accentColor ?? Color.accentColor).opacity(0.18)
+                        : sheetThemeColors?.rowBackground)
                 }
             }
 
-            Section {
-                VStack(spacing: 12) {
-                    AnimatedAboutIcon(
-                        onTap: {
-                            if let url = URL(string: "https://www.rootshell.com") {
-                                UIApplication.shared.open(url)
+            if showsAboutInformation {
+                Section {
+                    VStack(spacing: 12) {
+                        AnimatedAboutIcon(
+                            onTap: {
+                                if let url = URL(string: "https://www.rootshell.com") {
+                                    UIApplication.shared.open(url)
+                                }
+                            },
+                            onLongPress: {
+                                showDebugSettings = true
                             }
-                        },
-                        onLongPress: {
-                            showDebugSettings = true
+                        )
+
+                        Text("Rootshell")
+                            .font(.headline)
+
+                        Text("Written by Kit Knox")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 8)
+                    .themedRow()
+
+                    if !screenshotMode {
+                        HStack(spacing: 12) {
+                            SettingsIcon(systemName: "info.circle")
+                            Text("Version")
+                            Spacer()
+                            let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+                            let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text("\(version) (\(build))")
+                                Text(BuildInfo.date)
+                            }
+                            .foregroundColor(.secondary)
+                            .font(.subheadline)
+                            .textSelection(.enabled)
                         }
-                    )
+                        .themedRow()
+                    }
 
-                    Text("Rootshell")
-                        .font(.headline)
+                    SettingsReviewLink()
 
-                    Text("Written by Kit Knox")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 8)
-                .themedRow()
-
-                if !screenshotMode {
-                    HStack(spacing: 12) {
-                        SettingsIcon(systemName: "info.circle")
-                        Text("Version")
-                        Spacer()
-                        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
-                        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text("\(version) (\(build))")
-                            Text(BuildInfo.date)
+                if let onOpenDestination {
+                    Button {
+                        onOpenDestination(.acknowledgements)
+                    } label: {
+                        HStack(spacing: 12) {
+                            SettingsIcon(systemName: "doc.text")
+                            Text("Acknowledgements")
                         }
-                        .foregroundColor(.secondary)
-                        .font(.subheadline)
-                        .textSelection(.enabled)
+                    }
+                    .themedRow()
+                } else {
+                    NavigationLink(value: SettingsSearchDestination.acknowledgements) {
+                        HStack(spacing: 12) {
+                            SettingsIcon(systemName: "doc.text")
+                            Text("Acknowledgements")
+                        }
                     }
                     .themedRow()
                 }
-
-                SettingsReviewLink()
-
-                NavigationLink(value: SettingsSearchDestination.acknowledgements) {
-                    HStack(spacing: 12) {
-                        SettingsIcon(systemName: "doc.text")
-                        Text("Acknowledgements")
-                    }
+                } footer: {
+                    SettingsOpenSourceFooter()
                 }
-                .themedRow()
-            } footer: {
-                SettingsOpenSourceFooter()
             }
         }
         .themedList()
+        .listStyle(.insetGrouped)
         // On the List, not in it: destinations registered inside lazy list
         // content aren't reliably picked up, and the debug screen is pushed by
         // the tap-count gesture above rather than by a visible row.
@@ -262,8 +288,11 @@ struct SettingsFloatingSearchChrome: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.secondary)
 
-                Text("Search Settings")
-                    .foregroundStyle(.primary)
+                ViewThatFits(in: .horizontal) {
+                    Text("Search Settings").fixedSize()
+                    Text("Search").fixedSize()
+                }
+                .foregroundStyle(.primary)
 
                 Spacer(minLength: 12)
 
@@ -442,22 +471,47 @@ struct SettingsView: View {
     var initialDestination: SettingsDestination? = nil
 
     @Environment(\.dismiss) var dismiss
-    @State private var navigationPath = NavigationPath()
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var detailNavigationPath = NavigationPath()
+    @State private var selectedSection: SettingsSection?
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
     @State private var hasNavigatedToInitialDestination = false
 
     @State private var showDebugSettings = false
     @State private var searchReservedHeight: CGFloat = 88
 
-    private var showsRootSearch: Bool {
-        navigationPath.isEmpty
+    private var sidebarSelection: Binding<SettingsSection?> {
+        Binding(
+            get: { selectedSection },
+            set: { selectSidebarSection($0, source: "sidebar") }
+        )
+    }
+
+    private var doneButton: some View {
+        Button("Done") {
+            dismiss()
+        }
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            NavigationStack(path: $navigationPath) {
-                SettingsHomeList(showDebugSettings: $showDebugSettings)
+        GeometryReader { geometry in
+            let showsWideColumns = geometry.size.width >= 600
+
+            NavigationSplitView(
+                columnVisibility: showsWideColumns ? .constant(.all) : $columnVisibility,
+                preferredCompactColumn: $preferredCompactColumn
+            ) {
+                let showsSidebarSearch = showsWideColumns || preferredCompactColumn == .sidebar
+                ZStack(alignment: .bottom) {
+                    SettingsHomeList(
+                        showDebugSettings: $showDebugSettings,
+                        selection: sidebarSelection,
+                        showsAboutInformation: !showsWideColumns,
+                        onOpenDestination: openSearchDestination
+                    )
                     .safeAreaInset(edge: .bottom) {
-                        if showsRootSearch {
+                        if showsSidebarSearch {
                             Color.clear.frame(height: searchReservedHeight)
                         }
                     }
@@ -465,39 +519,47 @@ struct SettingsView: View {
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .navigationBarTrailing) {
-                            Button("Done") {
-                                dismiss()
-                            }
+                            doneButton
                         }
                     }
-                    .navigationDestination(for: SettingsSection.self) { section in
-                        sectionDetail(for: section)
+
+                    if showsSidebarSearch {
+                        SettingsFloatingSearchChrome(
+                            reservedHeight: $searchReservedHeight,
+                            onSelect: handleSearchSelection
+                        )
                     }
-                    .navigationDestination(for: SettingsDestination.self) { destination in
-                        switch destination {
-                        case .vpn:
-                            #if !CHINA_BUILD
-                            VPNSettingsView()
-                            #else
-                            EmptyView()
-                            #endif
-                        case .touchKeyboard:
-                            settingsSearchDestinationView(for: .touchKeyboard)
+                }
+                .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 300)
+                .toolbar(removing: .sidebarToggle)
+            } detail: {
+                NavigationStack(path: $detailNavigationPath) {
+                    Group {
+                        if let section = selectedSection ?? (showsWideColumns ? .appearance : nil) {
+                            sectionDetail(for: section)
+                        } else {
+                            Color.clear
+                                .navigationTitle("Settings")
                         }
                     }
                     .navigationDestination(for: SettingsSearchDestination.self) { destination in
                         settingsSearchDestinationView(for: destination)
                     }
-                    .onAppear {
-                        handleInitialDestination()
-                    }
+                }
+                .id(selectedSection)
+                .environment(\.horizontalSizeClass, horizontalSizeClass)
             }
-
-            if showsRootSearch {
-                SettingsFloatingSearchChrome(
-                    reservedHeight: $searchReservedHeight,
-                    onSelect: handleSearchSelection
-                )
+            .navigationSplitViewStyle(.balanced)
+            .environment(\.horizontalSizeClass, showsWideColumns ? .regular : horizontalSizeClass)
+            .onAppear {
+                handleInitialDestination(showsWideColumns: showsWideColumns)
+            }
+            .onChange(of: showsWideColumns) { _, isWide in
+                Ghostty.logger.info("Settings layout mode wide=\(isWide, privacy: .public) width=\(geometry.size.width, privacy: .public)")
+                handleInitialDestination(showsWideColumns: isWide)
+            }
+            .onChange(of: detailNavigationPath.count) { _, count in
+                Ghostty.logger.debug("Settings detail path section=\(selectedSection?.rawValue ?? "none", privacy: .public) count=\(count)")
             }
         }
     }
@@ -526,18 +588,36 @@ struct SettingsView: View {
         }
     }
 
-    private func handleInitialDestination() {
-        guard let initialDestination, !hasNavigatedToInitialDestination else { return }
+    private func selectSidebarSection(_ section: SettingsSection?, source: String) {
+        let sectionName = section?.rawValue ?? "none"
+        Ghostty.logger.info("Settings section select source=\(source, privacy: .public) section=\(sectionName, privacy: .public)")
+        selectedSection = section
+        detailNavigationPath = NavigationPath()
+        preferredCompactColumn = section == nil ? .sidebar : .detail
+    }
+
+    private func handleInitialDestination(showsWideColumns: Bool) {
+        guard !hasNavigatedToInitialDestination else {
+            if showsWideColumns, initialDestination == nil, selectedSection == nil {
+                selectSidebarSection(.appearance, source: "wide-default")
+            }
+            return
+        }
+        guard initialDestination != nil || showsWideColumns else { return }
         hasNavigatedToInitialDestination = true
         // Delay navigation by one run loop tick so the NavigationStack
         // finishes its initial layout.
         DispatchQueue.main.async {
             switch initialDestination {
             case .vpn:
-                navigationPath.append(SettingsSection.vpn)
+                selectSidebarSection(.vpn, source: "initial-vpn")
             case .touchKeyboard:
-                navigationPath.append(SettingsSection.terminal)
-                navigationPath.append(SettingsSearchDestination.touchKeyboard)
+                selectSidebarSection(.terminal, source: "initial-touch-keyboard")
+                detailNavigationPath.append(SettingsSearchDestination.touchKeyboard)
+            case nil:
+                if showsWideColumns, selectedSection == nil {
+                    selectSidebarSection(.appearance, source: "wide-default")
+                }
             }
         }
     }
@@ -545,10 +625,19 @@ struct SettingsView: View {
     private func handleSearchSelection(_ entry: SettingsSearchEntry) {
         switch entry.action {
         case .section(let section):
-            navigationPath.append(section)
+            selectSidebarSection(section, source: "search-section")
         case .destination(let destination):
-            navigationPath.append(destination)
+            openSearchDestination(destination)
         }
+    }
+
+    private func openSearchDestination(_ destination: SettingsSearchDestination) {
+        let sectionName = destination.section.rawValue
+        Ghostty.logger.info("Settings destination section=\(sectionName, privacy: .public) destination=\(destination.rawValue, privacy: .public)")
+        selectedSection = destination.section
+        detailNavigationPath = NavigationPath()
+        detailNavigationPath.append(destination)
+        preferredCompactColumn = .detail
     }
 }
 

@@ -49,11 +49,14 @@ struct SidebarResizeDivider: View {
     let backgroundColor: Color
     /// Persist the chosen width. Called on drag end and on reset.
     let onCommit: (CGFloat) -> Void
+    /// Keep the column fixed while dragging and commit the preview on release.
+    var commitsOnRelease = false
 
     private let visibleWidth: CGFloat = 1
     private var hitAreaWidth: CGFloat { cardGap ?? 16 }
 
     @State private var dragStartWidth: CGFloat = 0
+    @State private var previewWidth: CGFloat?
     @State private var isInSnapZone = false
     @State private var isHovering = false
     @State private var cursorToken: UUID?
@@ -72,9 +75,12 @@ struct SidebarResizeDivider: View {
             // Visible divider line.
             Rectangle()
                 .fill(dividerColor)
-                .frame(width: visibleWidth)
+                .frame(width: commitsOnRelease ? 3 : visibleWidth, height: commitsOnRelease ? 28 : nil)
+                .clipShape(Capsule())
         }
+        .offset(x: previewOffset)
         .frame(maxHeight: .infinity)
+        .contentShape(Rectangle().inset(by: commitsOnRelease ? -8 : 0))
         #if targetEnvironment(macCatalyst)
         .onHover { hovering in
             isHovering = hovering
@@ -107,6 +113,7 @@ struct SidebarResizeDivider: View {
                     if !isDragging {
                         isDragging = true
                         dragStartWidth = width
+                        previewWidth = width
                         isInSnapZone = false
                         #if !targetEnvironment(macCatalyst) && !os(visionOS)
                         snapHaptic.prepare()
@@ -129,7 +136,13 @@ struct SidebarResizeDivider: View {
                 .onEnded { _ in
                     isDragging = false
                     isInSnapZone = false
-                    onCommit(width)
+                    if commitsOnRelease, let previewWidth {
+                        width = previewWidth
+                        onCommit(previewWidth)
+                    } else {
+                        onCommit(width)
+                    }
+                    previewWidth = nil
                     #if targetEnvironment(macCatalyst)
                     if !isHovering, let cursorToken {
                         CatalystCursorCoordinator.shared.unregister(cursorToken)
@@ -138,14 +151,16 @@ struct SidebarResizeDivider: View {
                     #endif
                 }
         )
-        #if targetEnvironment(macCatalyst)
         .onDisappear {
+            previewWidth = nil
+            isDragging = false
+            #if targetEnvironment(macCatalyst)
             if let cursorToken {
                 CatalystCursorCoordinator.shared.unregister(cursorToken)
                 self.cursorToken = nil
             }
+            #endif
         }
-        #endif
     }
 
     /// Transform a live drag translation into a clamped, snapped width and
@@ -171,7 +186,17 @@ struct SidebarResizeDivider: View {
         }
         isInSnapZone = snappedNow
 
-        width = newWidth
+        if commitsOnRelease {
+            previewWidth = newWidth
+        } else {
+            width = newWidth
+        }
+    }
+
+    private var previewOffset: CGFloat {
+        guard commitsOnRelease, let previewWidth else { return 0 }
+        let delta = previewWidth - width
+        return side == .left ? delta : -delta
     }
 
     /// The default width clamped into the currently-allowed range so snapping
@@ -183,7 +208,7 @@ struct SidebarResizeDivider: View {
     private var dividerColor: Color {
         if isDragging {
             return Color.accentColor
-        } else if isHovering {
+        } else if isHovering || commitsOnRelease {
             return Color(uiColor: .separator).opacity(0.8)
         } else {
             return cardGap == nil ? Color(uiColor: .separator).opacity(0.5) : .clear

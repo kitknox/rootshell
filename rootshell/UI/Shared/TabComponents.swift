@@ -336,7 +336,7 @@ enum TabMetrics {
     static let troughKnobInset: CGFloat = 4
     #else
     static let tabMaxHeight: CGFloat = 32
-    static let tabBarHeight: CGFloat = 44
+    static let tabBarHeight: CGFloat = tabMaxHeight + PaneCardStyle.gap * 2
     static let horizontalPadding: CGFloat = 12
     static let verticalPadding: CGFloat = 6
     static let closeButtonSize: CGFloat = 16

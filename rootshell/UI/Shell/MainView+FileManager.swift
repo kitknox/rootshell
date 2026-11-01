@@ -3,29 +3,31 @@
 //  rootshell
 //
 //  Presents the file manager: a resizable column beside the terminal, a HUD
-//  over it (floating or covering it), or a sheet on iPhone. The window's model is created on first use
-//  and kept while hidden, so reopening restores panes, selection and focus.
+//  over it (floating or covering it), or an edge drawer. visionOS
+//  compact width still uses a sheet. The window's model is created on first
+//  use and kept while hidden, so reopening restores panes, selection and focus.
 //
 
 import SwiftUI
+import os
 
 extension MainView {
     var fileManagerShowsSidebar: Bool {
-        showFileManager && !isPhone && fileManagerPresentation == .sidebar && fileManagerModel != nil
+        showFileManager && !usesPinnedWideEdgeSidebarLayout && !isPhone
+            && fileManagerPresentation == .sidebar && fileManagerModel != nil
     }
 
     /// The floating or full-size HUD.
     var fileManagerShowsOverlay: Bool {
-        showFileManager && !isPhone && fileManagerPresentation != .sidebar && fileManagerModel != nil
+        showFileManager && !usesPinnedWideEdgeSidebarLayout && !isPhone
+            && fileManagerPresentation != .sidebar && fileManagerModel != nil
+            && !edgeSidebarColumnOwns(.fileManager)
     }
 
-    /// The HUD and the iPhone sheet own the keyboard; the sidebar shares the window with the terminal.
+    /// The HUD and drawer own the keyboard; a pinned column shares it.
     var fileManagerOwnsKeyboard: Bool {
-        showFileManager && (isPhone || fileManagerPresentation.ownsKeyboard)
-    }
-
-    var fileManagerSidebarCurrentWidth: CGFloat {
-        fileManagerShowsSidebar ? fileManagerSidebarWidth : 0
+        showFileManager && !edgeSidebarColumnOwns(.fileManager)
+            && (isPhone || fileManagerPresentation.ownsKeyboard)
     }
 
     // MARK: - Toggle
@@ -33,16 +35,14 @@ extension MainView {
     /// First press opens; with the sidebar open but the terminal typing, a press
     /// moves focus into the manager; otherwise it closes.
     func toggleFileManager() {
-        if showFileManager {
-            if fileManagerShowsSidebar, KeyboardTracker.shared.isHardwareKeyboard, !fileManagerFieldFocused {
-                focusedTerminalForFileManager?.resignFirstResponder()
-                fileManagerModel?.requestFocus()
-            } else {
-                closeFileManager()
-            }
+        if (fileManagerShowsSidebar || edgeSidebarColumnOwns(.fileManager)),
+           KeyboardTracker.shared.isHardwareKeyboard,
+           !fileManagerFieldFocused {
+            focusedTerminalForFileManager?.resignFirstResponder()
+            fileManagerModel?.requestFocus()
             return
         }
-        openFileManager()
+        toggleEdgeSidebarPage(.fileManager)
     }
 
     private var fileManagerFieldFocused: Bool {
@@ -50,15 +50,97 @@ extension MainView {
         return DraggableHUDHostView.ownsFirstResponder(in: window)
     }
 
-    private var focusedTerminalForFileManager: Ghostty.TerminalView? {
+    var focusedTerminalForFileManager: Ghostty.TerminalView? {
         guard terminals.indices.contains(selectedTabIndex) else { return nil }
         return terminals[selectedTabIndex].focusedTerminal
+    }
+
+    var panelMultiplexerTerminalID: UUID? {
+        guard lifecycleScenePhase == .active, showingTabSwitcher || showFileManager,
+              let terminal = focusedTerminalForFileManager,
+              MultiplexerExposeFeed.canDetect(terminal) else { return nil }
+        return terminal.uuid
+    }
+
+    func updatePanelMultiplexerFeed() {
+        if panelMultiplexerTerminalID != nil, let terminal = focusedTerminalForFileManager {
+            muxExposeFeed.start(terminal: terminal, consumer: .panels)
+        } else {
+            muxExposeFeed.stopNow(consumer: .panels)
+        }
+        followFileManagerDirectory()
+    }
+
+    func followFileManagerDirectory() {
+        guard showFileManager, fileManagerModel != nil,
+              let terminal = focusedTerminalForFileManager else { return }
+        let directory: String?
+        let paneID: String
+        if muxExposeFeed.terminal === terminal,
+           let snapshot = muxExposeFeed.snapshot,
+           let tab = snapshot.tabs.first(where: { $0.id == snapshot.activeTabID }),
+           let pane = tab.panes.first(where: \.isActive) {
+            directory = pane.workingDirectory
+            paneID = pane.id
+        } else if muxExposeFeed.terminal === terminal, muxExposeFeed.state == .unsupported,
+                  terminal.rawMultiplexer == nil, terminal.passthroughMultiplexer == nil {
+            let source = FileEndpoint.PaneSource(terminal: terminal, openInFolderTarget: captureOpenInFolderTarget())
+            fileManagerModel?.present(from: source, directory: terminal.pwd)
+            return
+        } else {
+            return
+        }
+        retargetFileManager(terminal: terminal, paneID: paneID, directory: directory)
+    }
+
+    var fileManagerControlTerminalID: UUID? {
+        guard lifecycleScenePhase == .active, showFileManager,
+              let terminal = focusedTerminalForFileManager, terminal.isMultiplexerPane else { return nil }
+        return terminal.uuid
+    }
+
+    func followControlFileManagerDirectory() async {
+        guard fileManagerControlTerminalID != nil, let terminal = focusedTerminalForFileManager else { return }
+        while !Task.isCancelled {
+            var directory: String?
+            var paneID: String?
+            if let binding = terminal.herdrPaneBinding,
+               let controller = HerdrController.controller(for: terminal) {
+                paneID = binding.paneId
+                directory = controller.paneInfos[binding.paneId]?.projectPath
+            } else if let binding = terminal.tmuxPaneBinding,
+                      let tab = tabsModel.selectedTab,
+                      let controller = TmuxController.controller(forWindowTab: tab) {
+                paneID = "%\(binding.paneId)"
+                do {
+                    directory = try await controller.paneWorkingDirectories()[binding.paneId]
+                } catch {
+                    Ghostty.logger.debug("File Manager pane directory query failed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            guard !Task.isCancelled, showFileManager, focusedTerminalForFileManager === terminal else { return }
+            if let paneID { retargetFileManager(terminal: terminal, paneID: paneID, directory: directory) }
+            do { try await Task.sleep(for: .seconds(1)) }
+            catch { return }
+        }
+    }
+
+    private func retargetFileManager(terminal: Ghostty.TerminalView, paneID: String, directory: String?) {
+        guard let model = fileManagerModel else { return }
+        guard let directory, directory.hasPrefix("/") else { return }
+        let location = "\(terminal.uuid)|\(paneID)|\(directory)"
+        guard location != followedFileManagerLocation else { return }
+        followedFileManagerLocation = location
+        let source = FileEndpoint.PaneSource(terminal: terminal, openInFolderTarget: captureOpenInFolderTarget())
+        model.present(from: source, directory: directory, followDirectory: true)
+        Ghostty.logger.info("File Manager follows multiplexer pane=\(paneID, privacy: .public) cwd=\(directory, privacy: .public)")
     }
 
     func openFileManager() {
         let model = fileManagerModel ?? makeFileManagerModel()
         fileManagerModel = model
-        if let terminal = focusedTerminalForFileManager {
+        if let terminal = focusedTerminalForFileManager,
+           !terminal.isMultiplexerPane, !MultiplexerExposeFeed.canDetect(terminal) {
             let source = FileEndpoint.PaneSource(terminal: terminal, openInFolderTarget: captureOpenInFolderTarget())
             let directory = terminal.pwd.flatMap { $0.hasPrefix("/") ? $0 : nil }
             model.present(from: source, directory: directory)
@@ -78,7 +160,8 @@ extension MainView {
             model.activeSide = side
         }
 
-        if let presentation, !isPhone, presentation != fileManagerPresentation {
+        if let presentation, !usesPinnedWideEdgeSidebarLayout, !isPhone,
+           presentation != fileManagerPresentation {
             if showFileManager {
                 switchFileManagerPresentation(presentation)
                 return
@@ -87,6 +170,7 @@ extension MainView {
             SettingsStore.shared.set(Settings.Transfer.fileManagerPresentation, presentation)
         }
         if showFileManager {
+            adoptEdgeSidebarPage(.fileManager)
             model.requestFocus()
         } else {
             revealFileManager(model)
@@ -104,8 +188,13 @@ extension MainView {
         yieldSlotToFileManager(fileManagerPresentation)
         #endif
         yieldAgentInboxSlot(to: fileManagerPresentation)
+        adoptEdgeSidebarPage(.fileManager)
 
-        if isPhone {
+        if usesPinnedWideEdgeSidebarLayout {
+            if edgeSidebarIsPinned(edgeSidebarAssignment.side(of: .fileManager)) {
+                scheduleTerminalRelayout()
+            }
+        } else if isPhone {
             resignFirstResponderForSheetPresentation()
         } else if fileManagerPresentation == .sidebar {
             if KeyboardTracker.shared.isHardwareKeyboard { focusedTerminalForFileManager?.resignFirstResponder() }
@@ -113,12 +202,12 @@ extension MainView {
         }
         showFileManager = true
         if fileManagerOwnsKeyboard { setOverlayOwnsKeyboardForAllTerminals(true) }
-        model.requestFocus()
     }
 
     func closeFileManager() {
         guard showFileManager else { return }
-        let wasSidebar = fileManagerShowsSidebar
+        let wasSidebar = fileManagerShowsSidebar || edgeSidebarColumnOwns(.fileManager)
+            || floatingEdgeSidebarPresented(edgeSidebarAssignment.side(of: .fileManager))
         showFileManager = false
         fileManagerModel?.save()
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented)
@@ -131,6 +220,7 @@ extension MainView {
     }
 
     func switchFileManagerPresentation(_ presentation: PanelPresentation) {
+        guard !usesPinnedWideEdgeSidebarLayout else { return }
         guard presentation != fileManagerPresentation else { return }
         #if !CHINA_BUILD
         yieldSlotToFileManager(presentation)
@@ -138,6 +228,8 @@ extension MainView {
         yieldAgentInboxSlot(to: presentation)
         fileManagerPresentation = presentation
         SettingsStore.shared.set(Settings.Transfer.fileManagerPresentation, presentation)
+        if showFileManager { adoptEdgeSidebarPage(.fileManager) }
+        Ghostty.logger.info("Edge sidebar presentation page=fileManager mode=\(presentation.rawValue, privacy: .public) window=\(windowId, privacy: .public)")
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented || fileManagerOwnsKeyboard)
         scheduleTerminalRelayout()
         fileManagerModel?.requestFocus()
@@ -193,10 +285,10 @@ extension MainView {
 
     // MARK: - Views
 
-    /// The docked column, placed beside the AI sidebar when both are open.
     @ViewBuilder
     func fileManagerSidebarColumn(width: CGFloat, totalWidth: CGFloat) -> some View {
-        if fileManagerShowsSidebar, let model = fileManagerModel {
+        if fileManagerShowsSidebar, !edgeSidebarColumnOwns(.fileManager), let model = fileManagerModel {
+            let side = edgeSidebarAssignment.side(of: .fileManager)
             FileManagerSidebarView(
                 manager: model,
                 width: $fileManagerSidebarWidth,
@@ -204,11 +296,20 @@ extension MainView {
                 totalWidth: totalWidth,
                 canFocus: showFileManager,
                 theme: resolvedSheetTheme(),
+                side: side,
                 onClose: { closeFileManager() },
                 onSwitchPresentation: { switchFileManagerPresentation($0) }
             )
+            .environment(\.edgeSidebarTitleContext, EdgeSidebarTitleContext(
+                pages: edgeSidebarAssignment.pages(on: side),
+                selection: .fileManager,
+                side: side,
+                isPinned: edgeSidebarIsPinned(side),
+                onTogglePin: { toggleEdgeSidebarPin(side) },
+                onSelect: selectEdgeSidebarPage
+            ))
             .frame(width: width)
-            .transition(.move(edge: .trailing))
+            .transition(.move(edge: side == .leading ? .leading : .trailing))
         }
     }
 
@@ -243,7 +344,7 @@ extension MainView {
     func fileManagerPhoneSheetModifier(sheetTheme: ResolvedSheetTheme) -> FileManagerPhoneSheetModifier {
         FileManagerPhoneSheetModifier(
             isPresented: Binding(
-                get: { showFileManager && isPhone },
+                get: { showFileManager && isPhone && !fileManagerUsesEdgeSidebar },
                 set: { if !$0 { closeFileManager() } }
             ),
             model: fileManagerModel,

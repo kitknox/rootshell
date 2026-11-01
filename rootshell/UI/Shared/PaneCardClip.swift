@@ -21,6 +21,15 @@ extension PaneCardStyle {
             bottomTrailingRadius: trailing, topTrailingRadius: trailing,
             style: rounded ? .continuous : .circular)
     }
+
+    /// Left-hand docked columns always round their trailing corners.
+    static func leadingColumnShape(rounded: Bool) -> UnevenRoundedRectangle {
+        let leading: CGFloat = rounded ? cornerRadius : 0
+        return UnevenRoundedRectangle(
+            topLeadingRadius: leading, bottomLeadingRadius: leading,
+            bottomTrailingRadius: 12, topTrailingRadius: 12,
+            style: rounded ? .continuous : .circular)
+    }
 }
 
 /// Clips to a card only while Rounded Panes is on, so the default layout

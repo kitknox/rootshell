@@ -213,34 +213,6 @@ struct TabIndicatorOverlay: View {
     }
 }
 
-// MARK: - AI Agent Sidebar Container
-
-#if !CHINA_BUILD
-/// Sidebar container for AI Agent on iPad/Catalyst/visionOS.
-/// Rendered within the tab content area with a draggable resize divider.
-/// Only used when presentation mode is .sidebar
-struct AIAgentSidebarContainer: View {
-    @Binding var isPresented: Bool
-    let session: AIAgentSession
-    let tabID: UUID
-    @Binding var isDragging: Bool
-    @Binding var sidebarWidth: CGFloat
-    let totalWidth: CGFloat
-
-    var body: some View {
-        AIAgentSidebarView(
-            isPresented: $isPresented,
-            session: session,
-            tabID: tabID,
-            isDragging: $isDragging,
-            sidebarWidth: $sidebarWidth,
-            totalWidth: totalWidth
-        )
-        .transition(.move(edge: .trailing).combined(with: .opacity))
-    }
-}
-#endif
-
 // MARK: - Container Corner Modifier
 
 struct ContainerCornerModifier: ViewModifier {

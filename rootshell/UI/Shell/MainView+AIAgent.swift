@@ -22,6 +22,7 @@ extension MainView {
 
         switch request.targetMode {
         case .sidebar:
+            adoptEdgeSidebarPage(.aiAgent)
             // Switching from window to sidebar - move ALL sessions
             // Get all tab IDs first, then move each to sidebar
             let windowTabIDs = Array(aiAgentWindowState.windowSessions.keys)
@@ -116,7 +117,7 @@ extension MainView {
         aiAgentWindowState.removeSession(tabID: tabID)
 
         // If the sheet is currently showing this tab, dismiss it.
-        if isPhone,
+        if usesPinnedWideEdgeSidebarLayout || isPhone,
            showAIAgentOverlay,
            terminals.indices.contains(selectedTabIndex),
            terminals[selectedTabIndex].id == tabID {
@@ -232,8 +233,11 @@ extension MainView {
         }
         #endif
 
+        if (usesPinnedWideEdgeSidebarLayout || isPhone || AICredentialsManager.shared.aiAgentPresentationMode == .sidebar),
+           !edgeSidebarPageIsOpen(.aiAgent) { adoptEdgeSidebarPage(.aiAgent) }
+
         // Different behavior based on device type
-        if isPhone {
+        if usesPinnedWideEdgeSidebarLayout || isPhone {
             // iPhone: use global sheet presentation
             Ghostty.logger.info("Opening AI Agent sheet: \(displayName)")
             showAIAgentOverlay = true
