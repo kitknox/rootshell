@@ -2599,7 +2599,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -2627,7 +2627,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn";
 				PRODUCT_NAME = rootshell;
 				REGISTER_APP_GROUPS = YES;
@@ -2659,7 +2659,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -2689,7 +2689,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				OTHER_SWIFT_FLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = rootshell;
@@ -2721,7 +2721,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -2751,7 +2751,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = rootshell;
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
@@ -3846,7 +3846,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -3876,7 +3876,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
@@ -3963,7 +3963,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -3993,7 +3993,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
@@ -4088,7 +4088,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -4121,7 +4121,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -4218,7 +4218,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -4251,7 +4251,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -4573,7 +4573,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -4601,7 +4601,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn";
 				PRODUCT_NAME = "rootshell-unused-china";
 				REGISTER_APP_GROUPS = YES;
@@ -4632,7 +4632,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -4660,7 +4660,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn";
 				PRODUCT_NAME = "rootshell-unused-china";
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
@@ -4685,11 +4685,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)-maccatalyst";
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CoreWLANPlugin/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn.CoreWLANPlugin";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -4709,11 +4709,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)-maccatalyst";
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CoreWLANPlugin/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn.CoreWLANPlugin";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -4733,7 +4733,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SessionActivityWidget/SessionActivityWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				EXCLUDED_SOURCE_FILE_NAMES = "VPN*.swift";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SessionActivityWidget/Info.plist;
@@ -4744,7 +4744,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn.SessionActivityWidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -4765,7 +4765,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SessionActivityWidget/SessionActivityWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				EXCLUDED_SOURCE_FILE_NAMES = "VPN*.swift";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SessionActivityWidget/Info.plist;
@@ -4776,7 +4776,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn.SessionActivityWidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -4797,7 +4797,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = VPNTunnelExtension/VPNTunnelExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VPNTunnelExtension/Info.plist;
@@ -4808,7 +4808,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn.vpntunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -4829,7 +4829,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = VPNTunnelExtension/VPNTunnelExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VPNTunnelExtension/Info.plist;
@@ -4840,7 +4840,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn.vpntunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -4864,7 +4864,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -4897,7 +4897,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				OTHER_SWIFT_FLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = rootshell;
@@ -4930,7 +4930,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -4963,7 +4963,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = rootshell;
 				REGISTER_APP_GROUPS = YES;
@@ -4995,7 +4995,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -5028,7 +5028,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = rootshell;
 				REGISTER_APP_GROUPS = YES;
@@ -5060,7 +5060,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -5088,7 +5088,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn";
 				PRODUCT_NAME = rootshell;
 				REGISTER_APP_GROUPS = YES;
@@ -5118,7 +5118,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -5148,7 +5148,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				OTHER_SWIFT_FLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = rootshell;
@@ -5179,7 +5179,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -5209,7 +5209,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = rootshell;
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
@@ -5239,7 +5239,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -5269,7 +5269,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = rootshell;
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
@@ -5299,7 +5299,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -5327,7 +5327,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn";
 				PRODUCT_NAME = rootshell;
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
@@ -5352,11 +5352,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)-maccatalyst";
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CoreWLANPlugin/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.CoreWLANPlugin";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -5376,11 +5376,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)-maccatalyst";
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CoreWLANPlugin/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.CoreWLANPlugin";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -5400,11 +5400,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)-maccatalyst";
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CoreWLANPlugin/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.CoreWLANPlugin";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -5424,11 +5424,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)-maccatalyst";
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CoreWLANPlugin/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.CoreWLANPlugin";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -5448,11 +5448,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)-maccatalyst";
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CoreWLANPlugin/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.CoreWLANPlugin";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -5472,11 +5472,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)-maccatalyst";
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CoreWLANPlugin/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.CoreWLANPlugin";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -5625,7 +5625,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -5658,7 +5658,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				OTHER_SWIFT_FLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -5693,7 +5693,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -5723,7 +5723,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				OTHER_SWIFT_FLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -5751,7 +5751,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SessionActivityWidget/SessionActivityWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SessionActivityWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Session Activity";
@@ -5761,7 +5761,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.SessionActivityWidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -5781,7 +5781,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SessionActivityWidget/SessionActivityWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SessionActivityWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Session Activity";
@@ -5791,7 +5791,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.SessionActivityWidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -5811,7 +5811,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SessionActivityWidget/SessionActivityWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SessionActivityWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Session Activity";
@@ -5821,7 +5821,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.SessionActivityWidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -5841,7 +5841,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SessionActivityWidget/SessionActivityWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SessionActivityWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Session Activity";
@@ -5851,7 +5851,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.SessionActivityWidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -5871,7 +5871,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SessionActivityWidget/SessionActivityWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SessionActivityWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Session Activity";
@@ -5881,7 +5881,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.SessionActivityWidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -5901,7 +5901,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SessionActivityWidget/SessionActivityWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SessionActivityWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Session Activity";
@@ -5911,7 +5911,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.SessionActivityWidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -5932,7 +5932,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "PushNotificationService/PushNotificationService-MacCatalyst.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PushNotificationService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "rootshell Push";
@@ -5942,7 +5942,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.PushNotificationService";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -5966,7 +5966,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "PushNotificationService/PushNotificationService-MacCatalyst.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PushNotificationService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "rootshell Push";
@@ -5976,7 +5976,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.PushNotificationService";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -6000,7 +6000,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "PushNotificationService/PushNotificationService-MacCatalyst.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PushNotificationService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "rootshell Push";
@@ -6010,7 +6010,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.PushNotificationService";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -6034,7 +6034,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "PushNotificationService/PushNotificationService-MacCatalyst.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PushNotificationService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "rootshell Push";
@@ -6044,7 +6044,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.PushNotificationService";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -6068,7 +6068,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "PushNotificationService/PushNotificationService-MacCatalyst.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PushNotificationService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "rootshell Push";
@@ -6078,7 +6078,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.PushNotificationService";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -6102,7 +6102,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "PushNotificationService/PushNotificationService-MacCatalyst.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PushNotificationService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "rootshell Push";
@@ -6112,7 +6112,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.PushNotificationService";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -6135,7 +6135,7 @@
 				CODE_SIGN_ENTITLEMENTS = "PushNotificationService/PushNotificationService-China.entitlements";
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "PushNotificationService/PushNotificationService-China-MacCatalyst.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PushNotificationService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "rootshell Push";
@@ -6145,7 +6145,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn.PushNotificationService";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				ROOTSHELL_PUSH_SERVER = "https://push.rootshell.com";
@@ -6168,7 +6168,7 @@
 				CODE_SIGN_ENTITLEMENTS = "PushNotificationService/PushNotificationService-China.entitlements";
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "PushNotificationService/PushNotificationService-China-MacCatalyst.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PushNotificationService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "rootshell Push";
@@ -6178,7 +6178,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn.PushNotificationService";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				ROOTSHELL_PUSH_SERVER = "https://push.rootshell.com";
@@ -6201,7 +6201,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = VPNTunnelExtension/VPNTunnelExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VPNTunnelExtension/Info.plist;
@@ -6212,7 +6212,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.vpntunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -6234,7 +6234,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = VPNTunnelExtension/VPNTunnelExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VPNTunnelExtension/Info.plist;
@@ -6245,7 +6245,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.vpntunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -6267,7 +6267,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = VPNTunnelExtension/VPNTunnelExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VPNTunnelExtension/Info.plist;
@@ -6278,7 +6278,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.vpntunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -6300,7 +6300,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = VPNTunnelExtension/VPNTunnelExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VPNTunnelExtension/Info.plist;
@@ -6311,7 +6311,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.vpntunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -6333,7 +6333,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = VPNTunnelExtension/VPNTunnelExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VPNTunnelExtension/Info.plist;
@@ -6344,7 +6344,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.vpntunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -6366,7 +6366,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = VPNTunnelExtension/VPNTunnelExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VPNTunnelExtension/Info.plist;
@@ -6377,7 +6377,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.vpntunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -6403,7 +6403,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -6436,7 +6436,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = rootshell;
 				REGISTER_APP_GROUPS = YES;
@@ -6469,7 +6469,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -6502,7 +6502,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				OTHER_SWIFT_FLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = rootshell;
@@ -6536,7 +6536,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -6569,7 +6569,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = rootshell;
 				REGISTER_APP_GROUPS = YES;
@@ -6601,7 +6601,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -6631,7 +6631,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell";
 				PRODUCT_NAME = rootshell;
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
@@ -6661,7 +6661,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 172;
+				CURRENT_PROJECT_VERSION = 173;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -6689,7 +6689,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.15;
+				MARKETING_VERSION = 1.0.16;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOTSHELL_ORG_IDENTIFIER).rootshell.cn";
 				PRODUCT_NAME = rootshell;
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
