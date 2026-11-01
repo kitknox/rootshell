@@ -1,6 +1,32 @@
 import Foundation
 import CoreGraphics
 
+/// Shared drawer gesture geometry for both keyboard implementations.
+nonisolated struct KeyboardToolbarDrawerDrag {
+    let initialCount: Int
+    let origin: CGPoint
+    let buttonFrame: CGRect
+    let rowHeight: CGFloat
+    private(set) var isDragging = false
+    private(set) var isQuickSelection = false
+
+    mutating func update(at location: CGPoint) -> Int? {
+        if abs(location.x - origin.x) >= buttonFrame.width { isQuickSelection = true }
+        guard isDragging || isQuickSelection || location.y < buttonFrame.minY
+            || location.y > buttonFrame.maxY else { return nil }
+        isDragging = true
+        let height = max(rowHeight, 1)
+        if location.y < buttonFrame.minY {
+            return initialCount + Int(ceil((buttonFrame.minY - location.y) / height))
+        }
+        if location.y > buttonFrame.maxY {
+            return max(0, initialCount - Int(ceil((location.y - buttonFrame.maxY) / height)))
+        }
+        return initialCount
+    }
+}
+
+
 /// One partition for the system toolbar and the touch keyboard. Runtime buttons
 /// reserve main-row slots without changing the user's saved configuration.
 nonisolated enum KeyboardToolbarOverflow {
