@@ -261,13 +261,11 @@ private final class DrawerRowView: UIView {
         let trailingInset: CGFloat
         switch behavior {
         case .pages:
-            cellWidth = viewportWidth / CGFloat(min(buttonCount, layout.capacity))
+            cellWidth = layout.cellWidth
             let stackWidth = CGFloat(buttonCount) * cellWidth
             trailingInset = max(0, layout.contentWidth - stackWidth)
         case .continuous:
-            cellWidth = buttonCount <= layout.capacity
-                ? viewportWidth / CGFloat(buttonCount)
-                : sizes.button.height + 4
+            cellWidth = sizes.button.height + 4
             trailingInset = 0
         }
         let stackWidth = CGFloat(buttonCount) * cellWidth
