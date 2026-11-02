@@ -8,6 +8,7 @@ protocol TerminalResponsePipelineHost: AnyObject {
     var terminalResponseReadQueue: DispatchQueue { get }
     var terminalResponseTmuxGatewayOwnerKey: Int { get }
     var terminalResponseHasTmuxController: Bool { get }
+    var terminalProtocolObserver: TerminalProtocolObserver? { get }
 }
 
 /// Owns Ghostty response-pipe monitoring for a terminal session.
@@ -104,6 +105,7 @@ final class TerminalResponsePipeline {
 
         let coalescer = TerminalResponsePasteCoalescer()
         let gatewayFastPath = self.gatewayFastPath
+        let protocolObserver = host.terminalProtocolObserver
 
         // Single ordered consumer: yields from the read queue are FIFO, and
         // one task dispatches them, so chunk order (and the stateful report
@@ -134,7 +136,9 @@ final class TerminalResponsePipeline {
                 let bytesRead = read(responseFd, buffer, bufferSize)
 
                 if bytesRead > 0 {
-                    let data = Data(bytes: buffer, count: bytesRead)
+                    let raw = Data(bytes: buffer, count: bytesRead)
+                    let data = protocolObserver?.consumeResponses(raw) ?? raw
+                    guard !data.isEmpty else { continue }
                     guard let toDispatch = coalescer.accept(chunk: data) else {
                         continue
                     }

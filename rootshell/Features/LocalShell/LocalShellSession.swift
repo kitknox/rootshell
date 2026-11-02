@@ -358,6 +358,8 @@ final class LocalShellSession: TerminalSession, EmbeddedConnectionConfigProvidin
     /// (alt-screen / mouse capture / cursor key mode / bracketed paste / cursor
     /// shape) for resumed sessions, mirroring the top-level `.trzsz` path.
     var onEmbeddedTrzszReady: (@MainActor (TrzszSession) -> Void)?
+    var onEmbeddedTrzszFreshSession: (@Sendable () -> Void)?
+    var embeddedTrzszProtocolObserver: TerminalProtocolObserver?
 
     /// Called when an embedded trzsz session fails before reaching `.running`
     /// (auth failure, host-key failure, expired credentials, network error).

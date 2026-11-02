@@ -398,11 +398,12 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
     /// Resize requested before session became running
     private var pendingResize: TerminalPTY.TerminalSize?
 
-    /// Last resize sent to server
-    private var lastSentResize: TerminalPTY.TerminalSize?
-
     /// Whether this session was resumed from saved credentials
     private(set) var wasResumed: Bool = false
+
+    /// Synchronous with the output path: discard a restored terminal's state
+    /// before a newly spawned PTY can emit its first bytes.
+    var onFreshSessionStarting: (@Sendable () -> Void)?
 
     /// Most recent moment the transport was confirmed connected to the
     /// server. Set on successful connect/attach and refreshed by
@@ -671,6 +672,8 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
         }
 
         // Normal SSH spawn path
+        wasResumed = false
+        onFreshSessionStarting?()
         try await spawnAndConnect()
     }
 
@@ -944,27 +947,9 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
                 guard !userInitiatedDisconnect, !didEndSession else { return .aborted }
                 pendingResize = nil
 
-                // Force a full screen redraw by sending a resize "jiggle".
-                // The server's PTY may already have this size from the previous
-                // session, so attaching with the same dimensions won't trigger
-                // SIGWINCH. Send a slightly different size first, then the correct
-                // size — two SIGWINCHs that force the TUI app to fully redraw.
-                let jiggleCols: UInt16
-                let jiggleRows: UInt16
-                if initialSize.cols > 1 {
-                    jiggleCols = initialSize.cols - 1
-                    jiggleRows = initialSize.rows
-                } else if initialSize.rows > 1 {
-                    jiggleCols = initialSize.cols
-                    jiggleRows = initialSize.rows - 1
-                } else {
-                    jiggleCols = initialSize.cols + 1
-                    jiggleRows = initialSize.rows
-                }
-                sendResize(width: jiggleCols, height: jiggleRows)
-                sendResize(width: initialSize.cols, height: initialSize.rows)
-                lastSentResize = initialSize
-                Self.logger.info("Sent resume resize jiggle: \(jiggleCols)x\(jiggleRows) → \(initialSize.cols)x\(initialSize.rows)")
+                // Await/serialize the redraw steps in the transport. Two
+                // independent tasks could deliver the temporary size last.
+                transport.resize(cols: cols, rows: rows, forceRedraw: true)
 
                 // Post-connection setup (mirrors connectGoTransport's non-connectOnly path)
                 isRunning = true
@@ -1398,18 +1383,16 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
         let rows = Int(initialSize.rows > 0 ? initialSize.rows : 24)
 
         try await transport.openSessionStream(cols: cols, rows: rows, execCommand: execCommand, agentEnabled: agentEnabled)
-        lastSentResize = initialSize
         pendingResize = nil
 
         // When using exec (e.g. tmux), the process may read the PTY size before
         // dimensions fully propagate. Send a WindowChange after a brief delay to
         // trigger SIGWINCH, forcing the process to re-read the correct size.
         if execCommand != nil {
-            let resizeCols = cols
-            let resizeRows = rows
-            Task { @MainActor [weak self] in
+            Task { @MainActor [weak self, weak transport] in
                 try? await Task.sleep(for: .milliseconds(10))
-                self?.goTransport?.resize(cols: resizeCols, rows: resizeRows)
+                guard let self, let transport, self.goTransport === transport else { return }
+                self.synchronizeTerminalSize(forceRedraw: true)
             }
         }
 
@@ -1466,13 +1449,13 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
             throw error
         }
         guard goTransport === transport else { throw MainChannelSwapError.unavailable }
-        lastSentResize = size
         pendingResize = nil
         recordMainSessionID(transport.sessionID)
         // Same SIGWINCH nudge as the first open: the exec'd program may read the size early.
-        Task { @MainActor [weak self] in
+        Task { @MainActor [weak self, weak transport] in
             try? await Task.sleep(for: .milliseconds(10))
-            self?.goTransport?.resize(cols: cols, rows: rows)
+            guard let self, let transport, self.goTransport === transport else { return }
+            self.synchronizeTerminalSize(forceRedraw: true)
         }
     }
 
@@ -1695,6 +1678,7 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
                 self.syncBannerRefreshTicker()
             }
             self.goTransport?.flushBackgroundedCallbacks()
+            self.synchronizeTerminalSize(forceRedraw: true)
             self.requestHealthRefresh()
             self.updateHeartbeatTimeoutBanner()
             self.startPeriodicStateUpdates()
@@ -1702,6 +1686,10 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
     }
 
     private func markHeartbeatPositive() {
+        // Roaming keeps the same PTY, but the phone's layout may have changed
+        // while disconnected. Retry pending sizes even when the dimensions
+        // equal the last attempted (but failed) WindowChange.
+        synchronizeTerminalSize(forceRedraw: lastNetworkLossAt != nil)
         let now = Date()
         lastPositiveHeartbeatAt = now
         lastConnectedAt = now
@@ -1844,14 +1832,18 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
             return
         }
 
-        if let last = lastSentResize,
-           last.rows == size.rows,
-           last.cols == size.cols {
-            return
-        }
-
         sendResize(width: size.cols, height: size.rows)
-        lastSentResize = size
+    }
+
+    private func synchronizeTerminalSize(forceRedraw: Bool) {
+        guard isRunning, !isResumingFromForeground, !Ghostty.isAppBackgroundedAtomic,
+              let transport = goTransport else { return }
+        let size = pty.windowSize
+        if forceRedraw, let terminalId {
+            TerminalBellSuppressor.suppress(terminalId, for: TerminalBellSuppressor.forcedRedraw)
+            TerminalBellSuppressor.suppressRebuild(terminalId)
+        }
+        transport.resize(cols: Int(size.cols), rows: Int(size.rows), forceRedraw: forceRedraw)
     }
 
     /// Sends a resize command to the server
@@ -2186,23 +2178,17 @@ extension TrzszSession: TrzszGoTransportDelegate {
     }
 
     func transport(_ transport: TrzszGoTransport, didChangeState transportState: TrzszGoTransport.State) {
-        guard !Ghostty.isAppBackgroundedAtomic, !isResumingFromForeground else { return }
+        guard transport === goTransport,
+              !Ghostty.isAppBackgroundedAtomic, !isResumingFromForeground else { return }
 
         switch transportState {
         case .connected:
-            if !isRunning {
-                // Initial connection
-                markHeartbeatPositive()
-                state = .running(latencyMs: nil)
-            } else if let terminalId {
-                // A roam reconnect recovered. No resize goes out, but tsshd
-                // replays what it buffered while we were away — bells in
-                // that backlog are stale, and so is any agent state read
-                // off the replay.
-                TerminalBellSuppressor.suppress(
-                    terminalId, for: TerminalBellSuppressor.forcedRedraw)
-                TerminalBellSuppressor.suppressRebuild(terminalId)
-            }
+            // Transport authentication finishes before the PTY is opened or
+            // attached. Publishing .running here releases the restore gate too
+            // early and can apply the alternate-screen trailer twice. The
+            // open/attach path publishes .running once the session is ready.
+            guard isRunning else { return }
+            synchronizeTerminalSize(forceRedraw: true)
 
         case .disconnected:
             // Don't end session on disconnect - Go transport handles reconnection internally

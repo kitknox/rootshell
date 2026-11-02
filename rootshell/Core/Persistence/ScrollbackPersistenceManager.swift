@@ -5,6 +5,7 @@
 //  Manages periodic persistence of terminal scrollback buffers to disk,
 //  and restoration on session reconnect. Scrollback is dumped as ANSI-styled
 //  text from Ghostty's primary screen buffer, preserving colors and styles.
+//  Active full-screen UIs also retain their styled alternate viewport.
 //
 
 import Crypto
@@ -76,6 +77,10 @@ final class ScrollbackPersistenceManager {
 
     private func alternateScreenFlagURL(for uuid: UUID) -> URL {
         scrollbackDirectory.appendingPathComponent("\(uuid.uuidString).altscreen.enc")
+    }
+
+    private func terminalStateURL(for uuid: UUID) -> URL {
+        scrollbackDirectory.appendingPathComponent("\(uuid.uuidString).terminalstate.enc")
     }
 
     private func atPromptFlagURL(for uuid: UUID) -> URL {
@@ -255,6 +260,7 @@ final class ScrollbackPersistenceManager {
         let isMouseCaptured: Bool
         let isCursorKeyMode: Bool
         let isFocusEventMode: Bool
+        let protocolObserver: TerminalProtocolObserver?
     }
 
     /// Gather terminal references for background save. MainActor, no I/O.
@@ -266,6 +272,7 @@ final class ScrollbackPersistenceManager {
         var refs: [BackgroundTerminalRef] = []
         for (uuid, termRef) in registeredTerminals {
             guard let terminal = termRef.terminal,
+                  terminal.canPersistTerminalContents,
                   let surface = terminal.surface else { continue }
 
             let isAlternate = ghostty_surface_is_alternate_active(surface)
@@ -292,7 +299,8 @@ final class ScrollbackPersistenceManager {
                 isAlternate: isAlternate,
                 isMouseCaptured: isMouseCaptured,
                 isCursorKeyMode: isCursorKeyMode,
-                isFocusEventMode: isFocusEventMode
+                isFocusEventMode: isFocusEventMode,
+                protocolObserver: terminal.terminalPersistenceProtocolObserver
             ))
         }
 
@@ -326,6 +334,11 @@ final class ScrollbackPersistenceManager {
         guard let ptr = ghostty_surface_dump_primary_screen(ref.surfacePointer, &len) else { return }
         var data = Data(bytes: ptr, count: Int(len))
         ghostty_surface_free_dump(ptr, len)
+        let alternateScreen = ref.isAlternate ? dumpAlternateScreen(ref.surfacePointer) : nil
+        let terminalState = ref.protocolObserver?.capture { state in
+            makeProtocolSnapshot(surface: ref.surfacePointer, state: state)
+        }
+        guard terminalState != nil || ref.protocolObserver == nil else { return }
 
         // Truncate from front if too large (keep most recent content)
         let maxSize = 10 * 1024 * 1024
@@ -345,6 +358,8 @@ final class ScrollbackPersistenceManager {
         // main-actor path via `lastSavedHashes`.
         var hasher = Hasher()
         hasher.combine(data)
+        hasher.combine(alternateScreen)
+        hasher.combine(terminalState)
         hasher.combine(ref.isAlternate)
         hasher.combine(ref.isAtPrompt)
         hasher.combine(ref.isMouseCaptured)
@@ -356,6 +371,7 @@ final class ScrollbackPersistenceManager {
 
         // Encrypt
         let encryptedData: Data
+        let encryptedTerminalState: Data?
         let encryptedAltFlag: Data?
         let encryptedAtPromptFlag: Data?
         let encryptedMouseFlag: Data?
@@ -363,8 +379,12 @@ final class ScrollbackPersistenceManager {
         let encryptedFocusEventFlag: Data?
         do {
             encryptedData = try ScrollbackEncryptionManager.encrypt(data, using: encryptionKey)
+            encryptedTerminalState = try terminalState.map {
+                try ScrollbackEncryptionManager.encrypt($0, using: encryptionKey)
+            }
             encryptedAltFlag = ref.isAlternate
-                ? try ScrollbackEncryptionManager.encrypt(Data([1]), using: encryptionKey)
+                ? try ScrollbackEncryptionManager.encrypt(
+                    TerminalAlternateScreenSnapshot.encode(alternateScreen), using: encryptionKey)
                 : nil
             encryptedAtPromptFlag = ref.isAtPrompt
                 ? try ScrollbackEncryptionManager.encrypt(Data([1]), using: encryptionKey)
@@ -389,6 +409,7 @@ final class ScrollbackPersistenceManager {
         let fileURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).ansi.enc")
         let legacyURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).ansi")
         let altFlagURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).altscreen.enc")
+        let terminalStateURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).terminalstate.enc")
         let promptFlagURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).atprompt.enc")
         let mouseFlagURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).mousecapture.enc")
         let cursorKeyFlagURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).cursorkeys.enc")
@@ -397,6 +418,11 @@ final class ScrollbackPersistenceManager {
         do {
             try FileManager.default.createDirectory(at: scrollbackDir, withIntermediateDirectories: true)
             try encryptedData.write(to: fileURL, options: .atomic)
+            if let encryptedTerminalState {
+                try encryptedTerminalState.write(to: terminalStateURL, options: .atomic)
+            } else {
+                try? FileManager.default.removeItem(at: terminalStateURL)
+            }
             try? FileManager.default.removeItem(at: legacyURL)
 
             if let encryptedAltFlag {
@@ -485,6 +511,7 @@ final class ScrollbackPersistenceManager {
     private func saveScrollback(for uuid: UUID) {
         guard let ref = registeredTerminals[uuid],
               let terminal = ref.terminal,
+              terminal.canPersistTerminalContents,
               let surface = terminal.surface else { return }
 
         // Check terminal mode state for persistence
@@ -511,6 +538,12 @@ final class ScrollbackPersistenceManager {
         guard let ptr = ghostty_surface_dump_primary_screen(surface, &len) else { return }
         var data = Data(bytes: ptr, count: Int(len))
         ghostty_surface_free_dump(ptr, len)
+        let alternateScreen = isAlternate ? Self.dumpAlternateScreen(surface) : nil
+        let observer = terminal.terminalPersistenceProtocolObserver
+        let terminalState = observer?.capture { state in
+            Self.makeProtocolSnapshot(surface: surface, state: state)
+        }
+        guard terminalState != nil || observer == nil else { return }
 
         // Truncate from front if too large (keep most recent content).
         // Must happen *before* hashing so both save paths (main-actor here
@@ -537,6 +570,8 @@ final class ScrollbackPersistenceManager {
         // layout without changing total rows.
         var hasher = Hasher()
         hasher.combine(data)
+        hasher.combine(alternateScreen)
+        hasher.combine(terminalState)
         hasher.combine(isAlternate)
         hasher.combine(isAtPrompt)
         hasher.combine(isMouseCaptured)
@@ -548,6 +583,7 @@ final class ScrollbackPersistenceManager {
 
         // Encrypt on MainActor before handing off to background write
         let encryptedData: Data
+        let encryptedTerminalState: Data?
         let encryptedAltFlag: Data?
         let encryptedAtPromptFlag: Data?
         let encryptedMouseFlag: Data?
@@ -555,8 +591,12 @@ final class ScrollbackPersistenceManager {
         let encryptedFocusEventFlag: Data?
         do {
             encryptedData = try ScrollbackEncryptionManager.shared.encrypt(data)
+            encryptedTerminalState = try terminalState.map {
+                try ScrollbackEncryptionManager.shared.encrypt($0)
+            }
             encryptedAltFlag = isAlternate
-                ? try ScrollbackEncryptionManager.shared.encrypt(Data([1]))
+                ? try ScrollbackEncryptionManager.shared.encrypt(
+                    TerminalAlternateScreenSnapshot.encode(alternateScreen))
                 : nil
             encryptedAtPromptFlag = isAtPrompt
                 ? try ScrollbackEncryptionManager.shared.encrypt(Data([1]))
@@ -578,6 +618,7 @@ final class ScrollbackPersistenceManager {
         let fileURL = scrollbackFileURL(for: uuid)
         let legacyURL = legacyScrollbackFileURL(for: uuid)
         let altFlagURL = alternateScreenFlagURL(for: uuid)
+        let terminalStateURL = terminalStateURL(for: uuid)
         let atPromptFlagURL = atPromptFlagURL(for: uuid)
         let mouseFlagURL = mouseCaptureURL(for: uuid)
         let cursorKeyFlagURL = cursorKeyModeURL(for: uuid)
@@ -589,6 +630,11 @@ final class ScrollbackPersistenceManager {
             do {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 try encryptedData.write(to: fileURL, options: .atomic)
+                if let encryptedTerminalState {
+                    try encryptedTerminalState.write(to: terminalStateURL, options: .atomic)
+                } else {
+                    try? FileManager.default.removeItem(at: terminalStateURL)
+                }
                 // Remove legacy plaintext file if it exists
                 try? FileManager.default.removeItem(at: legacyURL)
                 // Save or remove encrypted alternate screen flag
@@ -724,6 +770,68 @@ final class ScrollbackPersistenceManager {
 
     // MARK: - Alternate Screen Query
 
+    private nonisolated static func makeProtocolSnapshot(surface: ghostty_surface_t, state: TerminalProtocolState) -> Data? {
+        var len: UInt = 0
+        guard let ptr = ghostty_surface_dump_primary_screen(surface, &len) else { return nil }
+        var primary = Data(bytes: ptr, count: Int(len))
+        ghostty_surface_free_dump(ptr, len)
+        let maxSize = 10 * 1024 * 1024
+        if primary.count > maxSize {
+            guard let cut = primary[(primary.count - maxSize)...].firstIndex(of: 10) else { return nil }
+            primary = Data(primary[(cut + 1)...])
+        }
+        let alternate = state.alternate ? dumpAlternateScreen(surface) : nil
+        guard !state.alternate || alternate != nil else { return nil }
+        return try? JSONEncoder().encode(TerminalRestorationSnapshot(primary: primary, alternate: alternate, state: state))
+    }
+
+    func savedProtocolState(for uuid: UUID) -> TerminalProtocolState? {
+        guard let encrypted = try? Data(contentsOf: terminalStateURL(for: uuid)),
+              let bytes = try? ScrollbackEncryptionManager.shared.decrypt(encrypted) else { return nil }
+        if let snapshot = try? JSONDecoder().decode(TerminalRestorationSnapshot.self, from: bytes), snapshot.version == 1 {
+            return snapshot.protocolState
+        }
+        if bytes.starts(with: Data("\u{1b}c".utf8)) {
+            var parser = TerminalProtocolParser()
+            parser.consume(bytes)
+            return parser.state
+        }
+        return nil
+    }
+
+    /// A complete snapshot must replace the heuristic mode trailer, not precede
+    /// it: the guessed modes/cursor reset would corrupt the restored protocol.
+    func terminalStateRestorationBytes(for uuid: UUID) -> Data? {
+        guard let encrypted = try? Data(contentsOf: terminalStateURL(for: uuid)),
+              let bytes = try? ScrollbackEncryptionManager.shared.decrypt(encrypted),
+              !bytes.isEmpty else { return nil }
+        if let snapshot = try? JSONDecoder().decode(TerminalRestorationSnapshot.self, from: bytes), snapshot.version == 1 {
+            ResumeDebugLogger.shared.log("[Restore] RootShell terminal snapshot \(uuid.uuidString.prefix(8)): \(snapshot.replay.count) bytes")
+            return snapshot.replay
+        }
+        // Read snapshots written by the previous local build during migration.
+        // They are already terminal bytes, rather than a protocol-state envelope.
+        return bytes.starts(with: Data("\u{1b}c".utf8)) ? bytes : nil
+    }
+
+    /// Both save paths must include the alternate viewport in change detection;
+    /// full-screen apps can update continuously while the primary screen is idle.
+    private nonisolated static func dumpAlternateScreen(_ surface: ghostty_surface_t) -> Data? {
+        var len: UInt = 0
+        guard let ptr = ghostty_surface_dump_alternate_screen(surface, &len) else { return nil }
+        defer { ghostty_surface_free_dump(ptr, len) }
+        return Data(bytes: ptr, count: Int(len))
+    }
+
+    /// Mode switch and saved viewport are replayed together inside the output
+    /// restore gate, ahead of any incremental output from the surviving TUI.
+    func alternateScreenRestorationBytes(for uuid: UUID) -> Data? {
+        let url = alternateScreenFlagURL(for: uuid)
+        guard let encrypted = try? Data(contentsOf: url),
+              let saved = try? ScrollbackEncryptionManager.shared.decrypt(encrypted) else { return nil }
+        return TerminalAlternateScreenSnapshot.restorationBytes(from: saved)
+    }
+
     /// Check if the alternate screen was active when scrollback was last saved.
     func wasAlternateScreenActive(for uuid: UUID) -> Bool {
         let url = alternateScreenFlagURL(for: uuid)
@@ -813,6 +921,8 @@ final class ScrollbackPersistenceManager {
             let uuidString: String
             if filename.hasSuffix(".ansi.enc") {
                 uuidString = String(filename.dropLast(".ansi.enc".count))
+            } else if filename.hasSuffix(".terminalstate.enc") {
+                uuidString = String(filename.dropLast(".terminalstate.enc".count))
             } else if filename.hasSuffix(".ansi") {
                 uuidString = String(filename.dropLast(".ansi".count))
             } else if filename.hasSuffix(".altscreen.enc") {

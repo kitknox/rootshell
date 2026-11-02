@@ -315,6 +315,9 @@
 		E9A489C569C175D6EC296519 /* AppIconRadicalMonokai.icon in Resources */ = {isa = PBXBuildFile; fileRef = 47A100072F9D0BCD009B5D30 /* AppIconRadicalMonokai.icon */; };
 		EE81569E58E5829EE47E75AD /* AppIconSixColorsDark.icon in Resources */ = {isa = PBXBuildFile; fileRef = 477738D32F9D0865009B5D30 /* AppIconSixColorsDark.icon */; };
 		F053C5922D21FD448FBDF660 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = 4739D0592ED3A4F4000EE57A /* Citadel */; };
+		F210A5E10000000000000001 /* rootshell/Features/TSSH/Transport/TSSHResizeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F210A5E10000000000000002 /* rootshell/Features/TSSH/Transport/TSSHResizeController.swift */; };
+		F210A5E20000000000000001 /* rootshell/Core/Persistence/TerminalAlternateScreenSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F210A5E20000000000000002 /* rootshell/Core/Persistence/TerminalAlternateScreenSnapshot.swift */; };
+		F210A5E30000000000000001 /* rootshell/Core/Persistence/TerminalProtocolState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F210A5E30000000000000002 /* rootshell/Core/Persistence/TerminalProtocolState.swift */; };
 		F95F66F45A2A58F968B83428 /* VimRuntime.bundle in Resources */ = {isa = PBXBuildFile; fileRef = 47A51A922EEDC704000D76E0 /* VimRuntime.bundle */; platformFilters = (ios, xros, ); };
 		F9641A2175775B2B2284EFF2 /* AppIconRadicalDracula.icon in Resources */ = {isa = PBXBuildFile; fileRef = 478D16DE2F9FC42B007B574B /* AppIconRadicalDracula.icon */; };
 		FA804455DA96B007ACED884C /* network_ios in Frameworks */ = {isa = PBXBuildFile; platformFilters = (ios, xros, ); productRef = 47NWPKG12FF10000AABB0001 /* network_ios */; };
@@ -727,6 +730,9 @@
 		47WASM00000000000000001 /* Wasm */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Wasm; path = Resources/Wasm; sourceTree = "<group>"; };
 		992A6D1173F54B70A4EDBA3E /* joe */ = {isa = PBXFileReference; lastKnownFileType = folder; name = joe; path = Resources/joe; sourceTree = "<group>"; };
 		DD1249A5776E91521A4BEA8A /* rootshell.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = rootshell.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F210A5E10000000000000002 /* rootshell/Features/TSSH/Transport/TSSHResizeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/TSSH/Transport/TSSHResizeController.swift; sourceTree = SOURCE_ROOT; };
+		F210A5E20000000000000002 /* rootshell/Core/Persistence/TerminalAlternateScreenSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Persistence/TerminalAlternateScreenSnapshot.swift; sourceTree = SOURCE_ROOT; };
+		F210A5E30000000000000002 /* rootshell/Core/Persistence/TerminalProtocolState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Persistence/TerminalProtocolState.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -1361,6 +1367,9 @@
 				47AF05880000000000000B01 /* rootshell/Features/Askpass/RemoteAskpassProtocol.swift */,
 				47AF05890000000000000B01 /* rootshell/Features/Cloud/SSO/AWSSSOPortalURL.swift */,
 				47AF04960000000000000B01 /* rootshell/Core/Terminal/RemoteSessionBackgroundGracePolicy.swift */,
+				F210A5E10000000000000002 /* rootshell/Features/TSSH/Transport/TSSHResizeController.swift */,
+				F210A5E20000000000000002 /* rootshell/Core/Persistence/TerminalAlternateScreenSnapshot.swift */,
+				F210A5E30000000000000002 /* rootshell/Core/Persistence/TerminalProtocolState.swift */,
 				47AF04960000000000000B02 /* rootshell/Core/Terminal/BackgroundExecutionPolicy.swift */,
 				47AF04850000000000000B01 /* rootshell/Core/Terminal/TerminalScrollbarAvailabilityPolicy.swift */,
 				47AF0F1D0000000000000A01 /* rootshell/Core/Shell/InitialDirectoryCommand.swift */,
@@ -2346,6 +2355,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F210A5E20000000000000001 /* rootshell/Core/Persistence/TerminalAlternateScreenSnapshot.swift in Sources */,
+				F210A5E30000000000000001 /* rootshell/Core/Persistence/TerminalProtocolState.swift in Sources */,
+				F210A5E10000000000000001 /* rootshell/Features/TSSH/Transport/TSSHResizeController.swift in Sources */,
 				47D001270000000000000003 /* rootshell/UI/Keyboard/TerminalKeyboardGeometry.swift in Sources */,
 				47D001270000000000000002 /* rootshell/UI/Shell/DuoWorkspaceLayout.swift in Sources */,
 				47D001270000000000000001 /* rootshell/UI/Shell/DuoFrontDisplayMode.swift in Sources */,

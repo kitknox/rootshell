@@ -60,6 +60,7 @@ final class TerminalOutputPipeline {
     private var outputCoalescingResumeTimer: Timer?
     private var onURLRequest: (@Sendable (URL) -> Void)?
     private var urlRequestObserver: TerminalURLRequestObserver?
+    var protocolObserver: TerminalProtocolObserver?
 
     let bufferedWriter: TerminalBufferedPipeWriter
     let scrollbackRestoreOutputGate = TerminalScrollbackRestoreOutputGate()
@@ -106,12 +107,15 @@ final class TerminalOutputPipeline {
 
     func writeSessionOutput(_ data: Data) {
         urlRequestObserver?.consume(data)
-        scrollbackRestoreOutputGate.writeOrBuffer(data, to: bufferedWriter)
+        if let protocolObserver {
+            protocolObserver.write(data) { [scrollbackRestoreOutputGate, bufferedWriter] in scrollbackRestoreOutputGate.writeOrBuffer($0, to: bufferedWriter) }
+        } else { scrollbackRestoreOutputGate.writeOrBuffer(data, to: bufferedWriter) }
     }
 
     func enqueueCoalescedOutput(_ data: Data) {
         urlRequestObserver?.consume(data)
-        outputCoalescer.enqueue(data)
+        if let protocolObserver { protocolObserver.write(data) { [outputCoalescer] in outputCoalescer.enqueue($0) } }
+        else { outputCoalescer.enqueue(data) }
     }
 
     func setURLRequestHandler(_ handler: @escaping @Sendable (URL) -> Void) {
@@ -185,6 +189,7 @@ final class TerminalOutputPipeline {
 
     func makeSessionOutputSink(
         useOutputCoalescer: Bool,
+        observeProtocol: Bool = true,
         terminalUUID: UUID,
         noteGatewayInboundBytes: @escaping @Sendable (Int) -> Void
     ) -> @Sendable (Data) -> Void {
@@ -192,6 +197,7 @@ final class TerminalOutputPipeline {
         let bufferedWriter = self.bufferedWriter
         let scrollbackRestoreOutputGate = self.scrollbackRestoreOutputGate
         let persistenceNotifyPending = OSAllocatedUnfairLock<Bool>(initialState: false)
+        let protocolObserver = observeProtocol ? self.protocolObserver : nil
         // One fresh parser per adopted session. Saved scrollback and local
         // redraws use writeDirect and cannot replay a browser request.
         let urlObserver = onURLRequest.map { TerminalURLRequestObserver(onURL: $0) }
@@ -204,11 +210,12 @@ final class TerminalOutputPipeline {
             noteGatewayInboundBytes(data.count)
             urlObserver?.consume(data)
 
-            if let outputCoalescer {
-                outputCoalescer.enqueue(data)
-            } else {
-                writeDirect(data)
+            let enqueue: (Data) -> Void = { bytes in
+                if let outputCoalescer { outputCoalescer.enqueue(bytes) }
+                else { writeDirect(bytes) }
             }
+            if let protocolObserver { protocolObserver.write(data, enqueue: enqueue) }
+            else { enqueue(data) }
 
             guard !Ghostty.isAppBackgroundedAtomic else { return }
 
