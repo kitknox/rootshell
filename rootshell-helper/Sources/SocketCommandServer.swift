@@ -193,6 +193,10 @@ class SocketCommandServer {
             close(clientSocket)
         }
 
+        // A dying helper must not be adopted: the app's ping fails and it
+        // launches a fresh one.
+        guard !SessionManager.shared.isShuttingDown else { return }
+
         // Extract client PID using LOCAL_PEERPID (macOS-specific)
         var clientPID: pid_t = 0
         var pidLen = socklen_t(MemoryLayout<pid_t>.size)
@@ -373,22 +377,38 @@ class SocketCommandServer {
             // Spawn shell process (creates PTY internally)
             let spawnResult = try ProcessSpawner.spawnShell(with: spawnConfig)
             let pid = spawnResult.pid
+            // The handoff owns a duplicate taken before the reaper is armed: a
+            // shell that exits at once closes the session's master mid-send.
+            let ptyMasterFD = fcntl(spawnResult.pty.masterFD, F_DUPFD_CLOEXEC, 0)
+            let dupErrno = errno
 
             // Create session with the PTY from spawn result and client PID for crash detection
             let session = ShellSession(id: sessionID, pid: pid, clientPID: clientPID, pty: spawnResult.pty, socketPath: socketPath)
             SessionManager.shared.addSession(session)
+
+            guard ptyMasterFD >= 0 else {
+                _ = SessionManager.shared.killSession(sessionID)
+                SessionManager.shared.removeSession(sessionID)
+                return SocketResponse(success: false, error: "Failed to duplicate PTY: \(String(cString: strerror(dupErrno)))")
+            }
 
             // Send response immediately with socket path
             // Catalyst app will create a server socket and wait for us to connect
             NSLog("Sending response to client with socket path: \(socketPath)")
             let response = CreateShellResponse(sessionID: sessionID, socketPath: socketPath,
                 recoverySupported: true, recoveryAccepted: recoveryAccepted)
-            let responseData = try JSONEncoder().encode(response)
+            let responseData: Data
+            do {
+                responseData = try JSONEncoder().encode(response)
+            } catch {
+                close(ptyMasterFD)
+                throw error
+            }
 
             // Send the PTY FD to the Catalyst app asynchronously
             // The Catalyst app will have created a server socket by the time we try to connect
-            let ptyMasterFD = spawnResult.pty.masterFD  // Capture before async
             DispatchQueue.global(qos: .userInitiated).async {
+                defer { close(ptyMasterFD) }
                 // Retry until the Catalyst app has bound the session socket —
                 // a one-shot send races app-side restoration at launch.
                 var lastError: Error?
