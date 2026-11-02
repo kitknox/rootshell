@@ -1047,7 +1047,9 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         }
         machine.frame = bounds
         machine.layer.cornerRadius = isFloating ? 24 : 0
-        machine.configure(palette: palette, rows: styleBackdropBands,
+        // The detached card's footer key would read as a row of open space.
+        let keys = isFloating ? [] : rows.map { $0.filter { !$0.isHidden }.map(\.frame) }
+        machine.configure(palette: palette, rows: styleBackdropBands, keys: keys,
                           active: window != nil && !isHidden && !effectsSuspended)
         for case let cap as TerminalTouchSteampunkKeycap in allKeycaps {
             cap.machinery = machine
