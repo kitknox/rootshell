@@ -681,7 +681,12 @@ final class TerminalKeyboardAccessoryController: NSObject {
     #if !os(visionOS) && !targetEnvironment(macCatalyst)
     /// One toolbar row follows the terminal column above the system keyboard.
     private var windowToolbarMounted = false
-    private lazy var windowToolbarHost = UIView()
+    private lazy var windowToolbarPresentationHost: TerminalKeyboardPresentationHost = {
+        let controller = TerminalKeyboardPresentationHost()
+        controller.view.backgroundColor = .clear
+        return controller
+    }()
+    private var windowToolbarHost: UIView { windowToolbarPresentationHost.view }
     private var windowToolbarUpdateScheduled = false
     private var terminalColumnFrameInScreen: CGRect?
     #endif
@@ -1180,8 +1185,14 @@ final class TerminalKeyboardAccessoryController: NSObject {
         }
         let container = windowToolbarHost
         if container.superview !== window {
+            windowToolbarPresentationHost.willMove(toParent: nil)
+            windowToolbarPresentationHost.removeFromParent()
             container.removeFromSuperview()
             window.addSubview(container)
+        }
+        if windowToolbarPresentationHost.parent !== window.rootViewController {
+            window.rootViewController?.addChild(windowToolbarPresentationHost)
+            windowToolbarPresentationHost.didMove(toParent: window.rootViewController)
         }
         if !windowToolbarMounted {
             let toolbar = accessory.lendToolbar()
@@ -1214,6 +1225,8 @@ final class TerminalKeyboardAccessoryController: NSObject {
         keyboardAccessory?.toolbarView.isWindowHosted = false
         Ghostty.logger.debug("KeyboardToolbar: returned to keyboard accessory")
         keyboardAccessory?.reclaimToolbar()
+        windowToolbarPresentationHost.willMove(toParent: nil)
+        windowToolbarPresentationHost.removeFromParent()
         windowToolbarHost.removeFromSuperview()
         EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
     }
