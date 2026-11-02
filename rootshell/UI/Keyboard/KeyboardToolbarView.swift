@@ -1506,8 +1506,12 @@ class KeyboardToolbarView: UIView {
             ? corners.subtracting([.layerMinXMinYCorner, .layerMaxXMinYCorner]) : corners
         layer.maskedCorners = mainCorners
         let tint = glassTintColor(for: traitCollection)
-        backgroundBlurView.configure(radius: sizes.toolbar.cornerRadius, corners: mainCorners,
-                                     showsTopEdge: !hasPreviewRows, tint: tint)
+        let floating = followsTerminalViewport || (isEmbeddedPreview && isPhone)
+        let radius = floating ? min(bounds.height / 2, sizes.toolbar.height / 2) : sizes.toolbar.cornerRadius
+        layer.cornerRadius = radius
+        layer.masksToBounds = !floating
+        backgroundBlurView.configure(radius: radius, corners: mainCorners,
+                                     showsTopEdge: !hasPreviewRows && !floating && displayedAppearance != .separate, tint: tint)
         drawerPreview?.configure(radius: sizes.toolbar.cornerRadius,
                                  corners: [.layerMinXMinYCorner, .layerMaxXMinYCorner],
                                  showsTopEdge: true, tint: tint)
