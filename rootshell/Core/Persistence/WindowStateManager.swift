@@ -400,8 +400,18 @@ final class WindowStateManager {
             return nil
         }
 
+        // Unreadable (protected data while locked) is not corruption: keep the
+        // file, scrollback, and resume credentials, and let a later call retry.
+        let data: Data
         do {
-            let data = try Data(contentsOf: stateFileURL)
+            data = try Data(contentsOf: stateFileURL)
+        } catch {
+            Self.logger.error("Saved state unreadable, keeping it for a retry: \(error.localizedDescription)")
+            hasAttemptedLoad = false
+            return nil
+        }
+
+        do {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             let state = try decoder.decode(AppWindowState.self, from: data)

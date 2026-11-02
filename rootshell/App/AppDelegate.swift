@@ -110,6 +110,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 await CloudKitSyncManager.shared.logDiagnostics()
                 await CloudKitSyncManager.shared.revalidateSubscriptionsIfNeeded()
             }
+            // A locked launch builds its scenes only now that settings are primed.
+            LaunchReadiness.shared.markReady()
         }
 
         return true
@@ -123,6 +125,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Encrypted hook push. The extension normally decrypts before display;
         // this is the fallback for a raw payload reaching the app undecorated.
         if userInfo["rs"] != nil {
+            // Locked, the app-group policy is unreadable and the push would be
+            // judged rejected and its delivered notification removed.
+            guard ProtectedDataGuard.isAvailable else {
+                Self.logger.warning("Hook push received while locked — deferring until unlock")
+                nonisolated(unsafe) let deferred = userInfo
+                ProtectedDataGuard.whenAvailable {
+                    Task { @MainActor in
+                        await PushNotificationRouter.handleRemote(userInfo: deferred)
+                    }
+                }
+                completionHandler(.noData)
+                return
+            }
             Task { @MainActor in
                 await PushNotificationRouter.handleRemote(userInfo: userInfo)
                 completionHandler(.noData)
