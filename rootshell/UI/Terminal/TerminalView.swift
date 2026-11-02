@@ -6177,6 +6177,35 @@ extension Ghostty.TerminalView: KeyboardButtonDelegate {
         sendUserInput(data)
     }
 
+    /// Keep raw sequence steps behind encoded combos in Ghostty's I/O queue.
+    /// Sending straight to the session could overtake an asynchronous key write.
+    func sendSequenceData(_ data: Data) {
+        // Preserve semantic Escape handling (discovery dismissal/gateway detach).
+        if herdrController?.showsGatewayStatus == true
+            || (data == Data([0x1B]) && (discoveredSessions != nil
+                || tmuxController?.isActive == true || isTmuxGatewaySurfaceActive)) {
+            sendRawData(data)
+            return
+        }
+        guard surface != nil || herdrEndpointPane != nil else { sendRawData(data); return }
+        commitKoreanCompositionIfNeeded(external: true)
+        NotificationCenter.default.post(name: .ghosttyDidReceiveInput, object: self)
+        noteUserInput()
+        endDictationSession()
+        invalidateWritingAssistance()
+        if let state = herdrEndpointPane {
+            emitAfterDictation { _ in state.sendText(String(decoding: data, as: UTF8.self)) }
+            return
+        }
+        emitAfterDictation { view in
+            guard let surface = view.surface else { return }
+            data.withUnsafeBytes { raw in
+                guard let base = raw.baseAddress else { return }
+                ghostty_surface_send_input(surface, base.assumingMemoryBound(to: CChar.self), UInt(data.count))
+            }
+        }
+    }
+
     /// Custom-key combos go through Ghostty so kitty/CSI u modes keep Shift
     /// (Ctrl+Shift+[ under Neovim). Cmd combos keep raw bytes, avoiding app keybinds.
     func sendKeyCombo(_ combo: SequenceStep.KeyCombo) -> Bool {

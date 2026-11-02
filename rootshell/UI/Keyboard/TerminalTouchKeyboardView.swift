@@ -1993,6 +1993,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         updatePrediction()
     }
     func sendRawData(_ data: Data) { guard canSend else { return }; sequenceDelegate?.sendRawData(data) }
+    func sendSequenceData(_ data: Data) { guard canSend else { return }; sequenceDelegate?.sendSequenceData(data) }
     func sendKeyCombo(_ combo: SequenceStep.KeyCombo) -> Bool {
         guard canSend else { return true }
         return sequenceDelegate?.sendKeyCombo(combo) ?? false
