@@ -35,6 +35,35 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         XCTAssertEqual(narrow.offset(containing: 100), 40)
     }
 
+    func testToolbarPinsStayReachableWhenOnlyPrimaryKeysPage() {
+        let area = CGRect(x: 5, y: 0, width: 250, height: 44)
+        let layout = ToolbarSectionLayout(area: area, counts: [3, 7, 2], buttonWidth: 38,
+            scrollsAll: false, paged: true)
+        XCTAssertEqual(layout.sectionFrames[0].minX, area.minX)
+        XCTAssertEqual(layout.sectionFrames[2].maxX, area.maxX)
+        XCTAssertLessThan(layout.sectionFrames[0].maxX, layout.scrollFrame.minX)
+        XCTAssertGreaterThan(layout.sectionFrames[2].minX, layout.scrollFrame.maxX)
+        XCTAssertGreaterThanOrEqual(layout.scrollFrame.width, 38)
+        XCTAssertEqual(layout.pageLayout.offset(containing: 6) + layout.scrollFrame.width, layout.contentWidth)
+
+        let all = ToolbarSectionLayout(area: area, counts: [3, 7, 2], buttonWidth: 38,
+            scrollsAll: true, paged: true)
+        XCTAssertEqual(all.scrollFrame, area)
+        XCTAssertEqual(all.sectionFrames[0].maxX, all.sectionFrames[1].minX)
+        XCTAssertEqual(all.sectionFrames[1].maxX, all.sectionFrames[2].minX)
+        XCTAssertLessThanOrEqual(all.sectionFrames[2].maxX, all.contentWidth)
+
+        let cells = ToolbarPageLayout(viewportWidth: 220, buttonWidth: 40, spacing: 4, itemCount: 4)
+            .cells(for: [1, 3, 2, 1], splitAt: 2)
+        XCTAssertEqual(cells, [0..<1, 2..<5, 5..<7, 7..<8])
+        XCTAssertEqual(cells.map(\.count), [1, 3, 2, 1])
+        let crowded = ToolbarSectionLayout(area: CGRect(x: 0, y: 0, width: 596, height: 44),
+            counts: [30, 7, 30], buttonWidth: 38, scrollsAll: false, paged: true, pinCellWidthLimit: 8.4)
+        XCTAssertEqual(crowded.scrollFrame.width, 84, accuracy: 0.001)
+        XCTAssertNotNil(Model.splitColumns(count: crowded.pageLayout.capacity, width: Double(crowded.scrollFrame.width + 44),
+            fold: (310 - Double(crowded.scrollFrame.minX))...(330 - Double(crowded.scrollFrame.minX))))
+    }
+
     func testKeyboardStateIsSharedAcrossTabsByDefault() {
         var store = Model.StateStore<KeyboardState>()
         let first = store.state(tabID: UUID(), perTab: false) { KeyboardState() }
@@ -110,12 +139,14 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         state.modifiers.begin(.alt)
         state.drawerOffset = CGPoint(x: 0, y: 120)
         state.toolbarOffsets = [0: CGPoint(x: 80, y: 0)]
+        state.mainToolbarOffset = CGPoint(x: 250, y: 0)
         let saved = state.suspendingInput()
         XCTAssertTrue(saved.modifiers.oneShot.contains(.control))
         XCTAssertTrue(saved.modifiers.locked.contains(.shift))
         XCTAssertFalse(saved.modifiers.isActive(.alt))
         XCTAssertEqual(saved.drawerOffset, state.drawerOffset)
         XCTAssertEqual(saved.toolbarOffsets, state.toolbarOffsets)
+        XCTAssertEqual(saved.mainToolbarOffset, state.mainToolbarOffset)
         XCTAssertTrue(state.modifiers.isActive(.alt), "Saving must not mutate the outgoing value")
     }
 

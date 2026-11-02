@@ -32,6 +32,7 @@ class KeyboardModifierButton: KeyboardButton {
     /// Set only for main-row modifiers; drawer keys retain their existing handling.
     var sweepPeers: (() -> [KeyboardModifierButton])?
     private var sweepTouch: UITouch?
+    var isSweeping: Bool { sweepTouch != nil }
     private var sweepButtons: [KeyboardModifierButton] = []
     private var sweepTimer: Timer?
     private static let sweepHoldDuration: TimeInterval = 0.2
@@ -145,6 +146,7 @@ class KeyboardModifierButton: KeyboardButton {
         guard sweepTouch == nil, canDispatchTouchAction, let touch = touches.first else { return }
         SystemShiftReader.shared.noteTouchEvent(event)
         sweepTouch = touch
+        Ghostty.logger.debug("KeyboardToolbar: modifier sweep began, key=\(self.key, privacy: .public)")
         sweepButtons = [self]
         sweepLastEntry = touch.timestamp
         sweepHoveredButton = self
@@ -204,7 +206,8 @@ class KeyboardModifierButton: KeyboardButton {
             } else if sweepButtons.count > 1 {
                 applySweep(state: sweepClears ? .inactive : .oneShot)
                 playHaptic()
-            } else if !sweepAppliedOnTouchDown {
+            } else if !sweepAppliedOnTouchDown, sweepHoveredButton === self,
+                      bounds.contains(touch.location(in: self)) {
                 sendKey()
                 playHaptic()
             }
@@ -237,6 +240,7 @@ class KeyboardModifierButton: KeyboardButton {
     }
 
     private func applySweep(state: ModifierState) {
+        Ghostty.logger.debug("KeyboardToolbar: modifier sweep applied to \(self.sweepButtons.count, privacy: .public) keys")
         for button in sweepButtons {
             button.lastTapTimestamp = 0
             button.modifierState = state
