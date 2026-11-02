@@ -7,6 +7,111 @@
 //
 
 import UIKit
+
+/// Shared glass container implementation for the toolbar and floating drawers.
+/// Keeps tint, border, and corner styling in one place for both layouts.
+private final class ToolbarPlateView: UIVisualEffectView {
+    private let tintOverlay = UIView()
+    private let topBorder = UIView()
+
+    init() {
+        super.init(effect: UIBlurEffect(style: .systemUltraThinMaterial))
+        isUserInteractionEnabled = false
+        clipsToBounds = true
+        layer.cornerCurve = .continuous
+        tintOverlay.translatesAutoresizingMaskIntoConstraints = false
+        topBorder.translatesAutoresizingMaskIntoConstraints = false
+        topBorder.backgroundColor = .separator
+        contentView.addSubview(tintOverlay)
+        contentView.addSubview(topBorder)
+        NSLayoutConstraint.activate([
+            tintOverlay.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            tintOverlay.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            tintOverlay.topAnchor.constraint(equalTo: contentView.topAnchor),
+            tintOverlay.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            topBorder.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            topBorder.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            topBorder.topAnchor.constraint(equalTo: contentView.topAnchor),
+            topBorder.heightAnchor.constraint(equalToConstant: 0.5),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func configure(radius: CGFloat, corners: CACornerMask, showsTopEdge: Bool, tint: UIColor) {
+        layer.cornerRadius = radius
+        layer.maskedCorners = corners
+        topBorder.isHidden = !showsTopEdge
+        tintOverlay.backgroundColor = tint
+        // A zero-height preview must not leave the border or backdrop visible.
+        isHidden = bounds.height == 0
+    }
+}
+
+/// Tracks in window coordinates so changing the toolbar height cannot move
+/// the drag's origin. A drag owns the touch until release, including reversals.
+private final class DrawerToggleButton: KeyboardSymbolButton {
+    var onDragBegan: (() -> Int)?
+    var onDragChanged: ((Int, CGPoint, Bool) -> Void)?
+    var onPreviewBegan: (() -> Void)?
+    var onPreviewEnded: ((_ quickSelection: Bool, _ activate: Bool) -> Void)?
+    private var drawerTouch: UITouch?
+    private var drag: KeyboardToolbarDrawerDrag?
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard drawerTouch == nil, beginTouchInteraction(touches), let touch = touches.first else { return }
+        SystemShiftReader.shared.noteTouchEvent(event)
+        drawerTouch = touch
+        drag = KeyboardToolbarDrawerDrag(initialCount: onDragBegan?() ?? 0,
+            origin: touch.location(in: window), buttonFrame: convert(bounds, to: window),
+            rowHeight: sizes.toolbar.drawerHeight)
+        isHighlighted = true
+    }
+
+    private func updateDrag(_ touch: UITouch) {
+        guard canDispatchTouchAction else { cancelTouchInteraction(); return }
+        guard var drag else { return }
+        let location = touch.location(in: window)
+        let wasDragging = drag.isDragging
+        guard let selection = drag.update(at: location) else { return }
+        self.drag = drag
+        if !wasDragging {
+            delegate?.cancelScrollTouches()
+            onPreviewBegan?()
+        }
+        guard drawerTouch != nil else { return }
+        onDragChanged?(selection, location, drag.isQuickSelection)
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = drawerTouch, touches.contains(touch) else { return }
+        updateDrag(touch)
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = drawerTouch, touches.contains(touch) else { return }
+        updateDrag(touch)
+        if drawerTouch != nil && canDispatchTouchAction && drag?.isDragging != true
+            && bounds.contains(touch.location(in: self)) {
+            sendKey()
+            playHaptic()
+        }
+        finishDrawerTouch(activate: true)
+    }
+
+    override func cancelTouchInteraction() {
+        finishDrawerTouch(activate: false)
+    }
+
+    private func finishDrawerTouch(activate: Bool) {
+        let wasDragging = drag?.isDragging == true
+        let quickSelection = drag?.isQuickSelection == true
+        super.cancelTouchInteraction()
+        drawerTouch = nil
+        drag = nil
+        if wasDragging { onPreviewEnded?(quickSelection, activate) }
+    }
+}
 import GhosttyKit
 import os
 
@@ -303,18 +408,28 @@ class KeyboardToolbarView: UIView {
     // Main toolbar views
     private let mainToolbarContainer = UIView()
     private let mainRowStackView = UIStackView()
-    private let backgroundBlurView = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
-    private let tintOverlayView = UIView()
+    private let backgroundBlurView = ToolbarPlateView()
 
     // Drawer views
     private let drawerContainerView = UIView()
     private let drawerRowsStack = UIStackView()
     private var drawerRowViews: [DrawerRowView] = []
+    private enum DrawerRowID: Hashable {
+        case arrows
+        case extra(Int)
+    }
+    private var cachedDrawerRows: [DrawerRowID: DrawerRowView] = [:]
     private var drawerHeightConstraint: NSLayoutConstraint?
+    private var drawerPreview: ToolbarPlateView?
+    private var drawerPreviewHeight: CGFloat?
+    private var drawerPreviewConstraints: [NSLayoutConstraint] = []
+    private var drawerPreviewRowConstraints: [NSLayoutConstraint] = []
+    private var backgroundTopConstraint: NSLayoutConstraint?
+    private var drawerPreviewOriginalCorners: CACornerMask?
+    private var drawerGestureInitialState: DrawerState?
+    private weak var drawerSelectionButton: KeyboardButton?
     private var backgroundLeadingConstraint: NSLayoutConstraint?
     private var backgroundTrailingConstraint: NSLayoutConstraint?
-    private var topBorderLeadingConstraint: NSLayoutConstraint?
-    private var topBorderTrailingConstraint: NSLayoutConstraint?
     private var drawerContainerLeadingConstraint: NSLayoutConstraint?
     private var drawerContainerTrailingConstraint: NSLayoutConstraint?
     private var mainToolbarLeadingConstraint: NSLayoutConstraint?
@@ -416,21 +531,7 @@ class KeyboardToolbarView: UIView {
 
         // Background blur covers entire view (toolbar + drawer)
         backgroundBlurView.translatesAutoresizingMaskIntoConstraints = false
-        backgroundBlurView.isUserInteractionEnabled = false
-        backgroundBlurView.layer.cornerRadius = sizes.toolbar.cornerRadius
-        backgroundBlurView.layer.cornerCurve = .continuous
-        backgroundBlurView.clipsToBounds = true
-        tintOverlayView.translatesAutoresizingMaskIntoConstraints = false
-        tintOverlayView.isUserInteractionEnabled = false
-        tintOverlayView.backgroundColor = glassTintColor(for: traitCollection)
         addSubview(backgroundBlurView)
-        backgroundBlurView.contentView.addSubview(tintOverlayView)
-
-        // Add subtle top border
-        let topBorder = UIView()
-        topBorder.backgroundColor = .separator
-        topBorder.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(topBorder)
 
         // --- Drawer container (above main toolbar) ---
         drawerContainerView.translatesAutoresizingMaskIntoConstraints = false
@@ -464,12 +565,10 @@ class KeyboardToolbarView: UIView {
         drawerHeightConstraint = heightConstraint
         let backgroundLeadingConstraint = backgroundBlurView.leadingAnchor.constraint(equalTo: leadingAnchor)
         let backgroundTrailingConstraint = backgroundBlurView.trailingAnchor.constraint(equalTo: trailingAnchor)
+        let backgroundTopConstraint = backgroundBlurView.topAnchor.constraint(equalTo: topAnchor)
+        self.backgroundTopConstraint = backgroundTopConstraint
         self.backgroundLeadingConstraint = backgroundLeadingConstraint
         self.backgroundTrailingConstraint = backgroundTrailingConstraint
-        let topBorderLeadingConstraint = topBorder.leadingAnchor.constraint(equalTo: leadingAnchor)
-        let topBorderTrailingConstraint = topBorder.trailingAnchor.constraint(equalTo: trailingAnchor)
-        self.topBorderLeadingConstraint = topBorderLeadingConstraint
-        self.topBorderTrailingConstraint = topBorderTrailingConstraint
         let drawerContainerLeadingConstraint = drawerContainerView.leadingAnchor.constraint(equalTo: leadingAnchor)
         let drawerContainerTrailingConstraint = drawerContainerView.trailingAnchor.constraint(equalTo: trailingAnchor)
         self.drawerContainerLeadingConstraint = drawerContainerLeadingConstraint
@@ -489,18 +588,8 @@ class KeyboardToolbarView: UIView {
             // Background blur
             backgroundLeadingConstraint,
             backgroundTrailingConstraint,
-            backgroundBlurView.topAnchor.constraint(equalTo: topAnchor),
+            backgroundTopConstraint,
             backgroundBlurView.bottomAnchor.constraint(equalTo: bottomAnchor),
-            tintOverlayView.leadingAnchor.constraint(equalTo: backgroundBlurView.contentView.leadingAnchor),
-            tintOverlayView.trailingAnchor.constraint(equalTo: backgroundBlurView.contentView.trailingAnchor),
-            tintOverlayView.topAnchor.constraint(equalTo: backgroundBlurView.contentView.topAnchor),
-            tintOverlayView.bottomAnchor.constraint(equalTo: backgroundBlurView.contentView.bottomAnchor),
-
-            // Top border
-            topBorder.topAnchor.constraint(equalTo: topAnchor),
-            topBorderLeadingConstraint,
-            topBorderTrailingConstraint,
-            topBorder.heightAnchor.constraint(equalToConstant: 0.5),
 
             // Drawer container (top of view)
             drawerContainerView.topAnchor.constraint(equalTo: topAnchor),
@@ -531,13 +620,14 @@ class KeyboardToolbarView: UIView {
         NSLayoutConstraint.activate(constraints)
 
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: KeyboardToolbarView, _: UITraitCollection) in
-            self.tintOverlayView.backgroundColor = self.glassTintColor(for: self.traitCollection)
+            self.updatePlateAppearance()
         }
         registerForTraitChanges([UITraitVerticalSizeClass.self, UITraitHorizontalSizeClass.self]) { (self: KeyboardToolbarView, _: UITraitCollection) in
             self.updateInsetsForCurrentTraits()
         }
 
         updateInsetsForCurrentTraits()
+        updatePlateAppearance()
     }
 
     /// Square off the plate's bottom corners while the accessory extends the
@@ -548,8 +638,12 @@ class KeyboardToolbarView: UIView {
             ? [.layerMinXMinYCorner, .layerMaxXMinYCorner]
             : [.layerMinXMinYCorner, .layerMaxXMinYCorner,
                .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-        layer.maskedCorners = corners
-        backgroundBlurView.layer.maskedCorners = corners
+        if drawerPreview != nil {
+            drawerPreviewOriginalCorners = corners
+        } else {
+            layer.maskedCorners = corners
+        }
+        updatePlateAppearance()
     }
 
     override func safeAreaInsetsDidChange() {
@@ -582,6 +676,7 @@ class KeyboardToolbarView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        updatePlateAppearance()
 
         let width = bounds.width
         guard width > 0 else { return }
@@ -590,6 +685,7 @@ class KeyboardToolbarView: UIView {
         if abs(width - lastBuiltWidth) > 10 {
             rebuildForCurrentWidth()
         }
+        updateDrawerPreviewFrame()
     }
 
     private func updateInsetsForCurrentTraits() {
@@ -597,8 +693,6 @@ class KeyboardToolbarView: UIView {
         let chromeInsets = currentChromeHorizontalInsets()
         backgroundLeadingConstraint?.constant = chromeInsets.left
         backgroundTrailingConstraint?.constant = -chromeInsets.right
-        topBorderLeadingConstraint?.constant = chromeInsets.left
-        topBorderTrailingConstraint?.constant = -chromeInsets.right
         drawerContainerLeadingConstraint?.constant = chromeInsets.left
         drawerContainerTrailingConstraint?.constant = -chromeInsets.right
         mainToolbarLeadingConstraint?.constant = chromeInsets.left
@@ -614,6 +708,7 @@ class KeyboardToolbarView: UIView {
 
     /// Rebuild the entire toolbar from the manager's current effective layout.
     func rebuildForCurrentWidth() {
+        extraKeysToggleButton?.cancelTouchInteraction()
         let width = bounds.width
         guard width > 0 else { return }
         lastBuiltWidth = width
@@ -638,6 +733,13 @@ class KeyboardToolbarView: UIView {
         let layout = manager.effectiveLayout(availableWidth: availableWidth,
             reservedMainRowSlots: onTouchKeyboardRequested == nil ? 0 : 1, sizes: sizes)
         effectiveDrawerRows = layout.drawers
+        // A layout rebuild can change a row's contents. Ordinary drawer count
+        // changes reuse these views and their horizontal scroll positions.
+        let cachedModifiers = Set(cachedDrawerRows.values.flatMap {
+            $0.stackView.arrangedSubviews.compactMap { $0 as? KeyboardModifierButton }
+        })
+        modifierButtons.removeAll { cachedModifiers.contains($0) }
+        cachedDrawerRows.removeAll()
         let mainSlots = layout.main
         if onTouchKeyboardRequested != nil {
             let button = KeyboardSymbolButton(key: "__touchKeyboard__",
@@ -896,12 +998,39 @@ class KeyboardToolbarView: UIView {
     #endif
 
     private func createExtraKeysDrawerToggleButton() -> KeyboardSymbolButton {
-        let button = KeyboardSymbolButton(
+        let button = DrawerToggleButton(
             key: "__extraDrawer__",
             display: .icon("ellipsis"),
             sizes: sizes
         )
         button.delegate = self
+        button.onPreviewBegan = { [weak self] in self?.beginDrawerPreview() }
+        button.onPreviewEnded = { [weak self] quickSelection, activate in
+            self?.finishDrawerSelection(quickSelection: quickSelection, activate: activate)
+        }
+        button.onDragBegan = { [weak self] in
+            guard let self else { return 0 }
+            self.drawerGestureInitialState = self.drawerState
+            switch self.drawerState {
+            case .closed, .arrows: return 0
+            case .stacked(let count): return count
+            case .cycling(let index): return index + 1
+            }
+        }
+        button.onDragChanged = { [weak self, weak button] selection, location, quickSelection in
+            guard let self else { return }
+            let manager = KeyboardToolbarManager.shared
+            let count = min(max(selection, 0), manager.drawerRowCount)
+            let state: DrawerState = count == 0 ? .closed
+                : manager.drawerToggleMode == .cycle ? .cycling(index: count - 1) : .stacked(count: count)
+            if state != self.drawerState {
+                self.setDrawerSelectionButton(nil)
+                self.drawerState = state
+                self.applyDrawerState()
+                button?.playHaptic()
+            }
+            self.updateDrawerSelection(at: location, enabled: quickSelection)
+        }
         extraKeysToggleButton = button
         return button
     }
@@ -1049,6 +1178,139 @@ class KeyboardToolbarView: UIView {
 
     // MARK: - Drawer Management
 
+    private func setDrawerSelectionButton(_ button: KeyboardButton?) {
+        guard button !== drawerSelectionButton else { return }
+        UIView.performWithoutAnimation {
+            drawerSelectionButton?.isHighlighted = false
+            drawerSelectionButton = button
+            button?.isHighlighted = true
+        }
+    }
+
+    private func updateDrawerSelection(at location: CGPoint, enabled: Bool) {
+        guard enabled, let window else {
+            setDrawerSelectionButton(nil)
+            return
+        }
+        drawerPreview?.layoutIfNeeded()
+        // Hit-test manually: the preview ignores real touches so the toggle
+        // continues owning this gesture. Check every ancestor to respect row
+        // scrolling and clipping, including partially visible keys.
+        func button(in view: UIView) -> KeyboardButton? {
+            guard !view.isHidden, view.alpha > 0,
+                  view.bounds.contains(view.convert(location, from: window)) else { return nil }
+            if let key = view as? KeyboardButton, key.isEnabled {
+                // This control owns a native menu rather than a key action.
+                return key is KeyboardWritingAssistanceButton ? nil : key
+            }
+            for child in view.subviews.reversed() {
+                if let key = button(in: child) { return key }
+            }
+            return nil
+        }
+        setDrawerSelectionButton(button(in: drawerContainerView))
+    }
+
+    private func finishDrawerSelection(quickSelection: Bool, activate: Bool) {
+        let selectedButton = quickSelection && activate ? drawerSelectionButton : nil
+        setDrawerSelectionButton(nil)
+        if quickSelection, let originalState = drawerGestureInitialState,
+           drawerState != originalState {
+            drawerState = originalState
+            applyDrawerState()
+        }
+        drawerGestureInitialState = nil
+        endDrawerPreview()
+        // Dispatch after restoring layout so actions that present UI cannot
+        // interrupt the cleanup. Keep the chosen key alive across row rebuilds.
+        selectedButton?.sendKey()
+        selectedButton?.playHaptic()
+    }
+
+    /// One appearance path for both layouts, including changes to traits,
+    /// sizing, and the home-indicator strip while a preview is active.
+    private func updatePlateAppearance() {
+        let corners = drawerPreviewOriginalCorners ?? layer.maskedCorners
+        let hasPreviewRows = drawerPreview != nil && visibleDrawerRowCount > 0
+        let mainCorners = hasPreviewRows
+            ? corners.subtracting([.layerMinXMinYCorner, .layerMaxXMinYCorner]) : corners
+        layer.maskedCorners = mainCorners
+        let tint = glassTintColor(for: traitCollection)
+        backgroundBlurView.configure(radius: sizes.toolbar.cornerRadius, corners: mainCorners,
+                                     showsTopEdge: !hasPreviewRows, tint: tint)
+        drawerPreview?.configure(radius: sizes.toolbar.cornerRadius,
+                                 corners: [.layerMinXMinYCorner, .layerMaxXMinYCorner],
+                                 showsTopEdge: true, tint: tint)
+    }
+
+    /// Keep the accessory's reservation unchanged while the user scrubs through
+    /// rows. Hosting the preview in the window lets it cover the terminal even
+    /// when UIKit clips views extending outside the keyboard accessory.
+    private func beginDrawerPreview() {
+        guard drawerPreview == nil, let window else { return }
+        layoutIfNeeded()
+        drawerPreviewHeight = intrinsicContentSize.height
+        drawerPreviewOriginalCorners = layer.maskedCorners
+        drawerPreviewConstraints = constraints.filter {
+            ($0.firstItem as? UIView) === drawerContainerView
+                || ($0.secondItem as? UIView) === drawerContainerView
+        }
+        if let drawerHeightConstraint { drawerPreviewConstraints.append(drawerHeightConstraint) }
+        NSLayoutConstraint.deactivate(drawerPreviewConstraints)
+        drawerContainerView.removeFromSuperview()
+
+        let preview = ToolbarPlateView()
+        window.addSubview(preview)
+        preview.contentView.addSubview(drawerContainerView)
+        drawerPreviewRowConstraints = [
+            drawerContainerView.leadingAnchor.constraint(equalTo: preview.contentView.leadingAnchor),
+            drawerContainerView.trailingAnchor.constraint(equalTo: preview.contentView.trailingAnchor),
+            drawerContainerView.topAnchor.constraint(equalTo: preview.contentView.topAnchor),
+            drawerContainerView.bottomAnchor.constraint(equalTo: preview.contentView.bottomAnchor),
+        ]
+        NSLayoutConstraint.activate(drawerPreviewRowConstraints)
+        drawerPreview = preview
+        updateDrawerPreviewFrame()
+    }
+
+    private func updateDrawerPreviewFrame() {
+        guard let drawerPreview, let window else { return }
+        let mainFrame = mainToolbarContainer.convert(mainToolbarContainer.bounds, to: window)
+        let height = CGFloat(visibleDrawerRowCount) * sizes.toolbar.drawerHeight
+        drawerPreview.frame = CGRect(x: mainFrame.minX, y: mainFrame.minY - height,
+                                     width: mainFrame.width, height: height)
+        // Only the terminal's reservation stays fixed. The original plate
+        // covers the main row; the floating plate covers the preview drawers.
+        // Otherwise closing drawers leaves the old, taller background visible.
+        backgroundTopConstraint?.constant = mainToolbarContainer.frame.minY
+        updatePlateAppearance()
+        drawerPreview.setNeedsLayout()
+        drawerPreview.layoutIfNeeded()
+    }
+
+    /// Restore the normal hierarchy after committing or cancelling a preview.
+    private func endDrawerPreview() {
+        guard let preview = drawerPreview else { return }
+        let previousHeight = drawerPreviewHeight
+        NSLayoutConstraint.deactivate(drawerPreviewRowConstraints)
+        drawerPreviewRowConstraints.removeAll()
+        drawerContainerView.removeFromSuperview()
+        addSubview(drawerContainerView)
+        NSLayoutConstraint.activate(drawerPreviewConstraints)
+        drawerPreviewConstraints.removeAll()
+        drawerPreview = nil
+        drawerPreviewHeight = nil
+        backgroundTopConstraint?.constant = 0
+        if let drawerPreviewOriginalCorners { layer.maskedCorners = drawerPreviewOriginalCorners }
+        drawerPreviewOriginalCorners = nil
+        updatePlateAppearance()
+        preview.removeFromSuperview()
+        drawerHeightConstraint?.constant = CGFloat(visibleDrawerRowCount) * sizes.toolbar.drawerHeight
+        setNeedsLayout()
+        invalidateIntrinsicContentSize()
+        if previousHeight != intrinsicContentSize.height { onDrawerStateChanged?() }
+    }
+
     /// Runtime drawer open state. `stacked(count)` shows extra-keys drawers
     /// 1...count with drawer 1 adjacent to the main row; `cycling(index)` shows
     /// a single row with that drawer's contents; `arrows` is the joystick row.
@@ -1098,42 +1360,46 @@ class KeyboardToolbarView: UIView {
         applyDrawerState()
     }
 
-    /// Rebuild the drawer rows to match `drawerState` and update toolbar height.
+    /// Reconcile rows without recreating their scroll views or key controls.
     private func applyDrawerState() {
-        // Remove stale drawer modifier buttons from tracking before clearing rows
-        let drawerModifiers = Set(drawerRowViews.flatMap { row in
-            row.stackView.arrangedSubviews.compactMap { $0 as? KeyboardModifierButton }
-        })
-        modifierButtons.removeAll { drawerModifiers.contains($0) }
-        for row in drawerRowViews {
+        let rowIDs: [DrawerRowID]
+        switch drawerState {
+        case .closed:
+            rowIDs = []
+        case .arrows:
+            rowIDs = [.arrows]
+        case .cycling(let index):
+            rowIDs = [.extra(index)]
+        case .stacked(let count):
+            // Arranged top-to-bottom: newest drawer on top, drawer 1 at the bottom
+            rowIDs = (0..<count).reversed().map { .extra($0) }
+        }
+        let desiredRows = rowIDs.map { id -> DrawerRowView in
+            if let row = cachedDrawerRows[id] {
+                row.updateEdgePadding(currentEdgePadding())
+                return row
+            }
+            let row = DrawerRowView(edgePadding: currentEdgePadding())
+            switch id {
+            case .arrows:
+                populateArrowRow(row)
+            case .extra(let index):
+                populateExtraKeysRow(row, drawerIndex: index)
+            }
+            cachedDrawerRows[id] = row
+            return row
+        }
+        for row in drawerRowViews where !desiredRows.contains(where: { $0 === row }) {
             drawerRowsStack.removeArrangedSubview(row)
             row.removeFromSuperview()
         }
-        drawerRowViews = []
-
-        let edgePadding = currentEdgePadding()
-        switch drawerState {
-        case .closed:
-            break
-        case .arrows:
-            let row = DrawerRowView(edgePadding: edgePadding)
-            populateArrowRow(row)
-            drawerRowsStack.addArrangedSubview(row)
-            drawerRowViews = [row]
-        case .cycling(let index):
-            let row = DrawerRowView(edgePadding: edgePadding)
-            populateExtraKeysRow(row, drawerIndex: index)
-            drawerRowsStack.addArrangedSubview(row)
-            drawerRowViews = [row]
-        case .stacked(let count):
-            // Arranged top-to-bottom: newest drawer on top, drawer 1 at the bottom
-            for index in stride(from: count - 1, through: 0, by: -1) {
-                let row = DrawerRowView(edgePadding: edgePadding)
-                populateExtraKeysRow(row, drawerIndex: index)
-                drawerRowsStack.addArrangedSubview(row)
-                drawerRowViews.append(row)
-            }
+        for (index, row) in desiredRows.enumerated() {
+            if drawerRowsStack.arrangedSubviews.indices.contains(index),
+               drawerRowsStack.arrangedSubviews[index] === row { continue }
+            drawerRowsStack.removeArrangedSubview(row)
+            drawerRowsStack.insertArrangedSubview(row, at: index)
         }
+        drawerRowViews = desiredRows
 
         // Toggle button states
         #if os(visionOS)
@@ -1142,6 +1408,13 @@ class KeyboardToolbarView: UIView {
         arrowToggleButton?.isDrawerActive = (drawerState == .arrows)
         #endif
         extraKeysToggleButton?.isActive = isExtraKeysDrawerOpen
+
+        if drawerPreview != nil {
+            drawerContainerView.isHidden = (drawerState == .closed)
+            applyBottomEdgeKeyDispatchMode(in: drawerContainerView)
+            updateDrawerPreviewFrame()
+            return
+        }
 
         let newHeight = CGFloat(visibleDrawerRowCount) * sizes.toolbar.drawerHeight
         let heightChanged = drawerHeightConstraint?.constant != newHeight
@@ -1264,6 +1537,9 @@ class KeyboardToolbarView: UIView {
     // MARK: - Layout
 
     override var intrinsicContentSize: CGSize {
+        if let drawerPreviewHeight {
+            return CGSize(width: UIView.noIntrinsicMetric, height: drawerPreviewHeight)
+        }
         let drawerExtra = CGFloat(visibleDrawerRowCount) * sizes.toolbar.drawerHeight
         return CGSize(width: UIView.noIntrinsicMetric, height: sizes.toolbar.height + drawerExtra)
     }
@@ -1319,11 +1595,11 @@ class KeyboardToolbarView: UIView {
     }
 
     func updateSizes(_ newSizes: KeyboardSizes) {
+        extraKeysToggleButton?.cancelTouchInteraction()
         sizes = newSizes
         layer.cornerRadius = sizes.toolbar.cornerRadius
         layer.cornerCurve = .continuous
-        backgroundBlurView.layer.cornerRadius = sizes.toolbar.cornerRadius
-        backgroundBlurView.layer.cornerCurve = .continuous
+        updatePlateAppearance()
         mainRowStackView.spacing = sizes.toolbar.spacing
         mainToolbarHeightConstraint?.constant = sizes.toolbar.height
         drawerHeightConstraint?.constant = CGFloat(visibleDrawerRowCount) * sizes.toolbar.drawerHeight

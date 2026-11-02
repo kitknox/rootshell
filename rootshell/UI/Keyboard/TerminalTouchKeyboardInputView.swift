@@ -28,7 +28,7 @@ final class TerminalTouchKeyboardInputView: UIInputView, UIGestureRecognizerDele
     private var transitionFallback: DispatchWorkItem?
     private var transitionTask: Task<Void, Never>?
     private var heightConstraint: NSLayoutConstraint!
-    private let floatingPanel = TerminalTouchKeyboardFloatingPanel()
+    private let floatingPanel = TerminalTouchKeyboardHostingPanel()
     /// Swallows taps on UIKit's handle: its tap opens a mode menu whose one entry
     /// only resets the position. UIKit's drag waits on its own tap, so that stays enabled.
     private lazy var handleTapGuard: UITapGestureRecognizer = {
@@ -427,6 +427,7 @@ final class TerminalTouchKeyboardToolbarInputView: UIInputView {
     override func layoutSubviews() {
         attachKeyboard()
         super.layoutSubviews()
+        updateAppearance()
         modeSwitcherMute.update(input: self, enabled: true)
     }
 }
@@ -506,12 +507,11 @@ final class TerminalKeyboardModeSwitcherMute {
 }
 
 /// An app input view replaces the system keys, including their drag handle.
-/// UIKit can nevertheless keep a taller floating hosting item (the old system
-/// keyboard's footer), and it owns that item's placement: writes to its center
-/// or transform are undone. Only clip the item to our card, or hide it.
+/// UIKit can retain a taller floating hosting item for its footer. Clip the
+/// host's rendering to the card without changing its system-owned frame.
 /// No keyboard-window frame or private selector is changed.
 @MainActor
-private final class TerminalTouchKeyboardFloatingPanel {
+private final class TerminalTouchKeyboardHostingPanel {
     private weak var panel: UIView?
     private let cardMask = CAShapeLayer()
     private var originalMask: CALayer?
@@ -519,8 +519,8 @@ private final class TerminalTouchKeyboardFloatingPanel {
     /// Without `content`, the whole item is masked out.
     func update(input: UIView, content: UIView?) {
         guard let window = input.window else { detach(); return }
-        // Stop before the full-screen tracking view. Only the narrow hosting
-        // item containing this input belongs to this floating keyboard.
+        // Stop before the full-screen tracking view. Only same-width ancestors
+        // near the input's height belong to this keyboard's hosting item.
         // A self-sizing pass can temporarily leave an ancestor at its old
         // height. Once found, never probe downward again; climbing further up
         // is allowed, because a host chosen during presentation can itself be

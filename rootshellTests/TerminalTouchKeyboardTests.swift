@@ -678,6 +678,41 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         XCTAssertEqual(state, .closed)
     }
 
+    func testDrawerDragAdjustsExistingCountAtButtonEdgesAndReverses() {
+        var drag = KeyboardToolbarDrawerDrag(initialCount: 2, origin: CGPoint(x: 20, y: 120),
+            buttonFrame: CGRect(x: 0, y: 100, width: 40, height: 40), rowHeight: 44)
+        XCTAssertNil(drag.update(at: CGPoint(x: 20, y: 120)))
+        for (y, count) in [(99.9, 3), (56.0, 3), (55.9, 4), (120.0, 2), (140.1, 1), (184.1, 0), (99.9, 3)] {
+            XCTAssertEqual(drag.update(at: CGPoint(x: 20, y: y)), count)
+        }
+        XCTAssertFalse(drag.isQuickSelection)
+    }
+
+    func testDrawerQuickSelectionRequiresOneButtonWidthAndAllowsVerticalReversal() {
+        var drag = KeyboardToolbarDrawerDrag(initialCount: 0, origin: CGPoint(x: 20, y: 120),
+            buttonFrame: CGRect(x: 0, y: 100, width: 40, height: 40), rowHeight: 44)
+        XCTAssertNil(drag.update(at: CGPoint(x: 59.9, y: 120)))
+        XCTAssertEqual(drag.update(at: CGPoint(x: 60, y: 120)), 0)
+        XCTAssertTrue(drag.isQuickSelection)
+        XCTAssertEqual(drag.update(at: CGPoint(x: 20, y: 99.9)), 1)
+        XCTAssertEqual(drag.update(at: CGPoint(x: 20, y: 55.9)), 2)
+        XCTAssertEqual(drag.update(at: CGPoint(x: 20, y: 99.9)), 1)
+        XCTAssertEqual(drag.update(at: CGPoint(x: 20, y: 140.1)), 0)
+        XCTAssertTrue(drag.isQuickSelection)
+    }
+
+    func testFloatingDrawerResizeKeepsBottomEdgeAndUpdatedAnchor() {
+        let available = CGRect(x: 12, y: 36, width: 900, height: 700)
+        let original = Model.floatingFrame(in: available, height: 300, anchor: CGPoint(x: 0.8, y: 0.85))
+        let expanded = Model.resizedFloatingFrame(original, height: 388, in: available)
+        XCTAssertEqual(expanded.maxY, original.maxY)
+        XCTAssertEqual(expanded.minX, original.minX)
+        let anchor = Model.floatingAnchor(for: expanded, in: available)
+        XCTAssertEqual(Model.floatingFrame(in: available, height: 388, anchor: anchor), expanded)
+        XCTAssertEqual(Model.resizedFloatingFrame(expanded, height: 300, in: available), original)
+        XCTAssertTrue(available.contains(Model.resizedFloatingFrame(original, height: 900, in: available)))
+    }
+
     func testCustomDrawersCycleAndAdaptToSettingsChanges() {
         var state = Model.ToolbarDrawerState.closed
         for expected in [[0], [1], [2], []] {
