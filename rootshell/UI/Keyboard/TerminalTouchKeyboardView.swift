@@ -1662,8 +1662,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         if usesSystemPlacement, !grabber.isHidden, grabber.frame.contains(point), let handle = systemFloatingHandle?() {
             return handle
         }
-        // Typing bounds overhang the toolbar's bottom edge; letters win there.
-        // Before the typing grid, which also covers the Apple Keyboard key.
+        // Menus keep their own touch handling before the key surfaces.
         if !styleMenuButton.isHidden, styleMenuButton.frame.contains(point) { return styleMenuButton }
         if !writingAssistanceButton.isHidden {
             let menuPoint = convert(point, to: writingAssistanceButton)
@@ -1671,7 +1670,6 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                 return writingAssistanceButton.hitTest(menuPoint, with: event)
             }
         }
-        if typingIndex(at: point) != nil { return self }
         if let cap = cap(at: point) { return cap.superview as? TerminalTouchToolbarSurface ?? self }
         return super.hitTest(point, with: event)
     }
@@ -1680,8 +1678,11 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         return typingGeometry.hit(at: point)
     }
     private func cap(at point: CGPoint) -> TerminalTouchKeycap? {
+        if let control = controls.first(where: { !$0.isHidden && capFrame($0).contains(point) && toolbarViewportContains(point, for: $0) }) {
+            return control
+        }
         if let index = typingIndex(at: point) { return rows.flatMap { $0 }[index] }
-        return controls.first { capFrame($0).contains(point) && toolbarViewportContains(point, for: $0) }
+        return nil
     }
     private func capFrame(_ cap: TerminalTouchKeycap) -> CGRect { cap.convert(cap.bounds, to: self) }
     private func toolbarViewportContains(_ point: CGPoint, for view: UIView) -> Bool {
