@@ -417,6 +417,16 @@ private final class DrawerRowView: UIView {
 
 // MARK: - KeyboardToolbarView
 
+final class KeyboardToolbarScrollView: UIScrollView {
+    var allowsPan: (() -> Bool)?
+
+    override func touchesShouldCancel(in view: UIView) -> Bool { true }
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer === panGestureRecognizer, allowsPan?() == false { return false }
+        return super.gestureRecognizerShouldBegin(gestureRecognizer)
+    }
+}
+
 class KeyboardToolbarView: UIView {
     // MARK: - Properties
 
@@ -488,7 +498,7 @@ class KeyboardToolbarView: UIView {
     // Main toolbar views
     private let mainToolbarContainer = UIView()
     private let mainRowStackView = UIStackView()
-    private let mainRowScrollView = UIScrollView()
+    private let mainRowScrollView = KeyboardToolbarScrollView()
     private let fixedControlsStackView = UIStackView()
     private let leftPinnedStackView = UIStackView()
     private let scrollContentView = UIView()
@@ -671,6 +681,13 @@ class KeyboardToolbarView: UIView {
         mainRowScrollView.isDirectionalLockEnabled = true
         mainRowScrollView.contentInsetAdjustmentBehavior = .never
         mainRowScrollView.delegate = self
+        mainRowScrollView.delaysContentTouches = false
+        mainRowScrollView.allowsPan = { [weak self] in
+            guard let self else { return false }
+            let sweeping = self.modifierButtons.contains { $0.isDescendant(of: self.mainToolbarContainer) && $0.isSweeping }
+            if sweeping { Ghostty.logger.debug("KeyboardToolbar: modifier sweep retains its contact") }
+            return !sweeping
+        }
         mainToolbarContainer.addSubview(mainRowScrollView)
         mainRowScrollView.addSubview(scrollContentView)
         for stack in [leftPinnedStackView, mainRowStackView, fixedControlsStackView] {
@@ -937,41 +954,24 @@ class KeyboardToolbarView: UIView {
         let area = mainToolbarContainer.bounds.insetBy(dx: currentEdgePadding(), dy: 0)
         guard area.width > 0, area.height > 0 else { return }
         let diameter = sizes.button.height
-        let sectionGap: CGFloat = 4
-        let pinCount = counts[0] + counts[2]
-        let pinGaps = CGFloat((counts[0] > 0 ? 1 : 0) + (counts[2] > 0 ? 1 : 0)) * sectionGap
-        // Fixed pins share the available width while retaining one full middle
-        // key. This also keeps every pin reachable after a narrow resize.
-        let pinCell = min(diameter + 4, max(1, (area.width - pinGaps - (counts[1] > 0 ? diameter + 4 : 0)) / CGFloat(max(1, pinCount))))
-        let leftWidth = CGFloat(counts[0]) * pinCell
-        let rightWidth = CGFloat(counts[2]) * pinCell
         let scrollsAll = displayedScrollScope == .all
-        let scrollFrame = scrollsAll ? area : CGRect(
-            x: area.minX + leftWidth + (counts[0] > 0 ? sectionGap : 0), y: area.minY,
-            width: max(1, area.width - leftWidth - rightWidth - pinGaps), height: area.height)
-        let scrollCount = scrollsAll ? counts.reduce(0, +) : counts[1]
-        let oldLayout = pageLayout
-        pageLayout = ToolbarPageLayout(viewportWidth: scrollFrame.width, buttonWidth: diameter, spacing: 4, itemCount: scrollCount)
         let paged = displayedScrollBehavior == .pages
-        let cellWidth = paged ? pageLayout.cellWidth : max(diameter + 4, scrollFrame.width / CGFloat(max(1, scrollCount)))
+        let layout = ToolbarSectionLayout(area: area, counts: counts, buttonWidth: diameter,
+            scrollsAll: scrollsAll, paged: paged)
+        let scrollFrame = layout.scrollFrame
+        let oldLayout = pageLayout
+        pageLayout = layout.pageLayout
+        let cellWidth = layout.cellWidth
         mainRowScrollView.frame = scrollFrame
         let clipsToScrollCapsule = displayedAppearance == .separate && !scrollsAll
         mainRowScrollView.layer.cornerCurve = .continuous
         mainRowScrollView.layer.cornerRadius = clipsToScrollCapsule ? area.height / 2 : 0
-        let contentWidth = paged ? pageLayout.contentWidth : max(scrollFrame.width, CGFloat(scrollCount) * cellWidth)
+        let contentWidth = layout.contentWidth
         scrollContentView.frame = CGRect(x: 0, y: 0, width: contentWidth, height: area.height)
         mainRowScrollView.contentSize = scrollContentView.bounds.size
         mainRowScrollView.alwaysBounceHorizontal = contentWidth > scrollFrame.width + 0.5
-        if scrollsAll {
-            var x: CGFloat = 0
-            for (stack, count) in zip(stacks, counts) {
-                stack.frame = CGRect(x: x, y: 0, width: CGFloat(count) * cellWidth, height: area.height)
-                x = stack.frame.maxX
-            }
-        } else {
-            leftPinnedStackView.frame = CGRect(x: area.minX, y: area.minY, width: leftWidth, height: area.height)
-            fixedControlsStackView.frame = CGRect(x: area.maxX - rightWidth, y: area.minY, width: rightWidth, height: area.height)
-            mainRowStackView.frame = CGRect(x: 0, y: 0, width: CGFloat(counts[1]) * cellWidth, height: area.height)
+        for (stack, frame) in zip(stacks, layout.sectionFrames) {
+            stack.frame = frame
         }
         for stack in stacks {
             stack.layoutIfNeeded()
@@ -1877,9 +1877,6 @@ class KeyboardToolbarView: UIView {
     }
 
     private var dismissButtonIconName: String {
-        if isWindowHosted || isEmbeddedPreview {
-            return dismissButtonShowsRestore && !dismissButtonPinned ? "keyboard" : "keyboard.chevron.compact.down"
-        }
         return Self.dismissSymbolName(pinned: dismissButtonPinned, showsRestore: dismissButtonShowsRestore)
     }
 
