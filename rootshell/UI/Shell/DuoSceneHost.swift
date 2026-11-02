@@ -1,7 +1,7 @@
 import SwiftUI
 
 extension Notification.Name {
-    /// Posted when the app moves between Duo's inner and front displays.
+    /// Posted when the app moves between Duo's inner and front displays, or first sees a hinge.
     static let duoDisplayDidChange = Notification.Name("duoDisplayDidChange")
 }
 
@@ -11,9 +11,16 @@ enum DuoHingeEvents {
     private(set) static var generation = 0
     /// Lets UIKit views without the `duoLayout` environment pick per-display settings.
     private(set) static var isFrontDisplay = false
+    private(set) static var hasHinge = false
 
-    static func noteChange(isFrontDisplay: Bool) {
+    static func noteChange(isFrontDisplay: Bool, hasHinge: Bool) {
         generation &+= 1
+        if hasHinge != self.hasHinge {
+            self.hasHinge = hasHinge
+            if isFrontDisplay == self.isFrontDisplay {
+                NotificationCenter.default.post(name: .duoDisplayDidChange, object: nil)
+            }
+        }
         setFrontDisplay(isFrontDisplay)
     }
 
@@ -82,7 +89,7 @@ private struct DuoSceneContext<Content: View>: View {
                 // reserved regions, never from the continuous hinge angle.
                 hasHinge = update.hinge != nil
                 isClosed = update.hinge?.status == .closed
-                DuoHingeEvents.noteChange(isFrontDisplay: isClosed)
+                DuoHingeEvents.noteChange(isFrontDisplay: isClosed, hasHinge: hasHinge)
             }
     }
 

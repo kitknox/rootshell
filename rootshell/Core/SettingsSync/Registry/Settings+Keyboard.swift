@@ -49,6 +49,10 @@ nonisolated extension Settings {
         static let touchHeightDuoFront = SettingKey<TerminalTouchKeyboardModel.Height?>(
             "terminalTouchKeyboardHeightDuoFront", default: nil, group: .keyboard, policy: .localByDefault,
             configKey: "terminal-touch-keyboard-height-duo-front", title: String(localized: "Front Display Keyboard Height"))
+        /// iPhone Duo's inner display splits the docked keys at its center while flat, as it does around a bent fold.
+        static let touchSplitDuo = SettingKey(
+            "terminalTouchKeyboardSplitDuo", default: false, group: .keyboard, policy: .localByDefault,
+            configKey: "terminal-touch-keyboard-split-duo", title: String(localized: "Split Keyboard"))
         static let touchGlyphs = SettingKey(
             "terminalTouchKeyboardGlyphs", default: true, group: .keyboard, policy: .localByDefault,
             configKey: "terminal-touch-keyboard-glyphs", title: String(localized: "Keyboard Key Glyphs"))
@@ -104,7 +108,7 @@ nonisolated extension Settings {
         static let all: [AnySettingDefinition] = [
             optionKeyAsAlt.erased, forceASCIIKeyboard.erased, doubleSpaceForPeriod.erased, composeAutocorrect.erased,
             writingAssistance.erased, touchEnabled.erased, touchLayout.erased, touchSuggestions.erased, touchHaptics.erased, touchCharacterPreview.erased,
-            touchHeight.erased, touchHeightDuoFront.erased, touchGlyphs.erased, touchStyle.erased, touchThemeAware.erased, touchLetterPrediction.erased,
+            touchHeight.erased, touchHeightDuoFront.erased, touchSplitDuo.erased, touchGlyphs.erased, touchStyle.erased, touchThemeAware.erased, touchLetterPrediction.erased,
             touchSteampunkThemeAwareKeycaps.erased, touchPhosphorColor.erased, touchClickSound.erased,
             touchStatePerTab.erased, touchSystemFloating.erased, touchFloatingGlassStyle.erased, touchFloatingGlassTintOpacity.erased,
             touchChooserPresented.erased,

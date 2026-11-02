@@ -313,12 +313,21 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         return reservedRegions(kind: .division).map(\.frame).first { $0.height > $0.width }
     }
 
+    /// The Duo's inner display can split without a fold, from the Placement menu.
+    private var offersSplit: Bool { DuoHingeEvents.hasHinge && !DuoHingeEvents.isFrontDisplay }
+    private var splitsWithoutFold = SettingsStore.shared.value(Settings.Keyboard.touchSplitDuo)
+
     private func splitLayout(leading: CGFloat, width: CGFloat)
         -> (rows: [Model.SplitRow], metrics: Model.SplitMetrics, fold: ClosedRange<Double>)? {
-        guard !isFloating, !isEmbeddedPreview, window != nil, let fold = splitFoldFrame else { return nil }
-        guard fold.minX - leading > 0, fold.maxX - leading < width else { return nil }
+        guard !isFloating, !isEmbeddedPreview, window != nil else { return nil }
+        let span: ClosedRange<Double>
+        if let fold = splitFoldFrame {
+            guard fold.minX - leading > 0, fold.maxX - leading < width else { return nil }
+            span = Double(fold.minX - leading)...Double(fold.maxX - leading)
+        } else if splitsWithoutFold, offersSplit {
+            span = Double(width / 2)...Double(width / 2)
+        } else { return nil }
         let rows = Model.splitRows(Model.rows(page: page, layout: layout))
-        let span = Double(fold.minX - leading)...Double(fold.maxX - leading)
         return Model.splitMetrics(rows, width: Double(width), fold: span).map { (rows, $0, span) }
     }
 
@@ -916,6 +925,11 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         hapticsEnabled = SettingsStore.shared.value(Settings.Keyboard.touchHaptics)
         clickSoundEnabled = SettingsStore.shared.value(Settings.Keyboard.touchClickSound)
         characterPreviewEnabled = SettingsStore.shared.value(Settings.Keyboard.touchCharacterPreview)
+        let splits = SettingsStore.shared.value(Settings.Keyboard.touchSplitDuo)
+        if splitsWithoutFold != splits {
+            cancelInteraction(preservingModifiers: true)
+            splitsWithoutFold = splits
+        }
         let height = Self.resolvedHeightSetting()
         let glyphs = SettingsStore.shared.value(Settings.Keyboard.touchGlyphs)
         if heightSetting != height || glyphsEnabled != glyphs { cancelInteraction() }
@@ -2217,18 +2231,32 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     private func keyboardMenuItems() -> [UIMenuElement] {
         var menus: [UIMenuElement] = []
         // UIKit places the system container; only the in-app card can be requested.
-        // The Duo's laptop pose keeps it docked below the fold.
-        if !isToolbarOnly, !usesSystemPlacement, !isEmbeddedPreview, !fillsHostHeight, onPlacementRequested != nil {
-            let docked = String(localized: "Docked"), detached = String(localized: "Detached")
-            let placements = [(Model.Placement.docked, docked), (Model.Placement.floating, detached)].map { placement, title in
-                UIAction(title: title, state: (placement == .floating) == isFloating ? .on : .off) { [weak self] _ in
-                    guard let self, (placement == .floating) != self.isFloating else { return }
+        // The Duo's laptop pose keeps it docked below the fold, split or not.
+        if !isToolbarOnly, !usesSystemPlacement, !isEmbeddedPreview, !fillsHostHeight || offersSplit,
+           onPlacementRequested != nil {
+            enum Choice { case docked, split, detached }
+            let current: Choice = isFloating ? .detached : (offersSplit && splitsWithoutFold ? .split : .docked)
+            var choices: [(Choice, String)] = [(.docked, String(localized: "Docked"))]
+            if offersSplit { choices.append((.split, String(localized: "Split"))) }
+            if !fillsHostHeight { choices.append((.detached, String(localized: "Detached"))) }
+            let placements = choices.map { choice, title in
+                UIAction(title: title, state: choice == current ? .on : .off) { [weak self] _ in
+                    guard let self, choice != current else { return }
                     self.cancelInteraction()
                     // Move containers after the menu has finished dismissing.
-                    DispatchQueue.main.async { [weak self] in self?.onPlacementRequested?(placement) }
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self else { return }
+                        if choice != .detached, self.offersSplit {
+                            SettingsStore.shared.set(Settings.Keyboard.touchSplitDuo, choice == .split)
+                        }
+                        if (choice == .detached) != self.isFloating {
+                            self.onPlacementRequested?(choice == .detached ? .floating : .docked)
+                        }
+                    }
                 }
             }
-            menus.append(UIMenu(title: String(localized: "Placement"), subtitle: isFloating ? detached : docked,
+            menus.append(UIMenu(title: String(localized: "Placement"),
+                                subtitle: choices.first { $0.0 == current }?.1,
                                 image: UIImage(systemName: "keyboard.badge.ellipsis"), children: placements))
         }
         let currentStyle = keyboardStyle
