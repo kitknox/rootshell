@@ -21,6 +21,12 @@ enum ProtectedDataGuard {
         return queue
     }()
 
+    /// Deferred actions in registration order; kept until a drain finds protected data available.
+    @MainActor private static var pending: [@MainActor @Sendable () -> Void] = []
+    @MainActor private static var observers: [NSObjectProtocol] = []
+    @MainActor private static var isDraining = false
+    @MainActor private static var domainConfirmed = false
+
     /// Whether the device is unlocked and protected data (including UserDefaults) is readable.
     @MainActor
     static var isAvailable: Bool {
@@ -34,24 +40,80 @@ enum ProtectedDataGuard {
     /// still run during background launches/unlocks.
     @MainActor
     static func whenAvailable(_ action: @MainActor @escaping @Sendable () -> Void) {
-        if isAvailable {
+        if isAvailable && pending.isEmpty {
             runWhenProtectedDataAvailable(action, reason: "available")
             return
         }
-        logger.warning("Protected data NOT available — deferring initialization")
-        final class TokenHolder: @unchecked Sendable {
-            var token: NSObjectProtocol?
+        if pending.isEmpty {
+            logger.warning("Protected data NOT available — deferring initialization")
         }
-        let holder = TokenHolder()
-        holder.token = NotificationCenter.default.addObserver(
-            forName: UIApplication.protectedDataDidBecomeAvailableNotification,
-            object: nil,
-            queue: protectedDataQueue
-        ) { _ in
-            if let token = holder.token { NotificationCenter.default.removeObserver(token) }
-            Task { @MainActor in
-                runWhenProtectedDataAvailable(action, reason: "unlock")
+        pending.append(action)
+        installObserversIfNeeded()
+        // Data may already be back with no trigger yet; never run inline in the caller.
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { scheduleDrain(reason: "enqueue") }
+        }
+    }
+
+    /// Suspends until protected data is available.
+    @MainActor
+    static func waitUntilAvailable() async {
+        if isAvailable && pending.isEmpty { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            whenAvailable { continuation.resume() }
+        }
+    }
+
+    /// A suspended process can miss the unlock notification, so foreground transitions drain too.
+    @MainActor
+    private static func installObserversIfNeeded() {
+        guard observers.isEmpty else { return }
+        let center = NotificationCenter.default
+        let triggers: [(Notification.Name, String)] = [
+            (UIApplication.protectedDataDidBecomeAvailableNotification, "unlock"),
+            (UIApplication.willEnterForegroundNotification, "willEnterForeground"),
+            (UIApplication.didBecomeActiveNotification, "didBecomeActive"),
+        ]
+        for (name, reason) in triggers {
+            observers.append(center.addObserver(forName: name, object: nil, queue: protectedDataQueue) { _ in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { scheduleDrain(reason: reason) }
+                }
+            })
+        }
+    }
+
+    @MainActor
+    private static func scheduleDrain(reason: String) {
+        guard !pending.isEmpty, !isDraining else { return }
+        guard isAvailable else {
+            if reason != "enqueue" {
+                let count = pending.count
+                logger.warning("\(reason, privacy: .public) fired but protected data is unavailable; keeping \(count) deferred actions")
             }
+            return
+        }
+        if !domainConfirmed {
+            // Defaults can still read empty just after unlock; deferred work must not see that.
+            isDraining = true
+            Task { @MainActor in
+                await UserDefaultsBackup.waitForReadableDomain()
+                domainConfirmed = true
+                isDraining = false
+                scheduleDrain(reason: reason)
+            }
+            return
+        }
+        let actions = pending
+        pending = []
+        logger.info("Protected data available (\(reason, privacy: .public)); running \(actions.count) deferred actions")
+        LifecycleDebugLogger.shared.checkpoint("ProtectedData.run", ms: nil, [
+            ("reason", reason),
+            ("actions", actions.count),
+            ("appState", String(describing: UIApplication.shared.applicationState)),
+        ])
+        for action in actions {
+            action()
         }
     }
 
@@ -60,11 +122,6 @@ enum ProtectedDataGuard {
         _ action: @MainActor @escaping @Sendable () -> Void,
         reason: String
     ) {
-        guard UIApplication.shared.isProtectedDataAvailable else {
-            logger.warning("Protected data notification fired but protected data is unavailable")
-            return
-        }
-
         logger.info("Protected data available")
 
         DispatchQueue.main.async {

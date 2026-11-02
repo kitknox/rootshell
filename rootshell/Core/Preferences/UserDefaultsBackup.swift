@@ -60,6 +60,34 @@ enum UserDefaultsBackup {
         }
     }
 
+    /// The domain can read empty briefly past unlock. Waits (bounded) for a sentinel so
+    /// recovery and priming don't run against it; fresh installs return at once.
+    /// Polls availability itself: ProtectedDataGuard's drain awaits this.
+    @MainActor
+    static func waitForReadableDomain() async {
+        var start = CFAbsoluteTimeGetCurrent()
+        var delay: Duration = .milliseconds(100)
+        var waited = false
+        while SettingsStore.looksCorrupted() {
+            if ProtectedDataGuard.isAvailable {
+                let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+                guard elapsedMs < 5000 else {
+                    logger.error("Defaults domain still empty \(elapsedMs)ms after unlock; continuing to recovery")
+                    return
+                }
+            } else {
+                start = CFAbsoluteTimeGetCurrent()
+            }
+            waited = true
+            try? await Task.sleep(for: delay)
+            delay = min(delay * 2, .seconds(2))
+        }
+        if waited {
+            let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+            logger.info("Defaults domain readable \(elapsedMs)ms after unlock")
+        }
+    }
+
     /// Detect if all sentinel keys are nil (corruption) and restore from backup if possible.
     /// Call early in app launch, AFTER confirming protected data is available.
     static func detectAndRecover() {

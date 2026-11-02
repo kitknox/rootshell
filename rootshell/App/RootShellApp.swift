@@ -15,7 +15,6 @@ import UIKit
 
 @main
 struct RootShellApp: App {
-    @StateObject private var ghosttyApp = Ghostty.App()
     // `locationManager` and `notificationManager` are intentionally NOT
     // @StateObject. The App body never reads any of their properties, so
     // holding them as observable would invalidate the App's scene list on
@@ -27,10 +26,10 @@ struct RootShellApp: App {
     // 18:28:55 crash, stack `assignWithCopy for WindowSceneList`). The
     // singletons are kept alive by their `.shared` static, so we just need
     // a non-observing reference.
-    @StateObject private var appearanceManager = AppearanceManager.shared
-    #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
-    @State private var liveActivityManager = LiveActivityManager.shared
-    #endif
+    //
+    // The terminal runtime, AppearanceManager and LiveActivityManager are
+    // created by `LaunchReadiness`, never here: App-level state is built
+    // before any protected-data guard runs.
 
     #if !targetEnvironment(macCatalyst) && !os(visionOS)
     @Setting(Settings.Window.fullScreenMode) private var fullScreenModeEnabled
@@ -61,28 +60,9 @@ struct RootShellApp: App {
         // doesn't fold the `_ =` access away.
         _ = AppIconManager.shared.selectedVariant
 
-        // Guard against background launches before device unlock.
-        // These singletons read UserDefaults in init() and have didSet observers
-        // that write values back — if defaults are empty (encrypted), they overwrite
-        // the real settings with zeros/nils.
-        guard ProtectedDataGuard.isAvailable else { return }
-
-        // Initialize FontManager early to register the selected font
-        // before Ghostty surfaces try to use it (full catalog loads on a worker)
-        _ = FontManager.shared
-
-        // Initialize RemoteSessionTracker early to ensure notification observer
-        // is set up before any MainView instances post notifications
-        _ = RemoteSessionTracker.shared
-
-        // Initialize LiveActivityManager early for session tracking
-        #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
-        _ = LiveActivityManager.shared
-        #endif
-
-        // Initialize DayNightThemeManager early so it can apply the correct
-        // theme on launch and begin observing system appearance changes
-        _ = DayNightThemeManager.shared
+        // Unlocked launch: warms the early singletons and creates the terminal
+        // runtime now. Locked launch: holds both until AppDelegate's unlock work.
+        _ = LaunchReadiness.shared
 
         // Notification categories and LocationDiaryManager are started from the
         // once-per-launch WindowGroup `.task` — they are not needed before first paint.
@@ -90,20 +70,24 @@ struct RootShellApp: App {
 
     var body: some Scene {
         WindowGroup(id: "main-terminal") {
-            DuoSceneHost { MainView() }
-                .overlay { MCPApprovalOverlay() }
-                .environmentObject(ghosttyApp)
-                .preferredColorScheme(appearanceManager.colorScheme)
-                .modifier(SoftScrollEdgeEffectModifier())
-                .statusBarStyleForTerminalTheme()
-                .immersiveChromeForFullScreen()
-                .fullScreenLaunchNotice()
-                .alwaysOnDisplay()
+            LaunchGate { ghosttyApp in
+                DuoSceneHost { MainView() }
+                    .overlay { MCPApprovalOverlay() }
+                    .environmentObject(ghosttyApp)
+                    .modifier(AppearanceColorSchemeModifier())
+                    .modifier(SoftScrollEdgeEffectModifier())
+                    .statusBarStyleForTerminalTheme()
+                    .immersiveChromeForFullScreen()
+                    .fullScreenLaunchNotice()
+                    .alwaysOnDisplay()
+            }
                 .task {
                     #if DEBUG
                     AgentInboxStore.shared.seedDemoIfRequested()
                     #endif
-                    guard ProtectedDataGuard.isAvailable else { return }
+                    // A locked launch runs this once the unlock work has primed settings.
+                    await LaunchReadiness.shared.waitUntilReady()
+                    await ProtectedDataGuard.waitUntilAvailable()
 
                     // App-level startup work: run ONCE per launch, not on every
                     // window. SwiftUI runs this `.task` per window; re-running
@@ -258,6 +242,10 @@ struct RootShellApp: App {
                         UserDefaultsBackup.saveSnapshot()
                     }
 
+                    // A locked launch's first activation can precede readable defaults;
+                    // the startup task covers VPN and CloudKit once it is ready.
+                    guard LaunchReadiness.shared.isReady else { return }
+
                     // Capture the lifecycle background epoch at activation
                     // observe time. Every deferred closure below re-reads the
                     // live value at fire time and aborts if a
@@ -355,8 +343,10 @@ struct RootShellApp: App {
         // select the first WindowGroup as the default launch scene, and the
         // visor intentionally starts hidden until explicitly summoned.
         WindowGroup(id: "visor") {
-            VisorContentView()
-                .environmentObject(ghosttyApp)
+            LaunchGate { ghosttyApp in
+                VisorContentView()
+                    .environmentObject(ghosttyApp)
+            }
                 .onContinueUserActivity("com.rootshell.visor") { _ in }
         }
         .handlesExternalEvents(matching: ["visor-terminal"])
@@ -368,9 +358,11 @@ struct RootShellApp: App {
         // when presentation mode is set to .window
         // Uses UIViewController wrapper for proper keyboard shortcut handling
         WindowGroup(id: "ai-agent") {
-            AIAgentWindowControllerRepresentable()
-                .preferredColorScheme(appearanceManager.colorScheme)
-                .ignoresSafeArea()
+            LaunchGate { _ in
+                AIAgentWindowControllerRepresentable()
+                    .modifier(AppearanceColorSchemeModifier())
+                    .ignoresSafeArea()
+            }
         }
         #if targetEnvironment(macCatalyst)
         .defaultSize(width: 500, height: 700)
