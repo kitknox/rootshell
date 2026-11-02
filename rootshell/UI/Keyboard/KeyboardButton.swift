@@ -13,6 +13,8 @@ protocol KeyboardButtonDelegate: AnyObject {
     func keyPressed(_ key: String, modifiers: KeyModifiers)
     func cancelScrollTouches()
     func sendRawData(_ data: Data)
+    /// Raw sequence steps must share the encoded keys' output queue.
+    func sendSequenceData(_ data: Data)
     /// Encode a modified combo like the hardware key, honoring the terminal's
     /// keyboard protocol. False means the caller sends `terminalData()` instead.
     func sendKeyCombo(_ combo: SequenceStep.KeyCombo) -> Bool
@@ -22,6 +24,7 @@ extension KeyboardButtonDelegate {
     // Default no-op for buttons not in scrollable containers
     func cancelScrollTouches() {}
     func sendRawData(_ data: Data) {}
+    func sendSequenceData(_ data: Data) { sendRawData(data) }
     func sendKeyCombo(_ combo: SequenceStep.KeyCombo) -> Bool { false }
 
     /// Send a [SequenceStep] sequence to the terminal one step at a time, inserting
@@ -30,18 +33,20 @@ extension KeyboardButtonDelegate {
     /// keyboard toolbar's custom keys and the swipe gesture binding system.
     func sendSequenceSteps(_ steps: [SequenceStep]) {
         guard !steps.isEmpty else { return }
-        // Ghostty-encoded keys arrive asynchronously and would reorder against
-        // raw steps, so only a lone combo takes that path.
-        if steps.count == 1, case .keyCombo(let combo) = steps[0], sendKeyCombo(combo) { return }
-
         var index = 0
         func sendNext() {
             guard index < steps.count else { return }
             let step = steps[index]
             index += 1
             let data = step.terminalData()
-            if !data.isEmpty {
-                sendRawData(data)
+            let encoded: Bool
+            if case .keyCombo(let combo) = step {
+                encoded = sendKeyCombo(combo)
+            } else {
+                encoded = false
+            }
+            if !encoded, !data.isEmpty {
+                sendSequenceData(data)
             }
             // If this step's data ends with ESC and there are more steps,
             // delay before sending the next so the terminal doesn't merge
