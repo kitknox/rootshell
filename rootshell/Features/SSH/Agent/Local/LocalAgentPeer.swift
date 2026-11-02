@@ -237,7 +237,7 @@ enum LocalAgentPeerResolver {
         return String(cString: buffer)
     }
 
-    private nonisolated static func isRootshellHelperProcess(pid: pid_t) -> Bool {
+    nonisolated static func isRootshellHelperProcess(pid: pid_t) -> Bool {
         guard let path = procPath(pid: pid) else { return false }
         let name = (path as NSString).lastPathComponent
         return name == "rootshell-helper"

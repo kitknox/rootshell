@@ -45,6 +45,30 @@ private let responsibilityDisclaim: ResponsibilityDisclaimFn? = {
     return unsafeBitCast(sym, to: ResponsibilityDisclaimFn.self)
 }()
 
+/// libbsm's token accessors are unavailable to Catalyst at compile time;
+/// Security already loads libbsm, so resolve them at runtime.
+private typealias AuditTokenFieldFn = @convention(c) (audit_token_t) -> Int32
+
+private func auditTokenField(_ name: String) -> AuditTokenFieldFn? {
+    guard let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), name) else { return nil }
+    return unsafeBitCast(sym, to: AuditTokenFieldFn.self)
+}
+
+private let auditTokenToASID = auditTokenField("audit_token_to_asid")
+private let auditTokenToPID = auditTokenField("audit_token_to_pid")
+
+private let currentAuditSessionID: Int32? = {
+    guard let auditTokenToASID else { return nil }
+    var token = audit_token_t()
+    var count = mach_msg_type_number_t(MemoryLayout<audit_token_t>.size / MemoryLayout<natural_t>.size)
+    let result = withUnsafeMutablePointer(to: &token) {
+        $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+            task_info(mach_task_self_, task_flavor_t(TASK_AUDIT_TOKEN), $0, &count)
+        }
+    }
+    return result == KERN_SUCCESS ? auditTokenToASID(token) : nil
+}()
+
 nonisolated private enum HelperProcessIDStore {
     private static let lock = NSLock()
     private static var value: pid_t = 0
@@ -336,10 +360,15 @@ public class HelperConnection {
 
         // First, check if helper is already running and healthy (reuse orphans)
         do {
-            try await socketConnection.ping()
-            Ghostty.logger.info("Existing helper is healthy, reusing")
-            isKnownRunning = true
-            return true
+            let peerToken = try await socketConnection.pingPeer()
+            if let stalePID = staleSessionHelperPID(peerToken) {
+                Ghostty.logger.info("Helper \(stalePID) is from another login session, replacing it")
+                await terminateHelper(pid: stalePID)
+            } else {
+                Ghostty.logger.info("Existing helper is healthy, reusing")
+                isKnownRunning = true
+                return true
+            }
         } catch {
             Ghostty.logger.info("Helper not responding: \(error.localizedDescription)")
         }
@@ -417,7 +446,7 @@ public class HelperConnection {
 
         // Build argv array for posix_spawn
         // argv[0] = program name, argv[1..n] = arguments, argv[n+1] = NULL
-        let args = [helperPath, "--app-group", AppGroupHelper.groupIdentifier]
+        let args = [helperPath, "--app-group", AppGroupHelper.groupIdentifier, "--parent-pid", String(getpid())]
 
         // Convert to C string array
         var cArgs = args.map { strdup($0) }
@@ -475,6 +504,33 @@ public class HelperConnection {
         return true
     }
 
+    /// A helper left over from an earlier login session can't start shells:
+    /// login inherits that session's dead bootstrap namespace (#637).
+    private func staleSessionHelperPID(_ peerToken: audit_token_t?) -> pid_t? {
+        #if STANDALONE
+        guard !PlatformDetection.isSandboxed, let peerToken, let auditTokenToASID, let auditTokenToPID,
+              let currentAuditSessionID, auditTokenToASID(peerToken) != currentAuditSessionID else { return nil }
+        let pid = auditTokenToPID(peerToken)
+        return pid > 1 ? pid : nil
+        #else
+        return nil
+        #endif
+    }
+
+    /// SIGTERM, then SIGKILL if it is still running. The SIGTERM wait outlasts
+    /// the helper's 0.5 s shutdown grace so its own escalation can finish.
+    private func terminateHelper(pid: pid_t) async {
+        #if STANDALONE
+        for sig in [SIGTERM, SIGKILL] {
+            guard LocalAgentPeerResolver.isRootshellHelperProcess(pid: pid), kill(pid, sig) == 0 else { return }
+            let deadline = ContinuousClock.now + .seconds(sig == SIGTERM ? 2 : 1)
+            while kill(pid, 0) == 0, ContinuousClock.now < deadline {
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+        }
+        #endif
+    }
+
     /// Checks if the helper process we launched is still running
     private func isHelperProcessRunning() -> Bool {
         guard helperPID > 0 else { return false }
@@ -498,8 +554,8 @@ public class HelperConnection {
         // Send SIGTERM first for clean shutdown
         kill(pid, SIGTERM)
 
-        // Give 1 second to clean up, then SIGKILL if still running
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.0) { [weak self] in
+        // Outlast the helper's 0.5 s shutdown grace, then SIGKILL if still running
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.0) { [weak self] in
             if self?.isHelperProcessRunning() == true {
                 Ghostty.logger.warning("Helper didn't respond to SIGTERM, sending SIGKILL")
                 kill(pid, SIGKILL)

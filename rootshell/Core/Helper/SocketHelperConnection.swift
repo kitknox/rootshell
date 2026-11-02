@@ -125,6 +125,11 @@ class SocketHelperConnection {
         _ = try await sendCommand(.ping)
     }
 
+    /// Pings the helper and returns its audit token: its pid and login session.
+    func pingPeer() async throws -> audit_token_t? {
+        try await exchange(.ping).peerToken
+    }
+
     /// Executes a command with streaming output
     /// - Parameters:
     ///   - command: Shell command to execute
@@ -265,6 +270,11 @@ class SocketHelperConnection {
     // MARK: - Private Implementation
 
     private func sendCommand(_ command: SocketCommand, payload: Data? = nil) async throws -> SocketResponse {
+        try await exchange(command, payload: payload).response
+    }
+
+    /// The response plus the kernel's audit token for the listening process.
+    private func exchange(_ command: SocketCommand, payload: Data? = nil) async throws -> (response: SocketResponse, peerToken: audit_token_t?) {
         guard let socketPath = AppGroupHelper.commandSocketPath else {
             throw SocketHelperError.noAppGroupContainer
         }
@@ -274,13 +284,13 @@ class SocketHelperConnection {
             let queue = command == .inspectLocalMultiplexers ? Self.inspectionQueue : Self.ioQueue
             queue.async {
             do {
-                let response = try Self.sendCommandSync(socketPath: socketPath, command: command, payload: payload)
-                if let helperPID = response.helperPID {
+                let result = try Self.sendCommandSync(socketPath: socketPath, command: command, payload: payload)
+                if let helperPID = result.response.helperPID {
                     #if STANDALONE
                     HelperConnection.recordHelperProcessID(helperPID)
                     #endif
                 }
-                continuation.resume(returning: response)
+                continuation.resume(returning: result)
             } catch {
                 continuation.resume(throwing: error)
             }
@@ -288,7 +298,7 @@ class SocketHelperConnection {
         }
     }
 
-    private static func sendCommandSync(socketPath: String, command: SocketCommand, payload: Data?) throws -> SocketResponse {
+    private static func sendCommandSync(socketPath: String, command: SocketCommand, payload: Data?) throws -> (response: SocketResponse, peerToken: audit_token_t?) {
         // Create socket
         let sock = socket(AF_UNIX, SOCK_STREAM, 0)
         guard sock >= 0 else {
@@ -329,6 +339,10 @@ class SocketHelperConnection {
             throw SocketHelperError.connectionFailed(errno)
         }
 
+        var token = audit_token_t()
+        var tokenLength = socklen_t(MemoryLayout<audit_token_t>.size)
+        let peerToken = getsockopt(sock, SOL_LOCAL, LOCAL_PEERTOKEN, &token, &tokenLength) == 0 ? token : nil
+
         // Send request
         let request = SocketRequest(command: command, payload: payload)
         let requestData = try SocketMessage.encode(request)
@@ -343,7 +357,7 @@ class SocketHelperConnection {
             throw SocketHelperError.commandFailed(response.error ?? "Unknown error")
         }
 
-        return response
+        return (response, peerToken)
     }
 }
 
