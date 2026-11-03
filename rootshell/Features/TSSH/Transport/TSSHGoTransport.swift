@@ -555,7 +555,27 @@ final class TrzszGoTransport: NSObject {
     private static var nextSessionNumber: Int = 1
 
     private var transportRef: TSSHTransportRef?
-    private var sessionRef: TSSHSessionRef?
+    private var sessionRef: TSSHSessionRef? {
+        didSet {
+            if sessionRef != oldValue { resizeController.reset() }
+        }
+    }
+
+    private lazy var resizeController = TSSHResizeController { [weak self] size in
+        guard let self, let sRef = self.sessionRef else { throw CancellationError() }
+        let probeID = self.ioProbe.begin(kind: "resize", label: self.debugLabel, [
+            ("cols", size.cols), ("rows", size.rows),
+        ])
+        self.ioProbe.scheduleStallCheck(id: probeID, thresholdSeconds: 2.0)
+        do {
+            try await TSSHCallGate.shared.resize(sRef, rows: size.rows, cols: size.cols)
+            self.ioProbe.end(id: probeID)
+        } catch {
+            self.ioProbe.end(id: probeID, error: error.localizedDescription)
+            Self.logger.error("Failed to resize: \(error.localizedDescription)")
+            throw error
+        }
+    }
 
     /// Ordered send pipeline: `send()` yields into this stream and a single
     /// writer task performs the gomobile writes sequentially. One Task per
@@ -1078,9 +1098,9 @@ final class TrzszGoTransport: NSObject {
     /// - Parameters:
     ///   - cols: New column count
     ///   - rows: New row count
-    /// Routes through the gate so resizes serialize behind any in-flight write.
-    func resize(cols: Int, rows: Int) {
-        guard let sRef = sessionRef else {
+    /// Serialize/coalesce layouts, retaining failed changes for a later retry.
+    func resize(cols: Int, rows: Int, forceRedraw: Bool = false) {
+        guard sessionRef != nil else {
             Self.logger.warning("Cannot resize: no session")
             return
         }
@@ -1088,22 +1108,7 @@ final class TrzszGoTransport: NSObject {
         // Local layout change — does not prove remote liveness, so don't
         // stamp the activity cache here.
 
-        let probe = ioProbe
-        let label = debugLabel
-        Task { [sRef] in
-            let probeID = probe.begin(kind: "resize", label: label, [
-                ("cols", cols),
-                ("rows", rows),
-            ])
-            probe.scheduleStallCheck(id: probeID, thresholdSeconds: 2.0)
-            do {
-                try await TSSHCallGate.shared.resize(sRef, rows: rows, cols: cols)
-                probe.end(id: probeID)
-            } catch {
-                probe.end(id: probeID, error: error.localizedDescription)
-                Self.logger.error("Failed to resize: \(error.localizedDescription)")
-            }
-        }
+        resizeController.request(.init(cols: cols, rows: rows), forceRedraw: forceRedraw)
     }
 
     /// Silently abandons the transport without sending "close" to the server.

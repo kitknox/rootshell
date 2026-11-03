@@ -1480,6 +1480,19 @@ extension Ghostty {
         /// even when layout fires before `.running`.
         var scrollbackWrittenAwaitingTrailer: Bool = false
 
+        /// Never replace a known-good save with the empty/spinner surface
+        /// while its restoration bytes are still being replayed.
+        var scrollbackRestoreReplayPending = false
+        var scrollbackRestoreReplayGeneration: UInt64 = 0
+
+        var canPersistTerminalContents: Bool {
+            restorationState == .none
+                && !pendingScrollbackRestore
+                && !pendingScrollbackRestoreForLayout
+                && !scrollbackWrittenAwaitingTrailer
+                && !scrollbackRestoreReplayPending
+        }
+
         /// Set true when the embedded trzsz session reaches `.running` and
         /// `applyResumeTrailer` has fired. The layout-deferred restore path
         /// uses this to decide whether to keep the gate open: if `.running` has
