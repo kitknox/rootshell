@@ -110,6 +110,7 @@ struct TSSHTransportParams: Sendable {
     let host: String
     let port: Int
     let serverVersion: String
+    let protoVersion: Int      // 0 = server predates ProtoVer
     let mode: String           // "KCP" or "QUIC"
     let clientID: Int64
     let serverID: Int64
@@ -259,6 +260,7 @@ actor TSSHCallGate {
             : params.host
         config.port = params.port
         config.serverVersion = params.serverVersion
+        config.protoVer = params.protoVersion
         config.mode = params.mode
         config.clientID = params.clientID
         config.serverID = params.serverID
