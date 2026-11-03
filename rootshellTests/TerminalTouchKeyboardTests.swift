@@ -1183,6 +1183,29 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         XCTAssertNotNil(Model.splitMetrics(rows, width: 900, fold: 300...320))
     }
 
+    func testIPadSplitHalvesSitAtTheScreenEdges() throws {
+        let rows = Model.splitRows(Model.rows(page: .letters))
+        for width in [834.0, 1194.0] {
+            let metrics = try XCTUnwrap(Model.splitMetrics(rows, width: width, fold: (width / 2)...(width / 2), hugsEdges: true))
+            XCTAssertEqual(metrics.unit, 56, accuracy: 0.001)
+            let top = Model.splitFrames(rows[0], metrics: metrics, width: width, y: 0, height: 60)
+            XCTAssertEqual(top.first!.minX, Model.splitEdgeInset, accuracy: 0.001)
+            XCTAssertEqual(top.last!.maxX, width - Model.splitEdgeInset, accuracy: 0.001)
+            // The middle row still staggers half a key toward the center.
+            let middle = Model.splitFrames(rows[1], metrics: metrics, width: width, y: 0, height: 60, towardFold: true)
+            XCTAssertEqual(middle.first!.minX - top.first!.minX, 28, accuracy: 0.001)
+            XCTAssertEqual(top.last!.maxX - middle.last!.maxX, 28, accuracy: 0.001)
+        }
+    }
+
+    func testDockedRowsOnTheWideDuoDisplayMatchTheSystemKeyboardWidth() {
+        // Apple's keys span about 790pt of the 951pt landscape inner display.
+        XCTAssertEqual(Model.dockedMargin(width: 951), 80.5, accuracy: 0.001)
+        // Portrait and the front display are already narrower.
+        XCTAssertEqual(Model.dockedMargin(width: 669), 0)
+        XCTAssertEqual(Model.dockedMargin(width: 644), 0)
+    }
+
     func testQWERTYOrderAndSpaceWidth() {
         let rows = Model.rows(page: .letters)
         XCTAssertEqual(rows[0].map(\.title).joined(), "qwertyuiop")

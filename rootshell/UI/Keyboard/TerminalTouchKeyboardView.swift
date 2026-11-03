@@ -313,22 +313,39 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         return reservedRegions(kind: .division).map(\.frame).first { $0.height > $0.width }
     }
 
-    /// The Duo's inner display can split without a fold, from the Placement menu.
-    private var offersSplit: Bool { DuoHingeEvents.hasHinge && !DuoHingeEvents.isFrontDisplay }
-    private var splitsWithoutFold = SettingsStore.shared.value(Settings.Keyboard.touchSplitDuo)
+    /// iPad and the Duo's inner display can split without a fold, from the Placement menu.
+    private var offersSplit: Bool {
+        traitCollection.userInterfaceIdiom == .pad || (DuoHingeEvents.hasHinge && !DuoHingeEvents.isFrontDisplay)
+    }
+    private var splitsWithoutFold = SettingsStore.shared.value(Settings.Keyboard.touchSplit)
 
     private func splitLayout(leading: CGFloat, width: CGFloat)
         -> (rows: [Model.SplitRow], metrics: Model.SplitMetrics, fold: ClosedRange<Double>)? {
         guard !isFloating, !isEmbeddedPreview, window != nil else { return nil }
         let span: ClosedRange<Double>
+        var hugsEdges = false
         if let fold = splitFoldFrame {
             guard fold.minX - leading > 0, fold.maxX - leading < width else { return nil }
             span = Double(fold.minX - leading)...Double(fold.maxX - leading)
         } else if splitsWithoutFold, offersSplit {
             span = Double(width / 2)...Double(width / 2)
+            hugsEdges = traitCollection.userInterfaceIdiom == .pad
         } else { return nil }
         let rows = Model.splitRows(Model.rows(page: page, layout: layout))
-        return Model.splitMetrics(rows, width: Double(width), fold: span).map { (rows, $0, span) }
+        return Model.splitMetrics(rows, width: Double(width), fold: span, hugsEdges: hugsEdges).map { (rows, $0, span) }
+    }
+
+    /// Safe-area insets plus the margins that center docked rows on a wide Duo display.
+    private var contentInsets: (leading: CGFloat, trailing: CGFloat) {
+        let (leading, trailing) = horizontalContentInsets
+        guard !isFloating, !splitActive, DuoHingeEvents.hasHinge else { return (leading, trailing) }
+        let margin = CGFloat(Model.dockedMargin(width: Double(bounds.width - leading - trailing)))
+        return (leading + margin, trailing + margin)
+    }
+
+    /// Thumb-sized keys (phone, detached card, iPad split) take phone touch rules.
+    private var usesPhoneTouchRules: Bool {
+        traitCollection.userInterfaceIdiom != .pad || isFloating || splitActive
     }
 
     /// Columns for a row inset 5pt on each side, as the toolbar and drawers are.
@@ -925,7 +942,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         hapticsEnabled = SettingsStore.shared.value(Settings.Keyboard.touchHaptics)
         clickSoundEnabled = SettingsStore.shared.value(Settings.Keyboard.touchClickSound)
         characterPreviewEnabled = SettingsStore.shared.value(Settings.Keyboard.touchCharacterPreview)
-        let splits = SettingsStore.shared.value(Settings.Keyboard.touchSplitDuo)
+        let splits = SettingsStore.shared.value(Settings.Keyboard.touchSplit)
         if splitsWithoutFold != splits {
             cancelInteraction(preservingModifiers: true)
             splitsWithoutFold = splits
@@ -1235,7 +1252,12 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         }
         updateHostFill()
         let top = contentTop
-        let (leading, trailing) = horizontalContentInsets
+        let (safeLeading, safeTrailing) = horizontalContentInsets
+        let split = splitLayout(leading: safeLeading, width: max(0, bounds.width - safeLeading - safeTrailing))
+        let wasSplit = splitActive
+        splitFoldSpan = split?.fold
+        // Split rows keep the full width, so these match what `split` measured.
+        let (leading, trailing) = contentInsets
         let width = max(0, bounds.width - leading - trailing)
         background.frame = isFloating ? bounds : CGRect(x: 0, y: top + toolbarHeight, width: bounds.width, height: max(0, bounds.height - top - toolbarHeight))
         background.layer.maskedCorners = isFloating ? [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
@@ -1250,9 +1272,6 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         controlGlass.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner,
                                            .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         layoutBackgroundEffect()
-        let split = splitLayout(leading: leading, width: width)
-        let wasSplit = splitActive
-        splitFoldSpan = split?.fold
         if splitActive != wasSplit {
             cancelInteraction(preservingModifiers: true)
             rebuildKeysForWidth(width)
@@ -1374,7 +1393,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         // Only overhang the toolbar; suggestion buttons keep their full height.
         let geometry = Model.typingGeometry(keys: rows.map { $0.map(\.key) }, frames: rows.map { $0.map(\.frame) },
             minX: leading, width: width, overhang: suggestionsEnabled ? 0 : Model.topRowOverhang,
-            touchCorrection: traitCollection.userInterfaceIdiom != .pad || isFloating)
+            touchCorrection: usesPhoneTouchRules)
         if typingGeometry.bounds != geometry.bounds || typingGeometry.targets.map(\.frame) != geometry.targets.map(\.frame)
             || typingGeometry.targets.map(\.key) != geometry.targets.map(\.key) {
             // Drawer drags intentionally resize the keyboard in every placement.
@@ -1707,7 +1726,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
 
     private func move(_ contact: Contact, to point: CGPoint) {
         guard contact.selection?.move(to: point, in: typingGeometry,
-                                      dockedPad: traitCollection.userInterfaceIdiom == .pad && !isFloating) == true else { return }
+                                      dockedPad: !usesPhoneTouchRules) == true else { return }
         contact.task?.cancel()
         contact.current = contact.selection?.selected.map { rows.flatMap { $0 }[$0] }
     }
@@ -1728,7 +1747,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         let index: Int?
         if let point = point ?? contact.selection?.latestPoint {
             index = contact.selection?.finish(at: point, in: typingGeometry,
-                dockedPad: traitCollection.userInterfaceIdiom == .pad && !isFloating)
+                dockedPad: !usesPhoneTouchRules)
         } else {
             index = contact.selection?.takeSelection()
         }
@@ -2233,15 +2252,18 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     /// Placement (when this host can move the keyboard), Style, and Layout submenus.
     private func keyboardMenuItems() -> [UIMenuElement] {
         var menus: [UIMenuElement] = []
-        // UIKit places the system container; only the in-app card can be requested.
+        // UIKit places the system container; only the in-app card can be requested,
+        // but a docked system container can still split its keys.
         // The Duo's laptop pose keeps it docked below the fold, split or not.
-        if !isToolbarOnly, !usesSystemPlacement, !isEmbeddedPreview, !fillsHostHeight || offersSplit,
-           onPlacementRequested != nil {
+        let movable = !usesSystemPlacement && onPlacementRequested != nil
+        let detaches = movable && !fillsHostHeight
+        let splits = offersSplit && (movable || !isFloating)
+        if !isToolbarOnly, !isEmbeddedPreview, detaches || splits {
             enum Choice { case docked, split, detached }
             let current: Choice = isFloating ? .detached : (offersSplit && splitsWithoutFold ? .split : .docked)
             var choices: [(Choice, String)] = [(.docked, String(localized: "Docked"))]
-            if offersSplit { choices.append((.split, String(localized: "Split"))) }
-            if !fillsHostHeight { choices.append((.detached, String(localized: "Detached"))) }
+            if splits { choices.append((.split, String(localized: "Split"))) }
+            if detaches { choices.append((.detached, String(localized: "Detached"))) }
             let placements = choices.map { choice, title in
                 UIAction(title: title, state: choice == current ? .on : .off) { [weak self] _ in
                     guard let self, choice != current else { return }
@@ -2250,7 +2272,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                     DispatchQueue.main.async { [weak self] in
                         guard let self else { return }
                         if choice != .detached, self.offersSplit {
-                            SettingsStore.shared.set(Settings.Keyboard.touchSplitDuo, choice == .split)
+                            SettingsStore.shared.set(Settings.Keyboard.touchSplit, choice == .split)
                         }
                         if (choice == .detached) != self.isFloating {
                             self.onPlacementRequested?(choice == .detached ? .floating : .docked)
@@ -2454,7 +2476,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
 
         // Lay out new keys before fading them in. Existing rows retain their
         // frames and horizontal scroll offsets until the animation starts.
-        let (leading, trailing) = horizontalContentInsets
+        let (leading, trailing) = contentInsets
         for (index, row) in toolbarDrawerRows.enumerated() where incoming.contains(row) {
             layoutToolbarDrawer(row, buttons: toolbarDrawerButtons[index], position: index,
                                 leading: leading, width: max(0, bounds.width - leading - trailing))

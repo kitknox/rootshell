@@ -219,7 +219,10 @@ struct TerminalTouchKeyboardSettingsView: View {
             Section("Terminal tools") {
                 Group {
                     if UIDevice.current.userInterfaceIdiom == .pad {
-                        Text("With Use System Detached Keyboard off, pinch inward, or long-press the keyboard switch key and choose Placement, then Detached, to float the keyboard. Drag the … handle to move it. Spread two fingers, double-tap the handle, or choose Docked to dock. Docking hides the keys when a hardware keyboard is connected.")
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("With Use System Detached Keyboard off, pinch inward, or long-press the keyboard switch key and choose Placement, then Detached, to float the keyboard. Drag the … handle to move it. Spread two fingers, double-tap the handle, or choose Docked to dock. Docking hides the keys when a hardware keyboard is connected.")
+                            Text("Choose Placement, then Split, to divide the docked keys into two halves at the screen edges for thumb typing.")
+                        }
                     } else {
                         Text("Long-press the keyboard switch key and choose Placement, then Detached, to float a smaller keyboard over the terminal, freeing the rest of the screen. Drag the … handle to move it. Double-tap the handle or choose Docked to dock.")
                     }

@@ -882,9 +882,11 @@ nonisolated enum TerminalTouchKeyboardModel {
     static let splitFoldClearance = 12.0
 
     /// As the system keyboard does, each half is centered in its side of the
-    /// fold, with one key unit capped near the system's size. nil when either
-    /// side is too narrow for usable keys.
-    static func splitMetrics(_ rows: [SplitRow], width: Double, fold: ClosedRange<Double>) -> SplitMetrics? {
+    /// fold, or with `hugsEdges` (iPad) sits at the screen edge under a thumb.
+    /// One key unit is capped near the system's size. nil when either side is
+    /// too narrow for usable keys.
+    static func splitMetrics(_ rows: [SplitRow], width: Double, fold: ClosedRange<Double>,
+                             hugsEdges: Bool = false) -> SplitMetrics? {
         let widest = rows.flatMap { [weight($0.left), weight($0.right)] }.max() ?? 0
         let leftMax = fold.lowerBound - splitFoldClearance
         let rightMin = fold.upperBound + splitFoldClearance
@@ -892,9 +894,20 @@ nonisolated enum TerminalTouchKeyboardModel {
         guard widest > 0, side / widest >= 30 else { return nil }
         let unit = min(56, side / widest)
         let half = unit * widest
+        if hugsEdges {
+            return SplitMetrics(unit: unit, halfWidth: half, leftMinX: splitEdgeInset,
+                                rightMinX: width - splitEdgeInset - half)
+        }
         return SplitMetrics(unit: unit, halfWidth: half, leftMinX: (splitEdgeInset + leftMax - half) / 2,
                             rightMinX: (rightMin + width - splitEdgeInset - half) / 2)
     }
+
+    /// The system's landscape keyboard on the Duo's 951pt inner display spans
+    /// about 790pt, centered; docked rows stop there too.
+    static let maxDockedWidth = 790.0
+
+    /// Space left on each side of the docked rows on a wide Duo display.
+    static func dockedMargin(width: Double) -> Double { max(0, (width - maxDockedWidth) / 2) }
 
     /// A row narrower than its half sits against the outer edge, or with
     /// `towardFold` against the fold, giving the system's half-key stagger.
