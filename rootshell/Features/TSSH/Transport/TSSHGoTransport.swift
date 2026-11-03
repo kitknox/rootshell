@@ -692,6 +692,7 @@ final class TrzszGoTransport: NSObject {
             host: host,
             port: port,
             serverVersion: serverInfo.serverVersion,
+            protoVersion: serverInfo.protoVersion ?? 0,
             mode: serverInfo.mode.rawValue,
             // Use bitPattern to handle UInt64 values that exceed Int64.max
             clientID: Int64(bitPattern: serverInfo.clientId),
