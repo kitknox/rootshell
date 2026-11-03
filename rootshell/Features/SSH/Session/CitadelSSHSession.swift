@@ -1000,7 +1000,14 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
                 }
                 pending.append(data)
                 held = pending
-                guard scanner?.scan(data) == true else { break }
+                guard scanner?.scan(data) == true else {
+                    guard pending.count <= MainChannelSwap.heldOutputLimit else {
+                        Self.logger.error("Replacement channel sent \(pending.count) bytes without its ready marker; abandoning")
+                        await swap.abandon()
+                        return
+                    }
+                    break
+                }
                 held = nil
                 guard await self.adoptReplacement(outbound, generation: generation, swap: swap) else { return }
                 sink.emit(pending)
@@ -1760,6 +1767,9 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
 /// One `replaceMainChannel` call: the channel it supersedes and the caller
 /// waiting for the new one to show its ready marker or fail.
 private final class MainChannelSwap {
+    /// Most output held before the ready marker; more abandons the swap.
+    nonisolated static let heldOutputLimit = 64 * 1024
+
     let previous: Task<Void, Never>?
     nonisolated let readyMarker: Data
     var task: Task<Void, Never>?
