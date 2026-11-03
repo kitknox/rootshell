@@ -117,15 +117,17 @@ struct PaneCardEffectShape: Shape {
 }
 
 /// The window-wide effect's visible area: its cards under Rounded Panes (or
-/// the whole terminal), shifted down by `topExtension`, plus the selected
-/// Integrated tab's silhouette, which shows the same effect.
+/// the whole terminal), less the top or bottom tab row it extends into, plus
+/// the selected Integrated tab's silhouette, which shows the same effect.
 struct TerminalEffectWindowShape: Shape {
     var sidebarWidth: CGFloat
     var topExtension: CGFloat
+    var bottomExtension: CGFloat = 0
     var roundedPanes: Bool
     /// The selected tab and its track's visible bounds, in local space.
     var tabRect: CGRect?
     var clip: CGRect?
+    var tabPosition: TabBarPosition = .top
     /// Gaps between split cards, in local space.
     var gaps: Path?
 
@@ -136,7 +138,7 @@ struct TerminalEffectWindowShape: Shape {
 
     func path(in rect: CGRect) -> Path {
         let terminal = CGRect(x: rect.minX, y: rect.minY + topExtension,
-                              width: rect.width, height: max(0, rect.height - topExtension))
+                              width: rect.width, height: max(0, rect.height - topExtension - bottomExtension))
         var path = roundedPanes
             ? PaneCardEffectShape(sidebarWidth: sidebarWidth)
                 .path(in: CGRect(origin: .zero, size: terminal.size))
@@ -149,7 +151,7 @@ struct TerminalEffectWindowShape: Shape {
             path = path.subtracting(gaps.intersection(Path(card)))
         }
         guard let tabRect, !tabRect.isEmpty else { return path }
-        var tab = IntegratedTabGeometry(in: tabRect).silhouettePath
+        var tab = IntegratedTabGeometry(in: tabRect, position: tabPosition).silhouettePath
         if let clip { tab = tab.intersection(Path(clip)) }
         path = path.union(tab)
         return path
@@ -162,6 +164,7 @@ struct TerminalEffectWindowClip: ViewModifier {
     let roundedPanes: Bool
     let sidebarWidth: CGFloat
     let topExtension: CGFloat
+    var bottomExtension: CGFloat = 0
     /// The effect's global origin, to bring the tab into local space.
     let origin: CGPoint
     let join: IntegratedTabJoin?
@@ -180,9 +183,11 @@ struct TerminalEffectWindowClip: ViewModifier {
                 .clipShape(TerminalEffectWindowShape(
                     sidebarWidth: sidebarWidth,
                     topExtension: topExtension,
+                    bottomExtension: bottomExtension,
                     roundedPanes: roundedPanes,
                     tabRect: join == nil ? nil : tracker.rect.map(local),
                     clip: join == nil ? nil : tracker.clip.map(local),
+                    tabPosition: tracker.position,
                     gaps: roundedPanes ? localGaps : nil))
                 .onAppear { if let join { tracker.track(join) } }
                 .onChange(of: join.map { ObjectIdentifier($0) }) { _, _ in
@@ -349,12 +354,14 @@ final class JoinedCardRimView: UIView, IntegratedTabJoinObserver {
             let rect = convert(tabRect, from: nil)
             return rect.minX...rect.maxX
         }
+        let position = integratedTabJoin?.position ?? .top
         rim.update(
             cards: bounds.isEmpty ? [] : [bounds],
             color: UIColor(palette.keyline(increasedContrast: increasedContrast))
                 .resolvedColor(with: traitCollection),
             lineWidth: 1 / max(1, traitCollection.displayScale),
             opening: opening,
-            openingEdgeY: bounds.minY)
+            openingEdgeY: position == .bottom ? bounds.maxY : bounds.minY,
+            openingPosition: position)
     }
 }

@@ -1824,8 +1824,8 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
         paneUnderlay.update(panes: panes, gaps: gaps)
     }
 
-    /// Top-row pane backgrounds and where this tab sits on screen, for the
-    /// selected Integrated tab to paint what lies beneath it.
+    /// Top- and bottom-row pane backgrounds and where this tab sits on screen,
+    /// for the selected Integrated tab to paint what lies beside it.
     private func pushIntegratedTabSurface() {
         guard let integratedTabSurface, let surfaceTabID else { return }
         guard let window, let tree else {
@@ -1838,16 +1838,22 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
                   container.superview === self, !container.isHidden else { continue }
             panes.append((container.frame, cardSurfaceColor(for: container.terminalView)))
         }
+        func segments(where isEdgeRow: ((frame: CGRect, color: UIColor)) -> Bool) -> [IntegratedTabSurface.Segment] {
+            panes.filter(isEdgeRow)
+                .sorted { $0.frame.minX < $1.frame.minX }
+                .map { IntegratedTabSurface.Segment(minX: $0.frame.minX, maxX: $0.frame.maxX, color: $0.color) }
+        }
         let top = panes.map(\.frame.minY).min() ?? 0
-        let segments = panes.filter { $0.frame.minY <= top + 1 }
-            .sorted { $0.frame.minX < $1.frame.minX }
-            .map { IntegratedTabSurface.Segment(minX: $0.frame.minX, maxX: $0.frame.maxX, color: $0.color) }
+        let bottom = panes.map(\.frame.maxY).max() ?? 0
+        let topSegments = segments { $0.frame.minY <= top + 1 }
+        let bottomSegments = segments { $0.frame.maxY >= bottom - 1 }
         // A swipe animates this view, so read where it is on screen.
         let originX = tracksSwipe
             ? (layer.presentation() ?? layer).convert(CGPoint.zero, to: window.layer.presentation() ?? window.layer).x
             : convert(CGPoint.zero, to: nil).x
-        integratedTabSurface.update(segments.isEmpty ? nil : .init(originX: originX, segments: segments),
-                                    for: surfaceTabID, from: self)
+        integratedTabSurface.update(
+            topSegments.isEmpty ? nil : .init(originX: originX, segments: topSegments, bottomSegments: bottomSegments),
+            for: surfaceTabID, from: self)
     }
 
     /// The gaps between this tab's cards and where it sits on screen, so the
@@ -1968,12 +1974,14 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
         }
         let keyline = UIColor(cardRimPalette.keyline(increasedContrast: cardRimIncreasedContrast))
             .resolvedColor(with: traitCollection)
+        let position = integratedTabJoin?.position ?? .top
         rim.update(
             cards: cards.filter(\.showsRim).map(\.container.frame),
             color: keyline,
             lineWidth: 1 / max(1, traitCollection.displayScale),
             opening: opening,
-            openingEdgeY: bounds.minY)
+            openingEdgeY: position == .bottom ? bounds.maxY : bounds.minY,
+            openingPosition: position)
     }
 }
 
@@ -1994,7 +2002,7 @@ private final class CardBackdropView: UIView {
 }
 
 /// Top-lit hairline rims over the pane cards. A joined Integrated tab opens
-/// the straight top edge beneath it; its own outline carries the rim on.
+/// the straight edge beside it; its own outline carries the rim on.
 final class CardRimView: UIView {
     private final class Rim {
         let host = CALayer()
@@ -2024,8 +2032,11 @@ final class CardRimView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    /// `openingEdgeY` is the cards' top edge for a top bar, their bottom edge
+    /// for a bottom bar.
     func update(cards: [CGRect], color: UIColor, lineWidth: CGFloat,
-                opening: ClosedRange<CGFloat>?, openingEdgeY: CGFloat) {
+                opening: ClosedRange<CGFloat>?, openingEdgeY: CGFloat,
+                openingPosition: TabBarPosition = .top) {
         while rims.count < cards.count {
             let rim = Rim()
             layer.addSublayer(rim.host)
@@ -2052,10 +2063,11 @@ final class CardRimView: UIView {
                 roundedRect: bounds.insetBy(dx: inset, dy: inset),
                 cornerRadius: radius - inset).cgPath
 
-            // Only the straight top edge of a top-row card opens. Off-card,
+            // Only the straight edge of an edge-row card opens. Off-card,
             // the opening collapses toward the tab.
+            let atBottom = openingPosition == .bottom
             var openingX = radius, openingWidth: CGFloat = 0
-            if let opening, abs(card.minY - openingEdgeY) < 0.5 {
+            if let opening, abs((atBottom ? card.maxY : card.minY) - openingEdgeY) < 0.5 {
                 let lower = max(opening.lowerBound - card.minX, radius)
                 let upper = min(opening.upperBound - card.minX, card.width - radius)
                 if upper > lower {
@@ -2066,7 +2078,8 @@ final class CardRimView: UIView {
                 }
             }
             let path = UIBezierPath(rect: bounds)
-            path.append(UIBezierPath(rect: CGRect(x: openingX, y: 0, width: openingWidth, height: lineWidth * 2)))
+            let openingY = atBottom ? bounds.maxY - lineWidth * 2 : 0
+            path.append(UIBezierPath(rect: CGRect(x: openingX, y: openingY, width: openingWidth, height: lineWidth * 2)))
             rim.opening.frame = bounds
             rim.opening.path = path.cgPath
         }

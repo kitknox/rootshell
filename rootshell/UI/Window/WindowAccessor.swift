@@ -75,6 +75,7 @@ private struct WindowConfigSignature: Equatable {
     var tabCount: Int
     var tabsInTitlebar: Bool
     var tabBarHidden: Bool
+    var tabBarPosition: TabBarPosition
     var hideTitleBar: Bool
     var topTabStyle: TopTabStyle
 }
@@ -457,6 +458,7 @@ private class TransparentWindowView: UIView {
             tabCount: SessionTracker.shared.tabCount(forSceneSessionId: sceneSessionId),
             tabsInTitlebar: store.get(Settings.Window.tabsInTitlebar),
             tabBarHidden: store.get(Settings.Tabs.barHidden),
+            tabBarPosition: store.get(Settings.Tabs.barPosition),
             hideTitleBar: store.get(Settings.Window.hideTitleBar),
             topTabStyle: store.get(Settings.Tabs.topTabStyle)
         )
@@ -1364,7 +1366,8 @@ private class TransparentWindowView: UIView {
 
         // Configure window dragging behavior
         let tabsInTitlebar = store.get(Settings.Window.tabsInTitlebar)
-        let tabBarHidden = store.get(Settings.Tabs.barHidden)
+        // A bottom tab bar leaves the titlebar as bare as a hidden one.
+        let tabBarHidden = store.get(Settings.Tabs.barHidden) || store.get(Settings.Tabs.barPosition) == .bottom
         let topTabStyle = store.get(Settings.Tabs.topTabStyle)
         configureTitlebarSeparator(
             for: window,

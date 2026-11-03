@@ -212,6 +212,7 @@ struct MainView: View {
 
     // Tab bar visibility
     @Setting(Settings.Tabs.barHidden) var tabBarHidden
+    @Setting(Settings.Tabs.barPosition) var tabBarPosition
     @Setting(Settings.Tabs.showShortcutIndicators) var showTabShortcutIndicators
     @Setting(Settings.Tabs.barAnimationsDisabled) var tabBarAnimationsDisabled
     @Setting(Settings.Tabs.topTabStyle) var topTabStyle
@@ -542,6 +543,12 @@ struct MainView: View {
                         }
                     }
                     .padding(workspace.terminalInsets)
+                    // The effect overflows into the selected Integrated tab, so
+                    // it paints over a bottom bar as it does over the header.
+                    .zIndex(showsBottomTabBar ? 1 : 0)
+                    if showsBottomTabBar {
+                        bottomTabBar(geometry: geometry, workspace: workspace, resolvedTheme: resolvedTheme)
+                    }
                     Color.clear.frame(height: workspace.lowerReservation)
                 }
                 .background(DuoInputRegionReporter(region: workspace.inputRegion, fold: workspace.fold))
@@ -645,7 +652,7 @@ struct MainView: View {
                 // Pass the TabModel (class reference, structural under Observation),
                 // not the title — keeps the title read inside the overlay's body
                 // so per-tab title mutations don't invalidate MainView.body.
-                if tabIndicator.isShowing && !showsHorizontalTabHeader && terminals.indices.contains(selectedTabIndex) {
+                if tabIndicator.isShowing && !showsHorizontalTabs && terminals.indices.contains(selectedTabIndex) {
                     // Position/count/shortcut reflect navigable tabs; hidden
                     // tmux windows are skipped, and grouped mode scopes this
                     // to the active group.
@@ -678,7 +685,9 @@ struct MainView: View {
                     tabsModel: tabsModel,
                     tabFrames: $tabFrames,
                     geometryWidth: geometry.size.width,
-                    enabled: sshHealthMonitoringEnabled,
+                    // Only titlebar tabs report frames; a bottom bar would read
+                    // ones left over from the top.
+                    enabled: sshHealthMonitoringEnabled && !showsBottomTabBar,
                     previews: tabHoverPreview
                 )
             }

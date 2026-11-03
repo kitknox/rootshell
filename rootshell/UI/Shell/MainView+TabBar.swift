@@ -91,7 +91,7 @@ extension MainView {
 
     /// The selected Integrated tab windows the terminal's background effect.
     var integratedTabWindowsEffect: Bool {
-        topTabStyle == .integrated && showsHorizontalTabHeader
+        topTabStyle == .integrated && showsHorizontalTabs
             && effectManager.activeEffect != nil && visibleContentAllowsTerminalEffects
     }
 
@@ -113,7 +113,8 @@ extension MainView {
             surface: integratedTabSurface,
             tabIDs: tabIDs,
             style: style,
-            override: override)
+            override: override,
+            position: horizontalTabPosition)
     }
 
     private var integratedTabCoversFullPanel: Bool {
@@ -150,9 +151,7 @@ extension MainView {
 
     var integratedMinimumDragWidth: CGFloat {
         #if targetEnvironment(macCatalyst)
-        return (usesTitlebarTabs || hideWindowTitleBar)
-            ? Self.catalystWindowDragWidth
-            : 0
+        return topTabBarAttachedToWindow ? Self.catalystWindowDragWidth : 0
         #else
         return 0
         #endif
@@ -230,6 +229,7 @@ extension MainView {
             availableWidth: availableWidth,
             style: topTabStyle,
             usesCompactSpacing: usesCompactTabSpacing,
+            position: horizontalTabPosition,
             selectedStyleRawValue: topTabStyleRawValueBinding,
             tabsModel: tabsModel,
             selectedTabIndex: Binding(

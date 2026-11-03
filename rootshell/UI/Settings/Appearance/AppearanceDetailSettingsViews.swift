@@ -264,6 +264,7 @@ struct WindowSettingsView: View {
     @Environment(\.duoLayout) private var duoLayout
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Setting(Settings.Tabs.topTabStyle) private var topTabStyle
+    @Setting(Settings.Tabs.barPosition) private var tabBarPosition
     @Setting(Settings.Tabs.duoFrontDisplayMode) private var duoFrontDisplayMode
     @Setting(Settings.Tabs.compactPillSpacing) private var compactPillTabSpacing
     @Setting(Settings.Tabs.hoverPreviews) private var tabHoverPreviewsEnabled
@@ -359,8 +360,24 @@ struct WindowSettingsView: View {
     var body: some View {
         List {
             Section {
-                SettingToggle(Settings.Tabs.barHidden, title: "Show Top Tab Bar", inverted: true)
-                    .themedRow()
+                SettingToggle(
+                    Settings.Tabs.barHidden,
+                    title: tabBarPosition == .bottom ? "Show Bottom Tab Bar" : "Show Top Tab Bar",
+                    inverted: true
+                )
+                .themedRow()
+
+                Picker(selection: $tabBarPosition) {
+                    ForEach(TabBarPosition.allCases, id: \.rawValue) { position in
+                        Text(position.displayName).tag(position)
+                    }
+                } label: {
+                    Text("Tab Bar Position")
+                        .settingRow(Settings.Tabs.barPosition)
+                }
+                .pickerStyle(.menu)
+                .disabled(SettingFileLock.isReadOnly(Settings.Tabs.barPosition.name))
+                .themedRow()
 
                 Picker(selection: topTabLayout) {
                     ForEach(TopTabLayout.allCases) { layout in

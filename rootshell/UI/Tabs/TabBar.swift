@@ -286,6 +286,7 @@ struct TabBar: View {
     let availableWidth: CGFloat
     let style: TopTabStyle
     let usesCompactSpacing: Bool
+    var position: TabBarPosition = .top
     @Binding var selectedStyleRawValue: String
 
     // MARK: - Structural / references
@@ -510,6 +511,7 @@ struct TabBar: View {
             keyboardShortcut: keyboardShortcut(tabsModel.navigationIndex(of: tab.id) ?? index),
             usesTitlebarTabs: usesTitlebarTabs,
             style: style,
+            position: position,
             tabWidth: tabWidth,
             hasThemeOverride: tabHasThemeOverride(tab.id),
             onTap: {
@@ -1373,6 +1375,7 @@ struct TabBarItem: View, Equatable {
     let keyboardShortcut: String?
     let usesTitlebarTabs: Bool
     let style: TopTabStyle
+    let position: TabBarPosition
     let tabWidth: CGFloat
     let hasThemeOverride: Bool
     let onTap: () -> Void
@@ -1407,6 +1410,7 @@ struct TabBarItem: View, Equatable {
             && lhs.sshHealthMonitoringEnabled == rhs.sshHealthMonitoringEnabled
             && lhs.usesTitlebarTabs == rhs.usesTitlebarTabs
             && lhs.style == rhs.style
+            && lhs.position == rhs.position
             && lhs.tabWidth == rhs.tabWidth
             // Compare the stored theme inputs. Deriving colors here makes
             // every unchanged tab parse the ANSI palette and resolve UIColors
@@ -1448,7 +1452,8 @@ struct TabBarItem: View, Equatable {
             logoMark: logoMark,
             style: style,
             tabWidth: tabWidth,
-            usesTitlebarTabs: usesTitlebarTabs
+            usesTitlebarTabs: usesTitlebarTabs,
+            position: position
         )
     }
 }

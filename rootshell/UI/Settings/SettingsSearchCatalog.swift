@@ -612,6 +612,8 @@ struct SettingsSearchEntry: Identifiable, Hashable {
             // MARK: Window
             row("window-tab-bar", String(localized: "Show Top Tab Bar"), in: .window,
                 keywords: ["tab bar", "hide tabs", "tabs"]),
+            row("window-tab-bar-position", String(localized: "Tab Bar Position"), in: .window,
+                keywords: ["bottom tabs", "top tabs", "tab bar", "keyboard"]),
             row("window-tab-style", String(localized: "Tab Style"), in: .window,
                 keywords: ["tab appearance", "compact"]),
             row("window-duo-front-display", String(localized: "Duo Front Display"), in: .window,

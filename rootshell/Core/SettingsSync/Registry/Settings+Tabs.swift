@@ -48,8 +48,22 @@ enum TabScopeMenuSize: String, CaseIterable, Sendable {
     }
 }
 
+/// Where the horizontal tab bar sits relative to the terminal.
+nonisolated enum TabBarPosition: String, CaseIterable, Sendable {
+    case top
+    case bottom
+
+    var displayName: String {
+        switch self {
+        case .top: String(localized: "Top", comment: "Tab bar position")
+        case .bottom: String(localized: "Bottom", comment: "Tab bar position")
+        }
+    }
+}
+
 extension DuoFrontDisplayMode: SettingValue {}
 extension NewTabAction: SettingValue {}
+extension TabBarPosition: SettingValue {}
 extension TabHoverPreviewActivation: SettingValue {}
 extension TabScopeMenuSize: SettingValue {}
 extension TopTabStyle: SettingValue {}
@@ -69,6 +83,10 @@ nonisolated extension Settings {
         static let barHidden = SettingKey(
             "tabBarHidden", default: false, group: .tabs, configKey: "tab-bar-hidden",
             title: String(localized: "Show Top Tab Bar", comment: "Setting title"))
+        static let barPosition = SettingKey(
+            "tabBarPosition", default: TabBarPosition.top, group: .tabs, policy: .localByDefault,
+            configKey: "tab-bar-position",
+            title: String(localized: "Tab Bar Position", comment: "Setting title"))
         static let barAnimationsDisabled = SettingKey(
             "tabBarAnimationsDisabled", default: false, group: .tabs, configKey: "tab-bar-animations-disabled",
             title: String(localized: "Disable Tab Animations", comment: "Setting title"))
@@ -137,7 +155,7 @@ nonisolated extension Settings {
             title: String(localized: "Open in Folder Height", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
-            newTabAction.erased, barHidden.erased, barAnimationsDisabled.erased, topTabStyle.erased, compactPillSpacing.erased,
+            newTabAction.erased, barHidden.erased, barPosition.erased, barAnimationsDisabled.erased, topTabStyle.erased, compactPillSpacing.erased,
             duoFrontDisplayMode.erased, duoBehindCameraShowsTabs.erased,
             showScopeMenu.erased, scopeMenuSize.erased, showShortcutIndicators.erased, exposeShowsCaptions.erased, programIcons.erased, exposeZoom.erased,
             hoverPreviews.erased, hoverPreviewActivation.erased, hoverPreviewZoom.erased,
