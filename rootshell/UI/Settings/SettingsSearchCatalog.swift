@@ -894,6 +894,10 @@ struct SettingsSearchEntry: Identifiable, Hashable {
             row("passwords-default-security", String(localized: "Default Security Settings"), in: .savedPasswords,
                 keywords: ["storage level", "authentication", "biometric", "keychain", "face id"]),
 
+            // MARK: Known Hosts
+            row("verify-host-keys-dns", String(localized: "Verify Host Keys via DNS"), in: .knownHosts,
+                keywords: ["sshfp", "dnssec", "dns", "doh", "host key", "fingerprint", "verifyhostkeydns"]),
+
             // MARK: SSH Transport
             row("force-ipv4", String(localized: "Force IPv4"), in: .sshTransport, icon: "network",
                 keywords: ["ipv4", "ipv6", "network", "dns"]),
