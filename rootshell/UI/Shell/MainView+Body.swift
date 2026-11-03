@@ -30,6 +30,7 @@ extension MainView {
                     activeTabRect: proxy[activeTabBounds],
                     rowSize: proxy.size,
                     span: integratedProgressSpan(rowWidth: proxy.size.width),
+                    position: horizontalTabPosition,
                     selectedTabID: selectedTabID,
                     animateSelectionChanges: !tabBarAnimationsDisabled
                         && !tabIndicator.suppressNextSelectionAnimation
@@ -54,7 +55,8 @@ extension MainView {
                 let origin = proxy.frame(in: .global).origin
                 IntegratedTabJoinPublisher(
                     rect: proxy[activeTabBounds].offsetBy(dx: origin.x, dy: origin.y),
-                    join: integratedTabJoin)
+                    join: integratedTabJoin,
+                    position: horizontalTabPosition)
                     // The selected tab's own slide, so the rims stay with it.
                     .animation(animatesIntegratedSelection ? TabBar.selectionAnimation : nil, value: tabID)
                     .onDisappear { integratedTabJoin.update(nil) }
@@ -90,12 +92,13 @@ extension MainView {
             let selectedTabID = terminals[selectedTabIndex].id
             GeometryReader { proxy in
                 let rect = proxy[activeTabBounds]
-                IntegratedTabEdgeRuleView(palette: palette, gap: rect.minX...rect.maxX)
+                IntegratedTabEdgeRuleView(palette: palette, gap: rect.minX...rect.maxX,
+                                          position: horizontalTabPosition)
                     .animation(animatesIntegratedSelection ? TabBar.selectionAnimation : nil,
                                value: selectedTabID)
             }
         } else {
-            IntegratedTabEdgeRuleView(palette: palette)
+            IntegratedTabEdgeRuleView(palette: palette, position: horizontalTabPosition)
         }
     }
 
@@ -121,7 +124,7 @@ extension MainView {
             // A transparent backdrop would show this band through it.
             (effectManager.isBackdropEnabled && transparencyManager.effectiveBackdropOpacity < 1
                 ? Color.clear : chromeBackground)
-                .frame(height: (hideWindowTitleBar && tabBarHidden) ? 0 : max(44, geometry.safeAreaInsets.top))
+                .frame(height: (hideWindowTitleBar && topTabBarHidden) ? 0 : max(44, geometry.safeAreaInsets.top))
             // Rounded Panes paints its backdrop around the cards in
             // terminalAndSidebarContent, never beneath translucent terminals.
             Spacer()
@@ -205,7 +208,7 @@ extension MainView {
     @ViewBuilder
     func catalystTabBarSpacer(geometry: GeometryProxy) -> some View {
         #if targetEnvironment(macCatalyst)
-        if tabBarHidden && usesTitlebarTabs && !hideWindowTitleBar {
+        if topTabBarHidden && usesTitlebarTabs && !hideWindowTitleBar {
             Color.clear
                 .frame(height: max(44, geometry.safeAreaInsets.top))
                 .catalystCursorRegion()
@@ -223,7 +226,7 @@ extension MainView {
     @ViewBuilder
     func catalystDragStripShield() -> some View {
         #if targetEnvironment(macCatalyst)
-        if hideWindowTitleBar && tabBarHidden {
+        if hideWindowTitleBar && topTabBarHidden {
             DragStripEventShield()
                 .frame(maxWidth: .infinity)
                 .frame(height: 12)
@@ -292,7 +295,7 @@ extension MainView {
     @ViewBuilder
     func integratedTabBarDragRegion() -> some View {
         #if targetEnvironment(macCatalyst)
-        if usesTitlebarTabs || hideWindowTitleBar {
+        if topTabBarAttachedToWindow {
             CatalystWindowDragRegion(tabStyleSelection: topTabStyleRawValueBinding)
                 .frame(minWidth: Self.catalystWindowDragWidth, maxWidth: .infinity)
                 .frame(height: TabMetrics.tabBarHeight)
@@ -321,7 +324,8 @@ extension MainView {
         // clips the integrated edge across the traffic-light clearance. Outer
         // frame is unchanged, leaving drag-region geometry alone.
         (effectManager.isBackdropEnabled ? Color.clear : tabBarChromeBackground(theme))
-            .padding(.bottom, topTabStyle.usesStripLayout ? IntegratedTabEdgeMetrics.reservedThickness : 0)
+            .padding(showsBottomTabBar ? .top : .bottom,
+                     topTabStyle.usesStripLayout ? IntegratedTabEdgeMetrics.reservedThickness : 0)
             .frame(width: tabBarLeadingPadding, height: 44)
             .overlay {
                 TabStyleContextMenuRegion(selectedStyleRawValue: topTabStyleRawValueBinding)

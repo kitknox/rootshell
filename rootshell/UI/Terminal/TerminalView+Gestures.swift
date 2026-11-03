@@ -2896,10 +2896,16 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
 
         // Tab bar visibility toggle
         let isTabBarHidden = SettingsStore.shared.value(Settings.Tabs.barHidden)
-        let tabBarAction = UIAction(
-            title: isTabBarHidden ? String(localized: "Show Top Tab Bar") : String(localized: "Hide Top Tab Bar"),
-            image: UIImage(systemName: isTabBarHidden ? "rectangle.topthird.inset.filled" : "rectangle.topthird.inset")
-        ) { [weak self] _ in
+        let tabBarTitle: String
+        let tabBarImage: String
+        if SettingsStore.shared.value(Settings.Tabs.barPosition) == .bottom {
+            tabBarTitle = isTabBarHidden ? String(localized: "Show Bottom Tab Bar") : String(localized: "Hide Bottom Tab Bar")
+            tabBarImage = "rectangle.bottomthird.inset.filled"
+        } else {
+            tabBarTitle = isTabBarHidden ? String(localized: "Show Top Tab Bar") : String(localized: "Hide Top Tab Bar")
+            tabBarImage = isTabBarHidden ? "rectangle.topthird.inset.filled" : "rectangle.topthird.inset"
+        }
+        let tabBarAction = UIAction(title: tabBarTitle, image: UIImage(systemName: tabBarImage)) { [weak self] _ in
             self?.menuToggleTabBar(nil)
         }
         let tabBarMenu = UIMenu(title: "", options: .displayInline, children: [tabBarAction])

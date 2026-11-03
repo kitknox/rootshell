@@ -47,6 +47,8 @@ final class TabHoverPreviewView: UIView {
 
     private var anchor: CGRect = .zero
     private var edge: Edge = .below
+    /// Window-space y where a docked keyboard or toolbar begins; nil when none.
+    var unobscuredMaxY: (UIWindow) -> CGFloat? = { _ in nil }
     private var zoom: CGFloat = 1
     private var metrics = TabHoverPreviewLayout.Metrics.standard(mac: false)
     /// Increments on every present / dismiss so a stale completion is inert.
@@ -376,7 +378,11 @@ final class TabHoverPreviewView: UIView {
     /// Card frame in window coordinates for the current anchor, zoom and aspect.
     private func resolvedFrame() -> CGRect {
         guard let window else { return CGRect(origin: anchor.origin, size: .zero) }
-        let safe = window.bounds.inset(by: window.safeAreaInsets)
+        var safe = window.bounds.inset(by: window.safeAreaInsets)
+        // Size and place the card only where the keyboard leaves it visible.
+        if let maxY = unobscuredMaxY(window), maxY > safe.minY, maxY < safe.maxY {
+            safe.size.height = maxY - safe.minY
+        }
         let pictureSize = TabHoverPreviewLayout.pictureSize(
             baseWidth: metrics.baseWidth, zoom: zoom, aspect: aspect,
             limit: CGSize(width: safe.width * 0.7, height: safe.height * 0.7)
@@ -442,7 +448,8 @@ final class TabHoverPreviewView: UIView {
     private func appearTransform() -> CGAffineTransform {
         let nudge: CGPoint
         switch edge {
-        case .below: nudge = CGPoint(x: 0, y: -6)
+        // Either can flip to the other side of its tab.
+        case .below, .above: nudge = CGPoint(x: 0, y: currentFrame().minY >= anchor.maxY ? -6 : 6)
         case .trailing: nudge = CGPoint(x: currentFrame().minX >= anchor.maxX ? -6 : 6, y: 0)
         }
         return CGAffineTransform(translationX: nudge.x, y: nudge.y).scaledBy(x: 0.96, y: 0.96)
@@ -580,9 +587,11 @@ private struct TabHoverPreviewCaptionRow: View {
 
 // MARK: - Placement math
 
-/// Which side of the anchor the card sits on: under a top tab, beside a sidebar row.
+/// Which side of the anchor the card sits on: under a top tab, over a bottom
+/// tab, beside a sidebar row.
 nonisolated enum TabHoverPreviewEdge: Equatable {
     case below
+    case above
     case trailing
 }
 
@@ -605,7 +614,7 @@ nonisolated struct TabHoverPreviewLayout {
         }
 
         func gap(for edge: TabHoverPreviewEdge) -> CGFloat {
-            edge == .below ? gapBelow : gapBeside
+            edge == .trailing ? gapBeside : gapBelow
         }
     }
 
@@ -642,6 +651,14 @@ nonisolated struct TabHoverPreviewLayout {
             if y + h > bounds.maxY {
                 let above = anchor.minY - gap - h
                 y = above >= bounds.minY ? above : clamp(y, bounds.minY, bounds.maxY - h)
+            }
+            return CGRect(x: x, y: y, width: w, height: h)
+        case .above:
+            let x = clamp(anchor.midX - w / 2, bounds.minX, bounds.maxX - w)
+            var y = anchor.minY - gap - h
+            if y < bounds.minY {
+                let below = anchor.maxY + gap
+                y = below + h <= bounds.maxY ? below : clamp(y, bounds.minY, bounds.maxY - h)
             }
             return CGRect(x: x, y: y, width: w, height: h)
         case .trailing:

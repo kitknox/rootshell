@@ -54,6 +54,10 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate, Pr
     /// its own rows.
     @ObservationIgnored var canPresent: (TabHoverPreviewSource) -> Bool = { _ in true }
     @ObservationIgnored var reduceMotion: () -> Bool = { false }
+    /// Which side of a top-bar tab the card prefers: above a bottom tab bar.
+    @ObservationIgnored var tabBarEdge: () -> TabHoverPreviewEdge = { .below }
+    /// Window-space y where a docked keyboard or toolbar begins; nil when none.
+    @ObservationIgnored var unobscuredMaxY: (UIWindow) -> CGFloat? = { _ in nil }
     @ObservationIgnored var style: () -> TabHoverPreviewView.Style = { TabHoverPreviewView.Style() }
     /// Title line under the picture.
     @ObservationIgnored var captionProvider: ((TabModel) -> AnyView)?
@@ -315,7 +319,7 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate, Pr
             tab: tab,
             caption: captionProvider?(tab),
             anchor: anchor.frame,
-            edge: source == .topBar ? .below : .trailing,
+            edge: source == .topBar ? tabBarEdge() : .trailing,
             in: anchor.window,
             style: style(),
             zoom: zoom,
@@ -348,6 +352,7 @@ final class TabHoverPreviewController: NSObject, UIGestureRecognizerDelegate, Pr
         let card = TabHoverPreviewView()
         card.onTap = { [weak self] in self?.enterExpose() }
         card.onHoverChange = { [weak self] inside in self?.cardHoverChanged(inside: inside) }
+        card.unobscuredMaxY = { [weak self] window in self?.unobscuredMaxY(window) }
         self.card = card
         return card
     }

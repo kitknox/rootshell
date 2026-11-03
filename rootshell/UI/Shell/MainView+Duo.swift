@@ -8,8 +8,29 @@ extension MainView {
         return context
     }
 
-    var showsHorizontalTabHeader: Bool {
+    /// A horizontal tab strip is on screen, above or below the terminal.
+    var showsHorizontalTabs: Bool {
         duoLayout.showsHorizontalTabs(globallyHidden: tabBarHidden)
+    }
+
+    /// The strip sits above the terminal.
+    var showsHorizontalTabHeader: Bool {
+        showsHorizontalTabs && tabBarPosition == .top
+    }
+
+    /// The strip sits below the terminal, on the keyboard while one is up.
+    var showsBottomTabBar: Bool {
+        showsHorizontalTabs && tabBarPosition == .bottom
+    }
+
+    /// Nothing occupies the top strip or Mac titlebar row.
+    var topTabBarHidden: Bool {
+        tabBarHidden || tabBarPosition == .bottom
+    }
+
+    /// Where the visible strip sits.
+    var horizontalTabPosition: TabBarPosition {
+        showsBottomTabBar ? .bottom : .top
     }
 
     /// Dynamic Island iPhones end the top safe area several points below the

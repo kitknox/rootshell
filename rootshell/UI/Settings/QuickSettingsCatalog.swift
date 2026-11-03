@@ -213,6 +213,7 @@ enum QuickSettingsCatalog {
         entries += [
             choices(Settings.Tabs.newTabAction, label: { $0.displayName }),
             toggle(Settings.Tabs.barHidden, inverted: true),
+            choices(Settings.Tabs.barPosition, label: { $0.displayName }),
             toggle(Settings.Tabs.barAnimationsDisabled),
             choices(Settings.Tabs.topTabStyle, label: { $0.displayName }),
             toggle(Settings.Tabs.compactPillSpacing),

@@ -418,6 +418,7 @@ struct TabButton: View {
     var style: TopTabStyle = .pills
     var tabWidth: CGFloat = 240
     var usesTitlebarTabs: Bool = false
+    var position: TabBarPosition = .top
 
     @State private var isHovered: Bool = false
     @State private var isCloseHovered: Bool = false
@@ -470,6 +471,12 @@ struct TabButton: View {
             return secondaryTextColor.blended(toward: textColor, amount: 0.6)
         }
         return secondaryTextColor
+    }
+
+    /// Centers Integrated content on the tab body, which leaves a strip of
+    /// row on the side away from the terminal.
+    private var integratedContentOffset: CGFloat {
+        position == .bottom ? -2 : 2
     }
 
     private var integratedInactiveCloseThreshold: CGFloat {
@@ -582,7 +589,7 @@ struct TabButton: View {
                     .foregroundColor(isSelected ? textColor : secondaryTextColor)
             }
             .frame(width: closeTargetSize.width, height: closeTargetSize.height)
-            .offset(y: style == .integrated ? 2 : 0)
+            .offset(y: style == .integrated ? integratedContentOffset : 0)
         }
         .onHover { hovering in
             if usesCloseHoverDisc {
@@ -604,7 +611,7 @@ struct TabButton: View {
                 HStack(spacing: 4) {
                     titleContent
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .offset(y: 2)
+                        .offset(y: integratedContentOffset)
                     // Hidden controls must not continue consuming their 44pt
                     // target in compact tabs; that space belongs to the title
                     // until the close affordance is actually visible.
@@ -627,7 +634,8 @@ struct TabButton: View {
                         hoverColor: unselectedBackgroundColor,
                         edgePalette: integratedEdgePalette,
                         namespace: namespace,
-                        reduceMotion: reduceMotion
+                        reduceMotion: reduceMotion,
+                        position: position
                     )
                 }
                 .contentShape(Rectangle())
@@ -755,7 +763,8 @@ struct TabButton: View {
         .padding(.leading, TabMetrics.horizontalPadding + 2)
         .padding(.trailing, 6)
         .frame(maxWidth: .infinity, maxHeight: TabMetrics.tabBarHeight)
-        .overlay(alignment: .bottom) {
+        // On the keyline, which runs along the terminal side of the strip.
+        .overlay(alignment: position == .bottom ? .top : .bottom) {
             LedgerTabIndicator(
                 isSelected: isSelected,
                 color: colorSchemeContrast == .increased ? textColor : indicatorColor,
@@ -770,8 +779,8 @@ struct TabButton: View {
     }
 }
 
-/// Ledger selection bar. Full tab width and bottom-aligned so it sits on,
-/// and occludes, the strip keyline under the active tab.
+/// Ledger selection bar. Full tab width and aligned to the terminal side so it
+/// sits on, and occludes, the strip keyline at the active tab.
 private struct LedgerTabIndicator: View {
     let isSelected: Bool
     let color: Color
@@ -839,14 +848,16 @@ struct TroughWellBackground: View {
     }
 }
 
-/// Integrated selected-tab silhouette: rounded at the top, with lower
-/// shoulders that widen into the terminal edge. The bottom remains open and
+/// Integrated selected-tab silhouette: rounded away from the terminal, with
+/// shoulders that widen into the terminal edge. That edge remains open and
 /// flush, so matching the terminal background reads as one connected surface.
 private struct BrowserTabShape: Shape {
+    var position: TabBarPosition = .top
+
     // Metrics live in `IntegratedTabGeometry` so this and the outline drawn
     // over it trace the same curve.
     func path(in rect: CGRect) -> Path {
-        IntegratedTabGeometry(in: rect).silhouettePath
+        IntegratedTabGeometry(in: rect, position: position).silhouettePath
     }
 }
 
@@ -858,6 +869,7 @@ private struct IntegratedTabBackground: View {
     let edgePalette: IntegratedTabEdgePalette
     let namespace: Namespace.ID?
     let reduceMotion: Bool
+    var position: TabBarPosition = .top
     @Environment(\.integratedTabJoinsCard) private var joinsCard
     @Environment(\.integratedTabSurfaceFill) private var surfaceFill
 
@@ -875,30 +887,34 @@ private struct IntegratedTabBackground: View {
         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovered)
     }
 
-    /// The surface beneath it plus the edge arching over it. Open at the bottom
-    /// so the tab still merges into the terminal; the run it joins is in `MainView`.
+    /// The surface beside it plus the edge arching around it. Open on the
+    /// terminal side so the tab still merges into it; the run it joins is in `MainView`.
     @ViewBuilder
     private var selectedBackground: some View {
         let background = ZStack {
             // Erased in the tab's own pass, so the opening slides with it.
             if surfaceFill?.style.erasesBeneath == true {
-                BrowserTabShape()
+                BrowserTabShape(position: position)
                     .fill(.black)
                     .blendMode(.destinationOut)
             }
 
             IntegratedTabSurfaceFillView(fallback: selectedColor)
-                .clipShape(BrowserTabShape())
+                .clipShape(BrowserTabShape(position: position))
 
             // Between fill and outline: clears the strip's rule out of the
             // outline's shoulder band. Joined cards have no rule; their rim
-            // opens under the tab and this outline carries it up around it.
+            // opens under the tab and this outline carries it around it.
             // A translucent fill can't hide the rule, which opens instead.
             if !joinsCard, surfaceFill?.style.isTranslucent != true {
-                IntegratedTabEdgeOccluder(fill: IntegratedTabSurfaceFillView(fallback: selectedColor))
+                IntegratedTabEdgeOccluder(fill: IntegratedTabSurfaceFillView(fallback: selectedColor),
+                                          position: position)
             }
 
-            IntegratedTabOutlineView(palette: edgePalette)
+            IntegratedTabOutlineView(
+                palette: edgePalette,
+                position: position,
+                opacity: joinsCard && position == .bottom ? Double(PaneCardStyle.rimBottomFraction) : 1)
         }
 
         if let namespace {
@@ -1280,7 +1296,28 @@ final class TabStyleContextMenuCoordinator: NSObject, UIContextMenuInteractionDe
                 self.action(for: .ledger, systemImage: "underline", selectedLayout: selectedLayout),
                 self.action(for: .trough, systemImage: "rectangle.split.3x1", selectedLayout: selectedLayout),
             ]
-            return UIMenu(children: actions)
+            return UIMenu(children: [
+                UIMenu(title: "", options: .displayInline, children: actions),
+                UIMenu(title: String(localized: "Tab Bar Position"), options: .displayInline,
+                       children: TabBarPosition.allCases.map { self.positionAction(for: $0) }),
+            ])
+        }
+    }
+
+    private func positionAction(for position: TabBarPosition) -> UIAction {
+        UIAction(
+            title: position.displayName,
+            image: UIImage(systemName: position == .top ? "rectangle.topthird.inset.filled" : "rectangle.bottomthird.inset.filled"),
+            attributes: SettingFileLock.isReadOnly(Settings.Tabs.barPosition.name) ? .disabled : [],
+            state: SettingsStore.shared.get(Settings.Tabs.barPosition) == position ? .on : .off
+        ) { _ in
+            // Leave the menu callback before the bar moves out from under it.
+            DispatchQueue.main.async {
+                guard SettingsStore.shared.get(Settings.Tabs.barPosition) != position else { return }
+                withTransaction(Transaction(animation: nil)) {
+                    SettingsStore.shared.set(Settings.Tabs.barPosition, position)
+                }
+            }
         }
     }
 

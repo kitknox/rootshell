@@ -39,6 +39,10 @@ extension MainView {
             SettingsStore.shared.value(Settings.Tabs.barAnimationsDisabled) || UIAccessibility.isReduceMotionEnabled
         }
         previews.style = { tabHoverPreviewStyle() }
+        previews.tabBarEdge = {
+            SettingsStore.shared.value(Settings.Tabs.barPosition) == .bottom ? .above : .below
+        }
+        previews.unobscuredMaxY = { window in keyboardTop(in: window) }
         previews.captionProvider = { tab in AnyView(tabHoverPreviewCaption(for: tab)) }
         // Same contract as the exposé: wake the mirrored tab's renderer, and
         // let the reconcile (which treats the previewed tab as visible) put

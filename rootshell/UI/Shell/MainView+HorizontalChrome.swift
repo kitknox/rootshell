@@ -1,6 +1,75 @@
 import SwiftUI
+import UIKit
 
 extension MainView {
+    /// The tab row below the terminal. It rides on the docked keyboard or
+    /// toolbar, and its fill runs out to the screen edges beneath it.
+    func bottomTabBar(geometry: GeometryProxy, workspace: DuoWorkspaceLayout,
+                      resolvedTheme: ResolvedTabBarTheme) -> some View {
+        VStack(spacing: 0) {
+            GeometryReader { barGeometry in
+                horizontalTabHeader(geometry: barGeometry, resolvedTheme: resolvedTheme)
+            }
+            .frame(height: TabMetrics.tabBarHeight)
+            .padding(.leading, workspace.headerInsets.leading)
+            .padding(.trailing, workspace.headerInsets.trailing)
+            Color.clear
+                .frame(height: bottomTabBarKeyboardLift(geometry: geometry, lowerReservation: workspace.lowerReservation))
+        }
+        .background {
+            (effectManager.isBackdropEnabled ? Color.clear : tabBarChromeBackground(resolvedTheme))
+                .ignoresSafeArea(.container, edges: [.horizontal, .bottom])
+                .allowsHitTesting(false)
+        }
+    }
+
+    /// How far the bottom tab bar rises to clear the keyboard and toolbar,
+    /// judged over the whole workspace so the bar's own height never feeds back.
+    private func bottomTabBarKeyboardLift(geometry: GeometryProxy, lowerReservation: CGFloat) -> CGFloat {
+        let _ = effectManager.keyboardStateVersion
+        var frame = geometry.frame(in: .global)
+        frame.size.height = max(0, frame.height - lowerReservation)
+        var lift = keyboardCoverage(of: frame, window: nil)
+        #if os(visionOS)
+        if showKeyboardToolbar { lift += KeyboardSizes.iPad.toolbar.height }
+        #endif
+        return lift
+    }
+
+    /// Window-space top of the docked keyboard or toolbar; nil when neither
+    /// covers the window. Hover previews stay above it.
+    func keyboardTop(in window: UIWindow) -> CGFloat? {
+        let safe = window.bounds.inset(by: window.safeAreaInsets)
+        let coverage = keyboardCoverage(of: safe, window: window)
+        return coverage > 0 ? safe.maxY - coverage : nil
+    }
+
+    /// How much of `frame` (global space) the docked keyboard or toolbar covers,
+    /// by the terminal's own rules.
+    private func keyboardCoverage(of frame: CGRect, window: UIWindow?) -> CGFloat {
+        // Web-preview tabs have no pane, but their fields still raise the keyboard.
+        let pane = terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].focusedPane : nil
+        return terminalBottomPadding(
+            containerFrame: frame,
+            containerSafeAreaBottom: 0,
+            keyboardFrame: effectManager.keyboardFrame,
+            keyboardHeight: effectManager.keyboardHeight,
+            reservedBottomToolbarHeight: pane?.reservedKeyboardToolbarHeightAtBottom ?? 0,
+            accessoryFrame: pane?.keyboardAccessoryFrameInScreen,
+            touchKeyboardFrame: pane?.dockedTouchKeyboardFrameInScreen,
+            containerBottomSafeAreaExpansion: 0,
+            terminalEffectsEnabled: false,
+            hostWindow: pane == nil ? window ?? sceneHostWindow : nil)
+    }
+
+    /// This scene's window, from any mounted pane or else the scene itself.
+    private var sceneHostWindow: UIWindow? {
+        if let window = overlayPreservationHostWindow { return window }
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first { $0.session.persistentIdentifier == windowSceneSessionID }
+        return scene?.keyWindow ?? scene?.windows.first
+    }
+
     func horizontalTabHeader(geometry: GeometryProxy, resolvedTheme: ResolvedTabBarTheme) -> some View {
         let cardInset = integratedCardLeadingInset(windowWidth: geometry.size.width)
         let surfaceFill = integratedTabSurfaceFill(theme: resolvedTheme)
@@ -38,7 +107,7 @@ extension MainView {
                     value: terminals.count
                 )
 #if targetEnvironment(macCatalyst)
-                .blockWindowDrag(when: usesTitlebarTabs)
+                .blockWindowDrag(when: usesTitlebarTabs && !showsBottomTabBar)
 #endif
 
             if usesCompactTabSpacing {

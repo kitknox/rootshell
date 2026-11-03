@@ -19,7 +19,7 @@ extension MainView {
             controller: tabExpose,
             configuration: tabExposeConfiguration(),
             appearance: tabExposeAppearance(),
-            integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabHeader ? integratedTabJoin : nil,
+            integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs ? integratedTabJoin : nil,
             width: width
         )
         // Above ordinary siblings in the content ZStack (SwiftUI-drawn fills

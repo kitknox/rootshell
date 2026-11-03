@@ -343,7 +343,7 @@ extension MainView {
     /// "Tabs in Title Bar" preference is off.
     var topTabBarAttachedToWindow: Bool {
         #if targetEnvironment(macCatalyst)
-        return usesTitlebarTabs || hideWindowTitleBar
+        return (usesTitlebarTabs || hideWindowTitleBar) && tabBarPosition == .top
         #else
         return false
         #endif
@@ -361,7 +361,7 @@ extension MainView {
         #if targetEnvironment(macCatalyst)
         let basePadding: CGFloat = 8
         let controlClearance: CGFloat
-        if usesTitlebarTabs && !hideWindowTitleBar {
+        if usesTitlebarTabs && !hideWindowTitleBar && tabBarPosition == .top {
             // The measured value arrives after AppKit creates the buttons.
             // Keep enough launch-time clearance for the larger Catalyst
             // traffic-light geometry seen on current macOS releases.
