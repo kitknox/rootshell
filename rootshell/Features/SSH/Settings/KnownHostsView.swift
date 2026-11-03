@@ -3,11 +3,52 @@ import SwiftUI
 /// View for managing known SSH hosts
 struct KnownHostsView: View {
     @StateObject private var manager = KnownHostsManager.shared
+    @Setting(Settings.HostTrust.verifyHostKeyDNS) private var verifyHostKeyDNS
+    @Setting(Settings.HostTrust.verifyHostKeyDNSResolver) private var dnsResolver
     @State private var showingClearAllAlert = false
     @State private var searchText = ""
 
+    private var dnsFooterText: String {
+        let provider = dnsResolver.displayName
+        return String(localized: "Looks up the host's SSHFP records through \(provider) over HTTPS and shows in the trust prompt whether its key matches. Trust DNSSEC Matches also connects without a prompt when a DNSSEC-signed record matches. When on, \(provider) sees the hostnames you connect to.", comment: "SSHFP host key verification setting footer")
+    }
+
     var body: some View {
         List {
+            if searchText.isEmpty {
+                Section {
+                    Picker(selection: $verifyHostKeyDNS) {
+                        ForEach(HostKeyDNSVerification.allCases, id: \.rawValue) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    } label: {
+                        Text("Verify Host Keys via DNS")
+                            .settingRow(Settings.HostTrust.verifyHostKeyDNS)
+                    }
+                    .pickerStyle(.menu)
+                    .disabled(SettingFileLock.isReadOnly(Settings.HostTrust.verifyHostKeyDNS.name))
+                    .themedRow()
+
+                    if verifyHostKeyDNS != .off {
+                        Picker(selection: $dnsResolver) {
+                            ForEach(SSHFPDoHProvider.allCases, id: \.rawValue) { provider in
+                                Text(provider.displayName).tag(provider)
+                            }
+                        } label: {
+                            Text("DNS Resolver")
+                                .settingRow(Settings.HostTrust.verifyHostKeyDNSResolver)
+                        }
+                        .pickerStyle(.menu)
+                        .disabled(SettingFileLock.isReadOnly(Settings.HostTrust.verifyHostKeyDNSResolver.name))
+                        .themedRow()
+                    }
+                } header: {
+                    SettingGroupHeader("DNS (SSHFP)", group: .hostTrust)
+                } footer: {
+                    Text(dnsFooterText)
+                }
+            }
+
             if filteredHosts.isEmpty {
                 Section {
                     VStack(spacing: 12) {

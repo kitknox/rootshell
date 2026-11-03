@@ -337,11 +337,19 @@ enum SSHConnectionHelper {
         onValidation: ((HostKeyValidationRequest) async -> HostKeyValidationResult)?
     ) -> SSHHostKeyValidator {
         let trustedCAKeys = HostCAManager.shared.trustedCAKeys(forHost: host)
+        let dnsVerification = SettingsStore.shared.value(Settings.HostTrust.verifyHostKeyDNS)
+        let dnsProvider = SettingsStore.shared.value(Settings.HostTrust.verifyHostKeyDNSResolver)
+        // Started now so the SSHFP lookup overlaps TCP connect and key exchange.
+        let sshfpLookup: Task<SSHFPLookupResult?, Never>? = dnsVerification == .off ? nil : Task.detached {
+            await SSHFPResolver.lookup(hostname: host, mode: dnsVerification, provider: dnsProvider)
+        }
         let delegate = CitadelHostKeyValidatorDelegate(
             hostname: host,
             port: port,
             label: label,
             trustedCAKeys: trustedCAKeys,
+            dnsVerification: dnsVerification,
+            sshfpLookup: sshfpLookup,
             onValidation: onValidation
         )
         return .custom(delegate)
