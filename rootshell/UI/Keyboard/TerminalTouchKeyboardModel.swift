@@ -47,6 +47,88 @@ nonisolated enum KeyboardToolbarOverflow {
     }
 }
 
+/// A page contains only complete key cells. The last page keeps the same width
+/// as every other page, so the scroll view can land on an exact page boundary.
+nonisolated struct ToolbarPageLayout {
+    let viewportWidth: CGFloat
+    let capacity: Int
+    let itemCount: Int
+
+    init(viewportWidth: CGFloat, buttonWidth: CGFloat, spacing: CGFloat, itemCount: Int) {
+        self.viewportWidth = max(1, viewportWidth)
+        capacity = max(1, Int((max(1, viewportWidth) + spacing) / max(1, buttonWidth + spacing)))
+        self.itemCount = max(0, itemCount)
+    }
+
+    var cellWidth: CGFloat { viewportWidth / CGFloat(capacity) }
+    var pageCount: Int { max(1, (itemCount + capacity - 1) / capacity) }
+    var contentWidth: CGFloat { CGFloat(pageCount) * viewportWidth }
+
+    func offset(containing item: Int) -> CGFloat {
+        CGFloat(min(pageCount - 1, max(0, item) / capacity)) * viewportWidth
+    }
+
+    /// A wide label occupies whole cells and stays within its page and fold half.
+    func cells(for spans: [Int], splitAt: Int? = nil) -> [Range<Int>] {
+        let boundaries = splitAt.map { [0, $0, capacity] } ?? [0, capacity]
+        let maximumSpan = zip(boundaries, boundaries.dropFirst()).map { $1 - $0 }.max() ?? 1
+        var cursor = 0
+        return spans.map { requested in
+            let span = min(maximumSpan, max(1, requested))
+            while true {
+                let column = cursor % capacity
+                let boundary = boundaries.first { $0 > column } ?? capacity
+                if column + span <= boundary { break }
+                cursor += boundary - column
+            }
+            defer { cursor += span }
+            return cursor..<(cursor + span)
+        }
+    }
+}
+
+/// Fixed pins and scrolling keys use the same compact cells in both keyboards.
+nonisolated struct ToolbarSectionLayout {
+    let scrollFrame: CGRect
+    let sectionFrames: [CGRect]
+    let pageLayout: ToolbarPageLayout
+    let cellWidth: CGFloat
+    let contentWidth: CGFloat
+    let pinCellWidth: CGFloat
+
+    init(area: CGRect, counts: [Int], buttonWidth: CGFloat, spacing: CGFloat = 4,
+         scrollsAll: Bool, paged: Bool, pinCellWidthLimit: CGFloat = .greatestFiniteMagnitude) {
+        let pinCount = counts[0] + counts[2]
+        let pinGaps = CGFloat((counts[0] > 0 ? 1 : 0) + (counts[2] > 0 ? 1 : 0)) * spacing
+        pinCellWidth = min(pinCellWidthLimit, buttonWidth + spacing,
+            max(1, (area.width - pinGaps - (counts[1] > 0 ? buttonWidth + spacing : 0)) / CGFloat(max(1, pinCount))))
+        let leftWidth = CGFloat(counts[0]) * pinCellWidth
+        let rightWidth = CGFloat(counts[2]) * pinCellWidth
+        scrollFrame = scrollsAll ? area : CGRect(
+            x: area.minX + leftWidth + (counts[0] > 0 ? spacing : 0), y: area.minY,
+            width: max(1, area.width - leftWidth - rightWidth - pinGaps), height: area.height)
+        let scrollCount = scrollsAll ? counts.reduce(0, +) : counts[1]
+        pageLayout = ToolbarPageLayout(viewportWidth: scrollFrame.width, buttonWidth: buttonWidth,
+            spacing: spacing, itemCount: scrollCount)
+        cellWidth = paged ? pageLayout.cellWidth : max(buttonWidth + spacing, scrollFrame.width / CGFloat(max(1, scrollCount)))
+        contentWidth = paged ? pageLayout.contentWidth : max(scrollFrame.width, CGFloat(scrollCount) * cellWidth)
+        if scrollsAll {
+            var x: CGFloat = 0
+            let scrollingCellWidth = cellWidth
+            sectionFrames = counts.map { count in
+                defer { x += CGFloat(count) * scrollingCellWidth }
+                return CGRect(x: x, y: 0, width: CGFloat(count) * scrollingCellWidth, height: area.height)
+            }
+        } else {
+            sectionFrames = [
+                CGRect(x: area.minX, y: area.minY, width: leftWidth, height: area.height),
+                CGRect(x: 0, y: 0, width: CGFloat(counts[1]) * cellWidth, height: area.height),
+                CGRect(x: area.maxX - rightWidth, y: area.minY, width: rightWidth, height: area.height),
+            ]
+        }
+    }
+}
+
 /// Platform-independent behavior shared by the touch surface and its tests.
 nonisolated enum TerminalTouchKeyboardModel {
     /// Stable persisted identifiers; rendering implementations live in the style files.
@@ -329,7 +411,9 @@ nonisolated enum TerminalTouchKeyboardModel {
         var toolPage = ToolPage.typing
         var toolbarDrawer = ToolbarDrawerState.closed
         var drawerOffset = CGPoint.zero
+        /// Horizontal offsets are page progress, independent of fold viewport width.
         var toolbarOffsets: [Int: CGPoint] = [:]
+        var mainToolbarOffset = CGPoint.zero
 
         func suspendingInput() -> Self {
             var result = self
@@ -802,7 +886,7 @@ nonisolated enum TerminalTouchKeyboardModel {
         }
         return [first, second, third, [
             Key(title: page == .letters ? "123" : "ABC", action: .page, weight: floating ? 2.5 : 1.25),
-            Key(title: "Apple Keyboard", action: .switchKeyboard, symbol: "keyboard", weight: floating ? 0 : 1.15),
+            Key(title: "Apple Keyboard", action: .switchKeyboard, symbol: "keyboard.badge.ellipsis", weight: floating ? 0 : 1.15),
             Key(title: "space", action: .text(" "), weight: floating ? 5 : 5.8, accessibility: "Space. Hold and drag to move the terminal cursor."),
             Key(title: "return", action: .key("\r"), symbol: "return", weight: floating ? 2.5 : 1.8)
         ]]
