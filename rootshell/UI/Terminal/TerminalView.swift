@@ -2202,7 +2202,10 @@ extension Ghostty {
                 && !rightBinding.isAppTabNavigation
             appTabSwipePanGesture?.isEnabled = scrollMode
                 && (leftBinding.isAppTabNavigation || rightBinding.isAppTabNavigation)
-            captureScrollPanGesture?.isEnabled = scrollMode && (captured || usesHerdrFallbackScrolling)
+            // Not gated on capture: the cached state can lag the C side, and a
+            // recognizer enabled once it catches up misses the touch in progress.
+            // gestureRecognizerShouldBegin checks the live state instead.
+            captureScrollPanGesture?.isEnabled = scrollMode
             captureLongPressGesture?.isEnabled = scrollMode && captured
             pinchZoomGesture?.isEnabled = scrollMode
             let twoFingerLongPressDuration = TwoFingerLongPressSetting.storedDuration()

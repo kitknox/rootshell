@@ -3306,6 +3306,11 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
             if horizontalIntent {
                 return false
             }
+            // Gate on the live C-side capture state, as catalystScrollGesture does:
+            // the @Published cache lags when an app asks for the mouse after the
+            // alt-screen scrollbar update that resyncs it. Syncing it here also
+            // re-syncs its observers.
+            updateMouseCaptureState()
             return (isMouseCaptured || usesHerdrFallbackScrolling) && isTouchScrollMode
         }
         // Two-finger long press for new connection works in scroll mode even during capture

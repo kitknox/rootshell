@@ -872,7 +872,6 @@ extension Ghostty.TerminalView {
                 self.trackpadScrollGesture?.isEnabled = forwardsScroll
                 self.twoFingerScrollGesture?.isEnabled = forwardsScroll
 
-                self.captureScrollPanGesture?.isEnabled = forwardsScroll && scrollMode
                 self.captureLongPressGesture?.isEnabled = isCaptured && scrollMode
 
                 // Update selection long press - disable during capture even in scroll mode
