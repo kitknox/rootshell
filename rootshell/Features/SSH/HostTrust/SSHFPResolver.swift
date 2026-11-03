@@ -10,12 +10,15 @@
 import Foundation
 import dnssd
 
-/// Validating DoH resolver for SSHFP lookups.
-nonisolated enum SSHFPDoHProvider: Sendable {
+/// Validating DoH resolvers for SSHFP lookups; each sets AD and SERVFAILs bogus zones.
+nonisolated enum SSHFPDoHProvider: String, CaseIterable, Sendable {
     case cloudflare
-    case secureDNS360
+    case quad9
+    case google
+    case mullvad
+    case secureDNS360 = "360"
 
-    static var forBuild: SSHFPDoHProvider {
+    static var buildDefault: SSHFPDoHProvider {
         #if CHINA_BUILD
         .secureDNS360
         #else
@@ -26,6 +29,9 @@ nonisolated enum SSHFPDoHProvider: Sendable {
     var endpoint: URL {
         switch self {
         case .cloudflare: URL(string: "https://cloudflare-dns.com/dns-query")!
+        case .quad9: URL(string: "https://dns.quad9.net/dns-query")!
+        case .google: URL(string: "https://dns.google/dns-query")!
+        case .mullvad: URL(string: "https://dns.mullvad.net/dns-query")!
         case .secureDNS360: URL(string: "https://doh.360.cn/dns-query")!
         }
     }
@@ -33,6 +39,9 @@ nonisolated enum SSHFPDoHProvider: Sendable {
     var displayName: String {
         switch self {
         case .cloudflare: "Cloudflare"
+        case .quad9: "Quad9"
+        case .google: "Google"
+        case .mullvad: "Mullvad"
         case .secureDNS360: String(localized: "360 Secure DNS", comment: "DNS-over-HTTPS provider name")
         }
     }
@@ -51,11 +60,13 @@ nonisolated enum SSHFPResolver {
     }()
 
     /// Nil when the mode is off, the name is skipped, or every lookup failed.
-    static func lookup(hostname: String, mode: HostKeyDNSVerification) async -> SSHFPLookupResult? {
+    static func lookup(
+        hostname: String, mode: HostKeyDNSVerification, provider: SSHFPDoHProvider
+    ) async -> SSHFPLookupResult? {
         guard mode != .off, SSHFPRecord.shouldLookUp(hostname: hostname) else { return nil }
 
         return await withTaskGroup(of: (fromDoH: Bool, result: SSHFPLookupResult?).self) { group in
-            group.addTask { (true, await dohLookup(hostname, provider: .forBuild)) }
+            group.addTask { (true, await dohLookup(hostname, provider: provider)) }
             group.addTask { (false, await systemLookup(hostname)) }
             var dohResult: SSHFPLookupResult?
             var systemResult: SSHFPLookupResult?

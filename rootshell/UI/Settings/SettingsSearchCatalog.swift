@@ -896,7 +896,8 @@ struct SettingsSearchEntry: Identifiable, Hashable {
 
             // MARK: Known Hosts
             row("verify-host-keys-dns", String(localized: "Verify Host Keys via DNS"), in: .knownHosts,
-                keywords: ["sshfp", "dnssec", "dns", "doh", "host key", "fingerprint", "verifyhostkeydns"]),
+                keywords: ["sshfp", "dnssec", "dns", "doh", "host key", "fingerprint", "verifyhostkeydns",
+                           "resolver", "cloudflare", "quad9", "google", "mullvad", "360"]),
 
             // MARK: SSH Transport
             row("force-ipv4", String(localized: "Force IPv4"), in: .sshTransport, icon: "network",

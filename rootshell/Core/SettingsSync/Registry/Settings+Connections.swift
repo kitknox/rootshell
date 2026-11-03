@@ -24,6 +24,7 @@ extension ScreenSharingCursorRenderingDefault: SettingValue {}
 extension ScreenSharingCursorSizeDefault: SettingValue {}
 extension PasteInsertFormat: SettingValue {}
 extension HostKeyDNSVerification: SettingValue {}
+extension SSHFPDoHProvider: SettingValue {}
 
 /// SSHFP host-key checking, mirroring OpenSSH `VerifyHostKeyDNS` no/ask/yes.
 nonisolated enum HostKeyDNSVerification: String, CaseIterable, Sendable {
@@ -255,8 +256,14 @@ nonisolated extension Settings {
             "sshVerifyHostKeyDNS", default: HostKeyDNSVerification.off, group: .hostTrust,
             configKey: "ssh-verify-host-key-dns",
             title: String(localized: "Verify Host Keys via DNS", comment: "Setting title"))
+        static let verifyHostKeyDNSResolver = SettingKey(
+            "sshVerifyHostKeyDNSResolver", default: SSHFPDoHProvider.buildDefault, group: .hostTrust,
+            configKey: "ssh-verify-host-key-dns-resolver",
+            title: String(localized: "DNS Resolver", comment: "Setting title"))
 
-        static let all: [AnySettingDefinition] = [trustedVNCCertificateFingerprints, verifyHostKeyDNS.erased]
+        static let all: [AnySettingDefinition] = [
+            trustedVNCCertificateFingerprints, verifyHostKeyDNS.erased, verifyHostKeyDNSResolver.erased,
+        ]
     }
 
     enum Roam {
