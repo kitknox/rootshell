@@ -251,8 +251,10 @@ extension Ghostty.TerminalView {
         noteAlwaysOnDisplayInteraction()
 
         if shouldYieldHardwareInputToEmojiUI {
-            resetKeyboardInteractionState(sendSyntheticKeyReleases: true)
-            super.pressesBegan(presses, with: event)
+            // Presses still held from before the yield keep their owner.
+            resetKeyboardInteractionState(sendSyntheticKeyReleases: true, resetPressRouting: false)
+            let forwarded = inputController.forwardingHardwarePresses(presses, proposed: presses)
+            if !forwarded.isEmpty { super.pressesBegan(forwarded, with: event) }
             return
         }
 
@@ -266,7 +268,8 @@ extension Ghostty.TerminalView {
             modTapInterceptor.noteChordUse()
             yieldInputLanguageOverrideForSystemCycle()
             keyboardAccessoryController?.clearOneShotModifiers()
-            super.pressesBegan(presses, with: event)
+            let forwarded = inputController.forwardingHardwarePresses(presses, proposed: presses)
+            if !forwarded.isEmpty { super.pressesBegan(forwarded, with: event) }
             return
         }
         #endif
@@ -308,6 +311,7 @@ extension Ghostty.TerminalView {
         }
 
         if handled { keyboardAccessoryController?.clearOneShotModifiers() }
+        forwardedPresses = inputController.forwardingHardwarePresses(presses, proposed: forwardedPresses)
         if !forwardedPresses.isEmpty {
             super.pressesBegan(forwardedPresses, with: event)
         }
@@ -969,9 +973,10 @@ extension Ghostty.TerminalView {
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        let forwardedPresses = inputController.finishingHardwarePresses(presses)
         if shouldYieldHardwareInputToEmojiUI {
-            resetKeyboardInteractionState(sendSyntheticKeyReleases: true)
-            super.pressesEnded(presses, with: event)
+            resetKeyboardInteractionState(sendSyntheticKeyReleases: true, resetPressRouting: false)
+            if !forwardedPresses.isEmpty { super.pressesEnded(forwardedPresses, with: event) }
             return
         }
         // A non-source release may belong to a key pressed before mod-tap.
@@ -1025,13 +1030,20 @@ extension Ghostty.TerminalView {
         }
         heldHardwareModifiers = hwMods
 
-        // Ensure the responder chain processes key release events properly
-        super.pressesEnded(presses, with: event)
+        // UIKit must not receive a release for a printable press we consumed.
+        // Physical modifiers and unknown UIKeyCommand releases still pass through.
+        if !forwardedPresses.isEmpty {
+            super.pressesEnded(forwardedPresses, with: event)
+        }
     }
 
     override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        resetKeyboardInteractionState(sendSyntheticKeyReleases: true)
-        super.pressesCancelled(presses, with: event)
+        let forwardedPresses = inputController.finishingHardwarePresses(presses)
+        // A partial cancellation must not forget who owns the remaining presses.
+        resetKeyboardInteractionState(sendSyntheticKeyReleases: true, resetPressRouting: false)
+        if !forwardedPresses.isEmpty {
+            super.pressesCancelled(forwardedPresses, with: event)
+        }
     }
 }
 
@@ -1043,9 +1055,10 @@ extension Ghostty.TerminalView {
     /// miss release events when the app/window deactivates or cancels a key
     /// sequence, so we clear our local state and optionally synthesize key
     /// releases to Ghostty for any special keys it still considers pressed.
-    func resetKeyboardInteractionState(sendSyntheticKeyReleases: Bool) {
+    func resetKeyboardInteractionState(sendSyntheticKeyReleases: Bool, resetPressRouting: Bool = true) {
         didHandleOptionKey = false
         keyRepeatManager.stop()
+        if resetPressRouting { inputController.resetHardwarePressRouting() }
         modTapInterceptor.reset()
         keysConsumedByOverlayAction.removeAll()
         virtualModTapModifier = nil
