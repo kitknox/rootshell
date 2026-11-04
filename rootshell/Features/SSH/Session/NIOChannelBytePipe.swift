@@ -22,48 +22,35 @@ nonisolated enum NIOChannelBytePipeError: Error {
     case unexpectedEndOfStream
 }
 
-/// AsyncBytePipe wrapping a NIO Channel. Inbound bytes are buffered in
-/// an actor-protected queue with a single waiter slot (consumers read
-/// sequentially, so multi-waiter support would be wasted complexity).
+/// AsyncBytePipe wrapping a NIO Channel. Inbound bytes are queued
+/// synchronously on the event loop so reads see them in wire order (#710).
+/// The channel reads only when a reader waits on an empty queue, so a paused
+/// consumer backpressures the peer (VNC's DCT encoder relies on this).
 /// Writes go straight through `channel.writeAndFlush`.
-actor NIOChannelBytePipe: AsyncBytePipe {
+nonisolated final class NIOChannelBytePipe: AsyncBytePipe, @unchecked Sendable {
 
-    private nonisolated static let logger = Logger(
+    private static let logger = Logger(
         subsystem: "com.kk2.rootshell",
         category: "NIOChannelBytePipe"
     )
 
-    private nonisolated let channel: Channel
-
-    /// Inbound queue. NIO's channelRead handler calls ``enqueue`` from
-    /// the event loop; the consumer calls ``read`` from its own actor.
-    /// Pending bytes accumulate here until a reader claims them.
-    private var inboundBuffer: [Data] = []
-
-    /// Single-waiter slot. Consumers only ever have one read
-    /// outstanding, so we don't need a deque of continuations — a
-    /// fatal trap if two concurrent reads landed would catch any
-    /// refactor that broke that invariant.
-    private var pendingReader: CheckedContinuation<Data?, Never>?
-
-    /// Set true when the peer closed the channel. Once true, all
-    /// further reads return nil (clean EOF) immediately.
-    private var closed: Bool = false
-
-    /// Holdover for partial reads — `AsyncBytePipe.read(maxBytes:)`
-    /// can return less than a full inbound chunk if the caller asked
-    /// for less. The remainder of the chunk stays here.
-    private var pendingTail: Data = Data()
+    private let channel: Channel
+    private let state = OSAllocatedUnfairLock(initialState: PipeState())
 
     /// Install the pipe + its supporting handlers on the given channel.
     /// Must be called on the channel's event loop. `extraHandlers` are
     /// added (in order) ahead of the pipe's own inbound handler — the
     /// hook for channel-type-specific unwrapping. Citadel DirectTCPIP
     /// channels already carry ByteBuffers and need no extra handler here.
-    nonisolated static func install(
+    static func install(
         on channel: Channel,
         extraHandlers: [ChannelHandler] = []
     ) throws -> NIOChannelBytePipe {
+        if let options = channel.syncOptions {
+            try options.setOption(ChannelOptions.autoRead, value: false)
+        } else {
+            _ = channel.setOption(ChannelOptions.autoRead, value: false)
+        }
         let pipe = NIOChannelBytePipe(channel: channel)
         let handler = InboundHandler(pipe: pipe)
         for extra in extraHandlers {
@@ -73,41 +60,49 @@ actor NIOChannelBytePipe: AsyncBytePipe {
         return pipe
     }
 
-    // An actor's synchronous initializer is inherently nonisolated (callable
-    // from `install` on the event loop); the `nonisolated` keyword is invalid
-    // here, so it must be omitted.
     private init(channel: Channel) {
         self.channel = channel
     }
 
     // MARK: - AsyncBytePipe
 
+    /// Returns queued bytes first, then nil (clean EOF) once closed.
     func read(maxBytes: Int) async throws -> Data? {
-        if !pendingTail.isEmpty {
-            return takeTail(maxBytes: maxBytes)
+        // Queued bytes need no suspension; parsers issue many small reads.
+        if let chunk = state.withLock({ $0.take(maxBytes: maxBytes) }) {
+            return chunk
         }
-        if let next = inboundBuffer.first {
-            inboundBuffer.removeFirst()
-            return clamp(next, to: maxBytes)
+        return await withCheckedContinuation { continuation in
+            let outcome: ReadOutcome = state.withLock { state in
+                if let chunk = state.take(maxBytes: maxBytes) {
+                    return .ready(chunk)
+                }
+                if state.closed {
+                    return .ready(nil)
+                }
+                precondition(state.reader == nil, "NIOChannelBytePipe supports a single reader")
+                state.reader = (continuation, maxBytes)
+                return .parked
+            }
+            switch outcome {
+            case .ready(let data):
+                continuation.resume(returning: data)
+            case .parked:
+                channel.read()
+            }
         }
-        if closed {
-            return nil
-        }
-        // Wait for the next inbound chunk (or close).
-        let data: Data? = await withCheckedContinuation { continuation in
-            pendingReader = continuation
-        }
-        if let data = data {
-            return clamp(data, to: maxBytes)
-        }
-        return nil
     }
 
     /// Accumulate exactly `count` bytes on top of the chunked ``read``
     /// primitive. Throws ``NIOChannelBytePipeError/unexpectedEndOfStream``
     /// if the peer closes mid-message.
     func readExactly(_ count: Int) async throws -> Data {
-        var out = Data()
+        guard count > 0 else { return Data() }
+        guard let first = try await read(maxBytes: count), !first.isEmpty else {
+            throw NIOChannelBytePipeError.unexpectedEndOfStream
+        }
+        if first.count == count { return first }
+        var out = first
         out.reserveCapacity(count)
         while out.count < count {
             guard let chunk = try await read(maxBytes: count - out.count), !chunk.isEmpty else {
@@ -118,63 +113,73 @@ actor NIOChannelBytePipe: AsyncBytePipe {
         return out
     }
 
-    nonisolated func write(_ data: Data) async throws {
+    func write(_ data: Data) async throws {
         var buffer = channel.allocator.buffer(capacity: data.count)
         buffer.writeBytes(data)
         try await channel.writeAndFlush(buffer).get()
     }
 
-    nonisolated func close() async {
+    func close() async {
         try? await channel.close()
     }
 
     // MARK: - Internal hooks for InboundHandler
 
-    /// Called from the NIO event loop when bytes arrive. Either hands
-    /// the buffer to a parked reader or queues it for the next read.
+    /// Called on the event loop. Hands bytes to a parked reader or queues them.
     fileprivate func enqueue(_ data: Data) {
-        if let reader = pendingReader {
-            pendingReader = nil
-            reader.resume(returning: data)
-            return
+        let handoff: (CheckedContinuation<Data?, Never>, Data)? = state.withLock { state in
+            state.chunks.append(data)
+            guard let reader = state.reader,
+                  let chunk = state.take(maxBytes: reader.maxBytes) else { return nil }
+            state.reader = nil
+            return (reader.continuation, chunk)
         }
-        inboundBuffer.append(data)
+        if let (continuation, chunk) = handoff {
+            continuation.resume(returning: chunk)
+        }
+    }
+
+    fileprivate var hasParkedReader: Bool {
+        state.withLock { $0.reader != nil }
     }
 
     fileprivate func finish() {
-        closed = true
-        if let reader = pendingReader {
-            pendingReader = nil
-            reader.resume(returning: nil)
+        let reader: CheckedContinuation<Data?, Never>? = state.withLock { state in
+            state.closed = true
+            defer { state.reader = nil }
+            return state.reader?.continuation
         }
-    }
-
-    // MARK: - Helpers
-
-    private func clamp(_ data: Data, to maxBytes: Int) -> Data {
-        if data.count <= maxBytes {
-            return data
-        }
-        pendingTail = data.subdata(in: maxBytes..<data.count)
-        return data.prefix(maxBytes)
-    }
-
-    private func takeTail(maxBytes: Int) -> Data {
-        if pendingTail.count <= maxBytes {
-            let out = pendingTail
-            pendingTail = Data()
-            return out
-        }
-        let prefix = pendingTail.prefix(maxBytes)
-        pendingTail = pendingTail.dropFirst(maxBytes)
-        return Data(prefix)
+        reader?.resume(returning: nil)
     }
 }
 
-/// Inbound-only NIO handler that pushes received `ByteBuffer`s into
-/// the parent pipe's actor-isolated queue. Hop to the actor via a
-/// detached Task because NIO handler callbacks run on the event loop,
-/// not the actor's executor.
+private nonisolated enum ReadOutcome: Sendable {
+    case ready(Data?)
+    case parked
+}
+
+/// Lock-protected inbound state. A reader only parks while `chunks` is empty.
+private nonisolated struct PipeState: Sendable {
+    var chunks = CircularBuffer<Data>()
+    var closed = false
+    var reader: (continuation: CheckedContinuation<Data?, Never>, maxBytes: Int)?
+
+    /// Pops or splits the front chunk. The unread rest stays an O(1) slice;
+    /// only the returned bytes are copied, so results are zero-based.
+    mutating func take(maxBytes: Int) -> Data? {
+        guard let front = chunks.first else { return nil }
+        if front.count <= maxBytes {
+            chunks.removeFirst()
+            return front.startIndex == 0 ? front : front.subdata(in: front.startIndex..<front.endIndex)
+        }
+        let split = front.startIndex + maxBytes
+        chunks[chunks.startIndex] = front[split...]
+        return front.subdata(in: front.startIndex..<split)
+    }
+}
+
+/// Inbound-only NIO handler that feeds received `ByteBuffer`s into the
+/// parent pipe synchronously, preserving channelRead order.
 private nonisolated final class InboundHandler: ChannelInboundHandler, @unchecked Sendable {
     typealias InboundIn = ByteBuffer
 
@@ -187,19 +192,25 @@ private nonisolated final class InboundHandler: ChannelInboundHandler, @unchecke
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         var buffer = self.unwrapInboundIn(data)
         guard let bytes = buffer.readData(length: buffer.readableBytes), !bytes.isEmpty else { return }
-        let pipe = self.pipe
-        Task { await pipe.enqueue(bytes) }
+        pipe.enqueue(bytes)
+    }
+
+    func channelReadComplete(context: ChannelHandlerContext) {
+        // A batch can satisfy the read without reaching the reader (empty
+        // channel data, filtered messages); with autoRead off, re-arm demand.
+        if pipe.hasParkedReader {
+            context.read()
+        }
+        context.fireChannelReadComplete()
     }
 
     func channelInactive(context: ChannelHandlerContext) {
-        let pipe = self.pipe
-        Task { await pipe.finish() }
+        pipe.finish()
         context.fireChannelInactive()
     }
 
     func errorCaught(context: ChannelHandlerContext, error: Error) {
-        let pipe = self.pipe
-        Task { await pipe.finish() }
+        pipe.finish()
         context.close(promise: nil)
     }
 }

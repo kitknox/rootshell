@@ -424,11 +424,13 @@ enum SSHConnectionHelper {
     ///   - onKeyboardInteractiveChallenge: Callback for keyboard-interactive (RFC 4256)
     ///     prompts (2FA/OTP/PAM). Pass nil for non-interactive callers — keyboard-interactive
     ///     auth will then fail rather than prompt.
+    ///   - channelWindowSize: Receive window for the target's channels; nil keeps the default.
     /// - Returns: A tuple of (target SSH client, optional jump client for cleanup)
     static func connect(
         config: SSHConfig,
         onHostKeyValidation: ((HostKeyValidationRequest) async -> HostKeyValidationResult)?,
-        onKeyboardInteractiveChallenge: ((KeyboardInteractiveChallenge) async -> [String]?)? = nil
+        onKeyboardInteractiveChallenge: ((KeyboardInteractiveChallenge) async -> [String]?)? = nil,
+        channelWindowSize: Int? = nil
     ) async throws -> (client: SSHClient, jumpClient: SSHClient?) {
         logger.info("Connecting to \(config.host):\(config.port)")
 
@@ -540,6 +542,9 @@ enum SSHConnectionHelper {
             targetSettings.algorithms = .all
             targetSettings.loginTimeout = SSHTimeoutConfig.citadelLoginTimeout
             targetSettings.protocolOptions = hostCertificateProtocolOptions(forHost: config.host)
+            if let channelWindowSize {
+                targetSettings.protocolOptions.insert(.initialChannelWindowSize(channelWindowSize))
+            }
 
             // jump(to:) awaits a DirectTCPIP child channel's handshake — same
             // cancellation gap. Closing the jump client cascades to the child.
@@ -630,6 +635,9 @@ enum SSHConnectionHelper {
             settings.algorithms = .all
             settings.loginTimeout = SSHTimeoutConfig.citadelLoginTimeout
             settings.protocolOptions = hostCertificateProtocolOptions(forHost: config.host)
+            if let channelWindowSize {
+                settings.protocolOptions.insert(.initialChannelWindowSize(channelWindowSize))
+            }
             let directChannelBox = CancellationChannelBox(directChannel)
             let client: SSHClient
             do {
