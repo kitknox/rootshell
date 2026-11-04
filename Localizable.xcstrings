@@ -52969,7 +52969,7 @@
       }
     },
     "Add" : {
-      "comment" : "Add button\nExternal SSH agents add discovered agent button\nLocal SSH agent audit action",
+      "comment" : "Add button",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -75516,7 +75516,7 @@
       }
     },
     "Always" : {
-      "comment" : "Cert validity: no start bound\nHole-punch mode: always perform\nLocation Diary authorization status\nPrediction mode: always show predictions\nShader animation: always\nTab hover preview activation",
+      "comment" : "Always On Display duration: never auto-lock\nCert validity: no start bound\nHole-punch mode: always perform\nLocation Diary authorization status\nPrediction mode: always show predictions\nShader animation: always\nTab hover preview activation",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -77830,6 +77830,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "放在 iCloud Drive 或 dotfile 儲存庫中的外部檔案，可讓您用任何編輯器編輯；請注意，共用的檔案會在所有使用它的裝置上釘選其中的鍵。"
+          }
+        }
+      }
+    },
+    "An optional terminal keyboard with layouts for English and most European languages, and long-press accents that match Apple's keyboards. Long-press the keyboard switch key to change the layout, style, or placement. Switch to Apple's keyboard for other languages, swipe typing, emoji, or dictation." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لوحة مفاتيح اختيارية للطرفية بتخطيطات للإنجليزية ومعظم اللغات الأوروبية، مع أحرف ذات علامات بالضغط المطول تطابق لوحات مفاتيح Apple. اضغط مطولًا على مفتاح تبديل لوحة المفاتيح لتغيير التخطيط أو النمط أو الموضع. بدّل إلى لوحة مفاتيح Apple للغات الأخرى أو الكتابة بالتمرير أو الرموز التعبيرية أو الإملاء."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un teclat de terminal opcional amb disposicions per a l'anglès i la majoria d'idiomes europeus, i accents en mantenir premudes les tecles, com als teclats d'Apple. Mantén premuda la tecla de canvi de teclat per canviar la disposició, l'estil o la ubicació. Canvia al teclat d'Apple per a altres idiomes, escriptura lliscant, emojis o dictat."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volitelná klávesnice terminálu s rozvrženími pro angličtinu a většinu evropských jazyků a s diakritikou dostupnou podržením klávesy stejně jako na klávesnicích Apple. Podržením klávesy pro přepnutí klávesnice změníte rozvržení, styl nebo umístění. Pro jiné jazyky, psaní tahem, emoji nebo diktování přepněte na klávesnici Apple."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Et valgfrit terminaltastatur med layouts til engelsk og de fleste europæiske sprog og accenter ved langt tryk, der svarer til Apples tastaturer. Hold tasten til skift af tastatur nede for at ændre layout, stil eller placering. Skift til Apples tastatur for at bruge andre sprog, glidende indtastning, emoji eller diktering."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine optionale Terminal-Tastatur mit Layouts für Englisch und die meisten europäischen Sprachen sowie Akzenten per langem Drücken wie auf Apples Tastaturen. Halten Sie die Taste zum Wechseln der Tastatur gedrückt, um Layout, Stil oder Platzierung zu ändern. Für andere Sprachen, das Streichen zum Schreiben, Emojis oder das Diktat wechseln Sie zu Apples Tastatur."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un teclado de terminal opcional con disposiciones para el inglés y la mayoría de los idiomas europeos, y acentos con pulsación prolongada iguales a los de los teclados de Apple. Mantén pulsada la tecla de cambio de teclado para cambiar la disposición, el estilo o la posición. Cambia al teclado de Apple para usar otros idiomas, la escritura deslizando el dedo, los emoji o el dictado."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valinnainen terminaalinäppäimistö, jossa on asettelut englannille ja useimmille Euroopan kielille sekä Applen näppäimistöjä vastaavat aksenttimerkit pitkällä painalluksella. Vaihda asettelua, tyyliä tai sijaintia painamalla pitkään näppäimistön vaihtonäppäintä. Vaihda Applen näppäimistöön, kun tarvitset muita kieliä, pyyhkäisykirjoitusta, emojeita tai sanelua."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un clavier de terminal facultatif avec des dispositions pour l'anglais et la plupart des langues européennes, et des accents par appui long identiques à ceux des claviers d'Apple. Maintenez la touche de changement de clavier enfoncée pour changer la disposition, le style ou la position. Passez au clavier d'Apple pour les autres langues, la saisie gestuelle, les emoji ou la dictée."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "מקלדת מסוף אופציונלית עם פריסות לאנגלית ולרוב השפות האירופיות, ותווים עם סימנים דיאקריטיים בלחיצה ארוכה כמו במקלדות של Apple. לחץ לחיצה ארוכה על מקש החלפת המקלדת כדי לשנות את הפריסה, הסגנון או המיקום. עבור למקלדת של Apple לשפות אחרות, הקלדה בהחלקה, אמוג'י או הכתבה."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Választható terminálbillentyűzet angol és a legtöbb európai nyelv kiosztásaival, valamint az Apple billentyűzeteivel egyező, hosszú nyomással elérhető ékezetes betűkkel. Az elrendezés, a stílus vagy az elhelyezés módosításához tartsa nyomva a billentyűzetváltó billentyűt. Más nyelvekhez, csúsztatásos gépeléshez, emojikhoz vagy diktáláshoz váltson az Apple billentyűzetére."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una tastiera del terminale opzionale con layout per l'inglese e la maggior parte delle lingue europee, e accenti con pressione prolungata come sulle tastiere Apple. Tieni premuto il tasto di cambio tastiera per cambiare layout, stile o posizione. Passa alla tastiera Apple per le altre lingue, la scrittura con scorrimento, le emoji o la dettatura."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "英語とほとんどのヨーロッパ言語のレイアウトを備え、Appleのキーボードと同じく長押しでアクセント付き文字を入力できる、オプションのターミナルキーボードです。キーボード切り替えキーを長押しすると、レイアウト、スタイル、配置を変更できます。他の言語、なぞり入力、絵文字、音声入力を使うには、Appleのキーボードに切り替えてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "영어 및 대부분의 유럽 언어 레이아웃을 제공하며, Apple 키보드와 동일하게 길게 눌러 악센트 문자를 입력할 수 있는 선택적 터미널 키보드입니다. 키보드 전환 키를 길게 눌러 레이아웃, 스타일 또는 배치를 변경할 수 있습니다. 다른 언어, 슬라이드 입력, 이모티콘, 받아쓰기를 사용하려면 Apple 키보드로 전환하십시오."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Et valgfritt terminaltastatur med oppsett for engelsk og de fleste europeiske språk, og aksenter ved langt trykk som samsvarer med Apples tastaturer. Hold inne tastaturbytte-tasten for å endre oppsett, stil eller plassering. Bytt til Apples tastatur for andre språk, sveipeskriving, emoji eller diktering."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Een optioneel terminaltoetsenbord met lay-outs voor het Engels en de meeste Europese talen, en accenten via lang indrukken die overeenkomen met de Apple-toetsenborden. Houd de toetsenbordwisseltoets ingedrukt om de lay-out, stijl of plaatsing te wijzigen. Schakel over naar het Apple-toetsenbord voor andere talen, schuiven om te typen, emoji of dicteren."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opcjonalna klawiatura terminala z układami dla angielskiego i większości języków europejskich oraz znakami diakrytycznymi po przytrzymaniu, zgodnymi z klawiaturami Apple. Przytrzymaj klawisz przełączania klawiatury, aby zmienić układ, styl lub położenie. Przełącz się na klawiaturę Apple, aby korzystać z innych języków, pisania gestem, emoji lub dyktowania."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Um teclado de terminal opcional, com layouts para inglês e a maioria dos idiomas europeus e acentos ao manter pressionado, como nos teclados da Apple. Mantenha pressionada a tecla de troca de teclado para alterar o layout, o estilo ou a posição. Mude para o teclado da Apple para usar outros idiomas, digitação por deslize, emoji ou ditado."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Um teclado de terminal opcional, com disposições para inglês e a maioria dos idiomas europeus e acentos ao manter premido, como nos teclados da Apple. Mantenha premida a tecla de mudança de teclado para alterar a disposição, o estilo ou a posição. Mude para o teclado da Apple para usar outros idiomas, a escrita por deslize, emojis ou ditado."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O tastatură de terminal opțională, cu aspecte pentru engleză și majoritatea limbilor europene și cu accente prin apăsare lungă, la fel ca pe tastaturile Apple. Ține apăsată tasta de comutare a tastaturii pentru a schimba aspectul, stilul sau plasarea. Comută la tastatura Apple pentru alte limbi, tastare prin glisare, emoji sau dictare."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Izbirna tipkovnica terminala s postavitvami za angleščino in večino evropskih jezikov ter s črkami z naglasi ob pridržanju tipke, enako kot na Applovih tipkovnicah. Pridržite tipko za preklop tipkovnice, da spremenite postavitev, slog ali položaj. Za druge jezike, pisanje s potegom, emodžije ali narekovanje preklopite na Applovo tipkovnico."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ett valfritt terminaltangentbord med layouter för engelska och de flesta europeiska språk, och accenter vid långt tryck som matchar Apples tangentbord. Håll ned tangentbordsbytartangenten för att ändra layout, stil eller placering. Byt till Apples tangentbord för andra språk, svepskrivning, emoji eller diktering."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Додаткова клавіатура термінала з розкладками для англійської та більшості європейських мов і символами з діакритикою за довгим натисканням, як на клавіатурах Apple. Утримуйте клавішу перемикання клавіатури, щоб змінити макет, стиль або розташування. Перемкніться на клавіатуру Apple, щоб користуватися іншими мовами, введенням проведенням, емодзі чи диктуванням."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bàn phím terminal tùy chọn với bố cục cho tiếng Anh và hầu hết các ngôn ngữ châu Âu, cùng các ký tự có dấu khi nhấn giữ giống như bàn phím của Apple. Nhấn giữ phím chuyển bàn phím để thay đổi bố cục, kiểu hoặc vị trí. Hãy chuyển sang bàn phím của Apple để dùng ngôn ngữ khác, gõ vuốt, emoji hoặc đọc chính tả."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选的终端键盘，提供英语及大多数欧洲语言的布局，长按可输入与 Apple 键盘一致的重音字母。长按键盘切换键可更改布局、样式或位置。如需输入其他语言、滑行输入、表情符号或听写，请切换到 Apple 键盘。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選用的終端機鍵盤，提供英文與大多數歐洲語言的版面配置，並可像 Apple 鍵盤一樣長按輸入重音字母。長按鍵盤切換鍵即可更改版面配置、樣式或位置。若需其他語言、滑動輸入、表情符號或聽寫，請切換至 Apple 鍵盤。"
           }
         }
       }
@@ -93888,6 +94042,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在向代理請求身分…"
+          }
+        }
+      }
+    },
+    "Assign different actions to swipes starting in the top and bottom halves of the terminal. Turning this off restores the shared swipe actions. Trackpad swipes always use the shared actions." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "عيّن إجراءات مختلفة للتمريرات التي تبدأ في النصفين العلوي والسفلي من الطرفية. ويؤدي إيقاف هذا الخيار إلى استعادة إجراءات التمرير المشتركة. وتستخدم تمريرات Trackpad الإجراءات المشتركة دائمًا."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Assigna accions diferents als lliscaments que comencen a la meitat superior i a la meitat inferior del terminal. Si ho desactives, es restauren les accions de lliscament compartides. Els lliscaments al trackpad sempre fan servir les accions compartides."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přiřaďte různé akce přejetím, která začínají v horní a dolní polovině terminálu. Vypnutím se obnoví společné akce přejetí. Přejetí po trackpadu vždy používají společné akce."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tildel forskellige handlinger til stryg, der starter i den øverste og nederste halvdel af terminalen. Hvis du slår dette fra, gendannes de fælles strygehandlinger. Stryg på trackpadden bruger altid de fælles handlinger."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weisen Sie Wischgesten, die in der oberen und unteren Hälfte des Terminals beginnen, unterschiedliche Aktionen zu. Wenn Sie diese Option deaktivieren, gelten wieder die gemeinsamen Wischaktionen. Wischgesten auf dem Trackpad verwenden immer die gemeinsamen Aktionen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Asigna acciones distintas a los deslizamientos que empiezan en la mitad superior y en la mitad inferior del terminal. Si lo desactivas, se restauran las acciones de deslizamiento compartidas. Los deslizamientos en el trackpad siempre usan las acciones compartidas."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Määritä eri toiminnot pyyhkäisyille, jotka alkavat terminaalin ylä- tai alapuoliskosta. Kun laitat tämän pois päältä, yhteiset pyyhkäisytoiminnot palautuvat käyttöön. Trackpadin pyyhkäisyt käyttävät aina yhteisiä toimintoja."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Attribuez des actions différentes aux balayages qui commencent dans la moitié supérieure et dans la moitié inférieure du terminal. Si cette option est désactivée, les actions de balayage communes sont rétablies. Les balayages sur le trackpad utilisent toujours les actions communes."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הקצה פעולות שונות להחלקות שמתחילות בחצי העליון ובחצי התחתון של המסוף. כיבוי האפשרות משחזר את פעולות ההחלקה המשותפות. החלקות במשטח המגע משתמשות תמיד בפעולות המשותפות."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rendeljen eltérő műveleteket a terminál felső és alsó feléből induló húzásokhoz. Kikapcsolásával visszaállnak a közös húzási műveletek. A trackpad-húzások mindig a közös műveleteket használják."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Assegna azioni diverse agli scorrimenti che iniziano nella metà superiore e in quella inferiore del terminale. Se disattivi questa opzione, vengono ripristinate le azioni di scorrimento condivise. Gli scorrimenti sul trackpad usano sempre le azioni condivise."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ターミナルの上半分と下半分から始まるスワイプに、それぞれ異なる動作を割り当てます。オフにすると、共通のスワイプ動作に戻ります。トラックパッドのスワイプには常に共通の動作が使用されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "터미널의 상단 절반과 하단 절반에서 시작하는 스와이프에 각각 다른 동작을 지정합니다. 이 설정을 끄면 공통 스와이프 동작으로 복원됩니다. 트랙패드 스와이프는 항상 공통 동작을 사용합니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tilordne ulike handlinger til sveip som starter i den øvre og nedre halvdelen av terminalen. Hvis du slår av dette, gjenopprettes de felles sveiphandlingene. Sveip på styreflaten bruker alltid de felles handlingene."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wijs verschillende acties toe aan veegbewegingen die in de bovenste en onderste helft van de terminal beginnen. Als je dit uitzet, worden de gedeelde veegacties hersteld. Veegbewegingen op het trackpad gebruiken altijd de gedeelde acties."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Przypisz różne czynności gestom rozpoczynanym w górnej i dolnej połowie terminala. Wyłączenie tej opcji przywraca wspólne czynności gestów. Gesty na gładziku zawsze używają wspólnych czynności."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atribua ações diferentes aos gestos de deslizar que começam nas metades superior e inferior do terminal. Desativar esta opção restaura as ações de gesto compartilhadas. Os gestos no trackpad sempre usam as ações compartilhadas."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atribua ações diferentes aos deslizes que começam nas metades superior e inferior do terminal. Desativar esta opção repõe as ações de deslize partilhadas. Os deslizes no trackpad usam sempre as ações partilhadas."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atribuie acțiuni diferite gesturilor de glisare care încep în jumătatea de sus și în cea de jos a terminalului. Dezactivarea opțiunii restabilește acțiunile de glisare comune. Gesturile pe trackpad folosesc întotdeauna acțiunile comune."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Potezam, ki se začnejo v zgornji ali spodnji polovici terminala, dodelite različna dejanja. Če to izklopite, se obnovijo skupna dejanja potez. Poteze po sledilni ploščici vedno uporabljajo skupna dejanja."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tilldela olika åtgärder till svep som börjar i terminalens övre och nedre halva. Om du stänger av detta återställs de gemensamma svepåtgärderna. Svep på styrplattan använder alltid de gemensamma åtgärderna."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Призначте різні дії для свайпів, що починаються у верхній і нижній половинах термінала. Якщо вимкнути цей параметр, відновляться спільні дії свайпів. Свайпи на трекпаді завжди використовують спільні дії."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gán các thao tác khác nhau cho những lần vuốt bắt đầu ở nửa trên và nửa dưới của terminal. Tắt tùy chọn này sẽ khôi phục các thao tác vuốt dùng chung. Vuốt trên trackpad luôn dùng các thao tác dùng chung."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为从终端上半部分和下半部分开始的滑动分配不同的操作。关闭后将恢复共用的滑动操作。触控板滑动始终使用共用操作。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "為從終端機上半部與下半部開始的滑動指定不同的動作。關閉後會還原為共用的滑動動作。Trackpad 滑動一律使用共用動作。"
           }
         }
       }
@@ -119705,6 +120013,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "底部"
+          }
+        }
+      }
+    },
+    "Bottom Half" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "النصف السفلي"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meitat inferior"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dolní polovina"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nederste halvdel"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untere Hälfte"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mitad inferior"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alapuolisko"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moitié inférieure"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "החצי התחתון"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alsó fél"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metà inferiore"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下半分"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "하단 절반"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nedre halvdel"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Onderste helft"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dolna połowa"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metade Inferior"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metade Inferior"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jumătatea de jos"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spodnja polovica"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nedre halvan"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нижня половина"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nửa dưới"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下半部分"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下半部"
           }
         }
       }
@@ -145967,6 +146429,160 @@
         }
       }
     },
+    "Choose Placement, then Split, to divide the docked keys into two halves at the screen edges for thumb typing." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "اختر «الموضع» ثم «التقسيم» لتوزيع المفاتيح المرسوة على نصفين عند حافتي الشاشة للكتابة بالإبهامين."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tria «Ubicació», després «Divisió», per separar les tecles acoblades en dues meitats als extrems de la pantalla i escriure amb els polzes."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zvolte Umístění a poté Rozdělení, aby se ukotvené klávesy rozdělily na dvě poloviny u okrajů obrazovky pro psaní palci."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vælg Placering og derefter Opdeling for at dele de fastgjorte taster i to halvdele ved skærmens kanter, så du kan skrive med tommelfingrene."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wählen Sie „Platzierung“ und dann „Teilen“, um die angedockten Tasten zum Tippen mit den Daumen in zwei Hälften an den Bildschirmrändern aufzuteilen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elige «Posición», luego «División», para separar las teclas acopladas en dos mitades en los bordes de la pantalla y escribir con los pulgares."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valitse Sijainti ja sitten Jako, niin kiinnitetyt näppäimet jakautuvat kahdeksi puolikkaaksi näytön reunoille peukalokirjoitusta varten."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisissez Position, puis Division, pour séparer les touches ancrées en deux moitiés placées sur les bords de l'écran et taper avec les pouces."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "בחר \"מיקום\" ואז \"פיצול\" כדי לחלק את המקשים המעוגנים לשני חצאים בקצוות המסך להקלדה באגודלים."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Válassza az Elhelyezés, majd a Felosztás lehetőséget, hogy a dokkolt billentyűket a képernyő szélein két félre ossza a hüvelykujjas gépeléshez."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scegli Posizione, poi Divisione, per separare i tasti ancorati in due metà ai bordi dello schermo e digitare con i pollici."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「配置」、「分割」の順に選択すると、ドッキングされたキーが画面の両端で2つに分かれ、親指で入力しやすくなります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "배치를 선택한 다음 분할을 선택하면 고정된 키가 화면 양쪽 가장자리로 나뉘어 엄지손가락으로 입력하기 편해집니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Velg Plassering og deretter Deling for å splitte de festede tastene i to halvdeler ved skjermkantene, slik at du kan skrive med tomlene."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kies 'Plaatsing' en daarna 'Splitsing' om de vastgekoppelde toetsen te verdelen over twee helften aan de schermranden, zodat je met je duimen kunt typen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wybierz „Położenie”, potem „Podział”, aby podzielić zadokowane klawisze na dwie połowy przy krawędziach ekranu do pisania kciukami."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escolha Posição e depois Divisão para dividir as teclas encaixadas em duas metades nas bordas da tela, para digitar com os polegares."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escolha Posição e depois Divisão para dividir as teclas encaixadas em duas metades junto às margens do ecrã, para escrever com os polegares."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alege „Plasare”, apoi „Împărțire”, pentru a separa tastele andocate în două jumătăți la marginile ecranului și a tasta cu degetele mari."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Izberite Položaj in nato Razdelitev, da zasidrane tipke razdelite na dve polovici ob robovih zaslona za tipkanje s palci."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Välj Placering och sedan Uppdelning för att dela de dockade tangenterna i två halvor vid skärmkanterna för tumskrivning."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Виберіть «Розташування», а потім «Розділення», щоб поділити закріплені клавіші на дві половини біля країв екрана для набору великими пальцями."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chọn Vị trí, rồi chọn Chia tách để chia các phím đang cố định thành hai nửa ở hai cạnh màn hình, thuận tiện gõ bằng ngón cái."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择“位置”，然后选择“分屏”，即可将停靠的按键分成两半并置于屏幕两侧，方便用拇指输入。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇「位置」，再選擇「分割」，即可將停駐的按鍵分成兩半並置於螢幕兩側，方便以拇指輸入。"
+          }
+        }
+      }
+    },
     "Choose Region" : {
       "comment" : "Storage provider: region suggestions menu",
       "localizations" : {
@@ -154150,7 +154766,7 @@
       }
     },
     "Client" : {
-      "comment" : "HTTP capture field\nLocal SSH agent client rule identity section",
+      "comment" : "HTTP capture field",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -189838,7 +190454,7 @@
       }
     },
     "Copied" : {
-      "comment" : "Clipboard entry source: explicit copy\nCopy button state: copied\nLocal SSH agent export copied button\nShare link: copied to clipboard",
+      "comment" : "Clipboard entry source: explicit copy\nCopy button state: copied\nShare link: copied to clipboard",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -235286,7 +235902,7 @@
       }
     },
     "Denied" : {
-      "comment" : "Local SSH agent audit outcome\nLocation Diary authorization status",
+      "comment" : "Location Diary authorization status",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -301129,7 +301745,7 @@
       }
     },
     "Failed" : {
-      "comment" : "Local SSH agent audit outcome\nTailscale SSH egress state",
+      "comment" : "Tailscale SSH egress state",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -368490,7 +369106,7 @@
       }
     },
     "Identity" : {
-      "comment" : "Local SSH agent client rule identity key label\nOpenPubkey field: signed-in account",
+      "comment" : "OpenPubkey field: signed-in account",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -370656,7 +371272,7 @@
       }
     },
     "Import" : {
-      "comment" : "External agent identity import button\nImport button",
+      "comment" : "Import button",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -420559,7 +421175,7 @@
       }
     },
     "Last Used" : {
-      "comment" : "Local SSH agent client rule last used label\nVPN quick connect: caption above the last VPN's name",
+      "comment" : "VPN quick connect: caption above the last VPN's name",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -426415,6 +427031,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "字母預測"
+          }
+        }
+      }
+    },
+    "Letter Prediction uses recent English typing to help choose between nearby letters. Turn it off for literal key targeting. Suggestions are local spelling guesses and completions; tap to apply one. Words are never automatically replaced. Both are English-only and stay off with other layouts. The double-space period shortcut follows your Terminal keyboard setting. Key Click Sounds match the keyboard style and are muted in Silent Mode. Character Preview shows the pressed letter above your finger; turn it off to only highlight the key." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يستخدم «تنبؤ الأحرف» كتابتك الإنجليزية الأخيرة للمساعدة في الاختيار بين الأحرف المتجاورة. أوقف تشغيله لاستهداف المفاتيح بدقة حرفية. الاقتراحات هي تخمينات إملائية وإكمالات محلية؛ اضغط على أحدها لتطبيقه. لا تُستبدل الكلمات تلقائيًا أبدًا. تعمل كلتا الميزتين بالإنجليزية فقط وتبقيان متوقفتين مع التخطيطات الأخرى. يتبع اختصار النقطة بالمسافة المزدوجة إعداد لوحة مفاتيح الطرفية. تتوافق «أصوات نقر المفاتيح» مع نمط لوحة المفاتيح وتُكتم في الوضع الصامت. تعرض «معاينة الحرف» الحرف المضغوط فوق إصبعك؛ أوقف تشغيلها لتمييز المفتاح فقط."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La Predicció de lletres fa servir el que has escrit recentment en anglès per ajudar a triar entre lletres properes. Desactiva-la per tocar exactament la tecla que prems. Els suggeriments són propostes locals d’ortografia i de compleció; toca’n un per aplicar-lo. Les paraules no se substitueixen mai automàticament. Totes dues funcions només estan disponibles en anglès i es mantenen desactivades amb altres disposicions. La drecera del punt amb doble espai segueix la configuració del Teclat del terminal. Els Sons de clic de les tecles s’adapten a l’estil del teclat i se silencien en mode silenciós. La Previsualització del caràcter mostra la lletra premuda damunt del dit; desactiva-la per només ressaltar la tecla."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Predikce písmen využívá vaše nedávné psaní v angličtině k rozlišení mezi sousedními písmeny. Pro přesné zasahování kláves ji vypněte. Návrhy jsou místní odhady pravopisu a doplnění; klepnutím návrh použijete. Slova se nikdy nenahrazují automaticky. Obě funkce fungují jen v angličtině a u jiných rozvržení zůstávají vypnuté. Zkratka pro tečku dvojitou mezerou se řídí nastavením klávesnice terminálu. Zvuky kláves odpovídají stylu klávesnice a v tichém režimu jsou ztlumené. Náhled znaku zobrazuje stisknuté písmeno nad prstem; po vypnutí se klávesa pouze zvýrazní."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bogstavforudsigelse bruger din seneste engelske indtastning til at vælge mellem nærliggende bogstaver. Slå den fra, hvis tasterne skal rammes præcist. Forslag er lokale stavegæt og fuldførelser; tryk for at anvende et. Ord bliver aldrig erstattet automatisk. Begge fungerer kun på engelsk og er slået fra med andre layouts. Genvejen med punktum ved dobbelt mellemrum følger din indstilling for Terminaltastatur. Tasteklik-lyde passer til tastaturstilen og er slået fra i lydløs tilstand. Forhåndsvisning af tegn viser det trykkede bogstav over din finger; slå den fra for kun at fremhæve tasten."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Buchstabenvorhersage nutzt Ihre letzten englischen Eingaben, um zwischen benachbarten Buchstaben zu wählen. Deaktivieren Sie sie für exakte Tastentreffer. Vorschläge sind lokale Rechtschreibvermutungen und Vervollständigungen; tippen Sie auf einen, um ihn zu übernehmen. Wörter werden nie automatisch ersetzt. Beide sind nur auf Englisch verfügbar und bleiben bei anderen Layouts deaktiviert. Der Punkt per doppeltem Leerzeichen folgt Ihrer Einstellung für die Terminal-Tastatur. Tastenklickgeräusche passen zum Tastaturstil und sind im Stummmodus stummgeschaltet. Die Zeichenvorschau zeigt den gedrückten Buchstaben über Ihrem Finger; deaktivieren Sie sie, um nur die Taste hervorzuheben."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Predicción de letras usa lo que has escrito recientemente en inglés para ayudar a elegir entre letras cercanas. Desactívala para que cada pulsación cuente de forma literal. Las sugerencias son correcciones ortográficas y compleciones locales; toca una para aplicarla. Las palabras nunca se sustituyen automáticamente. Ambas funciones solo están disponibles en inglés y se mantienen desactivadas con otras disposiciones. El atajo de punto con doble espacio sigue el ajuste del Teclado del terminal. Clics del teclado coincide con el estilo del teclado y se silencia en modo silencio. Vista previa de caracteres muestra la letra pulsada encima del dedo; desactívala para resaltar solo la tecla."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kirjainennustus käyttää viimeaikaista englanninkielistä kirjoittamista apuna valittaessa vierekkäisten kirjainten välillä. Laita se pois päältä, jos haluat näppäimiin osuttavan kirjaimellisesti. Ehdotukset ovat paikallisia oikeinkirjoitusarvauksia ja täydennyksiä; ota ehdotus käyttöön napauttamalla. Sanoja ei koskaan korvata automaattisesti. Molemmat toimivat vain englanniksi, ja ne pysyvät pois päältä muissa asetteluissa. Kaksoisvälilyönnin pisteoikotie noudattaa Terminaalinäppäimistön asetusta. Näppäinten naksutusäänet vastaavat näppäimistön tyyliä ja mykistyvät äänettömässä tilassa. Merkkien esikatselu näyttää painetun kirjaimen sormesi yläpuolella; laita se pois päältä, niin vain näppäin korostetaan."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prédiction de lettres s’appuie sur votre saisie récente en anglais pour choisir entre des lettres voisines. Désactivez-la pour un ciblage littéral des touches. Les suggestions sont des corrections orthographiques et des complétions locales ; touchez-en une pour l’appliquer. Les mots ne sont jamais remplacés automatiquement. Ces deux fonctions sont réservées à l’anglais et restent désactivées avec les autres dispositions. Le raccourci du point avec double espace suit votre réglage du Clavier du terminal. Clics du clavier s’accorde au style du clavier et est coupé en mode silencieux. Aperçu des caractères affiche la lettre appuyée au-dessus de votre doigt ; désactivez-le pour seulement mettre la touche en surbrillance."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "״חיזוי אותיות״ משתמש בהקלדה האחרונה שלך באנגלית כדי לעזור לבחור בין אותיות סמוכות. כבה אותו לקליטה מילולית של המקשים. ההצעות הן ניחושי איות והשלמות מקומיים; הקש על הצעה כדי להחיל אותה. מילים לעולם אינן מוחלפות אוטומטית. שתי האפשרויות זמינות באנגלית בלבד ונשארות כבויות בפריסות אחרות. קיצור הנקודה ברווח כפול פועל לפי הגדרת ״מקלדת המסוף״. ״צלילי הקשה״ תואמים לסגנון המקלדת ומושתקים במצב שקט. ״תצוגה מקדימה של תווים״ מציגה את האות שנלחצה מעל האצבע; כבה אותה כדי רק להדגיש את המקש."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Betű-előrejelzés a legutóbbi angol nyelvű gépelésed alapján segít választani a szomszédos betűk között. Kapcsold ki a billentyűk szó szerinti eltalálásához. A javaslatok helyi helyesírási tippek és kiegészítések; koppints egyre az alkalmazásához. A szavak soha nem cserélődnek le automatikusan. Mindkettő csak angolul működik, és más kiosztásoknál kikapcsolva marad. A dupla szóközös pont gyorsbillentyű a Terminálbillentyűzet beállítását követi. A Billentyűkattanás-hangok a billentyűzet stílusához igazodnak, és néma üzemmódban el vannak némítva. A Karakterelőnézet a lenyomott betűt az ujjad fölött mutatja; kapcsold ki, ha csak a billentyű kiemelését szeretnéd."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Predizione delle lettere usa quello che hai digitato di recente in inglese per scegliere tra lettere vicine. Disattivala per premere i tasti esattamente dove tocchi. I suggerimenti sono ipotesi di ortografia e completamenti locali; tocca per applicarne uno. Le parole non vengono mai sostituite automaticamente. Entrambe le funzioni sono disponibili solo in inglese e restano disattivate con gli altri layout. La scorciatoia del punto con doppio spazio segue l’impostazione della tastiera del terminale. I clic della tastiera si adattano allo stile della tastiera e vengono silenziati in modalità Silenzioso. Anteprima carattere mostra la lettera premuta sopra il dito; disattivala per evidenziare solo il tasto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「文字予測」は、最近の英語の入力をもとに近くの文字から正しいものを選びやすくします。タップした位置どおりに入力したい場合はオフにしてください。入力候補はデバイス上で生成されるスペル候補や補完で、タップすると適用されます。単語が自動的に置き換えられることはありません。「文字予測」と入力候補は英語専用で、他のレイアウトではオフのままになります。スペース2回でピリオドを入力するショートカットは、ターミナルキーボードの設定に従います。「キークリック音」はキーボードのスタイルに合わせて鳴り、消音モードではミュートされます。「文字プレビュー」では、押した文字が指の上に表示されます。オフにするとキーがハイライトされるだけになります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "‘글자 예측’은 최근 영어 입력을 바탕으로 가까운 글자 중 올바른 글자를 고르도록 돕습니다. 누른 위치 그대로 입력하려면 끄십시오. 제안은 기기에서 생성되는 철자 추측과 자동 완성이며, 탭하면 적용됩니다. 단어가 자동으로 바뀌지는 않습니다. ‘글자 예측’과 제안은 모두 영어 전용이며 다른 레이아웃에서는 꺼진 상태로 유지됩니다. 스페이스 두 번으로 마침표 입력 단축키는 터미널 키보드 설정을 따릅니다. ‘키 클릭 사운드’는 키보드 스타일에 맞춰 재생되며 무음 모드에서는 음소거됩니다. ‘문자 미리보기’는 누른 글자를 손가락 위에 표시합니다. 끄면 키만 강조 표시됩니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bokstavprediksjon bruker nylig engelsk skriving til å velge mellom bokstaver som ligger nær hverandre. Slå den av for å treffe tastene helt bokstavelig. Forslag er lokale staveforslag og fullføringer; trykk for å bruke ett. Ord blir aldri erstattet automatisk. Begge er bare for engelsk og er slått av med andre oppsett. Snarveien for punktum med dobbelt mellomrom følger innstillingen for Terminaltastatur. Tasteklikklyder passer til tastaturstilen og dempes i Lydløs-modus. Tegnforhåndsvisning viser bokstaven du trykker på, over fingeren; slå den av for bare å utheve tasten."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lettervoorspelling gebruikt recente Engelse invoer om te kiezen tussen letters die dicht bij elkaar liggen. Zet dit uit om toetsen letterlijk te raken. Suggesties zijn lokale spellingsvoorstellen en aanvullingen; tik om er een toe te passen. Woorden worden nooit automatisch vervangen. Beide zijn alleen in het Engels beschikbaar en blijven uit bij andere lay-outs. De snelkoppeling voor een punt met dubbele spatie volgt je instelling voor Terminaltoetsenbord. Toetsenbordklikken passen bij de stijl van het toetsenbord en worden gedempt in de stille modus. Tekenvoorbeeld toont de ingedrukte letter boven je vinger; zet dit uit om alleen de toets te markeren."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Predykcja liter korzysta z ostatnio wpisywanego tekstu w języku angielskim, aby pomóc wybrać między sąsiednimi literami. Wyłącz ją, aby trafiać dokładnie w klawisze. Sugestie to lokalne propozycje pisowni i uzupełnienia; stuknij, aby zastosować. Słowa nigdy nie są zastępowane automatycznie. Obie funkcje działają tylko w języku angielskim i pozostają wyłączone w innych układach. Skrót kropki po dwukrotnym naciśnięciu spacji działa zgodnie z ustawieniem Klawiatury terminala. Dźwięki klawiszy pasują do stylu klawiatury i są wyciszane w trybie cichym. Podgląd znaku pokazuje naciśniętą literę nad palcem; wyłącz go, aby tylko podświetlać klawisz."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Predição de Letras usa o que você digitou recentemente em inglês para ajudar a escolher entre letras próximas. Desative para acertar as teclas de forma literal. As sugestões são palpites de ortografia e complementos locais; toque para aplicar um. As palavras nunca são substituídas automaticamente. Ambas funcionam apenas em inglês e ficam desativadas com outros layouts. O atalho de ponto com espaço duplo segue o ajuste do Teclado do Terminal. Os Sons de Clique das Teclas combinam com o estilo do teclado e ficam mudos no Modo Silencioso. A Pré-visualização do Caractere mostra a letra pressionada acima do dedo; desative para apenas destacar a tecla."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Previsão de Letras usa o que escreveu recentemente em inglês para ajudar a escolher entre letras próximas. Desative para acertar nas teclas de forma literal. As sugestões são palpites ortográficos e conclusões locais; toque para aplicar uma. As palavras nunca são substituídas automaticamente. Ambas funcionam apenas em inglês e ficam desativadas com outras disposições. O atalho de ponto com espaço duplo segue a definição do Teclado do Terminal. Os Sons de clique das teclas acompanham o estilo do teclado e ficam silenciados no modo silencioso. A Pré-visualização do Carácter mostra a letra premida acima do dedo; desative para apenas realçar a tecla."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Predicția literelor folosește textul tastat recent în engleză pentru a ajuta la alegerea între literele apropiate. Dezactiveaz-o pentru țintirea exactă a tastelor. Sugestiile sunt estimări ortografice și completări locale; atinge una pentru a o aplica. Cuvintele nu sunt niciodată înlocuite automat. Ambele funcții sunt disponibile doar în engleză și rămân dezactivate cu alte aspecte. Scurtătura pentru punct la spațiu dublu urmează configurarea Tastaturii terminal. Sunetele la apăsarea tastelor se potrivesc cu stilul tastaturii și sunt dezactivate în modul Silențios. Previzualizarea caracterului afișează litera apăsată deasupra degetului; dezactiveaz-o pentru a evidenția doar tasta."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Napovedovanje črk uporablja nedavno tipkanje v angleščini za pomoč pri izbiri med sosednjimi črkami. Izklopite ga za dobesedno ciljanje tipk. Predlogi so lokalni predlogi črkovanja in dokončanja; tapnite enega, da ga uporabite. Besede se nikoli ne zamenjajo samodejno. Obe možnosti delujeta samo v angleščini in pri drugih postavitvah ostaneta izklopljeni. Bližnjica za piko z dvojnim presledkom sledi nastavitvi Tipkovnice terminala. Zvoki tipk se ujemajo s slogom tipkovnice in so v tihem načinu utišani. Predogled znaka prikaže pritisnjeno črko nad prstom; izklopite ga, da bo tipka samo označena."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bokstavsförutsägelse använder ditt senaste engelska skrivande för att välja mellan närliggande bokstäver. Stäng av den för exakt tangentträff. Förslagen är lokala stavningsgissningar och kompletteringar; tryck för att använda ett. Ord ersätts aldrig automatiskt. Båda finns bara på engelska och är avstängda med andra layouter. Genvägen för punkt med dubbelt mellanslag följer inställningen för Terminaltangentbord. Tangentklickljud matchar tangentbordsstilen och stängs av i ljudlöst läge. Teckenförhandsvisning visar den tryckta bokstaven ovanför fingret; stäng av den för att bara markera tangenten."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Передбачення літер» використовує ваш нещодавній набір англійською, щоб вибирати між сусідніми літерами. Вимкніть, щоб клавіші спрацьовували буквально. Пропозиції — це локальні варіанти написання й доповнення; торкніться, щоб застосувати. Слова ніколи не замінюються автоматично. Обидві функції працюють лише англійською й вимкнені для інших розкладок. Швидка крапка подвійним пробілом залежить від налаштування «Клавіатура термінала». «Звуки клавіш» відповідають стилю клавіатури й вимикаються в беззвучному режимі. «Попередній перегляд символу» показує натиснуту літеру над пальцем; вимкніть, щоб лише підсвічувати клавішу."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dự đoán chữ cái dùng những gì bạn gõ tiếng Anh gần đây để giúp chọn giữa các chữ cái gần nhau. Tắt để nhấn phím chính xác theo vị trí. Gợi ý là các phỏng đoán chính tả và phần hoàn thành cục bộ; chạm để áp dụng. Từ không bao giờ bị thay thế tự động. Dự đoán chữ cái và Gợi ý chỉ hỗ trợ tiếng Anh và luôn tắt khi dùng bố cục khác. Phím tắt dấu chấm bằng hai dấu cách tuân theo cài đặt Bàn phím terminal. Âm thanh bấm phím khớp với kiểu bàn phím và bị tắt ở Chế độ im lặng. Xem trước ký tự hiển thị chữ cái được nhấn phía trên ngón tay; tắt để chỉ tô sáng phím."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“字母预测”会根据你最近的英文输入，帮助在相邻字母之间做出选择。关闭后将严格按所按按键输入。输入建议是本地的拼写猜测和补全；轻点即可采用。单词绝不会被自动替换。“字母预测”和输入建议均仅支持英文，使用其他布局时保持关闭。双空格输入句点的快捷方式遵循“终端键盘”设置。“按键音”与键盘样式匹配，并在静音模式下静音。“字符预览”会在手指上方显示所按的字母；关闭后仅高亮按键。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「字母預測」會根據你最近的英文輸入，協助在相鄰字母之間做出選擇。關閉後將嚴格依所按按鍵輸入。輸入建議是本機的拼字猜測和補全；點一下即可套用。字詞絕不會被自動取代。「字母預測」與輸入建議僅支援英文，使用其他版面配置時會保持關閉。雙空格輸入句點的快速鍵遵循「終端機鍵盤」設定。「按鍵音效」與鍵盤樣式相符，並在靜音模式下靜音。「字元預覽」會在手指上方顯示所按的字母；關閉後僅會反白按鍵。"
           }
         }
       }
@@ -438165,7 +438935,7 @@
       }
     },
     "Local SSH Agent" : {
-      "comment" : "Local SSH agent settings title\nSetting title\nSettings row: local SSH agent",
+      "comment" : "Setting title",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -443255,6 +444025,314 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "長按以顯示動作 · 點一下「選取」以選擇多個項目"
+          }
+        }
+      }
+    },
+    "Long-press the keyboard switch key and choose Placement, then Detached, to float a smaller keyboard over the terminal, freeing the rest of the screen. Drag the … handle to move it. Double-tap the handle or choose Docked to dock." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "اضغط مطولًا على مفتاح تبديل لوحة المفاتيح واختر «الموضع» ثم «منفصلة» لتعويم لوحة مفاتيح أصغر فوق الطرفية وتحرير بقية الشاشة. اسحب مقبض … لتحريكها. اضغط مرتين على المقبض أو اختر «مرسوة» للإرساء."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantén premuda la tecla de canvi de teclat i tria «Ubicació», després «Desacoblat», per fer flotar un teclat més petit sobre el terminal i alliberar la resta de la pantalla. Arrossega el tirador … per moure'l. Toca el tirador dues vegades o tria «Acoblat» per acoblar-lo."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Podržte klávesu pro přepnutí klávesnice, zvolte Umístění a poté Odpojená, aby se nad terminálem zobrazila menší plovoucí klávesnice a uvolnil se zbytek obrazovky. Tažením za úchyt … ji přesunete. Dvojitým klepnutím na úchyt nebo volbou Ukotvená ji ukotvíte."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold tasten til skift af tastatur nede, og vælg Placering og derefter Frigjort for at lade et mindre tastatur flyde over terminalen, så resten af skærmen frigøres. Træk i …-håndtaget for at flytte det. Tryk to gange på håndtaget, eller vælg Fastgjort for at fastgøre det."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Halten Sie die Taste zum Wechseln der Tastatur gedrückt und wählen Sie „Platzierung“ und dann „Abgelöst“, um eine kleinere Tastatur über dem Terminal schweben zu lassen und den restlichen Bildschirm freizugeben. Ziehen Sie am Griff …, um sie zu bewegen. Doppeltippen Sie auf den Griff oder wählen Sie „Angedockt“, um sie anzudocken."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantén pulsada la tecla de cambio de teclado y elige «Posición», luego «Desacoplado», para que un teclado más pequeño flote sobre el terminal y deje libre el resto de la pantalla. Arrastra el tirador … para moverlo. Toca dos veces el tirador o elige «Acoplado» para acoplarlo."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paina pitkään näppäimistön vaihtonäppäintä, valitse Sijainti ja sitten Irrotettu, niin pienempi näppäimistö kelluu terminaalin päällä ja muu näyttö vapautuu. Siirrä sitä vetämällä …-kahvasta. Kiinnitä se kaksoisnapauttamalla kahvaa tai valitsemalla Kiinnitetty."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maintenez la touche de changement de clavier enfoncée et choisissez Position, puis Détaché, pour faire flotter un clavier plus petit au-dessus du terminal et libérer le reste de l'écran. Faites glisser la poignée … pour le déplacer. Touchez deux fois la poignée ou choisissez Ancré pour l'ancrer."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "לחץ לחיצה ארוכה על מקש החלפת המקלדת ובחר \"מיקום\" ואז \"מנותקת\" כדי להציף מקלדת קטנה יותר מעל המסוף ולפנות את שאר המסך. גרור את הידית … כדי להזיז אותה. הקש פעמיים על הידית או בחר \"מעוגנת\" כדי לעגן."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tartsa nyomva a billentyűzetváltó billentyűt, és válassza az Elhelyezés, majd a Leválasztott lehetőséget, hogy egy kisebb billentyűzet lebegjen a terminál fölött, a képernyő többi része pedig szabadon maradjon. Az áthelyezéséhez húzza a … fogantyút. A dokkoláshoz koppintson duplán a fogantyúra, vagy válassza a Dokkolt lehetőséget."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tieni premuto il tasto di cambio tastiera e scegli Posizione, poi Staccata, per far fluttuare una tastiera più piccola sopra il terminale, liberando il resto dello schermo. Trascina la maniglia … per spostarla. Tocca due volte la maniglia o scegli Ancorata per ancorarla."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キーボード切り替えキーを長押しして「配置」、「フローティング」の順に選択すると、小さなキーボードがターミナルの上にフローティング表示され、画面の残りの部分を広く使えます。「…」ハンドルをドラッグすると移動できます。ハンドルをダブルタップするか「ドッキング」を選択するとドッキングします。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키보드 전환 키를 길게 누르고 배치를 선택한 다음 분리를 선택하면 더 작은 키보드가 터미널 위에 떠 있어 나머지 화면을 넓게 쓸 수 있습니다. … 핸들을 드래그하여 위치를 옮기고, 핸들을 이중 탭하거나 고정을 선택하면 고정됩니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold inne tastaturbytte-tasten og velg Plassering og deretter Løsnet for å la et mindre tastatur flyte over terminalen og frigjøre resten av skjermen. Dra i …-håndtaket for å flytte det. Dobbelttrykk på håndtaket eller velg Festet for å feste det."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Houd de toetsenbordwisseltoets ingedrukt en kies 'Plaatsing' en daarna 'Losgekoppeld' om een kleiner toetsenbord boven de terminal te laten zweven, zodat de rest van het scherm vrijkomt. Sleep de greep … om het te verplaatsen. Dubbeltik op de greep of kies 'Vastgekoppeld' om het vast te koppelen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Przytrzymaj klawisz przełączania klawiatury i wybierz „Położenie”, potem „Odłączona”, aby nad terminalem unosiła się mniejsza klawiatura, a reszta ekranu pozostała wolna. Przeciągnij uchwyt …, aby ją przesunąć. Dotknij uchwytu dwukrotnie lub wybierz „Zadokowana”, aby ją zadokować."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantenha pressionada a tecla de troca de teclado e escolha Posição e depois Desencaixado para deixar um teclado menor flutuando sobre o terminal e liberar o resto da tela. Arraste a alça … para movê-lo. Toque duas vezes na alça ou escolha Encaixado para encaixá-lo."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantenha premida a tecla de mudança de teclado e escolha Posição e depois Desencaixado para que um teclado mais pequeno flutue sobre o terminal e liberte o resto do ecrã. Arraste a pega … para o mover. Toque duas vezes na pega ou escolha Encaixado para o encaixar."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ține apăsată tasta de comutare a tastaturii și alege „Plasare”, apoi „Detașată”, pentru ca o tastatură mai mică să plutească deasupra terminalului, eliberând restul ecranului. Trage de mânerul … pentru a o muta. Atinge mânerul de două ori sau alege „Andocată” pentru a o andoca."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pridržite tipko za preklop tipkovnice in izberite Položaj ter nato Ločena, da nad terminalom zaplava manjša tipkovnica in sprosti preostanek zaslona. Za premikanje povlecite ročico …. Za sidranje dvakrat tapnite ročico ali izberite Zasidrana."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Håll ned tangentbordsbytartangenten och välj Placering och sedan Lösgjort för att låta ett mindre tangentbord flyta över terminalen och frigöra resten av skärmen. Dra i handtaget … för att flytta det. Dubbeltryck på handtaget eller välj Dockat för att docka."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Утримуйте клавішу перемикання клавіатури й виберіть «Розташування», а потім «Відкріплена», щоб над терміналом з’явилася менша плаваюча клавіатура, а решта екрана звільнилася. Перетягуйте маркер …, щоб перемістити її. Торкніться маркера двічі або виберіть «Закріплена», щоб закріпити її."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nhấn giữ phím chuyển bàn phím, chọn Vị trí rồi chọn Tách rời để thả nổi một bàn phím nhỏ hơn trên terminal, giải phóng phần còn lại của màn hình. Kéo tay cầm … để di chuyển bàn phím. Chạm hai lần vào tay cầm hoặc chọn Cố định để cố định."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "长按键盘切换键，选择“位置”，然后选择“浮动”，即可在终端上方浮动显示较小的键盘，腾出屏幕的其余空间。拖移“…”手柄可移动键盘。连按两下手柄或选择“停靠”即可停靠。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "長按鍵盤切換鍵，選擇「位置」，再選擇「分離」，即可在終端機上方浮動顯示較小的鍵盤，騰出螢幕的其餘空間。拖移「…」控點可移動鍵盤。點兩下控點或選擇「停駐」即可停駐。"
+          }
+        }
+      }
+    },
+    "Long-press the keyboard switch key, open Placement, and choose Detached to float a smaller keyboard over the terminal. Choose Docked to put it back." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "اضغط مطولًا على مفتاح تبديل لوحة المفاتيح وافتح «الموضع» واختر «منفصلة» لتعويم لوحة مفاتيح أصغر فوق الطرفية. واختر «مرسوة» لإعادتها."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantén premuda la tecla de canvi de teclat, obre «Ubicació» i tria «Desacoblat» per fer flotar un teclat més petit sobre el terminal. Tria «Acoblat» per tornar-lo al seu lloc."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Podržte klávesu pro přepnutí klávesnice, otevřete Umístění a zvolte Odpojená, aby se nad terminálem zobrazila menší plovoucí klávesnice. Volbou Ukotvená ji vrátíte zpět."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold tasten til skift af tastatur nede, åbn Placering, og vælg Frigjort for at lade et mindre tastatur flyde over terminalen. Vælg Fastgjort for at sætte det tilbage."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Halten Sie die Taste zum Wechseln der Tastatur gedrückt, öffnen Sie „Platzierung“ und wählen Sie „Abgelöst“, um eine kleinere Tastatur über dem Terminal schweben zu lassen. Wählen Sie „Angedockt“, um sie wieder anzudocken."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantén pulsada la tecla de cambio de teclado, abre «Posición» y elige «Desacoplado» para que un teclado más pequeño flote sobre el terminal. Elige «Acoplado» para volver a colocarlo."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paina pitkään näppäimistön vaihtonäppäintä, avaa Sijainti-valikko ja valitse Irrotettu, niin pienempi näppäimistö kelluu terminaalin päällä. Palauta se valitsemalla Kiinnitetty."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maintenez la touche de changement de clavier enfoncée, ouvrez Position et choisissez Détaché pour faire flotter un clavier plus petit au-dessus du terminal. Choisissez Ancré pour le remettre en place."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "לחץ לחיצה ארוכה על מקש החלפת המקלדת, פתח את \"מיקום\" ובחר \"מנותקת\" כדי להציף מקלדת קטנה יותר מעל המסוף. בחר \"מעוגנת\" כדי להחזיר אותה."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tartsa nyomva a billentyűzetváltó billentyűt, nyissa meg az Elhelyezés menüt, és válassza a Leválasztott lehetőséget, hogy egy kisebb billentyűzet lebegjen a terminál fölött. A visszaállításhoz válassza a Dokkolt lehetőséget."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tieni premuto il tasto di cambio tastiera, apri Posizione e scegli Staccata per far fluttuare una tastiera più piccola sopra il terminale. Scegli Ancorata per riportarla in posizione."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キーボード切り替えキーを長押しして「配置」を開き、「フローティング」を選択すると、小さなキーボードがターミナルの上にフローティング表示されます。元に戻すには「ドッキング」を選択します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키보드 전환 키를 길게 누르고 배치를 열어 분리를 선택하면 더 작은 키보드가 터미널 위에 떠 있습니다. 다시 되돌리려면 고정을 선택하십시오."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold inne tastaturbytte-tasten, åpne Plassering og velg Løsnet for å la et mindre tastatur flyte over terminalen. Velg Festet for å sette det tilbake."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Houd de toetsenbordwisseltoets ingedrukt, open 'Plaatsing' en kies 'Losgekoppeld' om een kleiner toetsenbord boven de terminal te laten zweven. Kies 'Vastgekoppeld' om het terug te zetten."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Przytrzymaj klawisz przełączania klawiatury, otwórz „Położenie” i wybierz „Odłączona”, aby nad terminalem unosiła się mniejsza klawiatura. Wybierz „Zadokowana”, aby ją przywrócić."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantenha pressionada a tecla de troca de teclado, abra Posição e escolha Desencaixado para deixar um teclado menor flutuando sobre o terminal. Escolha Encaixado para voltar ao normal."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantenha premida a tecla de mudança de teclado, abra Posição e escolha Desencaixado para que um teclado mais pequeno flutue sobre o terminal. Escolha Encaixado para o repor."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ține apăsată tasta de comutare a tastaturii, deschide „Plasare” și alege „Detașată” pentru ca o tastatură mai mică să plutească deasupra terminalului. Alege „Andocată” pentru a o readuce la loc."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pridržite tipko za preklop tipkovnice, odprite Položaj in izberite Ločena, da nad terminalom zaplava manjša tipkovnica. Za vrnitev izberite Zasidrana."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Håll ned tangentbordsbytartangenten, öppna Placering och välj Lösgjort för att låta ett mindre tangentbord flyta över terminalen. Välj Dockat för att sätta tillbaka det."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Утримуйте клавішу перемикання клавіатури, відкрийте «Розташування» й виберіть «Відкріплена», щоб над терміналом з’явилася менша плаваюча клавіатура. Виберіть «Закріплена», щоб повернути її на місце."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nhấn giữ phím chuyển bàn phím, mở Vị trí rồi chọn Tách rời để thả nổi một bàn phím nhỏ hơn trên terminal. Chọn Cố định để đưa bàn phím trở lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "长按键盘切换键，打开“位置”并选择“浮动”，即可在终端上方浮动显示较小的键盘。选择“停靠”即可复原。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "長按鍵盤切換鍵，開啟「位置」並選擇「分離」，即可在終端機上方浮動顯示較小的鍵盤。選擇「停駐」即可還原。"
           }
         }
       }
@@ -471838,7 +472916,7 @@
       }
     },
     "Name" : {
-      "comment" : "File manager column\nFile manager name placeholder\nHTTP capture CA field\nHTTP capture session name field\nLocal SSH agent client rule identity name label\nStorage metadata field name placeholder\nStorage provider field",
+      "comment" : "File manager column\nFile manager name placeholder\nHTTP capture CA field\nHTTP capture session name field\nStorage metadata field name placeholder\nStorage provider field",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -503953,7 +505031,7 @@
       }
     },
     "None" : {
-      "comment" : "Auth method: no authentication\nBackground effect: no effect active\nBell sound: completely silent\nCursor effect: no effect\nHTTP capture: no host decrypted\nKey auth requirement: none\nKubernetes auth method: no authentication\nNotification sound: silent\nProfile folder: no folder selected\nQuick setup pair: disable both swipes\nSettings status: none configured\nSplit border style: no border\nTailscale SSH egress: none\nTailscale exit node: none\nVNC jump selection\nVNC security preference\nVPN excluded routes: none configured",
+      "comment" : "Auth method: no authentication\nBackground effect: no effect active\nBell sound: completely silent\nBookmarked locations: none saved\nCursor effect: no effect\nHTTP capture: no host decrypted\nKey auth requirement: none\nKubernetes auth method: no authentication\nNotification sound: silent\nProfile folder: no folder selected\nQuick setup pair: disable both swipes\nSettings status: none configured\nSplit border style: no border\nTailscale SSH egress: none\nTailscale exit node: none\nVNC jump selection\nVNC security preference\nVPN excluded routes: none configured",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -514469,7 +515547,7 @@
       }
     },
     "Off" : {
-      "comment" : "Agent notification policy: never notify\nMod-tap: no active rules\nSSHFP host key verification mode\nScreen Sharing clipboard sync default\nSetting value display\nSettings VPN row: nothing running\nSettings status: disabled\nTailscale SSH egress state\nTailscale state\nTask notification policy: never notify\nToggle state: disabled\nTwo-finger long press: gesture disabled\nVNC keyboard toolbar preference",
+      "comment" : "Agent notification policy: never notify\nAlways On Display duration: disabled\nLive Activity agent messages option\nMod-tap: no active rules\nSSHFP host key verification mode\nScreen Sharing clipboard sync default\nSetting value display\nSettings VPN row: nothing running\nTailscale SSH egress state\nTailscale state\nTask notification policy: never notify\nToggle state: disabled\nTwo-finger long press: gesture disabled\nVNC keyboard toolbar preference",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -515088,7 +516166,7 @@
       }
     },
     "On" : {
-      "comment" : "Setting value display\nSettings VPN row: in-app Tailscale waits to start\nSettings status: enabled\nTailscale VPN is active\nToggle state: enabled\nVNC keyboard toolbar preference",
+      "comment" : "Setting value display\nSettings VPN row: in-app Tailscale waits to start\nTailscale VPN is active\nToggle state: enabled\nVNC keyboard toolbar preference",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -543673,7 +544751,7 @@
       }
     },
     "Path" : {
-      "comment" : "Local SSH agent client rule identity path label\nStorage addressing style: bucket in the URL path",
+      "comment" : "Storage addressing style: bucket in the URL path",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -551242,6 +552320,160 @@
         }
       }
     },
+    "Pinch inward on the docked terminal keyboard to make it float. Spread two fingers apart on the floating keyboard to dock it again. You can also long-press the keyboard switch key, open Placement, and choose Docked or Detached." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "اقرص للداخل على لوحة مفاتيح الطرفية المرسوّة لجعلها عائمة. وباعد بين إصبعين على لوحة المفاتيح العائمة لإعادة إرسائها. يمكنك أيضًا الضغط مطولًا على مفتاح تبديل لوحة المفاتيح وفتح «الموضع» واختيار «مرسوة» أو «منفصلة»."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pessiga cap endins sobre el teclat del terminal acoblat per fer-lo flotar. Separa dos dits sobre el teclat flotant per tornar-lo a acoblar. També pots mantenir premuda la tecla de canvi de teclat, obrir «Ubicació» i triar «Acoblat» o «Desacoblat»."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stažením prstů k sobě na ukotvené klávesnici terminálu ji necháte plovoucí. Roztažením dvou prstů na plovoucí klávesnici ji znovu ukotvíte. Můžete také podržet klávesu pro přepnutí klávesnice, otevřít Umístění a zvolit Ukotvená nebo Odpojená."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Knib indad på det fastgjorte terminaltastatur for at frigøre det. Spred to fingre på det flydende tastatur for at fastgøre det igen. Du kan også holde tasten til skift af tastatur nede, åbne Placering og vælge Fastgjort eller Frigjort."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ziehen Sie zwei Finger auf der angedockten Terminal-Tastatur zusammen, um sie abzulösen. Spreizen Sie zwei Finger auf der schwebenden Tastatur, um sie wieder anzudocken. Sie können auch die Taste zum Wechseln der Tastatur gedrückt halten, „Platzierung“ öffnen und „Angedockt“ oder „Abgelöst“ wählen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Junta dos dedos sobre el teclado del terminal acoplado para desacoplarlo. Separa dos dedos sobre el teclado flotante para volver a acoplarlo. También puedes mantener pulsada la tecla de cambio de teclado, abrir «Posición» y elegir «Acoplado» o «Desacoplado»."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nipistä kiinnitettyä terminaalinäppäimistöä sisäänpäin, niin se alkaa kellua. Kiinnitä se takaisin levittämällä kahta sormea kelluvalla näppäimistöllä. Voit myös painaa pitkään näppäimistön vaihtonäppäintä, avata Sijainti-valikon ja valita Kiinnitetty tai Irrotettu."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pincez vers l'intérieur sur le clavier du terminal ancré pour le faire flotter. Écartez deux doigts sur le clavier flottant pour l'ancrer à nouveau. Vous pouvez aussi maintenir la touche de changement de clavier enfoncée, ouvrir Position et choisir Ancré ou Détaché."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "צבוט פנימה על מקלדת המסוף המעוגנת כדי להפוך אותה לצפה. הרחק שתי אצבעות על המקלדת הצפה כדי לעגן אותה מחדש. אפשר גם ללחוץ לחיצה ארוכה על מקש החלפת המקלדת, לפתוח את \"מיקום\" ולבחור \"מעוגנת\" או \"מנותקת\"."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Csippentsen befelé a dokkolt terminálbillentyűzeten a leválasztásához. Húzza szét két ujját a lebegő billentyűzeten az ismételt dokkoláshoz. A billentyűzetváltó billentyűt nyomva tartva az Elhelyezés menüben a Dokkolt vagy a Leválasztott lehetőséget is választhatja."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pizzica verso l'interno sulla tastiera del terminale ancorata per staccarla. Allarga due dita sulla tastiera mobile per ancorarla di nuovo. Puoi anche tenere premuto il tasto di cambio tastiera, aprire Posizione e scegliere Ancorata o Staccata."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ドッキングされたターミナルキーボードをピンチインすると、フローティング表示になります。フローティングキーボードで2本指を広げると、再びドッキングします。キーボード切り替えキーを長押しして「配置」を開き、「ドッキング」または「フローティング」を選択することもできます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "고정된 터미널 키보드에서 두 손가락을 모으면 키보드가 떠오릅니다. 플로팅 키보드에서 두 손가락을 벌리면 다시 고정됩니다. 키보드 전환 키를 길게 누른 다음 배치를 열고 고정 또는 분리를 선택할 수도 있습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Knip sammen på det festede terminaltastaturet for å løsne det. Spre to fingre på det flytende tastaturet for å feste det igjen. Du kan også holde inne tastaturbytte-tasten, åpne Plassering og velge Festet eller Løsnet."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Knijp naar binnen op het vastgekoppelde terminaltoetsenbord om het te laten zweven. Spreid twee vingers op het zwevende toetsenbord om het weer vast te koppelen. Je kunt ook de toetsenbordwisseltoets ingedrukt houden, 'Plaatsing' openen en 'Vastgekoppeld' of 'Losgekoppeld' kiezen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zsuń palce na zadokowanej klawiaturze terminala, aby ją odłączyć. Rozsuń dwa palce na pływającej klawiaturze, aby ją ponownie zadokować. Możesz też przytrzymać klawisz przełączania klawiatury, otworzyć „Położenie” i wybrać „Zadokowana” lub „Odłączona”."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Junte dois dedos no teclado do terminal encaixado para desencaixá-lo. Afaste dois dedos no teclado flutuante para encaixá-lo novamente. Você também pode manter pressionada a tecla de troca de teclado, abrir Posição e escolher Encaixado ou Desencaixado."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Junte dois dedos no teclado do terminal encaixado para o desencaixar. Afaste dois dedos no teclado flutuante para o voltar a encaixar. Também pode manter premida a tecla de mudança de teclado, abrir Posição e escolher Encaixado ou Desencaixado."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apropie două degete pe tastatura de terminal andocată pentru a o detașa. Depărtează două degete pe tastatura flotantă pentru a o andoca din nou. De asemenea, poți ține apăsată tasta de comutare a tastaturii, deschide „Plasare” și alege „Andocată” sau „Detașată”."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uščipnite navznoter na zasidrani tipkovnici terminala, da začne plavati. Razmaknite dva prsta na plavajoči tipkovnici, da jo znova zasidrate. Lahko tudi pridržite tipko za preklop tipkovnice, odprete Položaj in izberete Zasidrana ali Ločena."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nyp ihop på det dockade terminaltangentbordet för att lösgöra det. Dra isär två fingrar på det flytande tangentbordet för att docka det igen. Du kan också hålla ned tangentbordsbytartangenten, öppna Placering och välja Dockat eller Lösgjort."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Зведіть пальці на закріпленій клавіатурі термінала, щоб відкріпити її. Розведіть два пальці на плаваючій клавіатурі, щоб закріпити її знову. Також можна утримувати клавішу перемикання клавіатури, відкрити «Розташування» й вибрати «Закріплена» або «Відкріплена»."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chụm hai ngón tay vào trong trên bàn phím terminal đang cố định để thả nổi nó. Mở rộng hai ngón tay trên bàn phím nổi để cố định lại. Bạn cũng có thể nhấn giữ phím chuyển bàn phím, mở Vị trí rồi chọn Cố định hoặc Tách rời."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在已停靠的终端键盘上向内捏合，即可让它浮动。在浮动键盘上张开两指，即可再次将其停靠。也可以长按键盘切换键，打开“位置”，然后选择“停靠”或“浮动”。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在停駐的終端機鍵盤上向內捏合，即可讓它浮動。在浮動鍵盤上將兩指向外撥開，即可再次停駐。也可以長按鍵盤切換鍵，開啟「位置」，然後選擇「停駐」或「分離」。"
+          }
+        }
+      }
+    },
     "Pinch on the trackpad while Tab Exposé is open to resize its previews and change how many fit in the grid." : {
       "localizations" : {
         "ar" : {
@@ -553395,6 +554627,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "放在此項之前"
+          }
+        }
+      }
+    },
+    "Placement" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الموضع"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ubicació"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Umístění"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Placering"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Platzierung"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Posición"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sijainti"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Position"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "מיקום"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elhelyezés"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Posizione"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "배치"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plassering"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plaatsing"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Położenie"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Posição"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Posição"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plasare"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Položaj"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Placering"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Розташування"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vị trí"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位置"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位置"
           }
         }
       }
@@ -599894,7 +601280,7 @@
       }
     },
     "Remove" : {
-      "comment" : "Local SSH agent audit action\nStorage metadata: remove field",
+      "comment" : "Storage metadata: remove field",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -619364,156 +620750,156 @@
         }
       }
     },
-    "Restore left swipe to Next Tab and right swipe to Previous Tab." : {
+    "Restore left swipe to Next Tab and right swipe to Previous Tab for all areas, and turn off separate top and bottom swipes." : {
       "localizations" : {
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "إعادة التمرير لليسار إلى «علامة التبويب التالية» والتمرير لليمين إلى «علامة التبويب السابقة»."
+            "value" : "إعادة التمرير لليسار إلى «علامة التبويب التالية» والتمرير لليمين إلى «علامة التبويب السابقة» في جميع المناطق، وإيقاف فصل تمريرات الأعلى والأسفل."
           }
         },
         "ca" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Restaura el lliscament esquerre a Pestanya següent i el dret a Pestanya anterior."
+            "value" : "Restaura el lliscament esquerre a Pestanya següent i el dret a Pestanya anterior per a totes les zones, i desactiva la separació dels lliscaments de dalt i de baix."
           }
         },
         "cs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Obnovit přejetí vlevo na Další kartu a přejetí vpravo na Předchozí kartu."
+            "value" : "Obnovit přejetí vlevo na Další kartu a přejetí vpravo na Předchozí kartu pro všechny oblasti a vypnout oddělení přejetí nahoře a dole."
           }
         },
         "da" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gendan venstre stryg til Næste fane og højre stryg til Forrige fane."
+            "value" : "Gendan venstre stryg til Næste fane og højre stryg til Forrige fane for alle områder, og slå separate stryg øverst og nederst fra."
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Linkes Wischen auf „Nächster Tab“ und rechtes Wischen auf „Vorheriger Tab“ zurücksetzen."
+            "value" : "Linkes Wischen auf „Nächster Tab“ und rechtes Wischen auf „Vorheriger Tab“ für alle Bereiche zurücksetzen und getrennte Wischgesten für oben und unten deaktivieren."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Restaurar el deslizamiento izquierdo a Pestaña siguiente y el derecho a Pestaña anterior."
+            "value" : "Restaurar el deslizamiento izquierdo a Siguiente pestaña y el derecho a Pestaña anterior en todas las zonas, y desactivar la separación de los deslizamientos de arriba y abajo."
           }
         },
         "fi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Palauta vasen pyyhkäisy toimintoon Seuraava välilehti ja oikea pyyhkäisy toimintoon Edellinen välilehti."
+            "value" : "Palauta vasen pyyhkäisy toimintoon Seuraava välilehti ja oikea pyyhkäisy toimintoon Edellinen välilehti kaikilla alueilla ja poista erilliset ylä- ja alapyyhkäisyt käytöstä."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Rétablir le balayage gauche sur Onglet suivant et le balayage droit sur Onglet précédent."
+            "value" : "Rétablir le balayage gauche sur Onglet suivant et le balayage droit sur Onglet précédent pour toutes les zones, et désactiver la séparation des balayages du haut et du bas."
           }
         },
         "he" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "שחזרו את ההחלקה שמאלה ללשונית הבאה ואת ההחלקה ימינה ללשונית הקודמת."
+            "value" : "שחזרו את ההחלקה שמאלה ללשונית הבאה ואת ההחלקה ימינה ללשונית הקודמת בכל האזורים, וכבו את ההחלקות הנפרדות למעלה ולמטה."
           }
         },
         "hu" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "A balra húzás visszaállítása a Következő lapra és a jobbra húzás visszaállítása az Előző lapra."
+            "value" : "A balra húzás visszaállítása a Következő lapra és a jobbra húzás visszaállítása az Előző lapra minden területen, valamint a külön felső és alsó húzások kikapcsolása."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ripristina lo scorrimento a sinistra su Scheda successiva e quello a destra su Scheda precedente."
+            "value" : "Ripristina lo scorrimento a sinistra su Scheda successiva e quello a destra su Scheda precedente per tutte le aree, e disattiva la separazione degli scorrimenti in alto e in basso."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "左スワイプを「次のタブ」、右スワイプを「前のタブ」に戻します。"
+            "value" : "すべての領域で左スワイプを「次のタブ」、右スワイプを「前のタブ」に戻し、上下のスワイプの個別設定をオフにします。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "왼쪽 스와이프를 ‘다음 탭’으로, 오른쪽 스와이프를 ‘이전 탭’으로 복원합니다."
+            "value" : "모든 영역에서 왼쪽 스와이프를 ‘다음 탭’으로, 오른쪽 스와이프를 ‘이전 탭’으로 복원하고, 상단 및 하단 스와이프 구분을 끕니다."
           }
         },
         "nb" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tilbakestill venstre sveip til Neste fane og høyre sveip til Forrige fane."
+            "value" : "Tilbakestill venstre sveip til Neste fane og høyre sveip til Forrige fane for alle områder, og slå av separate sveip øverst og nederst."
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Veeg naar links terugzetten op Volgende tab en veeg naar rechts op Vorige tab."
+            "value" : "Veeg naar links voor alle gebieden terugzetten op 'Volgend tabblad' en veeg naar rechts op 'Vorig tabblad', en aparte veegbewegingen boven en onder uitzetten."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Przywróć gest w lewo do Następnej karty, a gest w prawo do Poprzedniej karty."
+            "value" : "Przywróć gest w lewo do Następnej karty, a gest w prawo do Poprzedniej karty we wszystkich obszarach i wyłącz osobne gesty dla górnej i dolnej połowy."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Restaurar o gesto para a esquerda como Próxima aba e o gesto para a direita como Aba anterior."
+            "value" : "Restaurar o gesto para a esquerda como Próxima Aba e o gesto para a direita como Aba Anterior em todas as áreas e desativar a separação dos gestos superiores e inferiores."
           }
         },
         "pt-PT" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Restaurar o deslize para a esquerda como Separador seguinte e o deslize para a direita como Separador anterior."
+            "value" : "Restaurar o deslize para a esquerda como Separador Seguinte e o deslize para a direita como Separador Anterior em todas as áreas e desativar a separação dos deslizes superiores e inferiores."
           }
         },
         "ro" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Restabilește gestul stânga la Fila următoare și gestul dreapta la Fila anterioară."
+            "value" : "Restabilește gestul stânga la Fila următoare și gestul dreapta la Tabul anterior pentru toate zonele și dezactivează separarea gesturilor de sus și de jos."
           }
         },
         "sl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Obnovite potezo v levo na Naslednji zavihek in potezo v desno na Prejšnji zavihek."
+            "value" : "Obnovite potezo v levo na Naslednji zavihek in potezo v desno na Prejšnji zavihek za vsa območja ter izklopite ločevanje potez zgoraj in spodaj."
           }
         },
         "sv" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Återställ vänster svep till Nästa flik och höger svep till Föregående flik."
+            "value" : "Återställ vänster svep till Nästa flik och höger svep till Föregående flik för alla områden, och stäng av separata svep överst och nederst."
           }
         },
         "uk" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Відновити свайп ліворуч до «Наступна вкладка», а свайп праворуч до «Попередня вкладка»."
+            "value" : "Відновити свайп ліворуч до «Наступна вкладка», а свайп праворуч до «Попередня вкладка» для всіх областей і вимкнути окремі свайпи зверху й знизу."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Khôi phục vuốt trái thành Tab kế tiếp và vuốt phải thành Tab trước đó."
+            "value" : "Khôi phục vuốt trái thành Tab tiếp theo và vuốt phải thành Tab Trước cho mọi khu vực, đồng thời tắt tách riêng vuốt nửa trên và nửa dưới."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将向左滑动恢复为“下一个标签页”,向右滑动恢复为“上一个标签页”。"
+            "value" : "将所有区域的向左滑动恢复为“下一个标签页”，向右滑动恢复为“上一个标签页”，并关闭上下半部分的单独滑动设置。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "將向左滑動還原為「下一個分頁」,向右滑動還原為「上一個分頁」。"
+            "value" : "將所有區域的向左滑動還原為「下一個標籤頁」，向右滑動還原為「上一個分頁」，並關閉上下半部的個別滑動設定。"
           }
         }
       }
@@ -662749,6 +664135,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "每個分頁獨立的狀態"
+          }
+        }
+      }
+    },
+    "Separate Top and Bottom Swipes" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "فصل تمريرات الأعلى والأسفل"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Separa els lliscaments de dalt i de baix"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oddělit přejetí nahoře a dole"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Separate stryg øverst og nederst"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Getrennte Wischgesten für oben und unten"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Separar los deslizamientos de arriba y abajo"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erilliset ylä- ja alapyyhkäisyt"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Séparer les balayages du haut et du bas"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "החלקות נפרדות למעלה ולמטה"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Külön felső és alsó húzások"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Separa gli scorrimenti in alto e in basso"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上下のスワイプを個別に設定"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "상단 및 하단 스와이프 구분"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Separate sveip øverst og nederst"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aparte veegbewegingen boven en onder"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Osobne gesty dla górnej i dolnej połowy"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Separar Gestos Superiores e Inferiores"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Separar Deslizes Superiores e Inferiores"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Separă gesturile de sus și de jos"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loči poteze zgoraj in spodaj"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Separata svep överst och nederst"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Окремі свайпи зверху й знизу"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tách riêng vuốt nửa trên và nửa dưới"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "区分上下半部分滑动"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "區分上下半部滑動"
           }
         }
       }
@@ -711787,7 +713327,7 @@
       }
     },
     "SSH Agent" : {
-      "comment" : "Agent key section header\nSetting group title",
+      "comment" : "Setting group title",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -814670,6 +816210,160 @@
         }
       }
     },
+    "Top Half" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "النصف العلوي"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meitat superior"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Horní polovina"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Øverste halvdel"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Obere Hälfte"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mitad superior"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yläpuolisko"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moitié supérieure"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "החצי העליון"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Felső fél"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metà superiore"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上半分"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "상단 절반"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Øvre halvdel"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bovenste helft"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Górna połowa"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metade Superior"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metade Superior"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jumătatea de sus"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zgornja polovica"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Övre halvan"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Верхня половина"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nửa trên"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上半部分"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上半部"
+          }
+        }
+      }
+    },
     "total 42" : {
       "localizations" : {
         "ar" : {
@@ -850659,160 +852353,6 @@
         }
       }
     },
-    "Use in Text Fields" : {
-      "localizations" : {
-        "ar" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "الاستخدام في حقول النص"
-          }
-        },
-        "ca" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Utilitzar als camps de text"
-          }
-        },
-        "cs" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Používat v textových polích"
-          }
-        },
-        "da" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Brug i tekstfelter"
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In Textfeldern verwenden"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Usar en campos de texto"
-          }
-        },
-        "fi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Käytä tekstikentissä"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Utiliser dans les champs de texte"
-          }
-        },
-        "he" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "השתמש בשדות טקסט"
-          }
-        },
-        "hu" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Használat szövegmezőkben"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Usa nei campi di testo"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テキストフィールドで使用"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "텍스트 필드에서 사용"
-          }
-        },
-        "nb" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bruk i tekstfelt"
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In tekstvelden gebruiken"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Używaj w polach tekstowych"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Usar em Campos de Texto"
-          }
-        },
-        "pt-PT" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Utilizar em Campos de Texto"
-          }
-        },
-        "ro" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Utilizează în câmpurile de text"
-          }
-        },
-        "sl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Uporabi v besedilnih poljih"
-          }
-        },
-        "sv" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Använd i textfält"
-          }
-        },
-        "uk" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Використовувати в текстових полях"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dùng trong trường văn bản"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在文本框中使用"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在文字欄位中使用"
-          }
-        }
-      }
-    },
     "Use inserting predictions for this session" : {
       "comment" : "Mosh help: --no-predict-overwrite option",
       "localizations" : {
@@ -880338,7 +881878,7 @@
       }
     },
     "Weekly" : {
-      "comment" : "Agent usage window title: weekly quota\nUpdate interval: weekly",
+      "comment" : "Agent usage window title: weekly quota",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -886968,6 +888508,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "開關關閉時不會傳送任何指令。此時僅對 Shell 自行回報目錄的主機顯示專案，且不顯示分支。"
+          }
+        }
+      }
+    },
+    "With Use System Detached Keyboard off, pinch inward, or long-press the keyboard switch key and choose Placement, then Detached, to float the keyboard. Drag the … handle to move it. Spread two fingers, double-tap the handle, or choose Docked to dock. Docking hides the keys when a hardware keyboard is connected." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "عند إيقاف «استخدام لوحة المفاتيح المنفصلة للنظام»، اقرص للداخل أو اضغط مطولًا على مفتاح تبديل لوحة المفاتيح واختر «الموضع» ثم «منفصلة» لتعويم لوحة المفاتيح. اسحب مقبض … لتحريكها. باعد بين إصبعيك أو اضغط مرتين على المقبض أو اختر «مرسوة» للإرساء. ويؤدي الإرساء إلى إخفاء المفاتيح عند توصيل لوحة مفاتيح خارجية."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amb «Utilitza el teclat desacoblat del sistema» desactivat, pessiga cap endins, o mantén premuda la tecla de canvi de teclat i tria «Ubicació», després «Desacoblat», per fer flotar el teclat. Arrossega el tirador … per moure'l. Separa dos dits, toca el tirador dues vegades o tria «Acoblat» per acoblar-lo. En acoblar-lo, les tecles s'oculten si hi ha un teclat físic connectat."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Když je volba Použít systémovou odpojenou klávesnici vypnutá, klávesnici odpojíte stažením prstů k sobě nebo podržením klávesy pro přepnutí klávesnice a volbou Umístění a poté Odpojená. Tažením za úchyt … ji přesunete. Roztažením dvou prstů, dvojitým klepnutím na úchyt nebo volbou Ukotvená ji ukotvíte. Po ukotvení se klávesy skryjí, pokud je připojena hardwarová klávesnice."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Når Brug systemets frigjorte tastatur er slået fra, kan du knibe indad eller holde tasten til skift af tastatur nede og vælge Placering og derefter Frigjort for at frigøre tastaturet. Træk i …-håndtaget for at flytte det. Spred to fingre, tryk to gange på håndtaget, eller vælg Fastgjort for at fastgøre det. Fastgørelse skjuler tasterne, når der er tilsluttet et fysisk tastatur."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenn „Systemeigene abgelöste Tastatur verwenden“ deaktiviert ist, ziehen Sie zwei Finger zusammen, oder halten Sie die Taste zum Wechseln der Tastatur gedrückt und wählen Sie „Platzierung“ und dann „Abgelöst“, um die Tastatur abzulösen. Ziehen Sie am Griff …, um sie zu bewegen. Spreizen Sie zwei Finger, doppeltippen Sie auf den Griff oder wählen Sie „Angedockt“, um sie anzudocken. Beim Andocken werden die Tasten ausgeblendet, wenn eine Hardware-Tastatur verbunden ist."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Con «Usar el teclado desacoplado del sistema» desactivado, junta dos dedos sobre el teclado, o mantén pulsada la tecla de cambio de teclado y elige «Posición», luego «Desacoplado», para desacoplarlo. Arrastra el tirador … para moverlo. Separa dos dedos, toca dos veces el tirador o elige «Acoplado» para acoplarlo. Al acoplarlo, las teclas se ocultan si hay un teclado físico conectado."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kun Käytä järjestelmän irrotettua näppäimistöä on pois päältä, irrota näppäimistö nipistämällä sisäänpäin tai painamalla pitkään näppäimistön vaihtonäppäintä ja valitsemalla ensin Sijainti ja sitten Irrotettu. Siirrä sitä vetämällä …-kahvasta. Kiinnitä se levittämällä kahta sormea, kaksoisnapauttamalla kahvaa tai valitsemalla Kiinnitetty. Kiinnittäminen piilottaa näppäimet, kun fyysinen näppäimistö on yhdistettynä."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lorsque Utiliser le clavier détaché du système est désactivé, pincez vers l'intérieur, ou maintenez la touche de changement de clavier enfoncée et choisissez Position, puis Détaché, pour faire flotter le clavier. Faites glisser la poignée … pour le déplacer. Écartez deux doigts, touchez deux fois la poignée ou choisissez Ancré pour l'ancrer. L'ancrage masque les touches lorsqu'un clavier physique est connecté."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "כאשר \"השתמש במקלדת המנותקת של המערכת\" כבוי, צבוט פנימה או לחץ לחיצה ארוכה על מקש החלפת המקלדת ובחר \"מיקום\" ואז \"מנותקת\" כדי להציף את המקלדת. גרור את הידית … כדי להזיז אותה. הרחק שתי אצבעות, הקש פעמיים על הידית או בחר \"מעוגנת\" כדי לעגן. עיגון מסתיר את המקשים כאשר מחוברת מקלדת חומרה."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ha a Rendszer leválasztott billentyűzetének használata ki van kapcsolva, a billentyűzet leválasztásához csippentsen befelé, vagy tartsa nyomva a billentyűzetváltó billentyűt, és válassza az Elhelyezés, majd a Leválasztott lehetőséget. Az áthelyezéséhez húzza a … fogantyút. A dokkoláshoz húzza szét két ujját, koppintson duplán a fogantyúra, vagy válassza a Dokkolt lehetőséget. A dokkolás elrejti a billentyűket, ha hardveres billentyűzet van csatlakoztatva."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Con Usa la tastiera staccata di sistema disattivato, pizzica verso l'interno, oppure tieni premuto il tasto di cambio tastiera e scegli Posizione, poi Staccata, per staccare la tastiera. Trascina la maniglia … per spostarla. Allarga due dita, tocca due volte la maniglia o scegli Ancorata per ancorarla. L'ancoraggio nasconde i tasti quando è collegata una tastiera fisica."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「システムのフローティングキーボードを使用」がオフのときは、ピンチインするか、キーボード切り替えキーを長押しして「配置」、「フローティング」の順に選択すると、キーボードがフローティング表示になります。「…」ハンドルをドラッグすると移動できます。2本指を広げるか、ハンドルをダブルタップするか、「ドッキング」を選択するとドッキングします。ドッキング中にハードウェアキーボードが接続されていると、キーは非表示になります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시스템 분리형 키보드 사용이 꺼져 있으면 두 손가락을 모으거나, 키보드 전환 키를 길게 누르고 배치를 선택한 다음 분리를 선택하여 키보드를 띄울 수 있습니다. … 핸들을 드래그하여 위치를 옮기고, 두 손가락을 벌리거나 핸들을 이중 탭하거나 고정을 선택하면 고정됩니다. 하드웨어 키보드가 연결된 상태에서 고정하면 키가 숨겨집니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Når Bruk systemets løsnede tastatur er slått av, kniper du sammen eller holder inne tastaturbytte-tasten og velger Plassering og deretter Løsnet for å løsne tastaturet. Dra i …-håndtaket for å flytte det. Spre to fingre, dobbelttrykk på håndtaket eller velg Festet for å feste det. Når tastaturet er festet, skjules tastene hvis et maskinvaretastatur er tilkoblet."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als 'Losgekoppeld systeemtoetsenbord gebruiken' uitstaat, knijp je naar binnen, of houd je de toetsenbordwisseltoets ingedrukt en kies je 'Plaatsing' en daarna 'Losgekoppeld' om het toetsenbord te laten zweven. Sleep de greep … om het te verplaatsen. Spreid twee vingers, dubbeltik op de greep of kies 'Vastgekoppeld' om het vast te koppelen. Bij vastkoppelen worden de toetsen verborgen als er een hardwaretoetsenbord is aangesloten."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gdy opcja „Używaj systemowej odłączonej klawiatury” jest wyłączona, uszczypnij do środka lub przytrzymaj klawisz przełączania klawiatury i wybierz „Położenie”, potem „Odłączona”, aby odłączyć klawiaturę. Przeciągnij uchwyt …, aby ją przesunąć. Rozsuń dwa palce, dotknij uchwytu dwukrotnie lub wybierz „Zadokowana”, aby ją zadokować. Zadokowanie ukrywa klawisze, gdy podłączona jest klawiatura sprzętowa."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Com Usar Teclado Desencaixado do Sistema desativado, junte dois dedos ou mantenha pressionada a tecla de troca de teclado e escolha Posição e depois Desencaixado para desencaixar o teclado. Arraste a alça … para movê-lo. Afaste dois dedos, toque duas vezes na alça ou escolha Encaixado para encaixá-lo. Ao encaixar, as teclas ficam ocultas quando há um teclado físico conectado."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Com a opção Usar Teclado Desencaixado do Sistema desativada, junte dois dedos ou mantenha premida a tecla de mudança de teclado e escolha Posição e depois Desencaixado para desencaixar o teclado. Arraste a pega … para o mover. Afaste dois dedos, toque duas vezes na pega ou escolha Encaixado para o encaixar. Ao encaixar, as teclas ficam ocultas quando está ligado um teclado físico."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Când „Folosește tastatura detașată a sistemului” este dezactivată, apropie două degete sau ține apăsată tasta de comutare a tastaturii și alege „Plasare”, apoi „Detașată”, pentru a detașa tastatura. Trage de mânerul … pentru a o muta. Depărtează două degete, atinge mânerul de două ori sau alege „Andocată” pentru a o andoca. Andocarea ascunde tastele când este conectată o tastatură fizică."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ko je možnost Uporabi sistemsko ločeno tipkovnico izklopljena, tipkovnico ločite tako, da približate prsta ali pridržite tipko za preklop tipkovnice in izberete Položaj ter nato Ločena. Za premikanje povlecite ročico …. Za sidranje razmaknite prsta, dvakrat tapnite ročico ali izberite Zasidrana. Ko je priključena strojna tipkovnica, sidranje skrije tipke."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "När Använd systemets lösgjorda tangentbord är avstängt lösgör du tangentbordet genom att nypa ihop eller hålla ned tangentbordsbytartangenten och välja Placering och sedan Lösgjort. Dra i handtaget … för att flytta det. Dra isär två fingrar, dubbeltryck på handtaget eller välj Dockat för att docka. Vid dockning döljs tangenterna när ett fysiskt tangentbord är anslutet."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Коли параметр «Використовувати системну відкріплену клавіатуру» вимкнено, зведіть пальці або утримуйте клавішу перемикання клавіатури й виберіть «Розташування», а потім «Відкріплена», щоб відкріпити клавіатуру. Перетягуйте маркер …, щоб перемістити її. Розведіть два пальці, торкніться маркера двічі або виберіть «Закріплена», щоб закріпити її. Після закріплення клавіші приховуються, якщо підключено апаратну клавіатуру."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khi Dùng bàn phím tách rời của hệ thống đang tắt, hãy chụm hai ngón tay vào trong, hoặc nhấn giữ phím chuyển bàn phím, chọn Vị trí rồi chọn Tách rời để thả nổi bàn phím. Kéo tay cầm … để di chuyển bàn phím. Mở rộng hai ngón tay, chạm hai lần vào tay cầm hoặc chọn Cố định để cố định. Khi được cố định, các phím sẽ ẩn đi nếu có bàn phím vật lý được kết nối."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭“使用系统浮动键盘”后，向内捏合，或长按键盘切换键，选择“位置”，然后选择“浮动”，即可让键盘浮动。拖移“…”手柄可移动键盘。两指张开、连按两下手柄或选择“停靠”即可停靠。停靠后，如果已连接硬件键盘，按键将会隐藏。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "關閉「使用系統分離鍵盤」時，向內捏合，或長按鍵盤切換鍵並選擇「位置」，再選擇「分離」，即可讓鍵盤浮動。拖移「…」控點可移動鍵盤。兩指向外撥開、點兩下控點或選擇「停駐」即可停駐。停駐後，若已連接硬體鍵盤，按鍵會自動隱藏。"
           }
         }
       }
