@@ -1262,8 +1262,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
 
     private func loadToolbarConfiguration() {
         guard !hidesToolbar else {
-            configuredDrawerToggle = nil
-            configuredMain = []
+            configuredSections = [[], [], []]
             configuredDrawers = []
             toolbarDrawerState = .closed
             // Showing the toolbar again opens its drawer by default, as at creation.
