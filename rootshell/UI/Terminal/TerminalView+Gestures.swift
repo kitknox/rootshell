@@ -3102,7 +3102,9 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
 
 extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        #if !targetEnvironment(macCatalyst)
         swipeStartAreas[ObjectIdentifier(gestureRecognizer)] = touch.location(in: self).y < bounds.midY ? .top : .bottom
+        #endif
         // The brightness HUD is an interactive `UIHostingController` view (a
         // horizontal `Slider`) added as a subview of this terminal view. Without
         // this exclusion the terminal's tab-swipe pan (`appTabSwipePanGesture`)
