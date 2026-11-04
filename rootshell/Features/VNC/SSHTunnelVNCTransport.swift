@@ -33,6 +33,10 @@ actor SSHTunnelVNCTransport: RFBConnection {
     /// bounded-close rationale (a dead peer can park NIO close futures).
     private static let closeTimeoutSeconds: TimeInterval = 2.0
 
+    /// The DCT encoder only feels backpressure once the channel window fills,
+    /// so the 8 MiB default became a standing frame backlog; keep it near TCP's.
+    private static let channelWindowSize = 512 * 1024
+
     private let sshConfig: SSHConfig
     private let vncHost: String
     private let vncPort: UInt16
@@ -249,7 +253,8 @@ actor SSHTunnelVNCTransport: RFBConnection {
     ) async throws -> (client: SSHClient, jumpClient: SSHClient?) {
         try await SSHConnectionHelper.connect(
             config: config,
-            onHostKeyValidation: onHostKeyValidation
+            onHostKeyValidation: onHostKeyValidation,
+            channelWindowSize: channelWindowSize
         )
     }
 
