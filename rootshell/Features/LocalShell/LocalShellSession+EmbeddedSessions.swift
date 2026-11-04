@@ -201,10 +201,20 @@ extension LocalShellSession {
         let sessionID = ObjectIdentifier(session)
         let outputCallback = onOutput
         let outputDataCallback = onOutputData
+        // Observe remote bytes before the parent's output sink. Local prompts
+        // and connection spinners use that same sink, but must not overwrite
+        // the resumed application's saved modes and pen.
+        let protocolObserver = kind == .trzsz ? embeddedTrzszProtocolObserver : nil
+        let deliver: @Sendable (Data) -> Void = { data in
+            if let outputDataCallback { outputDataCallback(data) }
+            else { outputCallback?(String(decoding: data, as: UTF8.self)) }
+        }
+        let remoteOutput = protocolObserver?.makeOutputSink(enqueue: deliver)
         session.onOutput = { [weak self] output in
             Task { @MainActor [weak self] in
                 guard let self, self.isCurrentEmbeddedSession(sessionID, kind: kind) else { return }
-                outputCallback?(output)
+                if let remoteOutput { remoteOutput(Data(output.utf8)) }
+                else { outputCallback?(output) }
             }
         }
         let relay = EmbeddedOutputRelay()
@@ -214,7 +224,8 @@ extension LocalShellSession {
                 let chunks = relay.takeAll()
                 guard let self, self.isCurrentEmbeddedSession(sessionID, kind: kind) else { return }
                 for chunk in chunks {
-                    outputDataCallback?(chunk)
+                    if let remoteOutput { remoteOutput(chunk) }
+                    else { outputDataCallback?(chunk) }
                 }
             }
         }
@@ -678,7 +689,7 @@ extension LocalShellSession {
                 self.inlineFailureAnimator = nil
 
                 // Show error message and prompt below the animation
-                let errorMessage = "\r\n\r\nssh: \(error.localizedDescription)\r\n"
+                let errorMessage = "\r\n\r\nssh: \(SSHBanner.terminalSafe(error.localizedDescription))\r\n"
                 self.onOutput?(self.normalizeLineEndings(errorMessage))
                 self.displayPrompt()
             }
@@ -2032,6 +2043,7 @@ extension LocalShellSession {
 
         // Create Trzsz session with terminal ID for credential persistence
         let trzszSession = TrzszSession(config: resolvedTrzszConfig, pty: pty, terminalId: terminalId)
+        trzszSession.onFreshSessionStarting = onEmbeddedTrzszFreshSession
 
         // Set up host key validation
         trzszSession.onHostKeyValidation = { [weak self] request in

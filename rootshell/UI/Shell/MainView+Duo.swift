@@ -8,8 +8,29 @@ extension MainView {
         return context
     }
 
-    var showsHorizontalTabHeader: Bool {
+    /// A horizontal tab strip is on screen, above or below the terminal.
+    var showsHorizontalTabs: Bool {
         duoLayout.showsHorizontalTabs(globallyHidden: tabBarHidden)
+    }
+
+    /// The strip sits above the terminal.
+    var showsHorizontalTabHeader: Bool {
+        showsHorizontalTabs && tabBarPosition == .top
+    }
+
+    /// The strip sits below the terminal, on the keyboard while one is up.
+    var showsBottomTabBar: Bool {
+        showsHorizontalTabs && tabBarPosition == .bottom
+    }
+
+    /// Nothing occupies the top strip or Mac titlebar row.
+    var topTabBarHidden: Bool {
+        tabBarHidden || tabBarPosition == .bottom
+    }
+
+    /// Where the visible strip sits.
+    var horizontalTabPosition: TabBarPosition {
+        showsBottomTabBar ? .bottom : .top
     }
 
     /// Dynamic Island iPhones end the top safe area several points below the
@@ -30,7 +51,22 @@ extension MainView {
     /// Window-space top of the tab header band.
     var chromeTopInset: CGFloat { tabHeaderTopLimit ?? windowSafeAreaInsets.top }
 
-    var showsDuoSideRail: Bool { duoLayout.usesSideRail && !tabBarHidden && !showKeyboardChooser }
+    /// iPhone and iPad without top tabs: the terminal runs under the top safe
+    /// area. Its grid stays below it while scrollback fills the band. Duo's
+    /// full-width and front side-rail modes already own their top edge.
+    var terminalExtendsUnderTopSafeArea: Bool {
+        #if !targetEnvironment(macCatalyst) && !os(visionOS)
+        !showsHorizontalTabHeader && !duoLayout.usesFullWidth && !duoLayout.extendsTerminalToVerticalEdges
+        #else
+        false
+        #endif
+    }
+
+    /// The inner display reserves the rail's column even when the rail is
+    /// hidden, so only the top tab bar follows the global setting there.
+    var showsDuoSideRail: Bool {
+        duoLayout.usesSideRail && (!tabBarHidden || duoLayout.showsTabsBesideSideRail) && !showKeyboardChooser
+    }
 
     @ViewBuilder
     func applyDuoChrome<Content: View>(_ content: Content) -> some View {
@@ -40,31 +76,17 @@ extension MainView {
                 .toolbarVisibility(showsDuoSideRail ? .visible : .hidden, for: .navigationBar)
                 .toolbar {
                     if showsDuoSideRail {
-                        ToolbarItem(placement: .topBarLeading) {
+                        ToolbarItem(placement: .topBarTrailing) {
                             Button("Open Connections", systemImage: "plus", action: addNewTab)
                                 .labelStyle(.iconOnly)
                         }
                         .visibilityPriority(.high)
-                        ToolbarItem(placement: .topBarTrailing) {
-                            if let tab = tabsModel.selectedTab {
-                                DuoTabButton(
-                                    terminal: tab.focusedTerminal,
-                                    number: (tabsModel.navigationTabs.firstIndex(where: { $0.id == tab.id }) ?? 0) + 1,
-                                    onClose: {
-                                        if let position = tabsModel.index(of: tab.id) { requestUserCloseTab(at: position) }
-                                    },
-                                    onManage: { showingTabSwitcher = true }
-                                )
-                            } else {
-                                Button("Tabs", systemImage: "square.on.square") {
-                                    showingTabSwitcher = true
-                                }
-                                .labelStyle(.iconOnly)
-                                .disabled(true)
-                            }
+                        // Identical branches: flipping the generation replaces the item.
+                        if duoTabItemGeneration.isMultiple(of: 2) {
+                            duoTabToolbarItem
+                        } else {
+                            duoTabToolbarItem
                         }
-                        .axisBehavior(.verticalPreferred)
-                        .visibilityPriority(.high)
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("Settings", systemImage: "gearshape") { requestSettingsPresentation() }
                                 .labelStyle(.iconOnly)
@@ -87,6 +109,47 @@ extension MainView {
         content
         #endif
     }
+
+    #if !targetEnvironment(macCatalyst) && !os(visionOS)
+    @available(iOS 27.1, *)
+    @ToolbarContentBuilder
+    private var duoTabToolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            if let tab = tabsModel.selectedTab {
+                DuoTabButton(
+                    terminal: tab.focusedTerminal,
+                    number: (tabsModel.navigationTabs.firstIndex(where: { $0.id == tab.id }) ?? 0) + 1,
+                    onClose: {
+                        if let position = tabsModel.index(of: tab.id) { requestUserCloseTab(at: position) }
+                    },
+                    onManage: { showingTabSwitcher = true },
+                    onMountChange: noteDuoTabButtonMounted
+                )
+            } else {
+                Button("Tabs", systemImage: "square.on.square") {
+                    showingTabSwitcher = true
+                }
+                .labelStyle(.iconOnly)
+                .disabled(true)
+            }
+        }
+        .axisBehavior(.verticalPreferred)
+        .visibilityPriority(.high)
+    }
+    #endif
+
+    /// After a display or window change UIKit can take the rail's tab button
+    /// down while SwiftUI still declares it, and never remount it. Replace the
+    /// item when the button stays unmounted.
+    func noteDuoTabButtonMounted(_ mounted: Bool) {
+        duoTabButtonMounts = max(0, duoTabButtonMounts + (mounted ? 1 : -1))
+        guard !mounted else { return }
+        Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard duoTabButtonMounts == 0 else { return }
+            duoTabItemGeneration &+= 1
+        }
+    }
 }
 
 private struct DuoTabButton: View {
@@ -94,6 +157,7 @@ private struct DuoTabButton: View {
     let number: Int
     let onClose: () -> Void
     let onManage: () -> Void
+    let onMountChange: (Bool) -> Void
 
     var body: some View {
         Button(action: onManage) {
@@ -109,6 +173,8 @@ private struct DuoTabButton: View {
                     }
                 }
         }
+        .onAppear { onMountChange(true) }
+        .onDisappear { onMountChange(false) }
         .accessibilityLabel("Tab \(number)")
         .accessibilityHint("Show all tabs")
         .contextMenu {

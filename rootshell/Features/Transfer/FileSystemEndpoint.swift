@@ -323,6 +323,23 @@ nonisolated struct FileSystemEndpoint: Sendable {
         }
     }
 
+    /// Restores a copied directory's mode without following a symlink swapped in for it
+    /// (lsetstat@openssh.com when offered), dropping setuid/setgid as OpenSSH's sftp does.
+    func restoreDirectoryMode(_ path: String, mode: UInt32) async throws {
+        switch backend {
+        case .local(let resolver):
+            try await Self.onDisk {
+                guard lchmod(resolver.resolveParent(path), mode_t(mode & 0o1777)) == 0 else { throw POSIXError.current }
+            }
+        case .sftp(let sftp):
+            var attributes = SFTPFileAttributes()
+            attributes.permissions = mode & 0o1777
+            try await mapped(path) { try await sftp.setLinkAttributes(at: path, attributes: attributes) }
+        case .s3:
+            throw StorageError.noPermissions
+        }
+    }
+
     func setModificationDate(_ path: String, date: Date) async throws {
         switch backend {
         case .local(let resolver):

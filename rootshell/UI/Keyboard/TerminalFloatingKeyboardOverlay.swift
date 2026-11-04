@@ -241,7 +241,7 @@ final class TerminalFloatingKeyboardOverlay: UIView {
     private let keyboard: TerminalTouchKeyboardView
     private var state: TerminalFloatingKeyboardState
     private var dragOrigin: CGRect?
-    var onDock: (() -> Void)?
+    private var previousAvailable: CGRect?
     var isHostActive: (() -> Bool)?
     var inputRegion: CGRect? {
         didSet { if oldValue != inputRegion { dragOrigin = nil; setNeedsLayout() } }
@@ -260,7 +260,7 @@ final class TerminalFloatingKeyboardOverlay: UIView {
         addSubview(keyboard)
         keyboard.onFloatingDrag = { [weak self] translation, ended in self?.move(translation, ended: ended) }
         keyboard.onFloatingDragCancelled = { [weak self] in self?.dragOrigin = nil }
-        keyboard.onFloatingNudge = { [weak self] delta in self?.move(delta, ended: true, allowDock: false) }
+        keyboard.onFloatingNudge = { [weak self] delta in self?.move(delta, ended: true) }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
@@ -268,6 +268,7 @@ final class TerminalFloatingKeyboardOverlay: UIView {
         guard self.state !== state else { return }
         self.state = state
         dragOrigin = nil
+        previousAvailable = nil
         setNeedsLayout()
     }
 
@@ -283,8 +284,18 @@ final class TerminalFloatingKeyboardOverlay: UIView {
         super.layoutSubviews()
         guard available.width > 0, available.height > 0 else { return }
         keyboard.floatingAvailableHeight = available.height
-        let frame = settledFrame(TerminalTouchKeyboardModel.floatingFrame(in: available,
+        var frame = settledFrame(TerminalTouchKeyboardModel.floatingFrame(in: available,
             height: keyboard.intrinsicContentSize.height, anchor: state.anchor))
+        if previousAvailable == available, keyboard.frame.height > 0,
+           keyboard.frame.width == frame.width, keyboard.frame.height != frame.height {
+            frame = settledFrame(TerminalTouchKeyboardModel.resizedFloatingFrame(keyboard.frame,
+                height: frame.height, in: available))
+            // Update the travel anchor too, otherwise the next layout would
+            // move the card back to the old proportional position.
+            state.anchor = TerminalTouchKeyboardModel.floatingAnchor(for: frame, in: available)
+            state.saveAnchor()
+        }
+        previousAvailable = available
         if keyboard.frame.size != frame.size {
             if keyboard.frame.width != frame.width { keyboard.cancelInteraction(preservingModifiers: true) }
             dragOrigin = nil
@@ -300,7 +311,7 @@ final class TerminalFloatingKeyboardOverlay: UIView {
         return keyboard.hitTest(convert(point, to: keyboard), with: event)
     }
 
-    private func move(_ translation: CGPoint, ended: Bool, allowDock: Bool = true) {
+    private func move(_ translation: CGPoint, ended: Bool) {
         guard isHostActive?() == true else { return }
         if dragOrigin == nil { dragOrigin = keyboard.frame; keyboard.cancelInteraction(preservingModifiers: true) }
         guard let origin = dragOrigin else { return }
@@ -316,7 +327,6 @@ final class TerminalFloatingKeyboardOverlay: UIView {
             }
             state.anchor = TerminalTouchKeyboardModel.floatingAnchor(for: settled, in: available)
             state.saveAnchor()
-            if allowDock && TerminalTouchKeyboardModel.shouldDockAfterDrag(proposed, in: available) { onDock?() }
         }
     }
 

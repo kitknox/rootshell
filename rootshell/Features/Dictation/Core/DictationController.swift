@@ -106,10 +106,11 @@ final class DictationController {
             phase = .failed(DictationError.modelMissing.localizedDescription)
             return
         }
-        if self.target !== target { insertedChunks = []; insertedCount = 0 }
+        let mode = settings.get(Settings.Dictation.commitMode)
+        if self.target !== target || commitMode != mode { insertedChunks = []; insertedCount = 0 }
         self.target = target
         self.owner = owner
-        commitMode = settings.get(Settings.Dictation.commitMode)
+        commitMode = mode
         agentName = target.dictationAgentName
         style = Self.style(settings.get(Settings.Dictation.formatting), agent: agentHint || agentName != nil)
         formatter = DictationFormatter(.init(
@@ -190,6 +191,8 @@ final class DictationController {
         if !text.isEmpty { target.dictationInsert(text) }
         if submit { target.dictationSubmit() }
         phrases = []
+        // Live-mode chunks before this text can no longer be undone by length.
+        resetInsertions()
     }
 
     /// Return from the pane or HUD. Ends the phrase run, so Undo and spacing start fresh.

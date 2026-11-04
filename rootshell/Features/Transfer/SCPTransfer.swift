@@ -420,7 +420,7 @@ final class SCPTransfer {
 
         // Calculate total size
         progress.totalFiles = filesToDownload.count
-        progress.totalBytes = Int64(filesToDownload.reduce(0) { $0 + $1.size })
+        progress.totalBytes = filesToDownload.saturatingByteTotal { $0.size }
         progress.startTime = Date()
 
         // Download each file

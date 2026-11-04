@@ -491,13 +491,15 @@ final class TabExposeView: UIView, TabExposeControllerObserver, PreviewRendering
             let rect = convert(tabRect, from: nil)
             return rect.minX...rect.maxX
         }
+        let position = integratedTabJoin?.position ?? .top
         rim.update(
             cards: [heroRect],
             color: UIColor(rimPalette.keyline(increasedContrast: traitCollection.accessibilityContrast == .high))
                 .resolvedColor(with: traitCollection),
             lineWidth: 1 / max(1, traitCollection.displayScale),
             opening: opening,
-            openingEdgeY: heroRect.minY)
+            openingEdgeY: position == .bottom ? heroRect.maxY : heroRect.minY,
+            openingPosition: position)
     }
 
     private var isCompact: Bool {

@@ -23,6 +23,23 @@ extension ScreenSharingPointerModeDefault: SettingValue {}
 extension ScreenSharingCursorRenderingDefault: SettingValue {}
 extension ScreenSharingCursorSizeDefault: SettingValue {}
 extension PasteInsertFormat: SettingValue {}
+extension HostKeyDNSVerification: SettingValue {}
+extension SSHFPDoHProvider: SettingValue {}
+
+/// SSHFP host-key checking, mirroring OpenSSH `VerifyHostKeyDNS` no/ask/yes.
+nonisolated enum HostKeyDNSVerification: String, CaseIterable, Sendable {
+    case off
+    case ask
+    case trust
+
+    var displayName: String {
+        switch self {
+        case .off: String(localized: "Off", comment: "SSHFP host key verification mode")
+        case .ask: String(localized: "Show in Prompt", comment: "SSHFP host key verification mode")
+        case .trust: String(localized: "Trust DNSSEC Matches", comment: "SSHFP host key verification mode")
+        }
+    }
+}
 
 nonisolated extension Settings {
     enum Connections {
@@ -235,8 +252,18 @@ nonisolated extension Settings {
         static let trustedVNCCertificateFingerprints = AnySettingDefinition.opaque(
             "trustedVNCCertificateFingerprints", group: .hostTrust,
             title: String(localized: "Trusted Screen Sharing Certificates", comment: "Setting title"))
+        static let verifyHostKeyDNS = SettingKey(
+            "sshVerifyHostKeyDNS", default: HostKeyDNSVerification.off, group: .hostTrust,
+            configKey: "ssh-verify-host-key-dns",
+            title: String(localized: "Verify Host Keys via DNS", comment: "Setting title"))
+        static let verifyHostKeyDNSResolver = SettingKey(
+            "sshVerifyHostKeyDNSResolver", default: SSHFPDoHProvider.buildDefault, group: .hostTrust,
+            configKey: "ssh-verify-host-key-dns-resolver",
+            title: String(localized: "DNS Resolver", comment: "Setting title"))
 
-        static let all: [AnySettingDefinition] = [trustedVNCCertificateFingerprints]
+        static let all: [AnySettingDefinition] = [
+            trustedVNCCertificateFingerprints, verifyHostKeyDNS.erased, verifyHostKeyDNSResolver.erased,
+        ]
     }
 
     enum Roam {

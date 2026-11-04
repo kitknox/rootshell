@@ -9,6 +9,12 @@ struct PushAgentLogoAttachmentTests {
         (agent: "codex", assetName: "CodexLogo"),
         (agent: "pi", assetName: "PiLogo"),
         (agent: "omp", assetName: "OMPLogo"),
+        (agent: "dsh", assetName: "DeepSeekLogo"),
+        (agent: "hermes", assetName: "HermesLogo"),
+        // Hooks spell agents however their CLI does.
+        (agent: "claude", assetName: "ClaudeLogo"),
+        (agent: "Oh My Pi", assetName: "OMPLogo"),
+        (agent: "deepseek-harness", assetName: "DeepSeekLogo"),
     ])
     func knownAgent(agent: String, assetName: String) throws {
         #expect(PushAgentLogoAttachment.assetName(for: agent) == assetName)
@@ -21,7 +27,6 @@ struct PushAgentLogoAttachmentTests {
         nil,
         "",
         "cursor",
-        "claude",
     ] as [String?])
     func unknownAgent(agent: String?) {
         #expect(PushAgentLogoAttachment.assetName(for: agent) == nil)

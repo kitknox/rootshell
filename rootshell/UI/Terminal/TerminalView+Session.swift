@@ -342,12 +342,20 @@ extension Ghostty.TerminalView {
         }
 
         var trailer: Data? = nil
-        if trzszSession.wasResumed {
+        // A surviving surface already owns the current screen and negotiated
+        // modes. Only a surface recreated from persistence needs saved bytes.
+        let needsSurfaceRestore = pendingScrollbackRestore || pendingScrollbackRestoreForLayout || scrollbackWrittenAwaitingTrailer
+        if trzszSession.wasResumed, needsSurfaceRestore,
+           let snapshot = ScrollbackPersistenceManager.shared.terminalStateRestorationBytes(for: uuid) {
+            // Includes primary/alternate cells, keyboard negotiation stacks,
+            // margins, SGR, charsets and cursor state as one ordered replay.
+            trailer = snapshot
+        } else if trzszSession.wasResumed, needsSurfaceRestore {
+            ResumeDebugLogger.shared.log("[Restore] legacy snapshot for \(uuid.uuidString.prefix(8)); full protocol state unavailable")
             var bytes = Data()
-            let wasAltScreen = ScrollbackPersistenceManager.shared.wasAlternateScreenActive(for: self.uuid)
-            if wasAltScreen {
-                bytes.append(Data("\u{1b}[?1049h".utf8))
-            }
+            let alternateScreen = ScrollbackPersistenceManager.shared.alternateScreenRestorationBytes(for: self.uuid)
+            let wasAltScreen = alternateScreen != nil
+            if let alternateScreen { bytes.append(alternateScreen) }
             if ScrollbackPersistenceManager.shared.wasMouseCaptureActive(for: self.uuid) {
                 bytes.append(Data("\u{1b}[?1000h\u{1b}[?1002h\u{1b}[?1006h".utf8))
             }
@@ -420,6 +428,9 @@ extension Ghostty.TerminalView {
     /// Ensures the restore replay's final cursor positioning is rendered after
     /// the saved bytes and any gated live output have reached Ghostty.
     func didQueueScrollbackRestoreReplay() {
+        scrollbackRestoreReplayPending = true
+        scrollbackRestoreReplayGeneration &+= 1
+        let generation = scrollbackRestoreReplayGeneration
         outputPipeline.notifyWhenOutputDrained { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -427,6 +438,9 @@ extension Ghostty.TerminalView {
                 await Task.yield()
                 guard !Task.isCancelled else { return }
                 self.flushPostScrollbackRestoreRender()
+                if self.scrollbackRestoreReplayGeneration == generation {
+                    self.scrollbackRestoreReplayPending = false
+                }
             }
         }
     }

@@ -14,7 +14,7 @@
 
 ## About
 
-rootshell is an MIT-licensed open source terminal emulator built for Apple platforms. It features GPU-accelerated rendering powered by libghostty, native SSH with post-quantum key exchange, Secure Enclave key storage, VPN tunneling, HTTP and HTTPS traffic capture, high performance HEVC screen sharing, an agent inbox that tracks coding agents and long-running commands across sessions, end-to-end encrypted push notifications and coding-agent hooks, a built-in file browser and native git client, a voice-controlled AI agent, cloud provider integration (AWS, Azure, Linode, DigitalOcean), Kubernetes node debugging, native tmux and herdr control modes, and Rootshell Roam, a mosh-compatible and tssh (QUIC+KCP) mobile terminal protocol with seamless network roaming and session persistence.
+rootshell is an MIT-licensed open source terminal emulator built for Apple platforms. It features GPU-accelerated rendering powered by libghostty, native SSH with post-quantum key exchange, Secure Enclave key storage, VPN tunneling, a built-in Tailscale client, HTTP and HTTPS traffic capture, high performance HEVC screen sharing for Mac and Linux, an agent inbox that tracks coding agents and long-running commands across sessions, end-to-end encrypted push notifications and coding-agent hooks, a built-in file browser and native git client, a voice-controlled AI agent, cloud provider integration (AWS, Azure, Linode, DigitalOcean), Kubernetes node debugging, native tmux and herdr control modes, and Rootshell Roam, a mosh-compatible and tssh (QUIC+KCP) mobile terminal protocol with seamless network roaming and session persistence.
 
 For full feature details, screenshots, and documentation, visit **[www.rootshell.com](https://www.rootshell.com)**.
 
@@ -74,9 +74,12 @@ brew install --cask rootshell
 - **Custom Themes** - Create your own themes with a full color picker, duplicate built-in themes, or import Ghostty theme files. Theme-aware UI tints the entire app
 - **Day/Night Themes** - Automatic theme switching based on sunrise/sunset at your location
 - **Tabs & Splits** - Resizable split windows within tabs with session persistence
+- **Tab Bar Position** - Put any horizontal tab style at the top or below the terminal, above the keyboard or toolbar when it is visible
+- **Rounded Panes** - Optional style that draws panes, splits, and docked sidebars as separate rounded cards with lit edges and gaps between them; integrated tabs join the card and show progress
+- **Program Icons** - Tabs and the sidebar show the logo of the program in the focused pane: shells (bash, zsh, fish, Nushell, Elvish, xonsh), editors (Vim, Neovim, Helix, Emacs), monitors (htop, btop), and tools such as Git, Python, Ruby, Node.js, Cargo, Deno, Homebrew, and tmux, with category icons for everything else. Automatic in macOS local shells and tmux and herdr control mode; elsewhere, source the [bash/zsh](scripts/shell-integration-demo.sh) or [fish](scripts/shell-integration-demo.fish) shell integration demo
 - **Session Restoration** - Tabs, splits, themes, and connections restore automatically on launch
 - **Nerd Fonts** - Multiple monospace Nerd Fonts built-in with full icon support
-- **Custom Font Import** - Import TTF and OTF fonts with live preview, auto-grouped by family
+- **Custom Font Import** - Import TTF and OTF fonts with live preview, auto-grouped by family, or choose monospace fonts installed by other apps
 - **Clickable Hyperlinks** - URLs in terminal output are interactive: Cmd+click or context menu to open
 - **Cursor Blink Styles** - 7 animated cursor modes: normal, breathing, heartbeat, neon flicker, pulse, candle, and rootshell
 - **Vertical Tab Sidebar** - Tab switcher as a vertical list (⌘⇧\\) with search, keyboard navigation, drag to reorder, context menus on every row, and pinning as a docked, resizable column
@@ -113,14 +116,16 @@ See the [herdr control mode guide](docs/herdr-control-mode.md) for setup, the fo
 ### Visual Effects
 - **Custom Shaders** - Import shaders directly from Shadertoy with full uniform support
 - **Cursor Effects** - Warp, Sweep, Tail, and Blaze cursor animations
-- **Background Effects** - Solar (real-time sun tracking), Starfield, Fireflies, Aurora, Nebula, Butterflies, and Jellyfish. Butterflies flock, court, and perch with real physics; both new effects steer around active terminal text
+- **Background Effects** - Solar (real-time sun tracking), Starfield, Fireflies, Aurora, Nebula, Aquarium, Butterflies, and Jellyfish. Butterflies flock, court, and perch with real physics; Butterflies and Jellyfish steer around active terminal text
+- **Live Weather** - A sky that follows current conditions and the time of day: layered clouds, rain, snow, fog, wind, thunderstorms, sun, moon, and stars. Use device location (rounded to about 1 km and sent only to the weather providers) or a chosen city; the tab sidebar shows conditions and a six-hour forecast
+- **Theme Gradient** - A soft, drifting gradient built from your theme's colors in eight styles or your own colors, as a terminal effect or a window-wide backdrop that shows around Rounded Panes and through transparent terminals
 - **Video Backgrounds** - Play looping video files as terminal backgrounds with speed control
 - **Photo Backgrounds** - Terminal background from photo library with opacity presets, 9 image filters, and Ken Burns cinematic pan/zoom animation
 - **Window Transparency** - Configurable transparency with blur (macOS)
 
 ### SSH & Networking
 - **Native SSH Client** - Written entirely in Swift with no external dependencies
-- **Jump Hosts** - Multi-hop connections through bastion servers
+- **Jump Hosts** - Ordered chains of jump hosts with separate credentials per hop, including comma-separated `-J` lists for ssh, tssh, scp, and sftp. tssh relays UDP through consecutive hops for VPNs and resumed sessions
 - **SSH Agent Forwarding** - Three approval modes: auto-approve, per-session, per-request
 - **Secure Enclave Keys** - Hardware-protected P-256 keys generated in and never leaving the Secure Enclave, alongside software Ed25519, ECDSA, and RSA keys with biometric protection
 - **Passkey-Backed Keys** - `sk-ecdsa-sha2-nistp256` keys created, held, and synced by your passkey provider (iCloud Keychain or a third-party manager like 1Password), confirmed per signature with Face ID or Touch ID
@@ -128,23 +133,35 @@ See the [herdr control mode guide](docs/herdr-control-mode.md) for setup, the fo
 - **Keyboard-Interactive Auth** - RFC 4256 challenge-response (2FA, OTP, PAM) across every launch path, with password-manager AutoFill in auth prompts
 - **OpenPubkey SSH (opkssh)** - Sign in with Google, Microsoft, GitLab, or a custom OIDC issuer to create an SSH identity with no key files. Ephemeral key presented as an OpenSSH certificate with silent renewal
 - **SSH Certificates** - Attach OpenSSH user certificates (`-cert.pub`) to any saved key for `TrustedUserCAKeys` servers, and validate host keys against trusted certificate authorities with OpenSSH-style host patterns
+- **SSHFP Host Key Verification** - Optionally check host keys against SSHFP DNS records over DNS-over-HTTPS (Cloudflare, Quad9, Google, Mullvad, or 360 Secure DNS), show the result in the host key prompt, and connect automatically on a DNSSEC-validated match. Off by default
 - **GPG Agent Forwarding** - rootshell acts as your GPG agent over SSH and tssh: sign and decrypt remotely with keys that never leave the device. Reuse existing SSH and YubiKey keys or import GPG keys, with per-connection approval modes
 - **SSH Agent Server** - Local OpenSSH-compatible agent exposes saved keys (YubiKey, FIDO2, and opkssh included) to other apps and CLI tools via `SSH_AUTH_SOCK`, with code-signature client authorization and an audit log (macOS Standalone)
 - **External SSH Agents** - Use identities from a local ssh-agent, including 1Password, across profiles, jump hosts, agent forwarding, and VPN (macOS Standalone)
 - **Port Forwarding** - Local (`-L`), remote (`-R`), and dynamic SOCKS5 (`-D`) forwarding
-- **VPN Tunnel** - Any SSH or TSSH profile can act as a system-level VPN, routing all device traffic through the remote server. Per-profile DNS presets, route exclusions, Home Screen/Control Center widgets, Live Activity with real-time stats, Siri Shortcuts support, and an optional Block HTTP/3 (QUIC) setting. On macOS Standalone, runs as a system extension with live status and traffic stats
+- **Remote Ports** - An optional globe in the terminal corner lists the TCP ports the remote host listens on. Pick one to forward it to this device's loopback address and open it in an in-app browser tab, over SSH, tssh, Mosh/Roam, and tmux or herdr control-mode panes. See [remote listening ports](docs/remote-listening-ports.md)
+- **VPN Tunnel** - Any SSH or TSSH profile can act as a system-level VPN, routing all device traffic through the remote server. Per-profile DNS presets, route exclusions, Home Screen/Control Center widgets, Live Activity with real-time stats, Siri Shortcuts support, and an optional Block HTTP/3 (QUIC) setting. On macOS Standalone, runs as a system extension with live status and traffic stats. Auto Recovery reconnects a VPN left on before a restart or app update, and `vpn` in the iOS and visionOS local shell shows status and starts or stops saved profiles
 - **Multipath TCP** - MPTCP over Apple Network.framework maintains subflows on WiFi and cellular simultaneously for near-instant handover (requires Linux 5.6+ on server)
 - **Native SCP & SFTP** - Built-in `scp` and interactive `sftp` client with tab completion, glob patterns, and real-time progress
+- **File Manager** - Two-pane browser (⌘⇧U) for local folders, SSH and tssh hosts, and S3-compatible cloud storage, with a transfer queue, Quick Look previews, pasting files from the clipboard, and hardware keyboard navigation. **Browse as Root** switches a remote pane to sudo, with password and one-time-code prompts in a sheet
 - **Background SSH Tunnels** - Maintain port forwards without a terminal UI with auto-start on launch and byte transfer statistics
 - **Auto-start Multiplexer** - Automatically attach to or create a tmux, herdr or zmx session on connect
 - **Multiplexer Session Discovery** - After connecting, lists active tmux, zellij, herdr and zmx sessions with per-multiplexer detail and a live terminal preview
-- **Tailscale Integration** - Device discovery and SSH to your tailnet with no-auth support
 - **Host Shorthand (HSS)** - Pattern-based hostname expansion with YAML configuration
 - **Connection Health** - Real-time RTT and packet loss tracking with time series chart and negotiated cryptographic algorithm details
 - **Transfer to Nearby Device** - Hand off a live tssh session to another iCloud-paired device; the receiver reattaches to the same tsshd PTY with recent scrollback intact
-- **No SSH Compression** - The transport only ever negotiates `none`, with no zlib codec linked. Compression side channels do not apply, including the shared-context attack across multiplexed channels ([arXiv:2609.07709](https://arxiv.org/abs/2609.07709), CCS 2026) and compression-bomb DoS
+- **No SSH Compression** - The SSH transport only ever negotiates `none`, with no zlib codec linked. Compression side channels do not apply, including the shared-context attack across multiplexed channels ([arXiv:2609.07709](https://arxiv.org/abs/2609.07709), CCS 2026) and compression-bomb DoS
 - **Login Banners** - Server banners shown inline, sanitized against control-sequence injection
 - **Scrollback Encryption** - Persisted scrollback encrypted at rest with AES-256-GCM and restored on session reconnect with full ANSI colors
+
+### Tailscale
+
+Built-in Tailscale is available on iPhone, iPad, and macOS Standalone. It is not in the China App Store version, where we were blocked from including VPN support.
+
+- **No Tailscale App Needed** - Sign in under Settings → VPN → Tailscale and join your tailnet from rootshell itself, with MagicDNS names, subnet routes, and copyable peer hostnames and IPs
+- **Whole Device (VPN)** - Tailnet addresses become reachable from other apps. Optionally send traffic matching domain, wildcard, IP, or CIDR rules through a saved SSH or tssh host, or route everything else through it, and capture HTTP(S) traffic without leaving the tailnet. Disconnect the separate Tailscale app first
+- **rootshell Only** - Reach the tailnet from SSH, SFTP, Mosh, tssh, and Screen Sharing while another VPN stays connected; other apps are unaffected. Optional exit node with local network access, automatic connection on first use of a tailnet device, and tailnet access for `curl`, `git`, and `ping` in the iOS local shell (or an `ALL_PROXY` proxy for new Mac local shells)
+- **Quick Controls** - Start Tailscale from the VPN widget, Control Center, or the Connect VPN shortcut, and follow uptime and traffic in VPN settings and the Live Activity
+- **Tailnet Discovery** - Device discovery and SSH to your tailnet with no-auth support
 
 ### HTTP & HTTPS Capture
 
@@ -152,7 +169,7 @@ Available on iPhone, iPad, visionOS, and macOS Standalone; excluded from sandbox
 
 - **Traffic Inspection** - Capture HTTP/1.1, HTTP/2, and WebSocket frames through an existing SSH or tssh VPN, or use Local Capture through your device's internet connection without a remote server
 - **Selective HTTPS Decryption** - Guided capture-certificate setup and host rules with wildcards, exclusions, and ports. HTTPS is not decrypted by default; unmatched hosts appear as connections. Apps that reject the certificate are automatically skipped on subsequent connections. HTTP/3 (QUIC) is blocked while recording so clients can retry over HTTP/2 or HTTP/1.1
-- **Request Details** - Search and filter traffic, inspect headers, cookies, bodies, and timing, and view JSON trees, HTML previews, images, forms, source, or hex
+- **Request Details** - Search and filter traffic, inspect headers, cookies, bodies, and timing, and view JSON and plist trees, readable XML, HTML previews, images, forms, source, or hex. Requests show the server's country flag, location, and network
 - **Copy & Export** - Copy requests as cURL, save request/response messages or bodies, and export sessions as HAR or ZIP. Choose **HAR without Cookies and Auth** to omit cookie and authorization headers. Enable **Record Packets for pcap** before starting a session to export pcapng with embedded TLS keys for Wireshark
 - **Rewrite Rules** - Change request or response headers and replace body text using wildcard or regular-expression URL matching. Body rewrites apply to bodies up to 1 MB
 - **Sessions & Storage** - Review and rename saved sessions, configure body and session size limits, and choose how many sessions to keep. Recording pauses at the session-size limit
@@ -167,9 +184,10 @@ To start capturing:
 ### Screen Sharing
 - **High Performance Mode** - Adaptive-bitrate HEVC over UDP, decoded on the GPU through Metal and tuned for Apple silicon. Up to 4K at 60 FPS and 60 Mbps, tracking the network as conditions change, with video and audio encrypted with AES-256 SRTP
 - **Nothing to Install** - Connect to any Mac with Screen Sharing enabled in System Settings
+- **Linux Desktops** - Connect to [wayshare](https://github.com/kitknox/wayshare) servers on Linux, including Hyprland desktops, in both High Performance and Standard modes with Apple SRP login. Option is sent as Alt on Linux remotes
 - **Match Client Sizing** - The Mac creates a real virtual display sized exactly to your device: no panning, no scaling, no letterboxing, and it follows rotation
 - **Remote System Audio** - The remote Mac's audio plays on your device, scheduled against the server's clock for tight A/V sync
-- **Standard Mode** - RFB over TCP for constrained networks, VPNs, and non-Mac servers: headless Mac mini, Raspberry Pi, lab boxes, Linux. VNC password, Apple Diffie-Hellman, Apple Remote Desktop, and VeNCrypt authentication
+- **Standard Mode** - RFB over TCP for constrained networks, VPNs, and non-Mac servers: headless Mac mini, Raspberry Pi, lab boxes, Linux. VNC password, Apple Diffie-Hellman, Apple Remote Desktop, Apple SRP, and VeNCrypt authentication
 - **Full Input Support** - Tap to click, pinch to zoom, trackpad and mouse with a real pointer and native scrolling, hardware keyboards with physical key identity, and two-way clipboard with optional shared-clipboard sync
 - **Login Window Detection** - An on-device vision model spots the macOS login screen and offers to type your saved password. No frame or text read from one ever leaves the device
 - **Curtain Mode** - Blank the remote Mac's display while you keep control, with an optional on-screen message (requires Remote Management)
@@ -184,16 +202,16 @@ To start capturing:
 
 ### Rootshell Roam
 - **Mosh-Compatible Protocol** - Native [mosh](https://mosh.org)-compatible implementation built entirely in Swift with SSP (State Synchronization Protocol) support. Works with any standard mosh-server installation
-- **tssh/trzsz Support** - [tssh](https://github.com/trzsz/trzsz-ssh) connections with UDP-based terminal transport offering full native scrollback and lower interactive latency than mosh
+- **tssh/trzsz Support** - [tssh](https://github.com/trzsz/trzsz-ssh) connections with UDP-based terminal transport offering full native scrollback and lower interactive latency than mosh, with Zstandard output compression on compatible tsshd servers
 - **QUIC + KCP Transports** - Choose between QUIC (TLS 1.3, modern congestion control) or KCP (AES-GCM-256) for tssh transport, with rebuilt reconnection engines for fast, stable recovery after network changes. Configure in Settings → Roam → Transport Mode
-- **Session Resumption** - Roam sessions survive app termination and device reboots. Credentials are stored in the Keychain and sessions resume automatically.
+- **Session Resumption** - Roam sessions survive app termination and device reboots. Credentials are stored in the Keychain and sessions resume automatically. tssh reattachment restores full-screen contents, saved cursors, and terminal and keyboard modes.
 - **Seamless Network Roaming** - Switch between WiFi and cellular without dropping your session. Handles IP address changes, network transitions, and temporary connectivity loss with a status banner
 - **STUN Firewall Traversal** - Automatic NAT hole-punching via STUN to enable connections through stateful firewalls without VPN tunnels
 - **Predictive Local Echo** - Keystroke predictions displayed immediately while waiting for server confirmation, making typing responsive on high-latency connections
 - **Hardware-Accelerated Crypto** - Apple hardware-accelerated AES with key state caching for OCB encryption/decryption
 
 ### Cloud & Infrastructure
-- **Cloud Providers** - AWS, Azure, Linode, DigitalOcean, Tailscale, and NetBird (cloud or self-hosted) with OAuth and token authentication
+- **Cloud Providers** - AWS (including IAM Identity Center sign-in with automatic credential refresh), Azure, Linode, DigitalOcean, Tailscale, and NetBird (cloud or self-hosted) with OAuth and token authentication
 - **Serial Console** - Direct access to Linode LISH and AWS EC2 serial consoles
 - **Kubernetes** - Cluster browsing, node debugging via debug pods, EKS kubeconfig generation
 - **Mesh Device Details** - Tailscale and NetBird peers show OS, owner, client version, mesh path, exit nodes and subnet routes, and key expiry
@@ -211,7 +229,9 @@ To start capturing:
 ### Agent Inbox
 - **Coding Agent Cards** - Claude Code, Codex, Cursor, Copilot, OpenCode, Antigravity, and Pi are recognized in any tab and shown in the vertical tab bar as cards with live status: working, waiting for your input, or done
 - **On-Device Detection** - Detection reads the terminal screen on device, so it works identically for local shells, SSH, tssh, and tmux control mode panes with nothing to install on the server. Split tabs are pane-aware: tapping a card focuses the exact pane
+- **Program Status Protocol** - Programs can report working, idle, waiting, completed, and failed states plus progress directly over OSC 7501, taking priority over screen detection. The bundled Vim and Helix report their own status, including failed saves
 - **Smart Notifications** - One notification per event, and an agent that delegates to background agents is tracked through the wait instead of reported done early
+- **Agent Messages** - Notifications from coding-agent hooks collect in an inbox panel (⌃⌘I) with Needs You, Working, Done, Failed, and Archived sections; select one to open its pane. The Live Activity can show an unread count or unread statuses
 - **Project Grouping** - Group the inbox by project to see each project's agents side by side, each card naming its git branch
 - **Long-Running Commands** - Builds, test runs, deployments, file transfers, and password or confirmation prompts like sudo appear as cards too: badged while running, marked unread when they finish unseen, notifying when one blocks on input. Programs reporting OSC 9;4 progress feed the same cards. Off by default under Settings → Agents & Commands
 - **Subscription Usage** - Claude, Codex, and GitHub Copilot plan usage shown per provider with reset countdowns, per-model breakdowns, and a pace mark. Sign-ins never leave memory; only usage figures and plan labels persist
@@ -219,14 +239,14 @@ To start capturing:
 ### Push Notifications & Agent Hooks
 
 - **Notifications From Any Computer** - Pair a computer under Settings → Notifications → Push Notifications, then use the dependency-free `rootshell-notify` CLI from scripts, cron jobs, CI, builds, or deployments. Set a title, body, status, priority, and optional target device; notifications arrive while rootshell is in the background
-- **Claude Code and Codex Hooks** - The setup command detects installed agents and adds idempotent hooks without replacing existing configuration. Both agents report completed turns; Claude Code also reports permission prompts, questions, and other requests for input. Visible Codex approval prompts are detected on device because its pre-review hook cannot reliably say whether user action is required
+- **Agent Hooks** - The setup command detects Claude Code, Codex, Pi, Oh My Pi, and Hermes and adds idempotent hooks, extensions, or plugins without replacing existing configuration. All of them report completed turns; Claude Code, Pi, Oh My Pi, and Hermes also report permission prompts, questions, and other requests for input, and Pi, Oh My Pi, and Hermes report failed turns. Visible Codex approval prompts are detected on device because its pre-review hook cannot reliably say whether user action is required. Notification titles name the sending host
 - **Jump Back to Work** - Tapping an agent notification returns to its originating rootshell window, tab, and pane, including panes managed through tmux control mode
 - **Post-Quantum End-to-End Encryption** - Titles, summaries, and routing hints are encrypted on the sender with X-Wing (ML-KEM-768 + X25519); the stateless relay sees only ciphertext. Hooks send a short, credential-scrubbed summary and never send prompts, terminal output, transcripts, files, or environment variables
 - **Per-Device Control** - Every paired computer has its own revocable credential, and automatic agent notifications can be enabled or disabled independently for each destination without affecting manual notifications
 
 To get started, open Settings → Notifications → Push Notifications → Pair a Computer. rootshell creates a pairing bundle for that device and displays a complete install command containing it. Copy that generated command into the computer you want notifications from. Only the command generated by the target device can pair that device.
 
-The generated command installs `rootshell-notify` in `~/.local/bin`, pairs the device, sends a test notification, and installs hooks for the Claude Code and Codex installations it finds. Codex asks you to review and trust the new hook from `/hooks`. See the [push notification and agent hook guide](push/README.md) for manual setup, custom notifications, upgrades, per-device controls, troubleshooting, and protocol details.
+The generated command installs `rootshell-notify` in `~/.local/bin`, pairs the device, sends a test notification, and installs hooks for the Claude Code, Codex, Pi, Oh My Pi, and Hermes installations it finds. Codex asks you to review and trust the new hook from `/hooks`, and Hermes needs `hermes plugins enable rootshell-push`. See the [push notification and agent hook guide](push/README.md) for manual setup, custom notifications, upgrades, per-device controls, troubleshooting, and protocol details.
 
 ### Built-in Tools
 - **rf File Browser** - Yazi-inspired Swift-native TUI file browser with miller columns, vim navigation, tabs, ripgrep search, bookmarks, file operations, bat syntax-highlighted preview, kitty image preview, git status indicators, and 700+ Nerd Font icons. Includes SFTP and S3-compatible cloud storage browsing, with yank/paste between local, SFTP and storage tabs. Configurable via `~/.config/rf/rf.yaml`
@@ -237,7 +257,7 @@ The generated command installs `rootshell-notify` in `~/.local/bin`, pairs the d
 - **ripgrep** - Fast regex-based file search (`rg`) with all standard flags
 - **mtr/traceroute** - Interactive TUI with per-hop loss, RTT, jitter, AS lookups, truecolor gradients, and report formats (text, CSV, JSON, XML)
 - **vim 9.2** - "Huge" feature set with 24-bit color, langmap, and vartabs
-- **curl** - curl 8.19.0 with HTTP/2 via nghttp2
+- **curl** - curl 8.23.0 with HTTP/2 via nghttp2
 - **croc** - Encrypted peer-to-peer file transfers with LAN peer discovery over multicast and relay fallback
 - **imgcat** - Display images inline using Kitty graphics protocol (PNG, JPEG, HEIC)
 - **libarchive** - bsdtar, unzip with Zip64, RAR/RAR5, 7-Zip, Zstandard, lz4 support
@@ -249,7 +269,8 @@ The generated command installs `rootshell-notify` in `~/.local/bin`, pairs the d
 - **Links from Remote Programs** - Opt-in device-side browser opening for tools such as Codex over SSH, native tmux, and Mosh, with an included `BROWSER` helper. See [remote URL opening](docs/remote-url-opening.md)
 - **Credential Requests from Remote Programs** - Opt-in per connection: `sudo -A`, keyring unlocks, and CLI tokens on an SSH or tssh host ask Rootshell over a forwarded socket, and you answer with password-manager AutoFill. See [remote credential requests](docs/remote-credential-requests.md)
 - **Keyboard Shortcuts** - Fully customizable keybindings with menu bar integration and Ghostty keybind config compatibility
-- **Customizable Toolbar** - Drag-and-drop keyboard toolbar with custom keys that send arbitrary text or key sequences, plus up to five configurable drawer rows. Sticky modifier keys with single-tap one-shot and double-tap lock
+- **Terminal Keyboard** - rootshell's own on-screen keyboard in 22 layouts, including US English, French AZERTY, German and English QWERTZ, Portuguese, Nordic, and Turkish, with long-press alternatives and seven styles from Flat to Steampunk. Dock it, detach it to float over the terminal on iPhone and iPad, or split it around the fold on iPhone Duo
+- **Customizable Toolbar** - Drag-and-drop keyboard toolbar with custom keys that send arbitrary text or key sequences, plus up to five configurable drawer rows. Sticky modifier keys with single-tap one-shot and double-tap lock. Swipe across modifiers to combine them, or swipe from the drawer button to open rows and send a drawer key in one gesture
 - **Clipboard Manager** - Optional device-only encrypted clipboard history (⌘⇧C) capturing copies, pastes, and OSC 52 writes, with transforms: base64, hex, URL encode/decode, JWT decode, hashes, JSON format, shell escape, ANSI strip. Off by default; turning it off wipes the store
 - **Spacebar Trackpad** - Long-press the on-screen spacebar to move the cursor like a trackpad
 - **Input Language Switching** - Karabiner-style input-source switch on a clean Command tap, a dedicated shortcut (default ⌘⇧Space), and reliable Korean (Hangul) composition
@@ -261,7 +282,7 @@ The generated command installs `rootshell-notify` in `~/.local/bin`, pairs the d
 
 ### Sync & Persistence
 - **iCloud Sync** - Connection history, known hosts, and profiles sync across devices
-- **Config Import** - Import connection profiles and keys from your OpenSSH config (concrete Host blocks, IdentityFile keys matched by fingerprint) and fonts, themes, keybindings, and appearance from a desktop Ghostty config
+- **Config Import** - Import connection profiles and keys from your OpenSSH config (concrete Host blocks, IdentityFile keys matched by fingerprint, and ProxyJump chains) and fonts, themes, keybindings, and appearance from a desktop Ghostty config
 - **Backup & Restore** - Export all app data (keys, passwords, profiles, themes, fonts, shortcuts, cloud accounts, settings) into a single AES-256-GCM encrypted `.rootshellbackup` file with intelligent merging on restore
 - **Shell Startup & Custom Prompt** - `~/.rootshellrc` sourced on new shell tabs. Fully customizable prompt via `.promptrc.toml` with Starship-compatible format strings, 11 modules, Powerline arrows, and transient prompt support
 - **Local Shell** - Full terminal sessions on iOS and macOS
@@ -269,6 +290,8 @@ The generated command installs `rootshell-notify` in `~/.local/bin`, pairs the d
 ### Platform Integration
 - **25 Languages** - Arabic, Brazilian Portuguese, Catalan, Czech, Danish, Dutch, Finnish, French, German, Hebrew, Hungarian, Italian, Japanese, Korean, Norwegian Bokmal, Polish, Portuguese, Romanian, Simplified Chinese, Slovenian, Spanish, Swedish, Traditional Chinese, Ukrainian, Vietnamese
 - **Siri & Shortcuts** - Open any saved connection profile from Shortcuts, Siri, or automation triggers. VPN connect/disconnect intents, plus Open Local Shell, Open SSH Connection, Run Command over SSH (runs in the background with real exit codes and separate stderr), and Get Connection Profiles actions
+- **AppleScript** - Open folders, create tabs or windows from a profile, and list and focus terminal panes by UUID across tabs and windows, including tmux and herdr control-mode panes (macOS)
+- **iPhone Duo** - Layouts for both displays on iOS 27.1: a side rail or camera-aware tabs on the front display, the terminal above the fold in laptop pose, and a Terminal Keyboard that splits around the fold
 - **Open in rootshell** - Files shared from other apps open directly in a new shell tab in your editor, honoring `EDITOR` from `~/.rootshellrc`
 - **Live Activity & Widgets** - Lock Screen and Dynamic Island show active sessions with real-time stats. Home Screen widgets for VPN and WiFi info
 - **Paste Image Upload** - Paste clipboard images into SSH sessions to upload files to the remote server and insert the path at cursor

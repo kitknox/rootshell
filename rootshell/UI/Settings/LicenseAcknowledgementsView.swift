@@ -484,13 +484,6 @@ struct LicenseAcknowledgementsView: View {
                 licenseText: apache2LicenseText
             ),
             LicenseEntry(
-                name: "Git logo",
-                licenseType: "CC BY 3.0",
-                copyright: "Jason Long. Git™ is a trademark of the Software Freedom Conservancy.",
-                repositoryURL: "https://git-scm.com/community/logos",
-                licenseText: ccBy3LicenseText
-            ),
-            LicenseEntry(
                 name: "tmux logo",
                 licenseType: "ISC",
                 copyright: "Copyright (c) Jason Long",

@@ -12,6 +12,26 @@ import Citadel
 import NIOCore
 import NIOFoundationCompat
 
+nonisolated extension Sequence {
+    /// Sums peer-reported sizes without trapping: a server can claim UInt64.max bytes per file.
+    func saturatingByteTotal(_ size: (Element) -> UInt64) -> Int64 {
+        var total: UInt64 = 0
+        for element in self {
+            let (sum, overflow) = total.addingReportingOverflow(size(element))
+            total = overflow ? .max : sum
+        }
+        return Int64(clamping: total)
+    }
+}
+
+nonisolated extension Int64 {
+    /// Adds two non-negative byte counts, pinning at Int64.max.
+    func addingSaturating(_ other: Int64) -> Int64 {
+        let (sum, overflow) = self.addingReportingOverflow(other)
+        return overflow ? .max : sum
+    }
+}
+
 /// Shared stateless SFTP operations.
 /// The interactive SFTP shell (SFTPSession), scp, and FileSystemEndpoint's
 /// SFTP backend call through to these methods.

@@ -1094,6 +1094,17 @@ final class TmuxController {
         pane.requestTmuxResizePane(horizontal: horizontal, cells: target.size)
     }
 
+    /// Rebuilds a window's split ratios from its applied layout, e.g. after a
+    /// pane's top inset changed without changing the window's cell size.
+    func reapplyLayout(windowID: Int) {
+        guard isActive, let tab = windowTabs[windowID], !tab.paneMove.isPending,
+              let ops = lastAppliedTopologyOps else { return }
+        for case let .setLayout(id, layout, zoomedPaneId) in ops where id == windowID {
+            _ = setLayout(windowId: windowID, layout: layout, zoomedPaneId: zoomedPaneId)
+            return
+        }
+    }
+
     private func appliedLayout(for windowID: Int) -> TmuxLayoutNode? {
         guard let ops = lastAppliedTopologyOps else { return nil }
         for case let .setLayout(id, layout, _) in ops where id == windowID {
@@ -1287,6 +1298,8 @@ final class TmuxController {
         let padX: CGFloat
         let padY: CGFloat
         let divider: CGFloat
+        /// Top inset shared by every pane on the window's top row.
+        let topInset: CGFloat
     }
 
     private func paneMetrics(for layout: TmuxLayoutNode) -> PaneMetrics? {
@@ -1301,7 +1314,19 @@ final class TmuxController {
             cellH: CGFloat(size.cell_height_px) / scale,
             padX: CGFloat(PaddingManager.shared.effectivePaddingX),
             padY: CGFloat(PaddingManager.shared.effectivePaddingY),
-            divider: SplitTreeHostingView.dividerVisibleThickness)
+            divider: SplitTreeHostingView.dividerVisibleThickness,
+            topInset: layoutTopInset(layout))
+    }
+
+    /// Panes may not be in their new positions yet, so take the largest inset
+    /// any of them reports; only panes touching the top report one.
+    private func layoutTopInset(_ node: TmuxLayoutNode) -> CGFloat {
+        switch node {
+        case let .pane(paneId, _, _, _, _):
+            return paneViews[paneId]?.topInsetPoints ?? 0
+        case let .split(_, children, _, _, _, _):
+            return children.map(layoutTopInset).max() ?? 0
+        }
     }
 
     /// ROOTSHELL-TMUX (id=tmux-split-chrome-ratio)
@@ -1309,8 +1334,10 @@ final class TmuxController {
         let cell = horizontal ? metrics.cellW : metrics.cellH
         let pad = horizontal ? metrics.padX : metrics.padY
         switch node {
-        case let .pane(_, width, height, _, _):
-            return CGFloat(horizontal ? width : height) * cell + pad * 2
+        case let .pane(_, width, height, _, y):
+            // A pane on the window's top row also clears the top inset.
+            let inset = !horizontal && y == 0 ? metrics.topInset : 0
+            return CGFloat(horizontal ? width : height) * cell + pad * 2 + inset
         case let .split(direction, children, _, _, _, _):
             let along = children.map { neededPoints($0, horizontal: horizontal, metrics: metrics) }
             if (direction == .horizontal) == horizontal {

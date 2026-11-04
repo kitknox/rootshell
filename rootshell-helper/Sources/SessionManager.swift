@@ -16,33 +16,6 @@ class ShellSession {
     let socketPath: String
     let createdAt: Date
 
-    var exitStatus: Int32?
-    var isAlive: Bool {
-        if exitStatus != nil { return false }
-
-        // Use ProcessSpawner helper which handles WIFEXITED/WEXITSTATUS
-        // -1 means still running OR error (already reaped)
-        let status = ProcessSpawner.wait(forProcess: pid, blocking: false)
-
-        if status >= 0 {
-            // Process exited, got valid exit status
-            exitStatus = status
-            return false
-        }
-
-        // status == -1: either still running or already reaped (ECHILD)
-        // Try to distinguish by checking if process exists
-        if kill(pid, 0) == 0 {
-            // Process exists, still running
-            return true
-        }
-
-        // Process doesn't exist - either reaped or never existed
-        // Mark as dead with unknown status
-        exitStatus = -1
-        return false
-    }
-
     init(id: UUID = UUID(), pid: pid_t, clientPID: pid_t = 0, pty: PTYPair, socketPath: String) {
         self.id = id
         self.pid = pid
@@ -52,38 +25,11 @@ class ShellSession {
         self.createdAt = Date()
     }
 
+    /// Hangs up the terminal and never waits: closing the master SIGHUPs
+    /// login, and the session's exit source reaps it. The session socket is
+    /// the app's: FDReceiver binds and unlinks it around the handoff.
     func cleanup() {
-        // Close PTY first - this may send SIGHUP to the shell
         pty.close()
-
-        // Remove socket file
-        try? FileManager.default.removeItem(atPath: socketPath)
-
-        // Reap the process - must ensure no zombie is left behind
-        guard exitStatus == nil else {
-            // Already reaped via isAlive check
-            return
-        }
-
-        var status: Int32 = 0
-
-        // Try non-blocking first
-        var result = waitpid(pid, &status, WNOHANG)
-
-        if result == 0 {
-            // Still running - give it a moment to exit after PTY close
-            usleep(100_000)  // 100ms
-            result = waitpid(pid, &status, WNOHANG)
-        }
-
-        if result == 0 {
-            // Still running - force kill and block until reaped
-            kill(pid, SIGKILL)
-            result = waitpid(pid, &status, 0)  // Blocking wait
-        }
-
-        // Mark as reaped (actual status extraction not critical here)
-        exitStatus = (result > 0) ? 0 : -1
     }
 }
 
@@ -93,15 +39,14 @@ class SessionManager {
 
     private var sessions: [UUID: ShellSession] = [:]
     private var sessionsByClientPID: [pid_t: Set<UUID>] = [:]  // Track sessions by client app PID
+    /// By session. An entry outlives its session until the login is reaped,
+    /// so while it exists that session's pid can't have been reused.
+    private var exitSources: [UUID: DispatchSourceProcess] = [:]
+    private var shuttingDown = false
     private let lock = NSLock()
-    private var monitorTimer: Timer?
-
-    /// Callback for when a session exits
-    var onSessionExit: ((UUID, Int32) -> Void)?
+    private let reapQueue = DispatchQueue(label: "com.kk2.rootshell.helper.reap", qos: .utility)
 
     private init() {
-        // Start monitoring timer for process exits
-        startMonitoring()
         // Set up client crash/exit detection
         setupClientMonitoring()
     }
@@ -126,45 +71,49 @@ class SessionManager {
 
         NSLog("Client PID \(clientPID) exited, cleaning up \(sessionsToRemove.count) session(s)")
 
-        // Send SIGHUP to all shells first
+        // Hang up each shell; its exit source reaps it.
         for sessionID in sessionsToRemove {
             _ = killSession(sessionID, signal: SIGHUP)
-        }
-
-        // Brief delay to allow shells to exit gracefully
-        usleep(50_000)  // 50ms
-
-        // Now clean up all sessions - cleanup() will ensure reaping
-        for sessionID in sessionsToRemove {
             removeSession(sessionID)
         }
-    }
-
-    deinit {
-        stopMonitoring()
     }
 
     // MARK: - Session Management
 
     /// Adds a new session
     func addSession(_ session: ShellSession) {
+        let exitSource = makeExitSource(for: session)
         lock.lock()
-        defer { lock.unlock() }
 
-        sessions[session.id] = session
+        exitSources[session.id] = exitSource
+        let refused = shuttingDown
+        if !refused {
+            sessions[session.id] = session
 
-        // Track by client PID if available
-        if session.clientPID > 0 {
-            if sessionsByClientPID[session.clientPID] == nil {
-                sessionsByClientPID[session.clientPID] = Set()
+            // Track by client PID if available
+            if session.clientPID > 0 {
+                if sessionsByClientPID[session.clientPID] == nil {
+                    sessionsByClientPID[session.clientPID] = Set()
+                }
+                sessionsByClientPID[session.clientPID]?.insert(session.id)
+
+                // Start monitoring this client PID for crashes
+                ClientMonitor.shared.monitorClient(session.clientPID)
             }
-            sessionsByClientPID[session.clientPID]?.insert(session.id)
-
-            // Start monitoring this client PID for crashes
-            ClientMonitor.shared.monitorClient(session.clientPID)
         }
 
-        NSLog("Added session \(session.id) (shell pid: \(session.pid), client pid: \(session.clientPID))")
+        lock.unlock()
+
+        if refused {
+            // Spawned while shutting down: hang up now; shutdown's escalation
+            // still covers it. The source isn't active yet, so the pid is ours.
+            kill(session.pid, SIGHUP)
+            session.cleanup()
+        } else {
+            NSLog("Added session \(session.id) (shell pid: \(session.pid), client pid: \(session.clientPID))")
+        }
+        // After insertion: a login that already exited is reaped right away.
+        exitSource.activate()
     }
 
     /// Gets a session by ID
@@ -195,10 +144,30 @@ class SessionManager {
             }
         }
 
+        let stillRunning = exitSources[id] != nil
         lock.unlock()
 
         NSLog("Removing session \(id) (shell pid: \(session.pid), client pid: \(session.clientPID))")
         session.cleanup()
+        if stillRunning {
+            killIfStillRunning(pid: session.pid, sessionID: id)
+        }
+    }
+
+    /// Bounded fallback for a login that outlives its signal and hangup.
+    private func killIfStillRunning(pid: pid_t, sessionID: UUID) {
+        reapQueue.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            let unreaped = self.exitSources[sessionID] != nil
+            if unreaped {
+                kill(pid, SIGKILL)
+            }
+            self.lock.unlock()
+            if unreaped {
+                NSLog("Session \(sessionID) (pid \(pid)) outlived its hangup, sent SIGKILL")
+            }
+        }
     }
 
     /// Lists all active session IDs
@@ -255,59 +224,84 @@ class SessionManager {
         }
     }
 
-    /// Cleanup all sessions (called on shutdown)
-    func cleanup() {
+    var isShuttingDown: Bool {
         lock.lock()
+        defer { lock.unlock() }
+        return shuttingDown
+    }
+
+    /// Hangs up every session, SIGKILLs any login still unreaped after
+    /// `grace`, then calls `done` on the reap queue. Never blocks. The app
+    /// waits 2 s before SIGKILLing the helper, so keep `grace` well under that.
+    func shutdown(grace: TimeInterval = 0.5, then done: @escaping () -> Void) {
+        lock.lock()
+        guard !shuttingDown else {
+            lock.unlock()
+            return
+        }
+        shuttingDown = true
         let allSessions = Array(sessions.values)
+        // Under the lock: reap unlists a session before reaping its pid.
+        for session in allSessions {
+            kill(session.pid, SIGHUP)
+        }
         sessions.removeAll()
+        sessionsByClientPID.removeAll()
         lock.unlock()
 
-        NSLog("Cleaning up \(allSessions.count) sessions")
-
-        // Send SIGHUP to all shells first
-        for session in allSessions {
-            try? ProcessSpawner.killProcess(session.pid, signal: SIGHUP)
-        }
-
-        // Brief delay to allow shells to exit gracefully
-        usleep(100_000)  // 100ms
-
-        // Now cleanup all sessions - this will ensure zombies are reaped
+        NSLog("Shutting down \(allSessions.count) session(s)")
         for session in allSessions {
             session.cleanup()
         }
+
+        // Every watched login, including ones already removed and hung up.
+        let deadline = DispatchTime.now() + grace
+        func escalate() {
+            lock.lock()
+            let survivors = exitSources.values.map(\.handle)
+            let expired = DispatchTime.now() >= deadline
+            if expired {
+                survivors.forEach { kill($0, SIGKILL) }
+            }
+            lock.unlock()
+            guard survivors.isEmpty || expired else {
+                reapQueue.asyncAfter(deadline: .now() + 0.05, execute: escalate)
+                return
+            }
+            if !survivors.isEmpty {
+                NSLog("Sent SIGKILL to \(survivors.count) login(s) that outlived their hangup")
+            }
+            done()
+        }
+        reapQueue.async(execute: escalate)
     }
 
     // MARK: - Process Monitoring
 
-    private func startMonitoring() {
-        // Check for exited processes every 1 second
-        monitorTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.checkForExitedProcesses()
+    /// Reaps the login when it exits. libdispatch fires `.exit` at once for a
+    /// pid that already exited.
+    private func makeExitSource(for session: ShellSession) -> DispatchSourceProcess {
+        let pid = session.pid
+        let sessionID = session.id
+        let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: reapQueue)
+        source.setEventHandler { [weak self] in
+            self?.reap(pid: pid, sessionID: sessionID)
         }
+        return source
     }
 
-    private func stopMonitoring() {
-        monitorTimer?.invalidate()
-        monitorTimer = nil
-    }
-
-    private func checkForExitedProcesses() {
+    private func reap(pid: pid_t, sessionID: UUID) {
         lock.lock()
-        let currentSessions = Array(sessions.values)
+        let source = exitSources.removeValue(forKey: sessionID)
         lock.unlock()
+        source?.cancel()
 
-        for session in currentSessions {
-            if !session.isAlive, let exitStatus = session.exitStatus {
-                NSLog("Session \(session.id) exited with status \(exitStatus)")
+        // Unlist before reaping so a listed session's pid can't be reused.
+        removeSession(sessionID)
 
-                // Notify callback
-                onSessionExit?(session.id, exitStatus)
-
-                // Remove from active sessions
-                removeSession(session.id)
-            }
-        }
+        var status: Int32 = 0
+        while waitpid(pid, &status, 0) == -1 && errno == EINTR {}
+        NSLog("Session \(sessionID) exited with status \(status)")
     }
 
     // MARK: - Socket Path Generation

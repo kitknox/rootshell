@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kitknox/Citadel-rootshell.git",
       "state" : {
-        "revision" : "946dc98cd618e60e43dfcf68de5d7296b4d991af",
-        "version" : "0.12.11"
+        "revision" : "e9091c5d5f4a38d4b01d4a034d84a5227fadf143",
+        "version" : "0.12.12"
       }
     },
     {
@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kitknox/ghosttykit-rootshell.git",
       "state" : {
-        "revision" : "f049cd3806f75c6be0d2a531a61bff448f2d339b",
-        "version" : "0.2.22"
+        "revision" : "ccb27daaf300e205021f79ab51ac4f5ec4f4f1cf",
+        "version" : "0.2.23"
       }
     },
     {
@@ -114,8 +114,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kitknox/libarchive_ios-rootshell.git",
       "state" : {
-        "revision" : "2b14c22b946b899f00be1e6ec1f346a82615df1b",
-        "version" : "0.1.1"
+        "revision" : "ed7b15d1ecd3e48e7c2d343d422df3a496c6f9b0",
+        "version" : "0.1.2"
       }
     },
     {
@@ -150,8 +150,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kitknox/rootshell-vnc.git",
       "state" : {
-        "revision" : "ef4d0c4f34cf2e3e6476a8a6ce5d1a2461b27c74",
-        "version" : "0.1.8"
+        "revision" : "eceb0fe1527d3d2bd26ea7f2527d6f6a2c6adc3b",
+        "version" : "0.1.9"
       }
     },
     {
@@ -320,8 +320,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kitknox/swift-nio-ssh-rootshell.git",
       "state" : {
-        "revision" : "3f517bd82ed2846b4c1cc06348df04efca02befd",
-        "version" : "0.1.5"
+        "revision" : "58cec1b177248bd6dd85e90b86362dd4d31d19ff",
+        "version" : "0.1.6"
       }
     },
     {
@@ -401,8 +401,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kitknox/trzsz-ssh-rootshell.git",
       "state" : {
-        "revision" : "14d8ac08cd5567f9d5f08ee9a841ce04f643376a",
-        "version" : "0.2.19"
+        "revision" : "a28a88f1237b29b0595adf58aab8185017aec2db",
+        "version" : "0.2.24"
       }
     },
     {
@@ -410,8 +410,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kitknox/vim-rootshell.git",
       "state" : {
-        "revision" : "89fdb95b3ba246a75b6a7488dcc99c5ebbb02eb8",
-        "version" : "0.2.0"
+        "revision" : "445322acc8ae8aaa9e63ccb7288eca0959f7bb1d",
+        "version" : "0.2.1"
       }
     },
     {

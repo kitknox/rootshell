@@ -612,6 +612,8 @@ struct SettingsSearchEntry: Identifiable, Hashable {
             // MARK: Window
             row("window-tab-bar", String(localized: "Show Top Tab Bar"), in: .window,
                 keywords: ["tab bar", "hide tabs", "tabs"]),
+            row("window-tab-bar-position", String(localized: "Tab Bar Position"), in: .window,
+                keywords: ["bottom tabs", "top tabs", "tab bar", "keyboard"]),
             row("window-tab-style", String(localized: "Tab Style"), in: .window,
                 keywords: ["tab appearance", "compact"]),
             row("window-duo-front-display", String(localized: "Duo Front Display"), in: .window,
@@ -892,6 +894,11 @@ struct SettingsSearchEntry: Identifiable, Hashable {
             row("passwords-default-security", String(localized: "Default Security Settings"), in: .savedPasswords,
                 keywords: ["storage level", "authentication", "biometric", "keychain", "face id"]),
 
+            // MARK: Known Hosts
+            row("verify-host-keys-dns", String(localized: "Verify Host Keys via DNS"), in: .knownHosts,
+                keywords: ["sshfp", "dnssec", "dns", "doh", "host key", "fingerprint", "verifyhostkeydns",
+                           "resolver", "cloudflare", "quad9", "google", "mullvad", "360"]),
+
             // MARK: SSH Transport
             row("force-ipv4", String(localized: "Force IPv4"), in: .sshTransport, icon: "network",
                 keywords: ["ipv4", "ipv6", "network", "dns"]),
@@ -1061,6 +1068,8 @@ struct SettingsSearchEntry: Identifiable, Hashable {
                 keywords: ["network", "ip", "live activity"]),
             row("live-activity-agents", String(localized: "Coding Agents"), in: .liveActivity, icon: "sparkles",
                 keywords: ["agents", "claude", "codex", "coding", "attention", "live activity"]),
+            row("live-activity-agent-messages", String(localized: "Agent Messages"), in: .liveActivity, icon: "tray",
+                keywords: ["inbox", "hook", "push", "unread", "badge", "agents", "live activity"]),
 
             // MARK: Clipboard Manager
             row("clipboard-biometrics", String(localized: "Require Face ID / Touch ID to Open"), in: .clipboardManager, icon: "faceid",

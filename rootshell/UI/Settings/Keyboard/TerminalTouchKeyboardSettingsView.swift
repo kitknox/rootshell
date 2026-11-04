@@ -3,9 +3,12 @@ import SwiftUI
 
 struct TerminalTouchKeyboardSettingsView: View {
     @Setting(Settings.Keyboard.touchStyle) private var keyboardStyle
+    @Setting(Settings.Keyboard.touchLayout) private var keyboardLayout
     @Setting(Settings.Keyboard.touchThemeAware) private var themeAware
     @Setting(Settings.Keyboard.touchPhosphorColor) private var phosphorColor
     @Setting(Settings.Keyboard.touchHeight) private var keyboardHeight
+    @Setting(Settings.Keyboard.touchHeightDuoFront) private var frontKeyboardHeight
+    @Environment(\.duoLayout) private var duoLayout
     @Setting(Settings.Keyboard.touchFloatingGlassStyle) private var floatingGlassStyle
     @Setting(Settings.Keyboard.touchFloatingGlassTintOpacity) private var floatingGlassTintOpacity
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -20,13 +23,40 @@ struct TerminalTouchKeyboardSettingsView: View {
         )
     }
 
+    private var frontHeight: Binding<TerminalTouchKeyboardModel.Height> {
+        Binding(
+            get: { frontKeyboardHeight ?? keyboardHeight },
+            set: { frontKeyboardHeight = $0 }
+        )
+    }
+
+    private var showsDuoHeights: Bool {
+        if #available(iOS 27.1, *) { return duoLayout.hasHinge }
+        return false
+    }
+
+    private func heightPicker(_ title: LocalizedStringKey, selection: Binding<TerminalTouchKeyboardModel.Height>) -> some View {
+        Picker(title, selection: selection) {
+            ForEach(TerminalTouchKeyboardModel.Height.allCases, id: \.self) { height in
+                Text(height.displayName).tag(height)
+            }
+        }
+    }
+
     var body: some View {
         List {
             Section {
                 SettingToggle(Settings.Keyboard.touchEnabled, title: "Terminal Keyboard", icon: "keyboard.badge.ellipsis")
                     .themedRow()
+                Picker("Keyboard Layout", selection: $keyboardLayout) {
+                    ForEach(TerminalTouchKeyboardModel.Layout.allCases, id: \.self) { layout in
+                        Text(layout.displayName).tag(layout)
+                    }
+                }
+                .settingContextMenu(Settings.Keyboard.touchLayout)
+                .themedRow()
             } footer: {
-                Text("An optional English QWERTY keyboard for terminal sessions. Switch to Apple's keyboard for other languages, swipe typing, emoji, or dictation.")
+                Text("An optional terminal keyboard with layouts for English and most European languages, and long-press accents that match Apple's keyboards. Long-press the keyboard switch key to change the layout, style, or placement. Switch to Apple's keyboard for other languages, swipe typing, emoji, or dictation.")
             }
             Section {
                 Picker("Preview Placement", selection: $previewFloating) {
@@ -70,8 +100,10 @@ struct TerminalTouchKeyboardSettingsView: View {
             }
             Section {
                 SettingToggle(Settings.Keyboard.touchLetterPrediction, title: "Letter Prediction", icon: "textformat.abc")
+                    .disabled(!keyboardLayout.usesEnglishTextModels)
                     .themedRow()
                 SettingToggle(Settings.Keyboard.touchSuggestions, title: "Suggestions", icon: "textformat.abc")
+                    .disabled(!keyboardLayout.usesEnglishTextModels)
                     .themedRow()
                 SettingToggle(Settings.Keyboard.touchHaptics, title: "Haptic Feedback", icon: "hand.tap")
                     .themedRow()
@@ -82,22 +114,30 @@ struct TerminalTouchKeyboardSettingsView: View {
             } header: {
                 Text("Typing")
             } footer: {
-                Text("Letter Prediction uses recent English typing to help choose between nearby letters. Turn it off for literal key targeting. Suggestions are local spelling guesses and completions; tap to apply one. Words are never automatically replaced. The double-space period shortcut follows your Terminal keyboard setting. Key Click Sounds match the keyboard style and are muted in Silent Mode. Character Preview shows the pressed letter above your finger; turn it off to only highlight the key.")
+                Text("Letter Prediction uses recent English typing to help choose between nearby letters. Turn it off for literal key targeting. Suggestions are local spelling guesses and completions; tap to apply one. Words are never automatically replaced. Both are English-only and stay off with other layouts. The double-space period shortcut follows your Terminal keyboard setting. Key Click Sounds match the keyboard style and are muted in Silent Mode. Character Preview shows the pressed letter above your finger; turn it off to only highlight the key.")
             }
             Section {
-                Picker("Keyboard Height", selection: $keyboardHeight) {
-                    ForEach(TerminalTouchKeyboardModel.Height.allCases, id: \.self) { height in
-                        Text(height.displayName).tag(height)
-                    }
+                if showsDuoHeights {
+                    heightPicker("Inner Display Height", selection: $keyboardHeight)
+                        .settingContextMenu(Settings.Keyboard.touchHeight)
+                        .themedRow()
+                    heightPicker("Front Display Height", selection: frontHeight)
+                        .settingContextMenu(Settings.Keyboard.touchHeightDuoFront)
+                        .themedRow()
+                } else {
+                    heightPicker("Keyboard Height", selection: $keyboardHeight)
+                        .settingContextMenu(Settings.Keyboard.touchHeight)
+                        .themedRow()
                 }
-                .settingContextMenu(Settings.Keyboard.touchHeight)
-                .themedRow()
                 SettingToggle(Settings.Keyboard.touchGlyphs, title: "Key Glyphs", icon: "command")
                     .themedRow()
             } header: {
                 Text("Layout")
             } footer: {
                 Text("Extra Large keeps the keyboard above the bottom safe area. Large moves every row, including Space, down into the bottom safe area without reducing key height. The bottom corners adapt to your iPhone. Medium, Small, and Extra Small also reduce the height of the keys and toolbar to leave more room for the terminal. Swipe up or down across the keys to step between heights. Key Glyphs shows symbols for Escape, Tab, and modifiers; turn it off to show their names.")
+                if showsDuoHeights {
+                    Text("On iPhone Duo, the inner and front displays each keep their own height, and swiping changes the display you’re using. The front display matches the inner one until you change it.")
+                }
             }
             Section {
                 Picker("Keyboard Style", selection: $keyboardStyle) {
@@ -179,9 +219,12 @@ struct TerminalTouchKeyboardSettingsView: View {
             Section("Terminal tools") {
                 Group {
                     if UIDevice.current.userInterfaceIdiom == .pad {
-                        Text("With Use System Detached Keyboard off, pinch inward or long-press the keyboard switch key and choose Detached to float the keyboard. Drag the … handle to move it. Spread two fingers, double-tap the handle, or choose Docked to dock. Docking hides the keys when a hardware keyboard is connected.")
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("With Use System Detached Keyboard off, pinch inward, or long-press the keyboard switch key and choose Placement, then Detached, to float the keyboard. Drag the … handle to move it. Spread two fingers, double-tap the handle, or choose Docked to dock. Docking hides the keys when a hardware keyboard is connected.")
+                            Text("Choose Placement, then Split, to divide the docked keys into two halves at the screen edges for thumb typing.")
+                        }
                     } else {
-                        Text("Long-press the keyboard switch key and choose Detached to float a smaller keyboard over the terminal, freeing the rest of the screen. Drag the … handle to move it. Double-tap the handle or choose Docked to dock.")
+                        Text("Long-press the keyboard switch key and choose Placement, then Detached, to float a smaller keyboard over the terminal, freeing the rest of the screen. Drag the … handle to move it. Double-tap the handle or choose Docked to dock.")
                     }
                 }
                 .font(.footnote)
@@ -223,7 +266,7 @@ struct TerminalTouchKeyboardPreview: UIViewRepresentable {
             lastSample = parent.sample
             predictionContext.append(text)
         }
-        func touchKeyboardSend(_ key: String, modifiers: KeyModifiers) {
+        func touchKeyboardSend(_ key: String, modifiers: KeyModifiers, shifted: Character?) {
             if key == "\u{7f}", modifiers.isEmpty {
                 if !parent.sample.isEmpty { parent.sample.removeLast() }
                 lastSample = parent.sample

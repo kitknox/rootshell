@@ -142,7 +142,6 @@ license does not apply to them; each keeps its own license.
 
 | [Neovim logo](https://github.com/neovim/neovim.github.io) | Jason Long | CC BY 3.0 |
 | [btop logo](https://github.com/aristocratos/btop) | Aristocratos | Apache 2.0 |
-| [Git logo](https://git-scm.com/community/logos) | Jason Long. Git™ is a trademark of the Software Freedom Conservancy | CC BY 3.0 |
 | [tmux logo](https://github.com/tmux/tmux/tree/master/logo) | Jason Long | ISC |
 | [Ruby logo](https://www.ruby-lang.org/en/about/logo/) | Copyright (c) 2006 Yukihiro Matsumoto; style classes converted to fill attributes | CC BY-SA 2.5 |
 | [Python logo](https://www.python.org/psf/trademarks/) | "Python" and the Python logos are trademarks or registered trademarks of the Python Software Foundation | Used under the PSF trademark policy |
@@ -150,7 +149,7 @@ license does not apply to them; each keeps its own license.
 | [Deno logo](https://deno.com/brand) | Deno Land Inc. | MIT |
 | [Node.js logo](https://github.com/nodejs/nodejs.org) | Node.js Website WG contributors. Node.js is a trademark of the OpenJS Foundation | MIT |
 
-The fish, htop, Emacs, Cargo and tail marks are original rootshell artwork.
+The fish, htop, Emacs, Cargo, tail and git marks are original rootshell artwork.
 
 ## Sound Effects
 

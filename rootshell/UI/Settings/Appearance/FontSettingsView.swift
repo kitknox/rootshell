@@ -13,6 +13,9 @@ struct FontSettingsView: View {
     @State private var showingFileImporter = false
     @State private var importError: String?
     @State private var showingImportError = false
+    @State private var showingFontPicker = false
+    @State private var notMonospaceFamily: String?
+    @State private var showingNotMonospace = false
     @State private var sampleFonts = SampleFontCache()
 
     var body: some View {
@@ -124,12 +127,27 @@ struct FontSettingsView: View {
                         .buttonStyle(.plain)
                         .themedRow()
                     }
+
+                    #if !targetEnvironment(macCatalyst)
+                    Button {
+                        showingFontPicker = true
+                    } label: {
+                        Label("Choose Installed Font...", systemImage: "textformat")
+                    }
+                    .themedRow()
+                    #endif
                 } header: {
                     Text("System Fonts")
                 } footer: {
+                    #if targetEnvironment(macCatalyst)
                     Text("Monospace fonts installed on your device via apps like Font Case.")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                    #else
+                    Text("Monospace fonts installed on your device. A font from an app like Font Case appears here once you choose it.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    #endif
                 }
             }
 
@@ -287,6 +305,23 @@ struct FontSettingsView: View {
                 showingImportError = true
             }
         }
+        .sheet(isPresented: $showingFontPicker) {
+            InstalledFontPicker { descriptor in
+                showingFontPicker = false
+                guard let descriptor else { return }
+                Task {
+                    if case .notMonospace(let family) = await fontManager.selectInstalledFont(descriptor) {
+                        notMonospaceFamily = family
+                        showingNotMonospace = true
+                    }
+                }
+            }
+        }
+        .alert("Not a Monospace Font", isPresented: $showingNotMonospace) {
+            Button("OK") {}
+        } message: {
+            Text("\(notMonospaceFamily ?? "") has characters of different widths, so it can't be used in the terminal.")
+        }
         .alert("Import Failed", isPresented: $showingImportError) {
             Button("OK") {}
         } message: {
@@ -352,6 +387,43 @@ struct FontSettingsView: View {
             Text("Adjusts the cell box around each glyph for the selected font. Negative values tighten spacing; positive values loosen it. Settings are saved per font.")
                 .font(.caption)
                 .foregroundColor(.secondary)
+        }
+    }
+}
+
+/// The system font picker, which lists fonts other apps installed before this
+/// app has access. Unfiltered: some monospace fonts (GNU Unifont) lack the trait.
+private struct InstalledFontPicker: UIViewControllerRepresentable {
+    /// Called with the picked font, or nil on cancel.
+    let onFinish: (UIFontDescriptor?) -> Void
+
+    func makeUIViewController(context: Context) -> UIFontPickerViewController {
+        let picker = UIFontPickerViewController()
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ picker: UIFontPickerViewController, context: Context) {
+        context.coordinator.onFinish = onFinish
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onFinish: onFinish)
+    }
+
+    final class Coordinator: NSObject, UIFontPickerViewControllerDelegate {
+        var onFinish: (UIFontDescriptor?) -> Void
+
+        init(onFinish: @escaping (UIFontDescriptor?) -> Void) {
+            self.onFinish = onFinish
+        }
+
+        func fontPickerViewControllerDidPickFont(_ picker: UIFontPickerViewController) {
+            onFinish(picker.selectedFontDescriptor)
+        }
+
+        func fontPickerViewControllerDidCancel(_ picker: UIFontPickerViewController) {
+            onFinish(nil)
         }
     }
 }

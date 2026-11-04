@@ -33,6 +33,9 @@ struct TrzszSessionCredentials: Codable, Sendable {
     /// tsshd server version (for resume validation)
     var serverVersion: String?
 
+    /// tsshd protocol version; absent in records written before it was saved.
+    var protoVersion: Int? = nil
+
     // MARK: - QUIC Credentials (hex-encoded for JSON storage)
 
     /// Server certificate (hex-encoded)
@@ -157,6 +160,7 @@ struct TrzszSessionCredentials: Codable, Sendable {
         self.displayName = displayName
         self.mode = serverInfo.mode
         self.serverVersion = serverInfo.serverVersion
+        self.protoVersion = serverInfo.protoVersion
         self.clientId = serverInfo.clientId
         self.serverId = serverInfo.serverId
 
@@ -256,6 +260,7 @@ extension TrzszSessionCredentials {
     func toServerInfo() -> TrzszServerInfo {
         TrzszServerInfo(
             serverVersion: serverVersion ?? "0.1.6",
+            protoVersion: protoVersion,
             port: udpPort,
             mode: mode,
             serverCert: serverCert,

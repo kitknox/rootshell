@@ -54,6 +54,7 @@ struct DraggableHUDContainer<Content: View>: UIViewRepresentable {
     var forwardsFileManagerToggle: Bool
     var forwardsIPLookupToggle: Bool
     var forwardsHTTPCaptureToggle: Bool
+    var forwardsAgentInboxToggle: Bool
     /// Handles a forwarded toggle menu action instead of `onDismiss`. Needed by
     /// the clipboard manager, whose toggle is a 3-state cycle (open → keyboard
     /// mode → close) rather than a plain dismiss: the HUD's field can hold
@@ -77,6 +78,7 @@ struct DraggableHUDContainer<Content: View>: UIViewRepresentable {
          forwardsFileManagerToggle: Bool = false,
          forwardsIPLookupToggle: Bool = false,
          forwardsHTTPCaptureToggle: Bool = false,
+         forwardsAgentInboxToggle: Bool = false,
          onForwardedToggle: (() -> Void)? = nil,
          onFind: (() -> Void)? = nil,
          onDismiss: (() -> Void)? = nil,
@@ -94,6 +96,7 @@ struct DraggableHUDContainer<Content: View>: UIViewRepresentable {
         self.forwardsFileManagerToggle = forwardsFileManagerToggle
         self.forwardsIPLookupToggle = forwardsIPLookupToggle
         self.forwardsHTTPCaptureToggle = forwardsHTTPCaptureToggle
+        self.forwardsAgentInboxToggle = forwardsAgentInboxToggle
         self.onForwardedToggle = onForwardedToggle
         self.onFind = onFind
         self.onDismiss = onDismiss
@@ -114,6 +117,7 @@ struct DraggableHUDContainer<Content: View>: UIViewRepresentable {
         view.forwardsFileManagerToggle = forwardsFileManagerToggle
         view.forwardsIPLookupToggle = forwardsIPLookupToggle
         view.forwardsHTTPCaptureToggle = forwardsHTTPCaptureToggle
+        view.forwardsAgentInboxToggle = forwardsAgentInboxToggle
         view.onForwardedToggle = onForwardedToggle
         view.onFind = onFind
         view.onDismiss = onDismiss
@@ -149,6 +153,7 @@ struct DraggableHUDContainer<Content: View>: UIViewRepresentable {
         uiView.forwardsFileManagerToggle = forwardsFileManagerToggle
         uiView.forwardsIPLookupToggle = forwardsIPLookupToggle
         uiView.forwardsHTTPCaptureToggle = forwardsHTTPCaptureToggle
+        uiView.forwardsAgentInboxToggle = forwardsAgentInboxToggle
         uiView.onForwardedToggle = onForwardedToggle
         uiView.setNeedsLayout()
     }
@@ -209,6 +214,7 @@ final class DraggableHUDHostView: UIView, UIGestureRecognizerDelegate {
     var forwardsFileManagerToggle = false
     var forwardsIPLookupToggle = false
     var forwardsHTTPCaptureToggle = false
+    var forwardsAgentInboxToggle = false
     var onForwardedToggle: (() -> Void)?
     var onFind: (() -> Void)?
     var onDismiss: (() -> Void)?
@@ -246,10 +252,15 @@ final class DraggableHUDHostView: UIView, UIGestureRecognizerDelegate {
         if action == #selector(menuToggleFileManager(_:)) { return forwardsFileManagerToggle }
         if action == #selector(menuToggleIPLookup(_:)) { return forwardsIPLookupToggle }
         if action == #selector(menuToggleHTTPCapture(_:)) { return forwardsHTTPCaptureToggle }
+        if action == #selector(menuToggleAgentInbox(_:)) { return forwardsAgentInboxToggle }
         return super.canPerformAction(action, withSender: sender)
     }
 
     @objc func menuToggleHTTPCapture(_ sender: Any?) {
+        (onForwardedToggle ?? onDismiss)?()
+    }
+
+    @objc func menuToggleAgentInbox(_ sender: Any?) {
         (onForwardedToggle ?? onDismiss)?()
     }
 
@@ -333,6 +344,14 @@ final class DraggableHUDHostView: UIView, UIGestureRecognizerDelegate {
            !sequence.isSequence, let trigger = sequence.first {
             let command = UIKeyCommand(input: trigger.uiKeyInput, modifierFlags: trigger.uiModifierFlags,
                                        action: #selector(menuToggleHTTPCapture(_:)))
+            command.wantsPriorityOverSystemBehavior = true
+            commands.append(command)
+        }
+        if forwardsAgentInboxToggle,
+           let sequence = KeybindManager.shared.sequence(for: .toggle_agent_inbox),
+           !sequence.isSequence, let trigger = sequence.first {
+            let command = UIKeyCommand(input: trigger.uiKeyInput, modifierFlags: trigger.uiModifierFlags,
+                                       action: #selector(menuToggleAgentInbox(_:)))
             command.wantsPriorityOverSystemBehavior = true
             commands.append(command)
         }

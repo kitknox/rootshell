@@ -40,6 +40,9 @@ struct TrzszServerInfo: Codable, Sendable {
     /// Server version string
     let serverVersion: String
 
+    /// `ProtoVer`; nil when the server or a saved record predates it. Protocol 2 enables zstd output.
+    var protoVersion: Int? = nil
+
     /// UDP port the server is listening on
     let port: Int
 
@@ -103,6 +106,8 @@ struct TrzszServerInfo: Codable, Sendable {
             throw TrzszError.invalidServerInfo(reason: "Missing ServerVer")
         }
 
+        let protoVersion = object["ProtoVer"] as? Int
+
         guard let port = object["Port"] as? Int else {
             throw TrzszError.invalidServerInfo(reason: "Missing Port")
         }
@@ -155,6 +160,7 @@ struct TrzszServerInfo: Codable, Sendable {
 
         return TrzszServerInfo(
             serverVersion: serverVersion,
+            protoVersion: protoVersion,
             port: port,
             mode: mode,
             serverCert: serverCert,

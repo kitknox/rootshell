@@ -70,16 +70,17 @@ final class MenuShortcutState: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
-        // Build initial shortcuts
-        rebuildShortcuts()
-
-        // Listen for keybind changes
-        KeybindManager.shared.keybindsDidChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] in
-                self?.rebuildShortcuts()
-            }
-            .store(in: &cancellables)
+        // The menu is built with the App body; KeybindManager must not load before unlock.
+        LaunchReadiness.shared.whenReady { [weak self] in
+            guard let self else { return }
+            rebuildShortcuts()
+            KeybindManager.shared.keybindsDidChange
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] in
+                    self?.rebuildShortcuts()
+                }
+                .store(in: &cancellables)
+        }
     }
 
     /// Drop menu key equivalents while a shortcut is being recorded so the
@@ -237,6 +238,14 @@ struct FileCommands: Commands {
             }
             .modifier(DynamicShortcut(action: .toggle_http_capture, shortcuts: shortcutState.shortcuts))
             #endif
+
+            Button("Agent Inbox") {
+                UIApplication.shared.sendMenuAction(
+                    #selector(Ghostty.TerminalView.menuToggleAgentInbox(_:)),
+                    from: nil
+                )
+            }
+            .modifier(DynamicShortcut(action: .toggle_agent_inbox, shortcuts: shortcutState.shortcuts))
         }
     }
 }

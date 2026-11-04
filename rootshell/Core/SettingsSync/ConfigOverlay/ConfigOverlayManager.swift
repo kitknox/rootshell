@@ -113,10 +113,11 @@ final class ConfigOverlayManager {
         if let external = ConfigOverlayLocation.externalURL(bookmark: bookmark, path: path) {
             activeURL = external.url
             isExternal = true
+            // A bookmark can only be made while the scope is held.
+            if external.url.startAccessingSecurityScopedResource() { securityScopeActive = true }
             if external.isStale, let fresh = ConfigOverlayLocation.makeBookmark(for: external.url) {
                 store.set(Settings.System.configOverlayBookmark, fresh)
             }
-            if external.url.startAccessingSecurityScopedResource() { securityScopeActive = true }
         } else {
             activeURL = ConfigOverlayLocation.canonicalURL
             isExternal = false
@@ -131,6 +132,9 @@ final class ConfigOverlayManager {
     }
 
     func setExternalFile(_ url: URL) {
+        // Picker URLs are security-scoped; bookmarkData fails until access starts.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         if ConfigOverlayLocation.supportsDirectExternalPath {
             store.set(Settings.System.configOverlayExternalPath, url.path)
             store.reset(Settings.System.configOverlayBookmark)

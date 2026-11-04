@@ -67,7 +67,7 @@ nonisolated enum ProgramCatalog {
         Entry(id: "nnn", displayName: "nnn", mark: filesMark, kind: .program),
         Entry(id: "lf", displayName: "lf", mark: filesMark, kind: .program),
         Entry(id: "mc", displayName: "Midnight Commander", mark: filesMark, kind: .program),
-        Entry(id: "git", displayName: "Git", mark: .asset("GitLogo"), kind: .program),
+        Entry(id: "git", displayName: "Git", mark: .template("GitLogo"), kind: .program),
         Entry(id: "python", displayName: "Python", mark: .asset("PythonLogo"), kind: .program),
         Entry(id: "ruby", displayName: "Ruby", mark: .asset("RubyLogo"), kind: .program),
         Entry(id: "node", displayName: "Node.js", mark: .asset("NodeLogo"), kind: .program),

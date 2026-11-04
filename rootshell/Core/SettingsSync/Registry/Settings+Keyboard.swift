@@ -14,6 +14,7 @@ extension KeyboardArrowJoystickButton.Mode: SettingValue {}
 extension TerminalTouchKeyboardModel.FloatingGlassStyle: SettingValue {}
 extension TerminalTouchKeyboardModel.Height: SettingValue {}
 extension TerminalTouchKeyboardModel.Style: SettingValue {}
+extension TerminalTouchKeyboardModel.Layout: SettingValue {}
 extension TerminalTouchKeyboardModel.PhosphorColor: SettingValue {}
 
 nonisolated extension Settings {
@@ -21,6 +22,10 @@ nonisolated extension Settings {
         static let touchEnabled = SettingKey(
             "terminalTouchKeyboardEnabled", default: false, group: .keyboard, policy: .localByDefault,
             configKey: "terminal-touch-keyboard", title: String(localized: "Terminal Keyboard"))
+        static let touchLayout = SettingKey(
+            "terminalTouchKeyboardLayout", default: TerminalTouchKeyboardModel.Layout.us,
+            group: .keyboard, policy: .localByDefault,
+            configKey: "terminal-touch-keyboard-layout", title: String(localized: "Keyboard Layout"))
         static let touchStatePerTab = SettingKey(
             "terminalTouchKeyboardStatePerTab", default: false, group: .keyboard, policy: .localByDefault,
             configKey: "terminal-touch-keyboard-state-per-tab", title: String(localized: "Separate Keyboard State per Tab"))
@@ -40,6 +45,14 @@ nonisolated extension Settings {
             "terminalTouchKeyboardHeight", default: TerminalTouchKeyboardModel.Height.large,
             group: .keyboard, policy: .localByDefault,
             configKey: "terminal-touch-keyboard-height", title: String(localized: "Keyboard Height"))
+        /// iPhone Duo's closed front display; nil follows `touchHeight`.
+        static let touchHeightDuoFront = SettingKey<TerminalTouchKeyboardModel.Height?>(
+            "terminalTouchKeyboardHeightDuoFront", default: nil, group: .keyboard, policy: .localByDefault,
+            configKey: "terminal-touch-keyboard-height-duo-front", title: String(localized: "Front Display Keyboard Height"))
+        /// Splits the docked keys on iPad and on iPhone Duo's flat inner display, as a bent fold does.
+        static let touchSplit = SettingKey(
+            "terminalTouchKeyboardSplit", default: false, group: .keyboard, policy: .localByDefault,
+            configKey: "terminal-touch-keyboard-split", title: String(localized: "Split Keyboard"))
         static let touchGlyphs = SettingKey(
             "terminalTouchKeyboardGlyphs", default: true, group: .keyboard, policy: .localByDefault,
             configKey: "terminal-touch-keyboard-glyphs", title: String(localized: "Keyboard Key Glyphs"))
@@ -94,8 +107,8 @@ nonisolated extension Settings {
 
         static let all: [AnySettingDefinition] = [
             optionKeyAsAlt.erased, forceASCIIKeyboard.erased, doubleSpaceForPeriod.erased, composeAutocorrect.erased,
-            writingAssistance.erased, touchEnabled.erased, touchSuggestions.erased, touchHaptics.erased, touchCharacterPreview.erased,
-            touchHeight.erased, touchGlyphs.erased, touchStyle.erased, touchThemeAware.erased, touchLetterPrediction.erased,
+            writingAssistance.erased, touchEnabled.erased, touchLayout.erased, touchSuggestions.erased, touchHaptics.erased, touchCharacterPreview.erased,
+            touchHeight.erased, touchHeightDuoFront.erased, touchSplit.erased, touchGlyphs.erased, touchStyle.erased, touchThemeAware.erased, touchLetterPrediction.erased,
             touchSteampunkThemeAwareKeycaps.erased, touchPhosphorColor.erased, touchClickSound.erased,
             touchStatePerTab.erased, touchSystemFloating.erased, touchFloatingGlassStyle.erased, touchFloatingGlassTintOpacity.erased,
             touchChooserPresented.erased,

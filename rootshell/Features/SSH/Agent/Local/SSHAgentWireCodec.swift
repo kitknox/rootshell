@@ -7,6 +7,9 @@ import Darwin
 
 nonisolated enum SSHAgentWireCodec {
     static let maxFrameLength = 256 * 1024
+    /// OpenSSH ssh-agent's AGENT_MAX_SID_LEN and AGENT_MAX_SESSION_IDS.
+    static let maxSessionIDLength = 128
+    static let maxSessionBinds = 16
 
     enum MessageType: UInt8 {
         case failure = 5
@@ -51,7 +54,7 @@ nonisolated enum SSHAgentWireCodec {
     enum Request: Sendable, Equatable {
         case listIdentities
         case sign(keyBlob: Data, data: Data, flags: UInt32)
-        case sessionBind(hostKeyBlob: Data, sessionID: Data, isForwarding: Bool)
+        case sessionBind(hostKeyBlob: Data, sessionID: Data, signature: Data, isForwarding: Bool)
         case addIdentity(AddedIdentity, constraints: [Constraint])
         case removeIdentity(keyBlob: Data)
         case removeAll
@@ -95,13 +98,17 @@ nonisolated enum SSHAgentWireCodec {
             return .sign(keyBlob: keyBlob, data: data, flags: flags)
         case MessageType.extensionRequest.rawValue:
             guard let name = reader.readString() else { return .unsupported(type) }
+            // PROTOCOL.agent: string hostkey, string session id, string signature, bool is_forwarding.
             if name == "session-bind@openssh.com",
                let hostKeyBlob = reader.readStringData(),
                let sessionID = reader.readStringData(),
+               sessionID.count <= maxSessionIDLength,
+               let signature = reader.readStringData(),
                let forwardingByte = reader.readUInt8() {
                 return .sessionBind(
                     hostKeyBlob: hostKeyBlob,
                     sessionID: sessionID,
+                    signature: signature,
                     isForwarding: forwardingByte != 0
                 )
             }
@@ -307,7 +314,8 @@ nonisolated enum SSHAgentWireCodec {
                   reader.readMPInt() != nil,
                   reader.readMPInt() != nil,
                   reader.readMPInt() != nil,
-                  let comment = reader.readString() else { return nil }
+                  let comment = reader.readString(),
+                  rsaKeyIsPlausible(n: n, e: e, d: d) else { return nil }
             var blob = publicBlobStart
             SSHAgentWriter.appendMPInt(e, to: &blob)
             SSHAgentWriter.appendMPInt(n, to: &blob)
@@ -325,6 +333,24 @@ nonisolated enum SSHAgentWireCodec {
                 material: .unsupported(keyType)
             )
         }
+    }
+
+    /// OpenSSH's RSA limits (3e2bbf871): modulus 1024-16384 bits, odd e >= 3, 0 < d < n.
+    static func rsaKeyIsPlausible(n: Data, e: Data, d: Data) -> Bool {
+        let modulusBits = bitLength(n)
+        guard modulusBits >= 1024, modulusBits <= 16384,
+              let lastE = e.last, lastE & 1 == 1, bitLength(e) >= 2, bitLength(e) <= modulusBits,
+              bitLength(d) > 0, bitLength(d) <= modulusBits else {
+            return false
+        }
+        return true
+    }
+
+    /// Bit length of a big-endian unsigned integer, ignoring leading zero bytes.
+    private static func bitLength(_ bytes: Data) -> Int {
+        guard let index = bytes.firstIndex(where: { $0 != 0 }) else { return 0 }
+        let significant = bytes.distance(from: index, to: bytes.endIndex)
+        return (significant - 1) * 8 + (8 - bytes[index].leadingZeroBitCount)
     }
 
     private static func parseConstraints(reader: inout SSHAgentReader) -> [Constraint] {

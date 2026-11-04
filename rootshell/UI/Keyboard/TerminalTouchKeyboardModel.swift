@@ -1,6 +1,31 @@
 import Foundation
 import CoreGraphics
 
+/// Shared drawer gesture geometry for both keyboard implementations.
+nonisolated struct KeyboardToolbarDrawerDrag {
+    let initialCount: Int
+    let origin: CGPoint
+    let buttonFrame: CGRect
+    let rowHeight: CGFloat
+    private(set) var isDragging = false
+    private(set) var isQuickSelection = false
+
+    mutating func update(at location: CGPoint) -> Int? {
+        if abs(location.x - origin.x) >= buttonFrame.width { isQuickSelection = true }
+        guard isDragging || isQuickSelection || location.y < buttonFrame.minY
+            || location.y > buttonFrame.maxY else { return nil }
+        isDragging = true
+        let height = max(rowHeight, 1)
+        if location.y < buttonFrame.minY {
+            return initialCount + Int(ceil((buttonFrame.minY - location.y) / height))
+        }
+        if location.y > buttonFrame.maxY {
+            return max(0, initialCount - Int(ceil((location.y - buttonFrame.maxY) / height)))
+        }
+        return initialCount
+    }
+}
+
 /// One partition for the system toolbar and the touch keyboard. Runtime buttons
 /// reserve main-row slots without changing the user's saved configuration.
 nonisolated enum KeyboardToolbarOverflow {
@@ -91,6 +116,11 @@ nonisolated enum TerminalTouchKeyboardModel {
         }
 
         var usesBottomSafeArea: Bool { self != .extraLarge }
+
+        /// The front display keeps its own height once set; until then it follows the inner one.
+        static func resolved(inner: Self, front: Self?, isFrontDisplay: Bool) -> Self {
+            isFrontDisplay ? front ?? inner : inner
+        }
 
         /// Positive steps shrink the keyboard. Clamps at both ends.
         func stepped(by offset: Int) -> Self {
@@ -183,6 +213,32 @@ nonisolated enum TerminalTouchKeyboardModel {
             }
         }
 
+        /// Toolbar modifier swipes lock once the finger rests this long on the last key.
+        static let sweepHold: TimeInterval = 0.2
+
+        /// Settles one touch that swept `modifiers` in order. Released quickly they
+        /// latch as one-shot, held they lock; either clears if the first was already on.
+        mutating func endSweep(_ modifiers: [Modifier], at time: TimeInterval, holding: Bool, cancelled: Bool = false) {
+            if modifiers.count == 1, !holding { return end(modifiers[0], at: time, cancelled: cancelled) }
+            held.subtract(modifiers)
+            defer { used.subtract(modifiers) }
+            guard !cancelled, let first = modifiers.first, used.isDisjoint(with: modifiers) else { return }
+            let clears = holding ? locked.contains(first) : oneShot.union(locked).contains(first)
+            for modifier in modifiers {
+                oneShot.remove(modifier)
+                locked.remove(modifier)
+                lastTap[modifier] = nil
+                guard !clears else { continue }
+                if holding { locked.insert(modifier) } else { oneShot.insert(modifier) }
+            }
+        }
+
+        /// Whether a held sweep would lock, or nil once a key press made it a chord.
+        func heldSweepLocks(_ modifiers: [Modifier]) -> Bool? {
+            guard let first = modifiers.first, used.isDisjoint(with: modifiers) else { return nil }
+            return !locked.contains(first)
+        }
+
         mutating func consume(_ rawValue: Int? = nil) {
             let consumed = rawValue.map { value in Set(Modifier.allCases.filter { value & $0.rawValue != 0 }) }
                 ?? oneShot.union(held)
@@ -193,6 +249,42 @@ nonisolated enum TerminalTouchKeyboardModel {
 
         mutating func cancelHeld() { held.removeAll(); used.removeAll() }
         mutating func reset() { self = Self() }
+    }
+
+    /// One touch swiping across toolbar modifiers; `Key` identifies a keycap.
+    struct ModifierSweep<Key: Equatable> {
+        private(set) var keys: [Key]
+        private(set) var modifiers: [Modifier]
+        private var hovered: Key?
+        private var entered: TimeInterval
+        /// Set once the finger rests past `sweepHold`; keys joined later lock too.
+        private(set) var held = false
+
+        init(_ key: Key, modifier: Modifier, at time: TimeInterval) {
+            keys = [key]; modifiers = [modifier]; hovered = key; entered = time
+        }
+
+        /// Moves onto `key`, or off every modifier with nil. Entering any key,
+        /// even one crossed before, restarts the hold; returns whether it did.
+        mutating func hover(_ key: Key?, modifier: Modifier?, at time: TimeInterval) -> Bool {
+            defer { hovered = key }
+            guard let key, let modifier, key != hovered else { return false }
+            if !keys.contains(key) { keys.append(key); modifiers.append(modifier) }
+            entered = time
+            return true
+        }
+
+        /// Only time resting on a modifier counts; off every key the hold waits.
+        func holding(at time: TimeInterval) -> Bool {
+            held || (hovered != nil && time - entered >= Modifiers.sweepHold)
+        }
+
+        /// Records the hold when due; returns whether this call did.
+        mutating func commitHold(at time: TimeInterval) -> Bool {
+            guard !held, holding(at: time) else { return false }
+            held = true
+            return true
+        }
     }
 
     /// One store per window. Reference values let placement and keyboard-choice
@@ -683,7 +775,7 @@ nonisolated enum TerminalTouchKeyboardModel {
 
     /// A detached card moves the Apple Keyboard key to its footer, as Apple's
     /// floating keyboard does with its globe, so the row matches Apple's widths.
-    static func rows(page: Page, floating: Bool = false) -> [[Key]] {
+    static func rows(page: Page, floating: Bool = false, layout: Layout = .us) -> [[Key]] {
         func text(_ string: String) -> [Key] { string.map { Key(title: String($0), action: .text(String($0))) } }
         let shift = Key(title: "Shift", action: .modifier(.shift), symbol: "shift", weight: 1.5)
         let delete = Key(title: "Delete", action: .key("\u{7f}"), symbol: "delete.left", weight: 1.5)
@@ -692,9 +784,13 @@ nonisolated enum TerminalTouchKeyboardModel {
         let third: [Key]
         switch page {
         case .letters:
-            first = text("qwertyuiop")
-            second = text("asdfghjkl")
-            third = [shift] + text("zxcvbnm") + [delete]
+            let letters = layout.letterRows
+            // Shift and Delete fill the third row out to the widest row.
+            let edge = (Double(letters.map(\.count).max() ?? 10) - Double(letters[2].count)) / 2
+            func edged(_ key: Key) -> Key { var key = key; key.weight = edge; return key }
+            first = text(letters[0])
+            second = text(letters[1])
+            third = [edged(shift)] + text(letters[2]) + [edged(delete)]
         case .numbers:
             first = text("1234567890")
             second = text("-/:;()$&@\"")
@@ -710,6 +806,14 @@ nonisolated enum TerminalTouchKeyboardModel {
             Key(title: "space", action: .text(" "), weight: floating ? 5 : 5.8, accessibility: "Space. Hold and drag to move the terminal cursor."),
             Key(title: "return", action: .key("\r"), symbol: "return", weight: floating ? 2.5 : 1.8)
         ]]
+    }
+
+    /// Letter units across the widest of the three typing rows.
+    static func columns(_ rows: [[Key]]) -> Double { rows.prefix(3).map(weight).max() ?? 10 }
+
+    /// Centers a shorter typing row so every letter key keeps one width.
+    static func rowInset(weight: Double, columns: Double, width: Double) -> Double {
+        2 + max(0, columns - weight) / 2 * width / max(1, columns)
     }
 
     /// Full cells are hit targets; the visual caps are inset inside them.
@@ -778,9 +882,11 @@ nonisolated enum TerminalTouchKeyboardModel {
     static let splitFoldClearance = 12.0
 
     /// As the system keyboard does, each half is centered in its side of the
-    /// fold, with one key unit capped near the system's size. nil when either
-    /// side is too narrow for usable keys.
-    static func splitMetrics(_ rows: [SplitRow], width: Double, fold: ClosedRange<Double>) -> SplitMetrics? {
+    /// fold, or with `hugsEdges` (iPad) sits at the screen edge under a thumb.
+    /// One key unit is capped near the system's size. nil when either side is
+    /// too narrow for usable keys.
+    static func splitMetrics(_ rows: [SplitRow], width: Double, fold: ClosedRange<Double>,
+                             hugsEdges: Bool = false) -> SplitMetrics? {
         let widest = rows.flatMap { [weight($0.left), weight($0.right)] }.max() ?? 0
         let leftMax = fold.lowerBound - splitFoldClearance
         let rightMin = fold.upperBound + splitFoldClearance
@@ -788,9 +894,20 @@ nonisolated enum TerminalTouchKeyboardModel {
         guard widest > 0, side / widest >= 30 else { return nil }
         let unit = min(56, side / widest)
         let half = unit * widest
+        if hugsEdges {
+            return SplitMetrics(unit: unit, halfWidth: half, leftMinX: splitEdgeInset,
+                                rightMinX: width - splitEdgeInset - half)
+        }
         return SplitMetrics(unit: unit, halfWidth: half, leftMinX: (splitEdgeInset + leftMax - half) / 2,
                             rightMinX: (rightMin + width - splitEdgeInset - half) / 2)
     }
+
+    /// The system's landscape keyboard on the Duo's 951pt inner display spans
+    /// about 790pt, centered; docked rows stop there too.
+    static let maxDockedWidth = 790.0
+
+    /// Space left on each side of the docked rows on a wide Duo display.
+    static func dockedMargin(width: Double) -> Double { max(0, (width - maxDockedWidth) / 2) }
 
     /// A row narrower than its half sits against the outer edge, or with
     /// `towardFold` against the fold, giving the system's half-key stagger.
@@ -870,6 +987,15 @@ nonisolated enum TerminalTouchKeyboardModel {
                       y: available.minY + (available.height - size.height) * y, width: size.width, height: size.height)
     }
 
+    /// Grow drawers upward while keeping the typing area and bottom edge fixed.
+    /// Only move the bottom edge when the available region requires clamping.
+    static func resizedFloatingFrame(_ frame: CGRect, height: CGFloat, in available: CGRect) -> CGRect {
+        let size = floatingFrame(in: available, height: height, anchor: .zero).size
+        return CGRect(x: min(max(frame.minX, available.minX), available.maxX - size.width),
+                      y: min(max(frame.maxY - size.height, available.minY), available.maxY - size.height),
+                      width: size.width, height: size.height)
+    }
+
     /// Moves a floating card off the Duo's fold, to the side holding most of it
     /// when the card fits there. All rects share coordinates.
     static func floatingFrame(_ frame: CGRect, avoiding fold: CGRect?, in available: CGRect) -> CGRect {
@@ -891,10 +1017,6 @@ nonisolated enum TerminalTouchKeyboardModel {
         let travelX = available.width - frame.width, travelY = available.height - frame.height
         return CGPoint(x: travelX > 0 ? min(1, max(0, (frame.minX - available.minX) / travelX)) : 0.5,
                        y: travelY > 0 ? min(1, max(0, (frame.minY - available.minY) / travelY)) : 0.5)
-    }
-
-    static func shouldDockAfterDrag(_ frame: CGRect, in available: CGRect) -> Bool {
-        frame.maxY >= available.maxY - 18 && abs(frame.midX - available.midX) < available.width * 0.2
     }
 
     /// Detect an existing native floating input region.
@@ -948,11 +1070,6 @@ nonisolated enum TerminalTouchKeyboardModel {
             }
         }
     }
-
-    static let accents: [String: String] = [
-        "a": "àáâäæãåā", "e": "èéêëēėę", "i": "ìíîïīį", "o": "òóôöõøœō",
-        "u": "ùúûüū", "c": "çćč", "n": "ñń", "s": "ßśš", "y": "ÿý", "z": "žźż"
-    ]
 
     struct SuggestionContext: Equatable, Sendable {
         let document: String

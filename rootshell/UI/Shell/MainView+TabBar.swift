@@ -27,6 +27,11 @@ extension MainView {
     /// Width reserved for action buttons (plus + settings)
     static let actionButtonsWidth: CGFloat = TabMetrics.tabBarHeight * 2
 
+    /// The Duo side rail carries its own new-tab and settings buttons.
+    var showsTabBarActions: Bool { !showsDuoSideRail }
+
+    var tabBarActionsWidth: CGFloat { showsTabBarActions ? Self.actionButtonsWidth : 0 }
+
     static let integratedMaximumTabWidth: CGFloat = 240
     static let catalystWindowDragWidth: CGFloat = 42
 
@@ -35,7 +40,7 @@ extension MainView {
     /// `TabBar`, where reading title/badge/health metadata does not invalidate
     /// `MainView.body`.
     func availableTabBarWidth(in geometry: GeometryProxy) -> CGFloat {
-        max(0, geometry.size.width - Self.actionButtonsWidth - tabBarLeadingPadding)
+        max(0, geometry.size.width - tabBarActionsWidth - tabBarLeadingPadding)
     }
 
     /// Width of the compact tab viewport. Capped tabs leave real flexible
@@ -52,7 +57,7 @@ extension MainView {
             0,
             geometry.size.width
                 - tabBarLeadingPadding
-                - Self.actionButtonsWidth
+                - tabBarActionsWidth
                 - integratedMinimumDragWidth
         )
         if topTabStyle == .integrated {
@@ -86,7 +91,7 @@ extension MainView {
 
     /// The selected Integrated tab windows the terminal's background effect.
     var integratedTabWindowsEffect: Bool {
-        topTabStyle == .integrated && showsHorizontalTabHeader
+        topTabStyle == .integrated && showsHorizontalTabs
             && effectManager.activeEffect != nil && visibleContentAllowsTerminalEffects
     }
 
@@ -108,13 +113,15 @@ extension MainView {
             surface: integratedTabSurface,
             tabIDs: tabIDs,
             style: style,
-            override: override)
+            override: override,
+            position: horizontalTabPosition)
     }
 
     private var integratedTabCoversFullPanel: Bool {
         #if !CHINA_BUILD
         if httpCaptureShowsOverlay && httpCapturePresentation == .full { return true }
         #endif
+        if agentInboxShowsOverlay && agentInboxPresentation == .full { return true }
         return fileManagerShowsOverlay && fileManagerPresentation == .full
     }
 
@@ -144,9 +151,7 @@ extension MainView {
 
     var integratedMinimumDragWidth: CGFloat {
         #if targetEnvironment(macCatalyst)
-        return (usesTitlebarTabs || hideWindowTitleBar)
-            ? Self.catalystWindowDragWidth
-            : 0
+        return topTabBarAttachedToWindow ? Self.catalystWindowDragWidth : 0
         #else
         return 0
         #endif
@@ -224,6 +229,7 @@ extension MainView {
             availableWidth: availableWidth,
             style: topTabStyle,
             usesCompactSpacing: usesCompactTabSpacing,
+            position: horizontalTabPosition,
             selectedStyleRawValue: topTabStyleRawValueBinding,
             tabsModel: tabsModel,
             selectedTabIndex: Binding(

@@ -1000,7 +1000,14 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
                 }
                 pending.append(data)
                 held = pending
-                guard scanner?.scan(data) == true else { break }
+                guard scanner?.scan(data) == true else {
+                    guard pending.count <= MainChannelSwap.heldOutputLimit else {
+                        Self.logger.error("Replacement channel sent \(pending.count) bytes without its ready marker; abandoning")
+                        await swap.abandon()
+                        return
+                    }
+                    break
+                }
                 held = nil
                 guard await self.adoptReplacement(outbound, generation: generation, swap: swap) else { return }
                 sink.emit(pending)
@@ -1760,6 +1767,9 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
 /// One `replaceMainChannel` call: the channel it supersedes and the caller
 /// waiting for the new one to show its ready marker or fail.
 private final class MainChannelSwap {
+    /// Most output held before the ready marker; more abandons the swap.
+    nonisolated static let heldOutputLimit = 64 * 1024
+
     let previous: Task<Void, Never>?
     nonisolated let readyMarker: Data
     var task: Task<Void, Never>?
@@ -2089,6 +2099,9 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
     /// CA public keys trusted for this host. When a server presents a host
     /// certificate signed by one of these, validation succeeds silently.
     private let trustedCAKeys: [NIOSSHPublicKey]
+    private let dnsVerification: HostKeyDNSVerification
+    /// SSHFP lookup started when the validator was built; nil when DNS checks are off.
+    private let sshfpLookup: Task<SSHFPLookupResult?, Never>?
     private let logger = Logger(subsystem: "com.rootshell", category: "CitadelHostKey")
 
     init(
@@ -2096,12 +2109,16 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
         port: Int,
         label: String?,
         trustedCAKeys: [NIOSSHPublicKey] = [],
+        dnsVerification: HostKeyDNSVerification = .off,
+        sshfpLookup: Task<SSHFPLookupResult?, Never>? = nil,
         onValidation: ((HostKeyValidationRequest) async -> HostKeyValidationResult)?
     ) {
         self.hostname = hostname
         self.port = port
         self.label = label
         self.trustedCAKeys = trustedCAKeys
+        self.dnsVerification = dnsVerification
+        self.sshfpLookup = sshfpLookup
         self.onValidation = onValidation
     }
 
@@ -2150,6 +2167,7 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
 
         // If the server presented an OpenSSH host certificate, try to validate
         // it against the configured certificate authorities first.
+        let plainKey: NIOSSHPublicKey
         if let cert = NIOSSHCertifiedPublicKey(hostKey) {
             if validateCertificate(cert, hostname: hostname, port: port, labelTag: labelTag) {
                 logger.info("[\(labelTag)] Host certificate validated via trusted CA for \(hostname):\(port) — no prompt")
@@ -2161,23 +2179,39 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
             // underlying base key, so reissued certs that share the same base
             // key won't re-prompt and the user sees the real host key.
             logger.info("[\(labelTag)] Host certificate not validated via CA; falling back to base key for \(hostname):\(port)")
-            return try await validatePlainKey(
-                cert.key,
-                hostname: hostname,
-                port: port,
-                label: label,
-                validationCallback: validationCallback
-            )
+            plainKey = cert.key
+        } else {
+            plainKey = hostKey
         }
 
-        // Plain (non-certificate) host key.
+        let dnsVerdict = await sshfpVerdict(for: plainKey)
+        if dnsVerdict != .unavailable {
+            logger.info("[\(labelTag)] SSHFP for \(hostname): \(String(describing: dnsVerdict))")
+        }
+        // OpenSSH VerifyHostKeyDNS=yes: a validated match wins over known hosts and isn't persisted.
+        if dnsVerification == .trust, dnsVerdict == .match(validated: true) {
+            logger.info("[\(labelTag)] Host key matches DNSSEC-validated SSHFP for \(hostname):\(port), no prompt")
+            return true
+        }
+
         return try await validatePlainKey(
-            hostKey,
+            plainKey,
             hostname: hostname,
             port: port,
             label: label,
+            dnsVerdict: dnsVerdict,
             validationCallback: validationCallback
         )
+    }
+
+    @MainActor
+    private func sshfpVerdict(for key: NIOSSHPublicKey) async -> SSHFPVerdict {
+        guard let sshfpLookup,
+              let blob = try? SSHHostKeyFormatter.base64Blob(for: key),
+              let blobData = Data(base64Encoded: blob)
+        else { return .unavailable }
+        return SSHFPRecord.evaluate(
+            keyType: SSHHostKeyFormatter.keyType(for: key), keyBlob: blobData, result: await sshfpLookup.value)
     }
 
     /// Attempt to validate a presented host certificate against the trusted CAs.
@@ -2199,9 +2233,9 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
         // principal that is in the list, preserving its cryptographic checks.
         let principal: String
         if cert.validPrincipals.isEmpty {
-            // Empty principals = valid for any host (the CA + our host-pattern
-            // scoping already constrain trust).
-            principal = hostname
+            // OpenSSH refuses these ("Certificate lacks principal list"); falls back to the base key.
+            logger.info("[\(labelTag)] Host cert has no principals; not trusting it via CA")
+            return false
         } else if cert.validPrincipals.contains(hostname) {
             principal = hostname
         } else if let matched = cert.validPrincipals.first(where: {
@@ -2236,6 +2270,7 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
         hostname: String,
         port: Int,
         label: String?,
+        dnsVerdict: SSHFPVerdict,
         validationCallback: ((HostKeyValidationRequest) async -> HostKeyValidationResult)?
     ) async throws -> Bool {
         let manager = KnownHostsManager.shared
@@ -2244,6 +2279,7 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
         let fingerprint = generateFingerprint(for: hostKey)
         let keyType = getKeyType(from: hostKey)
         let publicKeyData = try serializePublicKey(hostKey)
+        let dnsLine = dnsVerdict.promptLine.map { "\n\n\($0)" } ?? ""
 
         let labelTag = label ?? "Direct"
         logger.info("[\(labelTag)] Validating host key for \(hostname):\(port) - Type: \(keyType)")
@@ -2256,6 +2292,9 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
             if fingerprintsMatch || publicKeyDataMatches {
                 // Key matches - update last seen and accept
                 logger.info("[\(labelTag)] Host key matches known host, accepting")
+                if case .mismatch = dnsVerdict {
+                    logger.warning("[\(labelTag)] Known host key for \(hostname):\(port) does not match its SSHFP record")
+                }
 
                 if fingerprintsMatch && !publicKeyDataMatches {
                     // Update the stored key format
@@ -2289,7 +2328,7 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
                 let message = "\(labelPrefix)The host key for \(hostname):\(port) has changed. " +
                     "This could indicate a man-in-the-middle attack!\n\n" +
                     "Previously Trusted:\n\(knownHost.fingerprint)\n\n" +
-                    "New Key Received:\n\(fingerprint)"
+                    "New Key Received:\n\(fingerprint)" + dnsLine
 
                 let request = HostKeyValidationRequest(message: message, isKeyChanged: true)
                 return await handleUserResponse(
@@ -2316,7 +2355,7 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
             let message = "\(labelPrefix)Do you want to trust this host?\n\n" +
                 "Host: \(hostname):\(port)\n" +
                 "Key Type: \(keyType)\n\n" +
-                "Fingerprint:\n\(fingerprint)"
+                "Fingerprint:\n\(fingerprint)" + dnsLine
 
             let request = HostKeyValidationRequest(message: message, isKeyChanged: false)
             return await handleUserResponse(

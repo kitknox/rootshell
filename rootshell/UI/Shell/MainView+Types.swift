@@ -51,6 +51,8 @@ extension MainView {
         var translationX: CGFloat
         var width: CGFloat
         var isSettling: Bool = false
+        /// A committed swipe whose selection handoff waits for its slide to land.
+        var awaitsLandingHandoff: Bool = false
         /// `CACurrentMediaTime()` of the last began/changed/ended event that
         /// touched this state. Staleness signal for the wedge heals: a state
         /// that stops receiving events without ever settling is an abandoned

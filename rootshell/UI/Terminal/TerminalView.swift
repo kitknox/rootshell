@@ -185,6 +185,19 @@ extension Ghostty {
             }
         }
 
+        /// Window-space y of the safe-area top when the Duo inner side-rail
+        /// layout extends the surface under it (0 otherwise). The grid starts
+        /// below it while scrollback fills the band.
+        private var lastMultiplexerTopInset: CGFloat = 0
+        var topSafeEdge: CGFloat = 0 {
+            didSet {
+                guard topSafeEdge != oldValue else { return }
+                #if !targetEnvironment(macCatalyst) && !os(visionOS)
+                refreshBottomInset()
+                #endif
+            }
+        }
+
         /// App-level presentations, such as settings and sheets, occlude
         /// selection handle overlays before UIKit has attached a modal VC.
         var selectionUIExternallyOccluded: Bool = false
@@ -736,8 +749,8 @@ extension Ghostty {
             get { keyboardAccessoryController?.dismissTapStartPoint }
             set { keyboardAccessoryController?.dismissTapStartPoint = newValue }
         }
-        /// Bumped by every input path (bytes, key events, pastes). Dictation compares it
-        /// to tell its own insertions from typing that happened since.
+        /// Bumped by every input path (bytes, key events, pastes) except on-device
+        /// dictation's own delivery, which compares it to spot typing since.
         var userInputGeneration: UInt64 = 0
         /// Whether AI Agent overlay is visible for this terminal's tab (suppresses keyboard toolbar)
         var aiAgentOverlayActive: Bool = false {
@@ -1395,6 +1408,11 @@ extension Ghostty {
         var pendingDictationPlaceholderTokens = Set<String>()
         var dictationDeliveryDepth = 0
         var dictationSettleDeadline: TimeInterval?
+        /// On-device dictation output held behind a delayed Return, in order.
+        var dictationPending: [(submit: Bool, work: @MainActor (Ghostty.TerminalView) -> Void)] = []
+        var dictationDrainTask: Task<Void, Never>?
+        var dictationLastTextAt: ContinuousClock.Instant?
+        var dictationDelivering = false
 
         /// Long-press spacebar trackpad state. iOS reports drag offsets via
         /// `updateFloatingCursor(at:)`; we bucket them into whole-cell steps and
@@ -1462,6 +1480,19 @@ extension Ghostty {
         ///     saved-scrollback → trailer → buffered-server-output → live
         /// even when layout fires before `.running`.
         var scrollbackWrittenAwaitingTrailer: Bool = false
+
+        /// Never replace a known-good save with the empty/spinner surface
+        /// while its restoration bytes are still being replayed.
+        var scrollbackRestoreReplayPending = false
+        var scrollbackRestoreReplayGeneration: UInt64 = 0
+
+        var canPersistTerminalContents: Bool {
+            restorationState == .none
+                && !pendingScrollbackRestore
+                && !pendingScrollbackRestoreForLayout
+                && !scrollbackWrittenAwaitingTrailer
+                && !scrollbackRestoreReplayPending
+        }
 
         /// Set true when the embedded trzsz session reaches `.running` and
         /// `applyResumeTrailer` has fired. The layout-deferred restore path
@@ -2169,7 +2200,10 @@ extension Ghostty {
                 && bindings.contains { !$0.isDisabled && !$0.isAppTabNavigation }
             appTabSwipePanGesture?.isEnabled = scrollMode
                 && bindings.contains { $0.isAppTabNavigation }
-            captureScrollPanGesture?.isEnabled = scrollMode && (captured || usesHerdrFallbackScrolling)
+            // Not gated on capture: the cached state can lag the C side, and a
+            // recognizer enabled once it catches up misses the touch in progress.
+            // gestureRecognizerShouldBegin checks the live state instead.
+            captureScrollPanGesture?.isEnabled = scrollMode
             captureLongPressGesture?.isEnabled = scrollMode && captured
             pinchZoomGesture?.isEnabled = scrollMode
             let twoFingerLongPressDuration = TwoFingerLongPressSetting.storedDuration()
@@ -2844,12 +2878,52 @@ extension Ghostty {
             return Double(overlap * scale)
         }
 
-        /// Push the current bottom inset to the core so the grid reserves the
-        /// home-indicator strip (the drawable covers it; smooth-scroll overscan
-        /// fills it on scrollback). Deduped, so it is safe to call on every
-        /// layout pass.
+        /// The portion of this surface's drawable above `topSafeEdge`, in
+        /// framebuffer pixels. The grid starts below it while the scrollback
+        /// above the viewport fills it.
+        func currentTopInsetPixels() -> Double {
+            guard topSafeEdge > 0, let window else { return 0 }
+            let frameInWindow = convert(bounds, to: window)
+            let overlap = min(max(0, topSafeEdge - frameInWindow.minY), bounds.height)
+            let scale = contentScaleFactor
+            guard scale > 0 else { return 0 }
+            return Double(overlap * scale)
+        }
+
+        /// The top inset in points, rounded and clamped like Surface.setTopInset.
+        /// Multiplexer layouts budget it into the pane that touches the top.
+        var topInsetPoints: CGFloat {
+            let scale = contentScaleFactor
+            guard scale > 0 else { return 0 }
+            return CGFloat(min(max(currentTopInsetPixels().rounded(), 0), 10_000)) / scale
+        }
+
+        /// Push the current bottom and top insets to the core so the grid
+        /// reserves the home-indicator strip (the drawable covers it;
+        /// smooth-scroll overscan fills it on scrollback). Deduped, so it is
+        /// safe to call on every layout pass.
         func updateBottomInset() {
             surfaceController.updateBottomInset()
+            relayoutMultiplexerForTopInset()
+        }
+
+        /// Multiplexers budget the top inset into the top pane's grid, so a
+        /// change (such as top tabs toggling) re-lays out the tab after this pass.
+        private func relayoutMultiplexerForTopInset() {
+            let inset = topInsetPoints
+            guard inset != lastMultiplexerTopInset else { return }
+            lastMultiplexerTopInset = inset
+            guard isMultiplexerPane else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if let binding = tmuxPaneBinding {
+                    TmuxController.controller(forOwnerSurface: binding.parentSurface)?
+                        .reapplyLayout(windowID: binding.windowId)
+                    NotificationCenter.default.post(name: .terminalLayoutInvalidation, object: nil)
+                } else if isHerdrPane, !usesHerdrFallbackScrolling {
+                    enclosingSplitHost?.herdrSurfaceMetricsDidChange()
+                }
+            }
         }
 
         /// Toggle mouse reporting via ghostty's built-in action.
@@ -5838,7 +5912,7 @@ extension Ghostty.TerminalView {
     ///   - char: The character being pressed (lowercase for letters)
     ///   - modifiers: Active keyboard modifiers from toolbar
     /// - Returns: `true` if the key was handled via Ghostty, `false` if no mapping exists
-    private func sendViaGhosttyKeyEvent(_ char: Character, modifiers: KeyModifiers) -> Bool {
+    private func sendViaGhosttyKeyEvent(_ char: Character, modifiers: KeyModifiers, shifted: Character? = nil) -> Bool {
         let lookupChar = char.lowercased().first ?? char
         guard let hidUsage = Self.characterHIDUsageMap[lookupChar] else { return false }
         let mods = Self.ghosttyMods(modifiers)
@@ -5846,7 +5920,7 @@ extension Ghostty.TerminalView {
         // Build the text payload: apply shift transformation so legacy mode
         // sends the correct character (e.g., 'A' instead of 'a').
         let shiftActive = modifiers.contains(.shift)
-        let effectiveChar = shiftActive ? Self.shiftedCharacter(char) : char
+        let effectiveChar = shiftActive ? shifted ?? Self.shiftedCharacter(char) : char
         let text = String(effectiveChar)
 
         // Determine the unshifted codepoint (what the key produces without Shift)
@@ -5888,18 +5962,20 @@ extension Ghostty.TerminalView {
         text: String? = nil,
         unshiftedCodepoint: UInt32 = 0
     ) -> Bool {
-        userInputGeneration &+= 1
+        noteUserInput()
         endDictationSession()
         invalidateWritingAssistance()
         // Covered herdr gateway: Ghostty would encode straight into the hidden
         // shell. Escape already detached upstream; swallow the rest as handled.
         if herdrController?.showsGatewayStatus == true { return true }
         if let state = herdrEndpointPane {
-            state.sendKey(keyCode, action: action, mods: mods,
-                          text: text.flatMap { KeyCode.isUIKeyInputSentinel($0) ? nil : $0 }, unshifted: unshiftedCodepoint)
+            emitAfterDictation { _ in
+                state.sendKey(keyCode, action: action, mods: mods,
+                              text: text.flatMap { KeyCode.isUIKeyInputSentinel($0) ? nil : $0 }, unshifted: unshiftedCodepoint)
+            }
             return true
         }
-        guard let surface = surface else { return false }
+        guard surface != nil else { return false }
         guard let nativeKeycode = Ghostty.Input.nativeKeyCode(for: keyCode) else { return false }
 
         // A UIKit sentinel is a key name, not text.
@@ -5913,7 +5989,10 @@ extension Ghostty.TerminalView {
             consumedMods: consumedMods,
             unshiftedCodepoint: unshiftedCodepoint
         )
-        event.withCValue { ghostty_surface_key(surface, $0) }
+        emitAfterDictation { view in
+            guard let surface = view.surface else { return }
+            event.withCValue { ghostty_surface_key(surface, $0) }
+        }
         return true
     }
 
@@ -5938,6 +6017,11 @@ extension Ghostty.TerminalView {
 
 extension Ghostty.TerminalView: KeyboardButtonDelegate {
     func keyPressed(_ key: String, modifiers: KeyModifiers) {
+        keyPressed(key, modifiers: modifiers, shifted: nil)
+    }
+
+    /// `shifted` is the touch keyboard layout's Shift output for a letter; nil keeps US casing.
+    func keyPressed(_ key: String, modifiers: KeyModifiers, shifted: Character?) {
         // Debug logging
         Ghostty.logger.debug("TerminalView.keyPressed: key=\(key), modifiers rawValue=\(modifiers.rawValue)")
 
@@ -5960,7 +6044,7 @@ extension Ghostty.TerminalView: KeyboardButtonDelegate {
             let hasModifier = modifiers.contains(.control) || modifiers.contains(.alt) || modifiers.contains(.command)
             if !hasModifier && key.count == 1 && !key.hasPrefix("\u{1B}") {
                 let effectiveKey = modifiers.contains(.shift)
-                    ? String(Self.shiftedCharacter(key.first!))
+                    ? String(shifted ?? Self.shiftedCharacter(key.first!))
                     : key
                 composeTV.insertText(effectiveKey)
                 return
@@ -6007,7 +6091,7 @@ extension Ghostty.TerminalView: KeyboardButtonDelegate {
         #endif
 
         if !modifiers.isEmpty, key.count == 1, let char = key.first {
-            if sendViaGhosttyKeyEvent(char, modifiers: modifiers) {
+            if sendViaGhosttyKeyEvent(char, modifiers: modifiers, shifted: shifted) {
                 return
             }
         }
@@ -6063,7 +6147,7 @@ extension Ghostty.TerminalView: KeyboardButtonDelegate {
 
         // Shift modifier for regular single characters
         if modifiers.contains(.shift) && key.count == 1 && key != "\t" {
-            keySequence = String(key.map { Self.shiftedCharacter($0) })
+            keySequence = shifted.map(String.init) ?? String(key.map { Self.shiftedCharacter($0) })
         }
 
         // Control modifier
@@ -6105,6 +6189,35 @@ extension Ghostty.TerminalView: KeyboardButtonDelegate {
         NotificationCenter.default.post(name: .ghosttyDidReceiveInput, object: self)
         Ghostty.logger.debug("TerminalView: Sending raw data (\(data.count) bytes)")
         sendUserInput(data)
+    }
+
+    /// Keep raw sequence steps behind encoded combos in Ghostty's I/O queue.
+    /// Sending straight to the session could overtake an asynchronous key write.
+    func sendSequenceData(_ data: Data) {
+        // Preserve semantic Escape handling (discovery dismissal/gateway detach).
+        if herdrController?.showsGatewayStatus == true
+            || (data == Data([0x1B]) && (discoveredSessions != nil
+                || tmuxController?.isActive == true || isTmuxGatewaySurfaceActive)) {
+            sendRawData(data)
+            return
+        }
+        guard surface != nil || herdrEndpointPane != nil else { sendRawData(data); return }
+        commitKoreanCompositionIfNeeded(external: true)
+        NotificationCenter.default.post(name: .ghosttyDidReceiveInput, object: self)
+        noteUserInput()
+        endDictationSession()
+        invalidateWritingAssistance()
+        if let state = herdrEndpointPane {
+            emitAfterDictation { _ in state.sendText(String(decoding: data, as: UTF8.self)) }
+            return
+        }
+        emitAfterDictation { view in
+            guard let surface = view.surface else { return }
+            data.withUnsafeBytes { raw in
+                guard let base = raw.baseAddress else { return }
+                ghostty_surface_send_input(surface, base.assumingMemoryBound(to: CChar.self), UInt(data.count))
+            }
+        }
     }
 
     /// Custom-key combos go through Ghostty so kitty/CSI u modes keep Shift

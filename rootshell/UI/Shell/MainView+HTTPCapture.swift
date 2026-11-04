@@ -99,6 +99,7 @@ extension MainView {
         showOpenInFolderOverlay = false
         showIPLookup = false
         yieldSlotToHTTPCapture(httpCapturePresentation)
+        yieldAgentInboxSlot(to: httpCapturePresentation)
 
         if isPhone {
             resignFirstResponderForSheetPresentation()
@@ -134,6 +135,7 @@ extension MainView {
     func switchHTTPCapturePresentation(_ presentation: PanelPresentation) {
         guard presentation != httpCapturePresentation else { return }
         yieldSlotToHTTPCapture(presentation)
+        yieldAgentInboxSlot(to: presentation)
         httpCapturePresentation = presentation
         SettingsStore.shared.set(Settings.HTTPCapture.presentation, presentation)
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented || httpCaptureOwnsKeyboard || fileManagerOwnsKeyboard)
@@ -183,7 +185,7 @@ extension MainView {
                 theme: resolvedSheetTheme(),
                 onClose: { closeHTTPCapture() },
                 onSwitchPresentation: { switchHTTPCapturePresentation($0) },
-                integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabHeader ? integratedTabJoin : nil
+                integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs ? integratedTabJoin : nil
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // A fresh host per presentation; the HUD host sets up dragging and resizing once.

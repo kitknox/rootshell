@@ -145,7 +145,7 @@ enum TerminalTouchSteampunkArtwork {
 
     static func gear(radius: CGFloat, teeth: Int, scale: CGFloat, copper: Bool) -> UIImage? {
         let extent = ceil(radius + 4)
-        return image("gear/\(teeth)/\(copper)", size: CGSize(width: extent * 2, height: extent * 2), scale: scale) { c in
+        return image("gear/\(teeth)/\(copper)/\(radius)", size: CGSize(width: extent * 2, height: extent * 2), scale: scale) { c in
             c.translateBy(x: extent, y: extent)
             let gear = UIBezierPath()
             for tooth in 0..<teeth {
@@ -189,9 +189,9 @@ enum TerminalTouchSteampunkArtwork {
         }
     }
 
-    static func bed(size: CGSize, scale: CGFloat, material: Material, rows: [CGRect], solid: Bool) -> UIImage? {
+    static func bed(size: CGSize, scale: CGFloat, material: Material, rows: [CGRect], banks: [CGFloat], solid: Bool) -> UIImage? {
         let geometryKey = rows.map { "\($0.minX),\($0.minY),\($0.width),\($0.height)" }.joined(separator: ";")
-        return image("bed/\(material.key)/\(geometryKey)/\(solid)", size: size, scale: scale) { c in
+        return image("bed/\(material.key)/\(geometryKey)/\(banks)/\(solid)", size: size, scale: scale) { c in
             let bounds = CGRect(origin: .zero, size: size)
             // A tinted cutaway, not an opaque replacement for the floating glass.
             fill(c, rect: bounds, radius: 0, color: material.steel.ui.withAlphaComponent(solid ? 1 : 0.78))
@@ -214,8 +214,7 @@ enum TerminalTouchSteampunkArtwork {
             }
             // Oil channels, copper pipe elbows, and compression collars frame
             // the drive trains; these all live behind the original hit cells.
-            for fraction: CGFloat in [0.17, 0.5, 0.83] {
-                let x = size.width * fraction
+            for x in banks {
                 let top = rows.first?.minY ?? 0
                 let bottom = rows.last?.maxY ?? size.height
                 let pipe = UIBezierPath()

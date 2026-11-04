@@ -320,6 +320,8 @@ extension MainView {
             httpCaptureOverlays(fullSize: true)
             #endif
 
+            agentInboxOverlays(fullSize: true)
+
             // Compose text overlay
             composeOverlay(composeStateVersion: composeStateVersion)
 
@@ -361,6 +363,8 @@ extension MainView {
             #if !CHINA_BUILD
             httpCaptureOverlays(fullSize: false)
             #endif
+
+            agentInboxOverlays(fullSize: false)
 
             // Theme picker overlay
             themePickerOverlayView(isPresented: $showThemePickerOverlay)
@@ -748,19 +752,21 @@ extension MainView {
         if effectManager.activeEffect != nil,
            visibleContentAllowsTerminalEffects {
             // The selected Integrated tab is a window onto this same effect,
-            // which reaches up through the header row to draw there.
+            // which reaches through the tab row to draw there.
             let topExtension = effectTopExtension
+            let bottomExtension = effectBottomExtension
             GeometryReader { geometry in
                 let _ = effectManager.keyboardStateVersion
                 let frame = geometry.frame(in: .global)
                 let effectFrame = CGRect(x: frame.minX - leadingExtension, y: frame.minY - topExtension,
-                                         width: frame.width + leadingExtension, height: frame.height + topExtension)
+                                         width: frame.width + leadingExtension,
+                                         height: frame.height + topExtension + bottomExtension)
                 TerminalEffectView()
                     .environment(\.terminalEffectBottomInset, effectBottomInset(in: effectFrame))
                     // GeometryReader keeps the widened effect out of the
                     // ZStack's layout calculation. The terminal therefore
                     // retains its exact frame while only the effect overflows
-                    // left across the docked sidebar and up into the header.
+                    // left across the docked sidebar and into the tab row.
                     .frame(width: effectFrame.width, height: effectFrame.height)
                     // Rounded Panes: paint only the cards, never the gaps or
                     // the square corners around them
@@ -768,8 +774,9 @@ extension MainView {
                         roundedPanes: roundedPanes,
                         sidebarWidth: leadingExtension,
                         topExtension: topExtension,
+                        bottomExtension: bottomExtension,
                         origin: effectFrame.origin,
-                        join: topExtension > 0 ? integratedTabJoin : nil,
+                        join: topExtension > 0 || bottomExtension > 0 ? integratedTabJoin : nil,
                         gaps: paneCardGaps,
                         gapTabIDs: effectGapTabIDs))
                     .offset(x: -leadingExtension, y: -topExtension)
@@ -796,7 +803,12 @@ extension MainView {
     /// How far the effect reaches above the terminal to show through the
     /// selected Integrated tab.
     var effectTopExtension: CGFloat {
-        integratedTabWindowsEffect ? TabMetrics.tabBarHeight : 0
+        integratedTabWindowsEffect && !showsBottomTabBar ? TabMetrics.tabBarHeight : 0
+    }
+
+    /// How far it reaches below the terminal, for a bottom tab bar.
+    var effectBottomExtension: CGFloat {
+        integratedTabWindowsEffect && showsBottomTabBar ? TabMetrics.tabBarHeight : 0
     }
 
     /// Background fill when terminal is inset for ocean effect.
@@ -889,9 +901,35 @@ extension MainView {
         containerBottomSafeAreaExpansion: CGFloat,
         terminalEffectsEnabled: Bool
     ) -> CGFloat {
+        terminalBottomPadding(
+            containerFrame: geometry.frame(in: .global),
+            containerSafeAreaBottom: geometry.safeAreaInsets.bottom,
+            keyboardFrame: reportedKeyboardFrame,
+            keyboardHeight: keyboardHeight,
+            reservedBottomToolbarHeight: reservedBottomToolbarHeight,
+            accessoryFrame: accessoryFrame,
+            touchKeyboardFrame: touchKeyboardFrame,
+            containerBottomSafeAreaExpansion: containerBottomSafeAreaExpansion,
+            terminalEffectsEnabled: terminalEffectsEnabled)
+    }
+
+    /// `containerFrame` is in global space. `hostWindow` stands in for the
+    /// focused pane's window when the selected tab has no pane.
+    func terminalBottomPadding(
+        containerFrame: CGRect,
+        containerSafeAreaBottom: CGFloat,
+        keyboardFrame reportedKeyboardFrame: CGRect,
+        keyboardHeight: CGFloat,
+        reservedBottomToolbarHeight: CGFloat,
+        accessoryFrame: CGRect?,
+        touchKeyboardFrame: CGRect?,
+        containerBottomSafeAreaExpansion: CGFloat,
+        terminalEffectsEnabled: Bool,
+        hostWindow: UIWindow? = nil
+    ) -> CGFloat {
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
-        let window = terminals.indices.contains(selectedTabIndex)
-            ? terminals[selectedTabIndex].focusedPane?.window : nil
+        let window = (terminals.indices.contains(selectedTabIndex)
+            ? terminals[selectedTabIndex].focusedPane?.window : nil) ?? hostWindow
         // SwiftUI's global space belongs to this window; notification and
         // accessory frames belong to its screen. Convert on every layout so
         // moved/resized windows and the upper tabletop region stay accurate.
@@ -899,7 +937,6 @@ extension MainView {
             guard let window else { return .zero }
             return window.convert(frame, from: window.screen.coordinateSpace)
         }
-        let containerFrame = geometry.frame(in: .global)
         let accessoryFrame = accessoryFrame.map(localFrame)
         let touchKeyboardFrame = touchKeyboardFrame.map(localFrame)
         // Use the notification's destination throughout the transition. The
@@ -1005,7 +1042,7 @@ extension MainView {
 
         #else
         let keyboardFrame = reportedKeyboardFrame
-        let keyboardOffset = effectManager.keyboardOverlapHeight(in: geometry.frame(in: .global), keyboardFrame: keyboardFrame)
+        let keyboardOffset = effectManager.keyboardOverlapHeight(in: containerFrame, keyboardFrame: keyboardFrame)
         let rawKeyboardCoverage = keyboardOffset
         #endif
 
@@ -1015,8 +1052,11 @@ extension MainView {
 
         if hasOcean {
             // The ocean is a fraction of the effect's height, which reaches
-            // up into the header for the Integrated tab.
-            padding += effectTopExtension * effectManager.terminalBottomInsetFraction
+            // into the tab row for the Integrated tab.
+            let fraction = effectManager.terminalBottomInsetFraction
+            padding += effectTopExtension * fraction
+            // A bottom row holds the ocean's lowest stretch.
+            padding -= effectBottomExtension * (1 - fraction)
             #if !os(visionOS) && !targetEnvironment(macCatalyst)
             // `hasDockedKeyboard`, not raw `isDocked`: EffectManager calls any
             // full-width bottom-touching region over 100pt docked, which a drawer
@@ -1025,12 +1065,12 @@ extension MainView {
                 // Effects fit above an accessory-only toolbar too (see
                 // effectBottomInset), so the ocean band sits on top of it.
                 let toolbarCoverage = keyboardOffset - preservedKeyboardSafeAreaCompensation
-                let visibleHeight = max(0, geometry.size.height - toolbarCoverage)
+                let visibleHeight = max(0, containerFrame.height - toolbarCoverage)
                 padding += keyboardOffset
                 padding += visibleHeight * effectManager.terminalBottomInsetFraction
             } else {
                 // Docked keyboard or no keyboard with ocean: add ocean gap
-                let visibleHeight = max(0, geometry.size.height - rawKeyboardCoverage)
+                let visibleHeight = max(0, containerFrame.height - rawKeyboardCoverage)
                 padding += visibleHeight * effectManager.terminalBottomInsetFraction
                 padding += rawKeyboardCoverage
                 padding += preservedKeyboardSafeAreaCompensation
@@ -1038,14 +1078,15 @@ extension MainView {
             #else
             // visionOS and Mac Catalyst do not have an undocked software
             // keyboard path, so only the standard ocean inset applies.
-            let visibleHeight = max(0, geometry.size.height - rawKeyboardCoverage)
+            let visibleHeight = max(0, containerFrame.height - rawKeyboardCoverage)
             padding += visibleHeight * effectManager.terminalBottomInsetFraction
             padding += rawKeyboardCoverage
             #endif
+            padding = max(0, padding)
         } else {
             #if os(visionOS)
             // visionOS needs safe area padding when ocean is off
-            padding += geometry.safeAreaInsets.bottom
+            padding += containerSafeAreaBottom
             #endif
             // Use reduced keyboard offset when no ocean (tighter spacing)
             if keyboardOffset > 0 {
@@ -1054,8 +1095,9 @@ extension MainView {
         }
 
         #if os(visionOS)
-        // Add clearance for the keyboard toolbar ornament when visible
-        if showKeyboardToolbar {
+        // Add clearance for the keyboard toolbar ornament when visible; a
+        // bottom tab bar takes it instead.
+        if showKeyboardToolbar && !showsBottomTabBar {
             padding += KeyboardSizes.iPad.toolbar.height
         }
         #endif
@@ -1093,10 +1135,15 @@ extension MainView {
                     width: width,
                     keyboardFrame: keyboardFrame,
                     keyboardHeight: keyboardHeight,
-                    containerBottomSafeAreaExpansion: max(0, expanded.size.height - inner.size.height),
+                    // Only the bottom escape; the top one is the surface's top inset.
+                    containerBottomSafeAreaExpansion: max(
+                        0, expanded.frame(in: .global).maxY - inner.frame(in: .global).maxY),
                     layer: layer
                 )
             }
+            // The top escape lets scrollback fill the band above the grid,
+            // which ghostty_surface_set_top_inset keeps below the safe area.
+            .ignoresSafeArea(.container, edges: terminalExtendsUnderTopSafeArea ? .top : [])
             // A floating keyboard still reports a keyboard region the size of
             // the strip, which would otherwise cancel the escape.
             .ignoresSafeArea([.container, .keyboard], edges: (duoTabletopAvailable && !duoTabletopDisabled) || roundedPanes ? [] : .bottom)
@@ -1200,11 +1247,11 @@ extension MainView {
                                 focusedPane: tab.focusedPane,
                                 terminalEffectsEnabled: terminalEffectsEnabled,
                                 routesFocusedProgressToIntegratedEdge: topTabStyle == .integrated
-                                    && showsHorizontalTabHeader,
-                                integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabHeader ? integratedTabJoin : nil,
+                                    && showsHorizontalTabs,
+                                integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs ? integratedTabJoin : nil,
                                 tracksSwipe: appTabSwipeState.map { $0.sourceTabID == tab.id || $0.targetTabID == tab.id } ?? false,
                                 paneUnderlay: tab.paneUnderlay,
-                                integratedTabSurface: topTabStyle == .integrated && showsHorizontalTabHeader
+                                integratedTabSurface: topTabStyle == .integrated && showsHorizontalTabs
                                     ? integratedTabSurface : nil,
                                 paneCardGaps: roundedPanes ? paneCardGaps : nil,
                                 tabID: tab.id
@@ -1275,7 +1322,7 @@ extension MainView {
                     PortPreviewTabView(
                         preview: preview,
                         roundedPanes: roundedPanes,
-                        integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabHeader
+                        integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs
                             ? integratedTabJoin : nil
                     )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1334,6 +1381,7 @@ extension MainView {
         #if !CHINA_BUILD
         if httpCaptureShowsOverlay && httpCapturePresentation == .full { return true }
         #endif
+        if agentInboxShowsOverlay && agentInboxPresentation == .full { return true }
         return fileManagerShowsOverlay && fileManagerPresentation == .full
     }
 
@@ -1445,7 +1493,7 @@ extension MainView {
 
     var paneCardsEnterHomeIndicatorStrip: Bool {
         #if os(iOS) && !targetEnvironment(macCatalyst)
-        return roundedPanes && !isPhone
+        return roundedPanes && !isPhone && !showsBottomTabBar
         #else
         return false
         #endif
@@ -1456,6 +1504,7 @@ extension MainView {
         let aiSidebar: CGFloat
         let fileManager: CGFloat
         let httpCapture: CGFloat
+        let agentInbox: CGFloat
         let terminal: CGFloat
     }
 
@@ -1483,12 +1532,16 @@ extension MainView {
         #else
         let httpCaptureWidth: CGFloat = 0
         #endif
+        let agentInboxWidth = agentInboxShowsSidebar
+            ? min(agentInboxSidebarWidth, max(AgentInboxSidebarView.minWidth, rowWidth - dockedWidth - sidebarWidth - 320))
+            : 0
         return TerminalRowColumns(
             docked: dockedWidth,
             aiSidebar: sidebarWidth,
             fileManager: fileManagerWidth,
             httpCapture: httpCaptureWidth,
-            terminal: rowWidth - sidebarWidth - dockedWidth - fileManagerWidth - httpCaptureWidth)
+            agentInbox: agentInboxWidth,
+            terminal: rowWidth - sidebarWidth - dockedWidth - fileManagerWidth - httpCaptureWidth - agentInboxWidth)
     }
 
     /// The complete terminal and AI sidebar content.
@@ -1502,10 +1555,13 @@ extension MainView {
         let dockedSidebarTheme: ResolvedSheetTheme? = docked ? resolvedSheetTheme() : nil
         // Rounded panes inset the whole row; columns divide what remains.
         let cardGap: CGFloat = roundedPanes ? PaneCardStyle.gap : 0
-        // Floating tabs leave slack under them in the header row, which already
-        // separates the cards, and Integrated tabs join the card below. Ledger
-        // fills the row and keeps the gap.
+        // Floating tabs leave slack beside the cards in the tab row, which
+        // already separates them, and Integrated tabs join the adjacent card.
+        // Ledger fills the row and keeps the gap.
         let cardTopGap: CGFloat = showsHorizontalTabHeader && topTabStyle != .ledger ? 0 : cardGap
+        let cardBottomGap: CGFloat = showsBottomTabBar
+            ? (topTabStyle != .ledger ? 0 : cardGap)
+            : (paneCardsEnterHomeIndicatorStrip || windowSafeAreaInsets.bottom < cardGap ? cardGap : 0)
         // Mac terminals draw their own translucent background, so the backdrop
         // is painted only around the cards (here and between splits), unless
         // the window backdrop shows there instead.
@@ -1523,14 +1579,16 @@ extension MainView {
         let sidebarWidth = columns.aiSidebar
         let fileManagerWidth = columns.fileManager
         let httpCaptureWidth = columns.httpCapture
+        let agentInboxWidth = columns.agentInbox
         let terminalWidth = columns.terminal
         let portsTerminal = terminals.indices.contains(selectedTabIndex)
             ? terminals[selectedTabIndex].focusedPane?.asTerminal
             : nil
         // The terminal column ignores the keyboard, so the pill must lift
         // itself above it; otherwise the globe sits under the software
-        // keyboard on iPhone and cannot be tapped.
-        let portPillKeyboardLift = max(
+        // keyboard on iPhone and cannot be tapped. A bottom tab bar already
+        // lifts the whole column.
+        let portPillKeyboardLift = showsBottomTabBar ? 0 : max(
             effectManager.keyboardHeight,
             portsTerminal?.reservedKeyboardToolbarHeightAtBottom ?? 0
         )
@@ -1573,6 +1631,8 @@ extension MainView {
             }
 
             fileManagerSidebarColumn(width: fileManagerWidth, totalWidth: geometry.size.width)
+
+            agentInboxSidebarColumn(width: agentInboxWidth, totalWidth: geometry.size.width)
 
             #if !CHINA_BUILD
             httpCaptureSidebarColumn(width: httpCaptureWidth, totalWidth: geometry.size.width)
@@ -1624,13 +1684,11 @@ extension MainView {
         // iPad cards run into the home-indicator strip (the surface inset keeps
         // the grid above it). iPhone display corners would clip them there, so
         // its cards stop at the strip, which already separates the bottom edge.
-        .padding(EdgeInsets(top: cardTopGap, leading: cardGap,
-                            bottom: paneCardsEnterHomeIndicatorStrip || windowSafeAreaInsets.bottom < cardGap ? cardGap : 0,
-                            trailing: cardGap))
+        .padding(EdgeInsets(top: cardTopGap, leading: cardGap, bottom: cardBottomGap, trailing: cardGap))
         .background {
             if let cardBackdrop {
                 GeometryReader { proxy in
-                    let height = max(0, proxy.size.height - cardTopGap - cardGap)
+                    let height = max(0, proxy.size.height - cardTopGap - cardBottomGap)
                     PaneCardBackdropShape(holes: [
                         .init(rect: CGRect(x: cardGap, y: cardTopGap, width: max(0, dockedWidth - cardGap), height: height),
                               cornerRadius: PaneCardStyle.cornerRadius),
@@ -1653,6 +1711,7 @@ extension MainView {
         // CHINA gate — the docked path ships on China builds too.
         .animation(tabSidebarIsDragging ? .none : .interactiveSpring(), value: dockedWidth)
         .animation(fileManagerSidebarIsDragging ? .none : .spring(response: 0.3, dampingFraction: 0.85), value: fileManagerWidth)
+        .animation(agentInboxSidebarIsDragging ? .none : .spring(response: 0.3, dampingFraction: 0.85), value: agentInboxWidth)
         #if !CHINA_BUILD
         .animation(httpCaptureSidebarIsDragging ? .none : .spring(response: 0.3, dampingFraction: 0.85), value: httpCaptureWidth)
         .animation(
@@ -1751,7 +1810,9 @@ extension MainView {
         // collapse, and drawer-height changes re-evaluate this (same
         // mechanism terminalTabsView uses for the terminal's own padding).
         let _ = effectManager.keyboardStateVersion
-        guard terminals.indices.contains(selectedTabIndex),
+        // A bottom tab bar already lifts the column above both.
+        guard !showsBottomTabBar,
+              terminals.indices.contains(selectedTabIndex),
               let pane = terminals[selectedTabIndex].focusedPane,
               let window = pane.window else { return 0 }
         let touchKeyboardFrame = pane.dockedTouchKeyboardFrameInScreen

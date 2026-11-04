@@ -19,7 +19,7 @@ extension MainView {
             controller: tabExpose,
             configuration: tabExposeConfiguration(),
             appearance: tabExposeAppearance(),
-            integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabHeader ? integratedTabJoin : nil,
+            integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs ? integratedTabJoin : nil,
             width: width
         )
         // Above ordinary siblings in the content ZStack (SwiftUI-drawn fills
@@ -113,7 +113,8 @@ extension MainView {
                     shortcutFont: .system(size: compact ? 11 : 12, weight: .medium),
                     textColor: textColor.opacity(0.85),
                     showsBadges: !compact,
-                    showsAttentionDot: attentionDots
+                    showsAttentionDot: attentionDots,
+                    logoSize: 13
                 )
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.horizontal, 4)

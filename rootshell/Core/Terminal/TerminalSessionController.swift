@@ -67,6 +67,16 @@ final class TerminalSessionController {
         // plumbing (coalescer / gate / buffered writer) and runs on the
         // session's background queue, so it must not hop to the main actor.
         let outputSink = host.makeSessionOutputSink()
+        let protocolObserver = host.terminalProtocolObserver
+        if let trzsz = session as? TrzszSession {
+            trzsz.onFreshSessionStarting = { protocolObserver?.reset(state: nil) }
+        }
+        #if !targetEnvironment(macCatalyst)
+        if let local = session as? LocalShellSession {
+            local.onEmbeddedTrzszFreshSession = { protocolObserver?.reset(state: nil) }
+            local.embeddedTrzszProtocolObserver = protocolObserver
+        }
+        #endif
         session.onOutputData = { outputSink($0) }
         session.onOutput = { outputSink(Data($0.utf8)) }
 
@@ -779,7 +789,14 @@ final class TerminalSessionController {
                     switch state {
                     case .running:
                         hasBeenRunning = true
-                        host.terminalProgressFinish(.clearIfSpinnerRan)
+                        if trzszSession.wasResumed {
+                            // Cleanup contains ED (ESC[J). It would be replayed
+                            // after the attach redraw and erase the restored UI.
+                            // Match the embedded tssh resume path: stop silently.
+                            host.terminalProgressReset()
+                        } else {
+                            host.terminalProgressFinish(.clearIfSpinnerRan)
+                        }
                         for raw in trzszSession.consumeAuthBanners() {
                             let rendered = SSHBanner.renderAuthBanner(raw)
                             if !rendered.isEmpty { host.terminalWriteToGhostty(rendered) }
@@ -1069,7 +1086,8 @@ final class TerminalSessionController {
                    let config = connectionConfig.sshConfig {
                     host.terminalRequestAuthentication(config)
                 } else {
-                    host.terminalWriteToGhostty("\r\n❌ Connection failed: \(error.localizedDescription)\r\n")
+                    // The description can carry server text (e.g. a channel-open refusal).
+                    host.terminalWriteToGhostty("\r\n❌ Connection failed: \(SSHBanner.terminalSafe(error.localizedDescription))\r\n")
                 }
             }
         }

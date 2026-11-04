@@ -62,7 +62,8 @@ struct IntegratedTabEdgePalette: Equatable {
 // MARK: - Shared silhouette geometry
 
 /// Silhouette metrics, shared by the opaque fill (`BrowserTabShape`) and the
-/// hairline outline so the two can never drift.
+/// hairline outline so the two can never drift. Built for a top bar; a bottom
+/// bar's paths are mirrored about the row's middle.
 struct IntegratedTabGeometry {
     /// Tab body below the narrow strip of frame left visible above the tab.
     let tabRect: CGRect
@@ -70,10 +71,11 @@ struct IntegratedTabGeometry {
     let shoulderWidth: CGFloat
     let shoulderHeight: CGFloat
     let cornerRadius: CGFloat
+    private let mirrorTransform: CGAffineTransform
 
     static let bezierKappa: CGFloat = 0.552_284_8
 
-    init(in rect: CGRect) {
+    init(in rect: CGRect, position: TabBarPosition = .top) {
         let topInset = min(5, rect.height * 0.12)
         tabRect = CGRect(
             x: rect.minX,
@@ -84,6 +86,12 @@ struct IntegratedTabGeometry {
         shoulderWidth = min(16, tabRect.width * 0.12)
         shoulderHeight = min(10, tabRect.height * 0.28)
         cornerRadius = min(10, tabRect.height * 0.28)
+        mirrorTransform = Self.mirror(about: rect, position: position)
+    }
+
+    /// Flips a top-bar path into a bottom bar's `rect`.
+    static func mirror(about rect: CGRect, position: TabBarPosition) -> CGAffineTransform {
+        position == .bottom ? CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: rect.minY + rect.maxY) : .identity
     }
 
     /// Left shoulder → top → right shoulder, open at the bottom. `bottomInset`
@@ -93,7 +101,7 @@ struct IntegratedTabGeometry {
         var path = Path()
         path.move(to: CGPoint(x: tabRect.minX, y: bottom))
         appendOutline(to: &path, bottomInset: bottomInset)
-        return path
+        return path.applying(mirrorTransform)
     }
 
     /// Appends the outline after its starting point. Keeping the segment writer
@@ -156,10 +164,13 @@ struct IntegratedTabGeometry {
         in rowRect: CGRect,
         activeTabRect: CGRect,
         bottomInset: CGFloat,
-        span: ClosedRange<CGFloat>? = nil
+        span: ClosedRange<CGFloat>? = nil,
+        position: TabBarPosition = .top
     ) -> Path {
-        let geometry = IntegratedTabGeometry(in: activeTabRect)
-        // Rounded Panes: run only along the terminal card's straight top edge.
+        // Traced as a top bar, then mirrored as a whole.
+        let rowMirror = mirror(about: rowRect, position: position)
+        let geometry = IntegratedTabGeometry(in: activeTabRect.applying(rowMirror))
+        // Rounded Panes: run only along the terminal card's straight edge.
         let span = span ?? rowRect.minX...rowRect.maxX
         let baseline = rowRect.maxY - bottomInset
         let tabBottom = geometry.tabRect.maxY - bottomInset
@@ -168,11 +179,11 @@ struct IntegratedTabGeometry {
         path.addLine(to: CGPoint(x: geometry.tabRect.minX, y: tabBottom))
         geometry.appendOutline(to: &path, bottomInset: bottomInset)
         path.addLine(to: CGPoint(x: span.upperBound, y: baseline))
-        return path
+        return path.applying(rowMirror)
     }
 
-    /// Closed silhouette for the opaque fill. Bottom stays flush so matching the
-    /// terminal background reads as one connected surface.
+    /// Closed silhouette for the opaque fill. Its open edge stays flush so
+    /// matching the terminal background reads as one connected surface.
     var silhouettePath: Path {
         var path = outlinePath()
         path.closeSubpath()
@@ -208,11 +219,15 @@ final class IntegratedTabJoin {
     private(set) var rect: CGRect?
     /// The scrolling track's visible bounds, which clip the tab.
     private(set) var clip: CGRect?
+    /// Where the bar sits, so rims open their top or bottom edge.
+    private(set) var position: TabBarPosition = .top
     private let observers = NSHashTable<AnyObject>.weakObjects()
 
-    func update(_ newRect: CGRect?) {
-        guard rect != newRect else { return }
+    func update(_ newRect: CGRect?, position newPosition: TabBarPosition? = nil) {
+        let newPosition = newPosition ?? position
+        guard rect != newRect || position != newPosition else { return }
         rect = newRect
+        position = newPosition
         notify()
     }
 
@@ -243,6 +258,7 @@ final class IntegratedTabJoin {
 final class IntegratedTabJoinTracker: IntegratedTabJoinObserver {
     private(set) var rect: CGRect?
     private(set) var clip: CGRect?
+    private(set) var position: TabBarPosition = .top
     @ObservationIgnored private weak var join: IntegratedTabJoin?
 
     func track(_ newJoin: IntegratedTabJoin) {
@@ -256,6 +272,7 @@ final class IntegratedTabJoinTracker: IntegratedTabJoinObserver {
     func integratedTabJoinDidChange() {
         if rect != join?.rect { rect = join?.rect }
         if clip != join?.clip { clip = join?.clip }
+        if let join, position != join.position { position = join.position }
     }
 }
 
@@ -274,9 +291,10 @@ struct IntegratedTabTrackBoundsPreferenceKey: PreferenceKey {
 /// antialiased edges interfere at hairline width and speckle the shoulders.
 struct IntegratedTabOutlineShape: Shape {
     var bottomInset: CGFloat
+    var position: TabBarPosition = .top
 
     func path(in rect: CGRect) -> Path {
-        IntegratedTabGeometry(in: rect).outlinePath(bottomInset: bottomInset)
+        IntegratedTabGeometry(in: rect, position: position).outlinePath(bottomInset: bottomInset)
     }
 }
 
@@ -286,6 +304,7 @@ struct IntegratedTabOutlineShape: Shape {
 struct IntegratedTabEdgeRule: Shape {
     var lineWidth: CGFloat
     var gap: ClosedRange<CGFloat>?
+    var position: TabBarPosition = .top
 
     var animatableData: AnimatablePair<CGFloat, CGFloat> {
         get { AnimatablePair(gap?.lowerBound ?? 0, gap?.upperBound ?? 0) }
@@ -293,7 +312,7 @@ struct IntegratedTabEdgeRule: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
-        let y = rect.maxY - lineWidth
+        let y = position == .bottom ? rect.minY : rect.maxY - lineWidth
         guard let gap, gap.lowerBound < rect.maxX, gap.upperBound > rect.minX else {
             return Path(CGRect(x: rect.minX, y: y, width: rect.width, height: lineWidth))
         }
@@ -311,6 +330,7 @@ struct IntegratedTabEdgeRule: Shape {
 struct IntegratedTabEdgeRuleView: View {
     let palette: IntegratedTabEdgePalette
     var gap: ClosedRange<CGFloat>?
+    var position: TabBarPosition = .top
 
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -318,7 +338,7 @@ struct IntegratedTabEdgeRuleView: View {
     var body: some View {
         let lineWidth = IntegratedTabEdgeMetrics.lineWidth(for: displayScale)
         let increasedContrast = colorSchemeContrast == .increased
-        IntegratedTabEdgeRule(lineWidth: lineWidth, gap: gap)
+        IntegratedTabEdgeRule(lineWidth: lineWidth, gap: gap, position: position)
             .fill(palette.keyline(increasedContrast: increasedContrast))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
@@ -330,13 +350,14 @@ struct IntegratedTabEdgeRuleView: View {
 /// and outline would overlap there and composite to double density.
 struct IntegratedTabEdgeOccluder<Fill: View>: View {
     let fill: Fill
+    var position: TabBarPosition = .top
 
     @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         fill
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .mask(alignment: .bottom) {
+            .mask(alignment: position == .bottom ? .top : .bottom) {
                 Rectangle().frame(height: IntegratedTabEdgeMetrics.lineWidth(for: displayScale))
             }
             .allowsHitTesting(false)
@@ -348,6 +369,9 @@ struct IntegratedTabEdgeOccluder<Fill: View>: View {
 /// shoulder endpoints flush with the rule without a simulated crest artifact.
 struct IntegratedTabOutlineView: View {
     let palette: IntegratedTabEdgePalette
+    var position: TabBarPosition = .top
+    /// A bottom tab joining a card continues its dimmer lower rim.
+    var opacity: Double = 1
 
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -355,8 +379,8 @@ struct IntegratedTabOutlineView: View {
     var body: some View {
         let lineWidth = IntegratedTabEdgeMetrics.lineWidth(for: displayScale)
         let increasedContrast = colorSchemeContrast == .increased
-        let keyline = palette.keyline(increasedContrast: increasedContrast)
-        IntegratedTabOutlineShape(bottomInset: lineWidth / 2)
+        let keyline = palette.keyline(increasedContrast: increasedContrast).opacity(opacity)
+        IntegratedTabOutlineShape(bottomInset: lineWidth / 2, position: position)
             .stroke(
                 keyline,
                 style: StrokeStyle(
@@ -383,6 +407,7 @@ struct IntegratedOSCProgressEdgeHost: View {
     let activeTabRect: CGRect
     let rowSize: CGSize
     var span: ClosedRange<CGFloat>?
+    var position: TabBarPosition = .top
     let selectedTabID: UUID
     let animateSelectionChanges: Bool
 
@@ -409,7 +434,8 @@ struct IntegratedOSCProgressEdgeHost: View {
                 in: CGRect(origin: .zero, size: rowSize),
                 activeTabRect: activeTabRect,
                 bottomInset: lineWidth / 2,
-                span: span
+                span: span,
+                position: position
             )
             IntegratedOSCProgressLayerView(
                 path: path.cgPath,
@@ -590,6 +616,7 @@ extension EnvironmentValues {
 struct IntegratedTabJoinPublisher: View, Animatable {
     var rect: CGRect
     let join: IntegratedTabJoin
+    var position: TabBarPosition = .top
 
     nonisolated var animatableData: CGRect.AnimatableData {
         get { rect.animatableData }
@@ -597,7 +624,7 @@ struct IntegratedTabJoinPublisher: View, Animatable {
     }
 
     var body: some View {
-        let _ = join.update(rect)
+        let _ = join.update(rect, position: position)
         Color.clear
     }
 }
@@ -619,12 +646,12 @@ struct IntegratedSurfaceStyle: Equatable {
     var isTranslucent: Bool { opacity < 0.999 }
 }
 
-/// Each tab's top-row pane backgrounds, pushed by its split view, so the
-/// selected tab can paint exactly what sits beneath it.
+/// Each tab's top- and bottom-row pane backgrounds, pushed by its split view,
+/// so the selected tab can paint exactly what sits beside it.
 @Observable
 final class IntegratedTabSurface {
     struct Segment: Equatable {
-        /// Host-local x-range of a top-row pane.
+        /// Host-local x-range of an edge-row pane.
         var minX: CGFloat
         var maxX: CGFloat
         var color: UIColor
@@ -634,6 +661,7 @@ final class IntegratedTabSurface {
         /// On-screen window x of the host's leading edge.
         var originX: CGFloat
         var segments: [Segment]
+        var bottomSegments: [Segment]
     }
 
     private(set) var hosts: [UUID: Host] = [:]
@@ -651,9 +679,10 @@ final class IntegratedTabSurface {
 
     /// Window-space color runs across `tabIDs`, contiguous from -∞ to +∞ and
     /// split midway across gaps such as dividers.
-    func runs(for tabIDs: [UUID]) -> [(minX: CGFloat, maxX: CGFloat, color: UIColor)] {
+    func runs(for tabIDs: [UUID], position: TabBarPosition = .top) -> [(minX: CGFloat, maxX: CGFloat, color: UIColor)] {
         var segments = tabIDs.compactMap { hosts[$0] }.flatMap { host in
-            host.segments.map { (minX: host.originX + $0.minX, maxX: host.originX + $0.maxX, color: $0.color) }
+            (position == .bottom ? host.bottomSegments : host.segments)
+                .map { (minX: host.originX + $0.minX, maxX: host.originX + $0.maxX, color: $0.color) }
         }
         segments.sort { $0.minX < $1.minX }
         var runs: [(minX: CGFloat, maxX: CGFloat, color: UIColor)] = []
@@ -678,6 +707,7 @@ struct IntegratedTabSurfaceFill {
     let tabIDs: [UUID]
     let style: IntegratedSurfaceStyle
     let override: Color?
+    var position: TabBarPosition = .top
 }
 
 private struct IntegratedTabSurfaceFillKey: EnvironmentKey {
@@ -698,7 +728,7 @@ struct IntegratedTabSurfaceFillView: View {
     @Environment(\.integratedTabSurfaceFill) private var fill
 
     var body: some View {
-        let runs = fill.map { $0.surface.runs(for: $0.tabIDs) } ?? []
+        let runs = fill.map { $0.surface.runs(for: $0.tabIDs, position: $0.position) } ?? []
         if let override = fill?.override {
             Rectangle().fill(override)
         } else if let fill, !runs.isEmpty {

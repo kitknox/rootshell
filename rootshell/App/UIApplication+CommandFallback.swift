@@ -116,6 +116,10 @@ extension UIApplication {
         ghostty_postNotification(.toggleHTTPCapture)
     }
 
+    @objc func menuToggleAgentInbox(_ sender: Any?) {
+        ghostty_postNotification(.toggleAgentInbox)
+    }
+
     @objc func menuToggleThemePicker(_ sender: Any?) {
         ghostty_postNotification(.toggleThemePicker)
     }

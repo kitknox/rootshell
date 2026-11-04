@@ -97,10 +97,10 @@ enum FileTreeCopier {
             try await destination.createSymlink(at: item.destination, target: target)
         case .file:
             // openNewFile replaces a link in the way itself.
-            try await copyFile(item, from: source, to: destination, onBytes: onBytes)
-            if preserveAttributes {
+            let appliedOnHandle = try await copyFile(item, from: source, to: destination, preserveAttributes: preserveAttributes, onBytes: onBytes)
+            if preserveAttributes, !appliedOnHandle {
                 if let modified = item.modified { try? await destination.setModificationDate(item.destination, date: modified) }
-                if let mode = item.mode { try? await destination.setPermissions(item.destination, mode: mode) }
+                if let mode = item.mode { try? await destination.setPermissions(item.destination, mode: mode & 0o777) }
             }
         }
     }
@@ -110,7 +110,7 @@ enum FileTreeCopier {
     static func applyDirectoryModes(_ items: [Item], on destination: FileSystemEndpoint) async {
         for item in items.reversed() {
             guard case .directory = item.kind, let mode = item.mode else { continue }
-            try? await destination.setPermissions(item.destination, mode: mode)
+            try? await destination.restoreDirectoryMode(item.destination, mode: mode)
         }
     }
 
@@ -254,7 +254,7 @@ enum FileTreeCopier {
         let info = try await source.info(path)
         guard !info.isDirectory else { throw POSIXError(.EISDIR) }
         let item = Item(kind: .file, source: path, destination: target, size: Int64(clamping: info.size), mode: nil, modified: nil)
-        try await copyFile(item, from: source, to: destination) { _ in }
+        _ = try await copyFile(item, from: source, to: destination, preserveAttributes: false) { _ in }
     }
 
     /// Two source names that differ only in case or accents, which the destination
@@ -319,10 +319,11 @@ enum FileTreeCopier {
         try await destination.removeFile(path)
     }
 
-    private static func copyFile(_ item: Item, from source: FileSystemEndpoint, to destination: FileSystemEndpoint, onBytes: @MainActor (Int64) -> Void) async throws {
+    /// Returns true when `preserveAttributes` was satisfied through the open handle.
+    private static func copyFile(_ item: Item, from source: FileSystemEndpoint, to destination: FileSystemEndpoint, preserveAttributes: Bool, onBytes: @MainActor (Int64) -> Void) async throws -> Bool {
         if try await destination.copyOnServer(item.source, from: source, to: item.destination) {
             onBytes(item.size)
-            return
+            return false
         }
         let reader = try await source.openReader(item.source)
         let writer: any ChunkWriter
@@ -343,6 +344,11 @@ enum FileTreeCopier {
             failure = error
         }
         try? await reader.close()
+        var appliedOnHandle = false
+        if failure == nil, preserveAttributes, item.mode != nil || item.modified != nil {
+            // A refusal here is no better by path, so it isn't retried there.
+            appliedOnHandle = (try? await writer.applyAttributes(mode: item.mode, modified: item.modified)) ?? true
+        }
         // The item only counts as copied once the destination accepts the close.
         if failure == nil {
             do {
@@ -359,5 +365,6 @@ enum FileTreeCopier {
             if !writer.replacesAtomically { try? await destination.removeFile(item.destination) }
             throw failure
         }
+        return appliedOnHandle
     }
 }

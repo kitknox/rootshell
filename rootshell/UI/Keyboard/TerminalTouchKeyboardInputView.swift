@@ -28,7 +28,7 @@ final class TerminalTouchKeyboardInputView: UIInputView, UIGestureRecognizerDele
     private var transitionFallback: DispatchWorkItem?
     private var transitionTask: Task<Void, Never>?
     private var heightConstraint: NSLayoutConstraint!
-    private let floatingPanel = TerminalTouchKeyboardFloatingPanel()
+    private let floatingPanel = TerminalTouchKeyboardHostingPanel()
     /// Swallows taps on UIKit's handle: its tap opens a mode menu whose one entry
     /// only resets the position. UIKit's drag waits on its own tap, so that stays enabled.
     private lazy var handleTapGuard: UITapGestureRecognizer = {
@@ -36,6 +36,7 @@ final class TerminalTouchKeyboardInputView: UIInputView, UIGestureRecognizerDele
         tap.delegate = self
         return tap
     }()
+    private let modeSwitcherMute = TerminalKeyboardModeSwitcherMute()
     private var hostingGeneration = 0
     private var keyboardBottom: NSLayoutConstraint?
     private var measuredFooter: CGFloat = 0
@@ -53,6 +54,7 @@ final class TerminalTouchKeyboardInputView: UIInputView, UIGestureRecognizerDele
         hostingGeneration += 1
         endFloatingHold()
         removeHandleTapGuard()
+        modeSwitcherMute.restore()
         floatingPanel.detach()
         keyboard.usesSystemPlacement = value
         setNeedsLayout()
@@ -170,6 +172,8 @@ final class TerminalTouchKeyboardInputView: UIInputView, UIGestureRecognizerDele
     }
 
     override func layoutSubviews() {
+        // The native floating card drags by the switcher; see systemFloatingHandle.
+        defer { modeSwitcherMute.update(input: self, enabled: !(keyboard.usesSystemPlacement && isNativeFloating)) }
         let size = hostSize?() ?? .zero
         // UIKit sends intermediate zero-size layouts while replacing input sets.
         // They are not a user's request to dock the floating keyboard.
@@ -261,6 +265,7 @@ final class TerminalTouchKeyboardInputView: UIInputView, UIGestureRecognizerDele
         super.didMoveToWindow()
         if window == nil {
             removeHandleTapGuard()
+            modeSwitcherMute.restore()
             floatingPanel.detach()
         } else {
             setNeedsLayout()
@@ -270,14 +275,9 @@ final class TerminalTouchKeyboardInputView: UIInputView, UIGestureRecognizerDele
     /// UIKit keeps its floating-keyboard handle, hidden, in the hosting item. Touches
     /// routed to it run the native drag, so UIKit itself saves the new position.
     private func systemFloatingHandle() -> UIView? {
-        func find(_ view: UIView) -> UIView? {
-            if String(describing: type(of: view)) == "UIKeyboardModeSwitcherView" { return view }
-            for subview in view.subviews where subview !== self {
-                if let found = find(subview) { return found }
-            }
-            return nil
-        }
-        guard let host = superview, let handle = find(host) else { return nil }
+        modeSwitcherMute.restore()
+        guard let host = superview,
+              let handle = TerminalKeyboardModeSwitcherMute.modeSwitcher(in: host, excluding: self) else { return nil }
         var ancestor = handle.superview
         while let view = ancestor, view !== host { view.isHidden = false; ancestor = view.superview }
         if handleTapGuard.view !== handle {
@@ -362,6 +362,7 @@ final class TerminalTouchKeyboardInputView: UIInputView, UIGestureRecognizerDele
 final class TerminalTouchKeyboardToolbarInputView: UIInputView {
     private let keyboard: TerminalTouchKeyboardView
     private var heightConstraint: NSLayoutConstraint!
+    private let modeSwitcherMute = TerminalKeyboardModeSwitcherMute()
     var isActive = false
     private(set) var reservedBottomInset: CGFloat = 0
 
@@ -420,12 +421,14 @@ final class TerminalTouchKeyboardToolbarInputView: UIInputView {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if window != nil { attachKeyboard() }
+        if window != nil { attachKeyboard() } else { modeSwitcherMute.restore() }
     }
 
     override func layoutSubviews() {
         attachKeyboard()
         super.layoutSubviews()
+        updateAppearance()
+        modeSwitcherMute.update(input: self, enabled: true)
     }
 }
 
@@ -441,13 +444,74 @@ final class TerminalTouchKeyboardInputController: UIInputViewController {
     override func loadView() { inputView = keyboardInput }
 }
 
+/// UIKit leaves its "..." mode switcher hit-testable inside the hidden keyboard
+/// dock (iPhone landscape), where it swallows taps on our toolbar's leading key.
+/// Hidden only while the dock is hidden and one of our inputs is hosted.
+@MainActor
+final class TerminalKeyboardModeSwitcherMute {
+    private weak var switcher: UIView?
+    /// Only a switcher this mute hid is ever shown again.
+    private var hidSwitcher = false
+    private var observations: [NSKeyValueObservation] = []
+
+    static func modeSwitcher(in host: UIView, excluding input: UIView) -> UIView? {
+        if String(describing: type(of: host)) == "UIKeyboardModeSwitcherView" { return host }
+        for subview in host.subviews where subview !== input {
+            if let found = modeSwitcher(in: subview, excluding: input) { return found }
+        }
+        return nil
+    }
+
+    func update(input: UIView, enabled: Bool) {
+        guard enabled, input.window != nil, let host = input.superview,
+              let found = Self.modeSwitcher(in: host, excluding: input),
+              let dock = found.superview else {
+            restore()
+            return
+        }
+        if found !== switcher {
+            restore()
+            switcher = found
+            // Tracked while our input is hosted: UIKit toggles the dock and
+            // re-shows the switcher while rebuilding the input set.
+            observations = [found.layer, dock.layer].map {
+                $0.observe(\.isHidden) { [weak self] _, _ in
+                    MainActor.assumeIsolated { self?.reapply() }
+                }
+            }
+        }
+        reapply()
+    }
+
+    private func reapply() {
+        guard let switcher, let dock = switcher.superview else {
+            restore()
+            return
+        }
+        if dock.isHidden {
+            guard !switcher.isHidden else { return }
+            switcher.isHidden = true
+            hidSwitcher = true
+        } else if hidSwitcher {
+            hidSwitcher = false
+            switcher.isHidden = false
+        }
+    }
+
+    func restore() {
+        observations = []
+        if hidSwitcher { switcher?.isHidden = false }
+        hidSwitcher = false
+        switcher = nil
+    }
+}
+
 /// An app input view replaces the system keys, including their drag handle.
-/// UIKit can nevertheless keep a taller floating hosting item (the old system
-/// keyboard's footer), and it owns that item's placement: writes to its center
-/// or transform are undone. Only clip the item to our card, or hide it.
+/// UIKit can retain a taller floating hosting item for its footer. Clip the
+/// host's rendering to the card without changing its system-owned frame.
 /// No keyboard-window frame or private selector is changed.
 @MainActor
-private final class TerminalTouchKeyboardFloatingPanel {
+private final class TerminalTouchKeyboardHostingPanel {
     private weak var panel: UIView?
     private let cardMask = CAShapeLayer()
     private var originalMask: CALayer?
@@ -455,8 +519,8 @@ private final class TerminalTouchKeyboardFloatingPanel {
     /// Without `content`, the whole item is masked out.
     func update(input: UIView, content: UIView?) {
         guard let window = input.window else { detach(); return }
-        // Stop before the full-screen tracking view. Only the narrow hosting
-        // item containing this input belongs to this floating keyboard.
+        // Stop before the full-screen tracking view. Only same-width ancestors
+        // near the input's height belong to this keyboard's hosting item.
         // A self-sizing pass can temporarily leave an ancestor at its old
         // height. Once found, never probe downward again; climbing further up
         // is allowed, because a host chosen during presentation can itself be

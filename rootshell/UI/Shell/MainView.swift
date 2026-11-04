@@ -48,6 +48,9 @@ struct MainView: View {
     @Environment(\.horizontalSizeClass) var workspaceSizeClass
     @State var duoTabletopDisabled = false
     @State var duoTabletopAvailable = false
+    /// Flips to replace the Duo rail's tab item; see `noteDuoTabButtonMounted`.
+    @State var duoTabItemGeneration = 0
+    @State var duoTabButtonMounts = 0
     @EnvironmentObject var ghosttyApp: Ghostty.App
     @Environment(\.openWindow) var openWindow
     @Environment(\.dismissWindow) var dismissWindow
@@ -209,6 +212,7 @@ struct MainView: View {
 
     // Tab bar visibility
     @Setting(Settings.Tabs.barHidden) var tabBarHidden
+    @Setting(Settings.Tabs.barPosition) var tabBarPosition
     @Setting(Settings.Tabs.showShortcutIndicators) var showTabShortcutIndicators
     @Setting(Settings.Tabs.barAnimationsDisabled) var tabBarAnimationsDisabled
     @Setting(Settings.Tabs.topTabStyle) var topTabStyle
@@ -320,6 +324,12 @@ struct MainView: View {
     @State var fileManagerSidebarIsDragging = false
     /// A Files-tab choice waiting for the connection sheet to finish dismissing.
     @State var pendingFileManagerOpen: (endpoint: FileEndpoint, presentation: PanelPresentation?)?
+
+    // Agent inbox panel: shares the trailing docked slot with the file manager.
+    @State var showAgentInbox = false
+    @State var agentInboxPresentation: PanelPresentation = SettingsStore.shared.value(Settings.AgentInbox.presentation)
+    @State var agentInboxSidebarWidth: CGFloat = CGFloat(SettingsStore.shared.value(Settings.AgentInbox.sidebarWidth))
+    @State var agentInboxSidebarIsDragging = false
 
     #if !CHINA_BUILD
     // HTTP capture panel: shares the trailing docked slot with the file manager.
@@ -489,7 +499,7 @@ struct MainView: View {
                         .frame(height: TabMetrics.tabBarHeight)
                         .padding(workspace.headerInsets)
                         .background {
-                            if duoLayout.placesHeaderBesideTopRegions
+                            if workspace.headerSharesTopBand
                                 && topTabStyle.usesStripLayout {
                                 // The controls avoid the camera column, but
                                 // the strip meets the full-width terminal.
@@ -533,9 +543,16 @@ struct MainView: View {
                         }
                     }
                     .padding(workspace.terminalInsets)
+                    // The effect overflows into the selected Integrated tab, so
+                    // it paints over a bottom bar as it does over the header.
+                    .zIndex(showsBottomTabBar ? 1 : 0)
+                    if showsBottomTabBar {
+                        bottomTabBar(geometry: geometry, workspace: workspace, resolvedTheme: resolvedTheme)
+                    }
                     Color.clear.frame(height: workspace.lowerReservation)
                 }
                 .background(DuoInputRegionReporter(region: workspace.inputRegion, fold: workspace.fold))
+                .environment(\.terminalTopSafeEdge, terminalExtendsUnderTopSafeArea ? workspace.safeAreaTop : 0)
                 .onChange(of: workspace.tabletopAvailable, initial: true) { _, available in
                     duoTabletopAvailable = available
                     if !available { duoTabletopDisabled = false }
@@ -635,7 +652,7 @@ struct MainView: View {
                 // Pass the TabModel (class reference, structural under Observation),
                 // not the title — keeps the title read inside the overlay's body
                 // so per-tab title mutations don't invalidate MainView.body.
-                if tabIndicator.isShowing && !showsHorizontalTabHeader && !showsDuoSideRail && terminals.indices.contains(selectedTabIndex) {
+                if tabIndicator.isShowing && !showsHorizontalTabs && terminals.indices.contains(selectedTabIndex) {
                     // Position/count/shortcut reflect navigable tabs; hidden
                     // tmux windows are skipped, and grouped mode scopes this
                     // to the active group.
@@ -653,7 +670,8 @@ struct MainView: View {
                     // (pinned) tab sidebar consumes the leading edge and the
                     // AI agent sidebar the trailing edge.
                     .padding(.leading, dockedTabSidebarWidth(windowWidth: geometry.size.width))
-                    .padding(.trailing, aiAgentSidebarCurrentWidth() + fileManagerSidebarCurrentWidth + httpCaptureDockedWidth)
+                    .padding(.trailing, aiAgentSidebarCurrentWidth() + fileManagerSidebarCurrentWidth + httpCaptureDockedWidth
+                        + agentInboxSidebarCurrentWidth)
                     .transition(.opacity)
                 }
             }
@@ -667,7 +685,9 @@ struct MainView: View {
                     tabsModel: tabsModel,
                     tabFrames: $tabFrames,
                     geometryWidth: geometry.size.width,
-                    enabled: sshHealthMonitoringEnabled,
+                    // Only titlebar tabs report frames; a bottom bar would read
+                    // ones left over from the top.
+                    enabled: sshHealthMonitoringEnabled && !showsBottomTabBar,
                     previews: tabHoverPreview
                 )
             }

@@ -829,27 +829,31 @@ final class PingCommand {
             let remainingSec = deadline - now
             guard remainingSec > 0 else { return replies }
 
-            // Poll with short timeout (10ms) to avoid blocking the main actor.
-            // Between polls we yield so cancel(), interrupt(), and UI work can run.
-            let chunkMs: Int32
+            // Blocking waits run off the main actor; an unreachable target
+            // otherwise parks it in poll() for the whole wait window.
+            let fd = socketFD
+            let wait: (result: Int32, revents: Int16, err: Int32)
             if drainingQueuedReplies {
                 // Non-blocking drain once we have at least one matching reply.
-                chunkMs = 0
+                var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+                let result = poll(&pfd, 1, 0)
+                wait = (result, pfd.revents, result < 0 ? errno : 0)
             } else {
-                chunkMs = max(1, Int32(min(remainingSec * 1000, 10)))
+                // Capped so cancellation is noticed promptly.
+                let chunkMs = max(1, Int32(min(remainingSec * 1000, 100)))
+                wait = await Self.waitReadable(fd: fd, timeoutMs: chunkMs)
+                guard !Task.isCancelled, socketFD == fd else { return replies }
             }
-            var pfd = pollfd(fd: socketFD, events: Int16(POLLIN), revents: 0)
-            let pollResult = poll(&pfd, 1, chunkMs)
+            let pollResult = wait.result
+            let pollErr = wait.err
 
             if pollResult == 0 {
                 if drainingQueuedReplies {
                     return replies
                 }
-                await Task.yield()  // Release main actor between poll chunks
                 continue
             }
             if pollResult < 0 {
-                let pollErr = errno
                 if pollErr == EINTR { continue }
                 Self.logger.error("poll failed: errno=\(pollErr)")
                 pendingSocketReset = true
@@ -867,8 +871,8 @@ final class PingCommand {
             // closed under us). Flag the socket for recreation; the outer
             // run loop will call recreateSocket() on its next iteration.
             let errMask = Int16(POLLERR) | Int16(POLLHUP) | Int16(POLLNVAL)
-            if pfd.revents & errMask != 0 {
-                let revents = pfd.revents
+            if wait.revents & errMask != 0 {
+                let revents = wait.revents
                 Self.logger.error("poll revents indicate socket invalidation: revents=\(revents)")
                 pendingSocketReset = true
                 return replies
@@ -914,8 +918,6 @@ final class PingCommand {
                     }
                 }
             }
-
-            await Task.yield()  // Keep main actor responsive after recvmsg
 
             guard bytesRead >= icmpHeaderSize else { continue }
             guard bytesRead <= recvBuf.count else { continue }
@@ -1032,6 +1034,19 @@ final class PingCommand {
         }
 
         return replies
+    }
+
+    /// Returns poll()'s result, revents, and errno. Blocks on a GCD queue, not
+    /// the cooperative pool. cancel() may close `fd` mid-wait; the caller
+    /// re-checks cancellation and the fd afterwards.
+    private nonisolated static func waitReadable(fd: Int32, timeoutMs: Int32) async -> (Int32, Int16, Int32) {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+                let result = poll(&pfd, 1, timeoutMs)
+                continuation.resume(returning: (result, pfd.revents, result < 0 ? errno : 0))
+            }
+        }
     }
 
     private func payloadNonceMatches(buffer: [UInt8], payloadOffset: Int, payloadLength: Int) -> Bool {
