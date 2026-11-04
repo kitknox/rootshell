@@ -211,7 +211,8 @@ extension MainView {
     func handleAppTabSwipeBegan(_ notification: Notification) {
         guard let direction = notification.userInfo?["direction"] as? SwipeDirection else { return }
         let width = notification.userInfo?["width"] as? CGFloat ?? 0
-        let accepted = beginAppTabSwipe(direction: direction, width: width)
+        let preset = notification.userInfo?["preset"] as? SwipeGesturePreset
+        let accepted = beginAppTabSwipe(direction: direction, preset: preset, width: width)
         if let accept = notification.userInfo?["accept"] as? (Bool) -> Void {
             accept(accepted)
         }
@@ -221,7 +222,8 @@ extension MainView {
         guard let direction = notification.userInfo?["direction"] as? SwipeDirection else { return }
         let width = notification.userInfo?["width"] as? CGFloat ?? appTabSwipeState?.width ?? 0
         if appTabSwipeState == nil {
-            _ = beginAppTabSwipe(direction: direction, width: width)
+            let preset = notification.userInfo?["preset"] as? SwipeGesturePreset
+            _ = beginAppTabSwipe(direction: direction, preset: preset, width: width)
         }
         guard var state = appTabSwipeState,
               state.direction == direction else { return }
@@ -262,10 +264,10 @@ extension MainView {
         }
     }
 
-    private func beginAppTabSwipe(direction: SwipeDirection, width: CGFloat) -> Bool {
+    private func beginAppTabSwipe(direction: SwipeDirection, preset: SwipeGesturePreset?, width: CGFloat) -> Bool {
         guard appTabSwipeState?.isSettling != true,
               let sourceID = tabsModel.selectedTabID,
-              let targetID = appTabSwipeTargetID(for: direction),
+              let targetID = appTabSwipeTargetID(for: direction, preset: preset),
               targetID != sourceID else { return false }
 
         // Snapshot this before the eventual selection commit transfers first
@@ -329,8 +331,9 @@ extension MainView {
         return true
     }
 
-    private func appTabSwipeTargetID(for direction: SwipeDirection) -> UUID? {
-        guard let preset = SwipeGestureManager.shared.binding(for: direction).appTabPreset else { return nil }
+    /// `preset` is the poster's area-resolved binding; nil uses the shared one.
+    private func appTabSwipeTargetID(for direction: SwipeDirection, preset: SwipeGesturePreset?) -> UUID? {
+        guard let preset = preset ?? SwipeGestureManager.shared.binding(for: direction).appTabPreset else { return nil }
         let visible = tabsModel.navigationTabs
         guard visible.count > 1 else { return nil }
         let current = tabsModel.selectedTabID
