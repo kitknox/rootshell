@@ -22,6 +22,9 @@ nonisolated extension Settings {
         static let touchEnabled = SettingKey(
             "terminalTouchKeyboardEnabled", default: false, group: .keyboard, policy: .localByDefault,
             configKey: "terminal-touch-keyboard", title: String(localized: "Terminal Keyboard"))
+        static let touchInTextFields = SettingKey(
+            "terminalTouchKeyboardInTextFields", default: true, group: .keyboard, policy: .localByDefault,
+            configKey: "terminal-touch-keyboard-text-fields", title: String(localized: "Use in Text Fields"))
         static let touchLayout = SettingKey(
             "terminalTouchKeyboardLayout", default: TerminalTouchKeyboardModel.Layout.us,
             group: .keyboard, policy: .localByDefault,
@@ -107,7 +110,7 @@ nonisolated extension Settings {
 
         static let all: [AnySettingDefinition] = [
             optionKeyAsAlt.erased, forceASCIIKeyboard.erased, doubleSpaceForPeriod.erased, composeAutocorrect.erased,
-            writingAssistance.erased, touchEnabled.erased, touchLayout.erased, touchSuggestions.erased, touchHaptics.erased, touchCharacterPreview.erased,
+            writingAssistance.erased, touchEnabled.erased, touchInTextFields.erased, touchLayout.erased, touchSuggestions.erased, touchHaptics.erased, touchCharacterPreview.erased,
             touchHeight.erased, touchHeightDuoFront.erased, touchSplit.erased, touchGlyphs.erased, touchStyle.erased, touchThemeAware.erased, touchLetterPrediction.erased,
             touchSteampunkThemeAwareKeycaps.erased, touchPhosphorColor.erased, touchClickSound.erased,
             touchStatePerTab.erased, touchSystemFloating.erased, touchFloatingGlassStyle.erased, touchFloatingGlassTintOpacity.erased,

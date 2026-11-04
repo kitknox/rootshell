@@ -34,9 +34,16 @@ protocol TerminalTouchKeyboardHost: AnyObject {
     func touchKeyboardSend(_ key: String, modifiers: KeyModifiers, shifted: Character?)
     func touchKeyboardAccept(_ text: String, context: TerminalTouchKeyboardModel.SuggestionContext)
     func touchKeyboardInvalidateSuggestions()
+    #if canImport(FluidAudio) && !CHINA_BUILD
+    /// Where the Dictation page delivers. A text field's lasts only while it has focus.
+    var touchKeyboardDictationTarget: DictationTarget? { get }
+    #endif
 }
 
 extension TerminalTouchKeyboardHost {
+    #if canImport(FluidAudio) && !CHINA_BUILD
+    var touchKeyboardDictationTarget: DictationTarget? { self as? DictationTarget }
+    #endif
     var touchKeyboardThemeColors: ThemeManager.ThemeInfo.ThemeColors? { nil }
     var touchKeyboardPredictionContext: TerminalTouchKeyboardModel.PredictionSnapshot? { nil }
     func touchKeyboardSend(_ key: String, modifiers: KeyModifiers) {
@@ -445,7 +452,14 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     }
     #endif
     private var dictationEnabled = DictationSupport.isEnabled
-    private var toolPages: [Model.ToolPage] { Model.ToolPage.pages(dictation: dictationEnabled) }
+    private var toolPages: [Model.ToolPage] {
+        let pages = Model.ToolPage.pages(dictation: dictationEnabled)
+        switch textFieldMode {
+        case .off: return pages
+        case .toolbar: return pages.filter { $0 != .shortcuts }
+        case .keysOnly: return pages.filter { $0 == .typing || $0 == .dictation }
+        }
+    }
     private var toolbarDrawerKeys: [[Model.Key]] = []
     private var configuredDrawerToggle: Model.Key?
     private var toolbarDrawerState = Model.ToolbarDrawerState.closed
@@ -455,7 +469,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     private var toolbarDrawerButtons: [[TerminalTouchDrawerButton]] = []
     private var toolbarDrawerCache: [Int: (UIScrollView, [TerminalTouchDrawerButton])] = [:]
     private var toolbarDrawerHeight: CGFloat { CGFloat(toolbarDrawerRows.count) * keyboardHeight.toolbarDrawerRowHeight }
-    private var toolbarHeight: CGFloat { keyboardHeight.toolbarRowHeight + toolbarDrawerHeight }
+    private var toolbarHeight: CGFloat { hidesToolbar ? 0 : keyboardHeight.toolbarRowHeight + toolbarDrawerHeight }
     private var configuredMain: [Model.Key] = []
     private var configuredDrawers: [[Model.Key]] = []
     private var rows: [[TerminalTouchKeycap]] = []
@@ -631,7 +645,32 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         hostFill = (CGFloat(fill.rowHeight), CGFloat(fill.top))
     }
 
-    init() {
+    /// Ordinary text fields drop the Shortcuts page; keys-only also drops the
+    /// toolbar, its drawers, and every page but Dictation.
+    enum TextFieldMode { case off, toolbar, keysOnly }
+    var textFieldMode: TextFieldMode {
+        didSet {
+            guard oldValue != textFieldMode else { return }
+            cancelInteraction()
+            if !toolPages.contains(toolPage) {
+                #if canImport(FluidAudio) && !CHINA_BUILD
+                if toolPage == .dictation { loadedDictationPane?.paneWillHide() }
+                #endif
+                toolPage = .typing
+            }
+            controlGlass.isHidden = hidesToolbar
+            rebuildPageIndicatorDots()
+            loadToolbarConfiguration()
+            rebuildKeys()
+            rebuildDrawer()
+            invalidateIntrinsicContentSize()
+            onHeightChanged?()
+        }
+    }
+    private var hidesToolbar: Bool { textFieldMode == .keysOnly }
+
+    init(textFieldMode: TextFieldMode = .off) {
+        self.textFieldMode = textFieldMode
         // Supply one surface ourselves; UIKit's keyboard style adds another
         // material behind it, which washes out the native dark palette.
         super.init(frame: CGRect(x: 0, y: 0, width: 390, height: 304))
@@ -649,6 +688,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         addSubview(background)
         addSubview(floatingGlass)
         controlGlass.isUserInteractionEnabled = false
+        controlGlass.isHidden = hidesToolbar
         controlGlass.layer.cornerRadius = 22
         controlGlass.layer.cornerCurve = .continuous
         controlGlass.clipsToBounds = true
@@ -1078,7 +1118,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     /// These are artwork bands, not hit cells: the final band includes the
     /// bottom safe area (or floating grabber) so row-based details reach the edge.
     private var styleBackdropBands: [CGRect] {
-        var bands = [CGRect(x: 0, y: contentTop, width: bounds.width, height: toolbarHeight)]
+        var bands = hidesToolbar ? [] : [CGRect(x: 0, y: contentTop, width: bounds.width, height: toolbarHeight)]
         if !isToolbarOnly {
             if drawerOpen {
                 bands.append(CGRect(x: 0, y: drawer.frame.minY, width: bounds.width, height: drawer.frame.height))
@@ -1175,6 +1215,15 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     }
 
     private func loadToolbarConfiguration() {
+        guard !hidesToolbar else {
+            configuredDrawerToggle = nil
+            configuredMain = []
+            configuredDrawers = []
+            toolbarDrawerState = .closed
+            // Showing the toolbar again opens its drawer by default, as at creation.
+            toolbarDrawerOpenByDefault = false
+            return
+        }
         let manager = KeyboardToolbarManager.shared
         func key(for slot: KeySlot) -> Model.Key? {
             switch slot {
@@ -1267,7 +1316,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         controlGlass.frame = CGRect(x: leading + 2,
             y: top + 2,
             width: max(0, width - 4),
-            height: toolbarDrawerHeight + keyboardHeight.toolbarRowHeight - 4)
+            height: max(0, toolbarHeight - 4))
         controlGlass.layer.cornerRadius = min(22, (keyboardHeight.toolbarRowHeight - 4) / 2)
         controlGlass.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner,
                                            .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
@@ -2125,10 +2174,19 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     private func configureDictationPane() {
         #if canImport(FluidAudio) && !CHINA_BUILD
         let pane = dictationPane
-        pane.target = host as? DictationTarget
+        pane.target = host?.touchKeyboardDictationTarget
         pane.agentHint = preset == .agent
         pane.configure(style: keyboardStyle, palette: keycapPalette, ink: palette?.toolbarInk ?? .label)
         bringSubviewToFront(pageIndicator)
+        #endif
+    }
+
+    /// The host's dictation target was replaced: end this pane's session, then
+    /// point a showing page at the new target.
+    func dictationTargetDidChange() {
+        #if canImport(FluidAudio) && !CHINA_BUILD
+        loadedDictationPane?.paneWillHide()
+        if toolPage == .dictation { configureDictationPane() }
         #endif
     }
 
@@ -2152,7 +2210,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
 
     /// The toolbar mic key; toolbar-only mode falls back to the HUD.
     private func beginDictationFromToolbar() {
-        guard !beginDictation() else { return }
+        // The HUD fallback dictates into a terminal, never a text field.
+        guard !beginDictation(), textFieldMode == .off else { return }
         NotificationCenter.default.post(name: .toggleDictation, object: host)
     }
 

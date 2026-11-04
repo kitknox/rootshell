@@ -177,7 +177,11 @@ class QuickConnectTextField: UITextField, KeyboardButtonDelegate {
             // Only show toolbar when software keyboard is active
             // Hide for hardware keyboards and macOS compatibility mode
             // UITextField is always accessed on main thread, so we can safely assume main actor
-            return MainActor.assumeIsolated {
+            return MainActor.assumeIsolated { () -> UIView? in
+                #if !targetEnvironment(macCatalyst)
+                // The terminal keyboard brings its own toolbar.
+                if inputView is TerminalTouchKeyboardInputView { return nil }
+                #endif
                 let tracker = KeyboardTracker.shared
                 let shouldShow = !tracker.isHardwareKeyboard || tracker.isSoftwareKeyboardVisible
                 return shouldShow ? keyboardAccessory : nil

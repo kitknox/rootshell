@@ -106,13 +106,16 @@ final class DictationController {
             phase = .failed(DictationError.modelMissing.localizedDescription)
             return
         }
-        let mode = settings.get(Settings.Dictation.commitMode)
+        let setting = settings.get(Settings.Dictation.commitMode)
+        let mode: DictationCommitMode = setting == .handsFree && !target.dictationAllowsAutoSubmit ? .live : setting
         if self.target !== target || commitMode != mode { insertedChunks = []; insertedCount = 0 }
         self.target = target
         self.owner = owner
         commitMode = mode
         agentName = target.dictationAgentName
-        style = Self.style(settings.get(Settings.Dictation.formatting), agent: agentHint || agentName != nil)
+        let formatting = settings.get(Settings.Dictation.formatting)
+        let preferred = formatting == .auto ? target.dictationPreferredStyle : nil
+        style = preferred ?? Self.style(formatting, agent: agentHint || agentName != nil)
         formatter = DictationFormatter(.init(
             style: style,
             removeFillers: settings.get(Settings.Dictation.removeFillers),

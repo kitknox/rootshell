@@ -247,6 +247,9 @@ private struct ComposeTextView: UIViewRepresentable {
         #if !os(visionOS)
         textView.inputAccessoryView = keyboardAccessory
         #endif
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        TextFieldTouchKeyboard.exclude(textView)
+        #endif
         applyAutocorrectSettings(textView)
         textView.text = text
 
