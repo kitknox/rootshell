@@ -77835,6 +77835,7 @@
       }
     },
     "An optional terminal keyboard with layouts for English and most European languages, and long-press accents that match Apple's keyboards. Long-press the keyboard switch key to change the layout, style, or placement. Switch to Apple's keyboard for other languages, swipe typing, emoji, or dictation." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -77984,6 +77985,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "選用的終端機鍵盤，提供英文與大多數歐洲語言的版面配置，並可像 Apple 鍵盤一樣長按輸入重音字母。長按鍵盤切換鍵即可更改版面配置、樣式或位置。若需其他語言、滑動輸入、表情符號或聽寫，請切換至 Apple 鍵盤。"
+          }
+        }
+      }
+    },
+    "An optional terminal keyboard with layouts for English and most European languages, and long-press accents that match Apple's keyboards. Long-press the keyboard switch key to change the layout, style, or placement. Switch to Apple's keyboard for other languages, swipe typing, emoji, or dictation. Use in Text Fields types into rootshell's other fields too, with Dictation a swipe away; password and number fields keep Apple's keyboard." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لوحة مفاتيح اختيارية للطرفية بتخطيطات للإنجليزية ومعظم اللغات الأوروبية، مع أحرف ذات علامات بالضغط المطول تطابق لوحات مفاتيح Apple. اضغط مطولًا على مفتاح تبديل لوحة المفاتيح لتغيير التخطيط أو النمط أو الموضع. بدّل إلى لوحة مفاتيح Apple للغات الأخرى أو الكتابة بالتمرير أو الرموز التعبيرية أو الإملاء. يتيح «الاستخدام في حقول النص» الكتابة بها في حقول rootshell الأخرى أيضًا، مع الإملاء على بُعد تمريرة واحدة؛ وتبقى حقول كلمات المرور والأرقام على لوحة مفاتيح Apple."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un teclat de terminal opcional amb disposicions per a l'anglès i la majoria d'idiomes europeus, i accents en mantenir premudes les tecles, com als teclats d'Apple. Mantén premuda la tecla de canvi de teclat per canviar la disposició, l'estil o la ubicació. Canvia al teclat d'Apple per a altres idiomes, escriptura lliscant, emojis o dictat. «Utilitza als camps de text» permet escriure-hi també als altres camps de rootshell, amb el Dictat a un lliscament de distància; els camps de contrasenya i numèrics continuen fent servir el teclat d'Apple."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volitelná klávesnice terminálu s rozvrženími pro angličtinu a většinu evropských jazyků a s diakritikou dostupnou podržením klávesy stejně jako na klávesnicích Apple. Podržením klávesy pro přepnutí klávesnice změníte rozvržení, styl nebo umístění. Pro jiné jazyky, psaní tahem, emoji nebo diktování přepněte na klávesnici Apple. „Použít v textových polích“ umožní psát touto klávesnicí i do ostatních polí aplikace rootshell a Diktování je vždy jen jedno přejetí daleko; pole pro hesla a čísla dál používají klávesnici Apple."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Et valgfrit terminaltastatur med layouts til engelsk og de fleste europæiske sprog og accenter ved langt tryk, der svarer til Apples tastaturer. Hold tasten til skift af tastatur nede for at ændre layout, stil eller placering. Skift til Apples tastatur for at bruge andre sprog, glidende indtastning, emoji eller diktering. “Brug i tekstfelter” lader dig også skrive med det i rootshells andre felter, med Diktering kun et stryg væk; adgangskode- og talfelter beholder Apples tastatur."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine optionale Terminal-Tastatur mit Layouts für Englisch und die meisten europäischen Sprachen sowie Akzenten per langem Drücken wie auf Apples Tastaturen. Halten Sie die Taste zum Wechseln der Tastatur gedrückt, um Layout, Stil oder Platzierung zu ändern. Für andere Sprachen, das Streichen zum Schreiben, Emojis oder das Diktat wechseln Sie zu Apples Tastatur. Mit „In Textfeldern verwenden“ tippen Sie damit auch in die anderen Felder von rootshell, und das Diktat ist nur ein Wischen entfernt; Passwort- und Zahlenfelder behalten Apples Tastatur."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un teclado de terminal opcional con disposiciones para el inglés y la mayoría de los idiomas europeos, y acentos con pulsación prolongada iguales a los de los teclados de Apple. Mantén pulsada la tecla de cambio de teclado para cambiar la disposición, el estilo o la posición. Cambia al teclado de Apple para usar otros idiomas, la escritura deslizando el dedo, los emoji o el dictado. «Usar en campos de texto» permite escribir con él también en los demás campos de rootshell, con el Dictado a un deslizamiento de distancia; los campos de contraseña y numéricos mantienen el teclado de Apple."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valinnainen terminaalinäppäimistö, jossa on asettelut englannille ja useimmille Euroopan kielille sekä Applen näppäimistöjä vastaavat aksenttimerkit pitkällä painalluksella. Vaihda asettelua, tyyliä tai sijaintia painamalla pitkään näppäimistön vaihtonäppäintä. Vaihda Applen näppäimistöön, kun tarvitset muita kieliä, pyyhkäisykirjoitusta, emojeita tai sanelua. ”Käytä tekstikentissä” tuo näppäimistön myös rootshellin muihin kenttiin, ja Sanelu on vain pyyhkäisyn päässä; salasana- ja numerokentät käyttävät edelleen Applen näppäimistöä."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un clavier de terminal facultatif avec des dispositions pour l'anglais et la plupart des langues européennes, et des accents par appui long identiques à ceux des claviers d'Apple. Maintenez la touche de changement de clavier enfoncée pour changer la disposition, le style ou la position. Passez au clavier d'Apple pour les autres langues, la saisie gestuelle, les emoji ou la dictée. « Utiliser dans les champs de texte » permet aussi de saisir dans les autres champs de rootshell, avec la Dictée à portée de balayage ; les champs de mot de passe et numériques conservent le clavier d'Apple."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "מקלדת מסוף אופציונלית עם פריסות לאנגלית ולרוב השפות האירופיות, ותווים עם סימנים דיאקריטיים בלחיצה ארוכה כמו במקלדות של Apple. לחץ לחיצה ארוכה על מקש החלפת המקלדת כדי לשנות את הפריסה, הסגנון או המיקום. עבור למקלדת של Apple לשפות אחרות, הקלדה בהחלקה, אמוג'י או הכתבה. \"השתמש בשדות טקסט\" מאפשר להקליד בה גם בשדות האחרים של rootshell, כשההכתבה במרחק החלקה אחת; שדות סיסמה ומספרים נשארים עם המקלדת של Apple."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Választható terminálbillentyűzet angol és a legtöbb európai nyelv kiosztásaival, valamint az Apple billentyűzeteivel egyező, hosszú nyomással elérhető ékezetes betűkkel. Az elrendezés, a stílus vagy az elhelyezés módosításához tartsa nyomva a billentyűzetváltó billentyűt. Más nyelvekhez, csúsztatásos gépeléshez, emojikhoz vagy diktáláshoz váltson az Apple billentyűzetére. A „Használat szövegmezőkben” lehetővé teszi, hogy a rootshell többi mezőjébe is ezzel a billentyűzettel gépeljen, a Diktálás pedig egyetlen csúsztatásnyira van; a jelszó- és számmezők megtartják az Apple billentyűzetét."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una tastiera del terminale opzionale con layout per l'inglese e la maggior parte delle lingue europee, e accenti con pressione prolungata come sulle tastiere Apple. Tieni premuto il tasto di cambio tastiera per cambiare layout, stile o posizione. Passa alla tastiera Apple per le altre lingue, la scrittura con scorrimento, le emoji o la dettatura. «Usa nei campi di testo» permette di scrivere anche negli altri campi di rootshell, con la Dettatura a portata di scorrimento; i campi per password e numeri mantengono la tastiera Apple."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "英語とほとんどのヨーロッパ言語のレイアウトを備え、Appleのキーボードと同じく長押しでアクセント付き文字を入力できる、オプションのターミナルキーボードです。キーボード切り替えキーを長押しすると、レイアウト、スタイル、配置を変更できます。他の言語、なぞり入力、絵文字、音声入力を使うには、Appleのキーボードに切り替えてください。「テキストフィールドで使用」をオンにすると、rootshellのほかの入力フィールドでもこのキーボードで入力でき、スワイプするだけで音声入力を使えます。パスワードと数字のフィールドではAppleのキーボードのままです。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "영어 및 대부분의 유럽 언어 레이아웃을 제공하며, Apple 키보드와 동일하게 길게 눌러 악센트 문자를 입력할 수 있는 선택적 터미널 키보드입니다. 키보드 전환 키를 길게 눌러 레이아웃, 스타일 또는 배치를 변경할 수 있습니다. 다른 언어, 슬라이드 입력, 이모티콘, 받아쓰기를 사용하려면 Apple 키보드로 전환하십시오. ‘텍스트 필드에서 사용’을 켜면 rootshell의 다른 입력 필드에서도 이 키보드로 입력할 수 있으며, 한 번 쓸어넘기기만 하면 받아쓰기를 사용할 수 있습니다. 비밀번호 및 숫자 필드에서는 Apple 키보드가 유지됩니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Et valgfritt terminaltastatur med oppsett for engelsk og de fleste europeiske språk, og aksenter ved langt trykk som samsvarer med Apples tastaturer. Hold inne tastaturbytte-tasten for å endre oppsett, stil eller plassering. Bytt til Apples tastatur for andre språk, sveipeskriving, emoji eller diktering. «Bruk i tekstfelt» lar deg også skrive med det i rootshells andre felt, med Diktering bare et sveip unna; passord- og tallfelt beholder Apples tastatur."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Een optioneel terminaltoetsenbord met lay-outs voor het Engels en de meeste Europese talen, en accenten via lang indrukken die overeenkomen met de Apple-toetsenborden. Houd de toetsenbordwisseltoets ingedrukt om de lay-out, stijl of plaatsing te wijzigen. Schakel over naar het Apple-toetsenbord voor andere talen, schuiven om te typen, emoji of dicteren. ‘Gebruik in tekstvelden’ laat je er ook mee typen in de andere velden van rootshell, met Dicteren op één veeg afstand; wachtwoord- en nummervelden houden het Apple-toetsenbord."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opcjonalna klawiatura terminala z układami dla angielskiego i większości języków europejskich oraz znakami diakrytycznymi po przytrzymaniu, zgodnymi z klawiaturami Apple. Przytrzymaj klawisz przełączania klawiatury, aby zmienić układ, styl lub położenie. Przełącz się na klawiaturę Apple, aby korzystać z innych języków, pisania gestem, emoji lub dyktowania. „Używaj w polach tekstowych” pozwala pisać za jej pomocą także w innych polach aplikacji rootshell, a do Dyktowania wystarczy jedno przesunięcie palcem; pola haseł i liczb zachowują klawiaturę Apple."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Um teclado de terminal opcional, com layouts para inglês e a maioria dos idiomas europeus e acentos ao manter pressionado, como nos teclados da Apple. Mantenha pressionada a tecla de troca de teclado para alterar o layout, o estilo ou a posição. Mude para o teclado da Apple para usar outros idiomas, digitação por deslize, emoji ou ditado. “Usar em Campos de Texto” permite digitar com ele também nos outros campos do rootshell, com o Ditado a um deslize de distância; campos de senha e numéricos mantêm o teclado da Apple."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Um teclado de terminal opcional, com disposições para inglês e a maioria dos idiomas europeus e acentos ao manter premido, como nos teclados da Apple. Mantenha premida a tecla de mudança de teclado para alterar a disposição, o estilo ou a posição. Mude para o teclado da Apple para usar outros idiomas, a escrita por deslize, emojis ou ditado. “Usar em Campos de Texto” permite escrever com ele também nos outros campos do rootshell, com o Ditado à distância de um deslize; os campos de palavra-passe e numéricos mantêm o teclado da Apple."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O tastatură de terminal opțională, cu aspecte pentru engleză și majoritatea limbilor europene și cu accente prin apăsare lungă, la fel ca pe tastaturile Apple. Ține apăsată tasta de comutare a tastaturii pentru a schimba aspectul, stilul sau plasarea. Comută la tastatura Apple pentru alte limbi, tastare prin glisare, emoji sau dictare. „Folosește în câmpurile de text” permite tastarea și în celelalte câmpuri din rootshell, cu Dictarea la o glisare distanță; câmpurile pentru parole și numere păstrează tastatura Apple."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Izbirna tipkovnica terminala s postavitvami za angleščino in večino evropskih jezikov ter s črkami z naglasi ob pridržanju tipke, enako kot na Applovih tipkovnicah. Pridržite tipko za preklop tipkovnice, da spremenite postavitev, slog ali položaj. Za druge jezike, pisanje s potegom, emodžije ali narekovanje preklopite na Applovo tipkovnico. »Uporabi v besedilnih poljih« omogoča tipkanje tudi v drugih poljih aplikacije rootshell, Narekovanje pa je oddaljeno le en poteg; polja za gesla in številke ohranijo Applovo tipkovnico."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ett valfritt terminaltangentbord med layouter för engelska och de flesta europeiska språk, och accenter vid långt tryck som matchar Apples tangentbord. Håll ned tangentbordsbytartangenten för att ändra layout, stil eller placering. Byt till Apples tangentbord för andra språk, svepskrivning, emoji eller diktering. ”Använd i textfält” låter dig skriva med det även i rootshells andra fält, med Diktering bara ett svep bort; lösenords- och sifferfält behåller Apples tangentbord."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Додаткова клавіатура термінала з розкладками для англійської та більшості європейських мов і символами з діакритикою за довгим натисканням, як на клавіатурах Apple. Утримуйте клавішу перемикання клавіатури, щоб змінити макет, стиль або розташування. Перемкніться на клавіатуру Apple, щоб користуватися іншими мовами, введенням проведенням, емодзі чи диктуванням. «Використовувати в текстових полях» дає змогу вводити текст і в інших полях rootshell, а Диктування доступне за одне проведення пальцем; поля паролів і чисел і далі використовують клавіатуру Apple."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bàn phím terminal tùy chọn với bố cục cho tiếng Anh và hầu hết các ngôn ngữ châu Âu, cùng các ký tự có dấu khi nhấn giữ giống như bàn phím của Apple. Nhấn giữ phím chuyển bàn phím để thay đổi bố cục, kiểu hoặc vị trí. Hãy chuyển sang bàn phím của Apple để dùng ngôn ngữ khác, gõ vuốt, emoji hoặc đọc chính tả. “Dùng trong trường văn bản” cũng cho phép gõ vào các trường khác của rootshell, với Đọc chính tả chỉ cách một lần vuốt; các trường mật khẩu và số vẫn dùng bàn phím của Apple."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选的终端键盘，提供英语及大多数欧洲语言的布局，长按可输入与 Apple 键盘一致的重音字母。长按键盘切换键可更改布局、样式或位置。如需输入其他语言、滑行输入、表情符号或听写，请切换到 Apple 键盘。“在文本框中使用”可让你在 rootshell 的其他输入框中也使用此键盘，轻扫一下即可听写；密码和数字输入框仍使用 Apple 键盘。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選用的終端機鍵盤，提供英文與大多數歐洲語言的版面配置，並可像 Apple 鍵盤一樣長按輸入重音字母。長按鍵盤切換鍵即可更改版面配置、樣式或位置。若需其他語言、滑動輸入、表情符號或聽寫，請切換至 Apple 鍵盤。「在文字欄位中使用」可讓你在 rootshell 的其他欄位中也使用此鍵盤，滑動一下即可聽寫；密碼與數字欄位仍使用 Apple 鍵盤。"
           }
         }
       }
@@ -852349,6 +852504,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "「在本機 Shell 中使用」會在新的本機 Shell 中設定 ALL_PROXY，讓支援它的工具（例如 curl）連接你的 tailnet。"
+          }
+        }
+      }
+    },
+    "Use in Text Fields" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الاستخدام في حقول النص"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utilitza als camps de text"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Použít v textových polích"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brug i tekstfelter"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Textfeldern verwenden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar en campos de texto"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Käytä tekstikentissä"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utiliser dans les champs de texte"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "השתמש בשדות טקסט"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Használat szövegmezőkben"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa nei campi di testo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テキストフィールドで使用"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "텍스트 필드에서 사용"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bruk i tekstfelt"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gebruik in tekstvelden"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Używaj w polach tekstowych"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar em Campos de Texto"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar em Campos de Texto"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folosește în câmpurile de text"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uporabi v besedilnih poljih"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Använd i textfält"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Використовувати в текстових полях"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dùng trong trường văn bản"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在文本框中使用"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在文字欄位中使用"
           }
         }
       }
