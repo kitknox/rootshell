@@ -95,6 +95,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             SettingsStore.shared.bootstrap()
             SettingsSyncCoordinator.shared.start()
             ConfigOverlayManager.shared.start()
+            #if !os(visionOS) && !targetEnvironment(macCatalyst)
+            TextFieldTouchKeyboard.shared.start()
+            #endif
             // Interim until every manager registers its own reload(keys:).
             SettingsRefreshHub.shared.register(
                 groups: [.theme, .font, .cursor, .transparency, .selection, .sounds, .notifications]

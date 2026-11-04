@@ -2,6 +2,7 @@
 import SwiftUI
 
 struct TerminalTouchKeyboardSettingsView: View {
+    @Setting(Settings.Keyboard.touchEnabled) private var touchEnabled
     @Setting(Settings.Keyboard.touchStyle) private var keyboardStyle
     @Setting(Settings.Keyboard.touchLayout) private var keyboardLayout
     @Setting(Settings.Keyboard.touchThemeAware) private var themeAware
@@ -48,6 +49,9 @@ struct TerminalTouchKeyboardSettingsView: View {
             Section {
                 SettingToggle(Settings.Keyboard.touchEnabled, title: "Terminal Keyboard", icon: "keyboard.badge.ellipsis")
                     .themedRow()
+                SettingToggle(Settings.Keyboard.touchInTextFields, title: "Use in Text Fields", icon: "character.cursor.ibeam")
+                    .disabled(!touchEnabled)
+                    .themedRow()
                 Picker("Keyboard Layout", selection: $keyboardLayout) {
                     ForEach(TerminalTouchKeyboardModel.Layout.allCases, id: \.self) { layout in
                         Text(layout.displayName).tag(layout)
@@ -56,7 +60,7 @@ struct TerminalTouchKeyboardSettingsView: View {
                 .settingContextMenu(Settings.Keyboard.touchLayout)
                 .themedRow()
             } footer: {
-                Text("An optional terminal keyboard with layouts for English and most European languages, and long-press accents that match Apple's keyboards. Long-press the keyboard switch key to change the layout, style, or placement. Switch to Apple's keyboard for other languages, swipe typing, emoji, or dictation.")
+                Text("An optional terminal keyboard with layouts for English and most European languages, and long-press accents that match Apple's keyboards. Long-press the keyboard switch key to change the layout, style, or placement. Switch to Apple's keyboard for other languages, swipe typing, emoji, or dictation. Use in Text Fields types into rootshell's other fields too, with Dictation a swipe away; password and number fields keep Apple's keyboard.")
             }
             Section {
                 Picker("Preview Placement", selection: $previewFloating) {

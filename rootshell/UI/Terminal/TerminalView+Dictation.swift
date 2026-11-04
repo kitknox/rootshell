@@ -15,6 +15,15 @@ protocol DictationTarget: AnyObject {
     func dictationSubmit()
     func dictationSend(_ key: DictationKey)
     func dictationDeleteBackward(_ count: Int)
+    /// A text field's own formatting under Auto; nil keeps Auto's terminal choice.
+    var dictationPreferredStyle: DictationFormatter.Style? { get }
+    /// False where Return submits a form, so hands-free only types.
+    var dictationAllowsAutoSubmit: Bool { get }
+}
+
+extension DictationTarget {
+    var dictationPreferredStyle: DictationFormatter.Style? { nil }
+    var dictationAllowsAutoSubmit: Bool { true }
 }
 
 extension Ghostty.TerminalView: DictationTarget {

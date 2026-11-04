@@ -183,6 +183,9 @@ extension Ghostty.TerminalView {
         field.autocorrectionType = .no
         field.autocapitalizationType = .none
         field.spellCheckingType = .no
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        TextFieldTouchKeyboard.exclude(field)
+        #endif
         // Adding to self keeps the field in the responder chain even if our
         // superview changes (split panes, tab swaps).
         addSubview(field)
