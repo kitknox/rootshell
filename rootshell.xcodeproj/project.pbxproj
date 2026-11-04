@@ -228,6 +228,7 @@
 		47CWP0012F560000DDEE0001 /* CoreWLANPlugin.bundle in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 47CWP0032F560000DDEE0003 /* CoreWLANPlugin.bundle */; platformFilter = maccatalyst; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		47D001270000000000000001 /* rootshell/UI/Shell/DuoFrontDisplayMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47D001270000000000000011 /* rootshell/UI/Shell/DuoFrontDisplayMode.swift */; };
 		47D001270000000000000002 /* rootshell/UI/Shell/DuoWorkspaceLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47D001270000000000000012 /* rootshell/UI/Shell/DuoWorkspaceLayout.swift */; };
+		47D001270000000000000004 /* rootshell/Features/VNC/ExternalDisplay/ExternalDisplaySizing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47D001270000000000000014 /* rootshell/Features/VNC/ExternalDisplay/ExternalDisplaySizing.swift */; };
 		47D001270000000000000003 /* rootshell/UI/Keyboard/TerminalKeyboardGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47D001270000000000000013 /* rootshell/UI/Keyboard/TerminalKeyboardGeometry.swift */; };
 		47D8B28B2ECAC24B00CA99EC /* libc++.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 47D8B28A2ECAC24B00CA99EC /* libc++.tbd */; };
 		47D8B2A12ECB90D100CA99EC /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 47D8B2A02ECB90D100CA99EC /* Metal.framework */; };
@@ -712,6 +713,7 @@
 		47CWP0032F560000DDEE0003 /* CoreWLANPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoreWLANPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		47D001270000000000000011 /* rootshell/UI/Shell/DuoFrontDisplayMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/UI/Shell/DuoFrontDisplayMode.swift; sourceTree = SOURCE_ROOT; };
 		47D001270000000000000012 /* rootshell/UI/Shell/DuoWorkspaceLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/UI/Shell/DuoWorkspaceLayout.swift; sourceTree = SOURCE_ROOT; };
+		47D001270000000000000014 /* rootshell/Features/VNC/ExternalDisplay/ExternalDisplaySizing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/VNC/ExternalDisplay/ExternalDisplaySizing.swift; sourceTree = SOURCE_ROOT; };
 		47D001270000000000000013 /* rootshell/UI/Keyboard/TerminalKeyboardGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/UI/Keyboard/TerminalKeyboardGeometry.swift; sourceTree = SOURCE_ROOT; };
 		47D8B2422ECAAE7F00CA99EC /* rootshell.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = rootshell.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		47D8B28A2ECAC24B00CA99EC /* libc++.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = "libc++.tbd"; path = "usr/lib/libc++.tbd"; sourceTree = SDKROOT; };
@@ -1313,6 +1315,7 @@
 			children = (
 				47D001270000000000000013 /* rootshell/UI/Keyboard/TerminalKeyboardGeometry.swift */,
 				47D001270000000000000012 /* rootshell/UI/Shell/DuoWorkspaceLayout.swift */,
+				47D001270000000000000014 /* rootshell/Features/VNC/ExternalDisplay/ExternalDisplaySizing.swift */,
 				47D001270000000000000011 /* rootshell/UI/Shell/DuoFrontDisplayMode.swift */,
 				47ABC10D2FF50000AABB000D /* rootshell-helper/Sources/PTYManagerImpl.m */,
 				47ABC10E2FF50000AABB000E /* rootshell-helper/Sources/ProcessSpawner.m */,
@@ -2363,6 +2366,7 @@
 				F210A5E10000000000000001 /* rootshell/Features/TSSH/Transport/TSSHResizeController.swift in Sources */,
 				47D001270000000000000003 /* rootshell/UI/Keyboard/TerminalKeyboardGeometry.swift in Sources */,
 				47D001270000000000000002 /* rootshell/UI/Shell/DuoWorkspaceLayout.swift in Sources */,
+				47D001270000000000000004 /* rootshell/Features/VNC/ExternalDisplay/ExternalDisplaySizing.swift in Sources */,
 				47D001270000000000000001 /* rootshell/UI/Shell/DuoFrontDisplayMode.swift in Sources */,
 				47AF04750000000000000A02 /* rootshell/Features/Tmux/TmuxSplitEqualizer.swift in Sources */,
 				47AF04750000000000000A01 /* rootshell/Features/Tmux/TmuxLayoutNode.swift in Sources */,
@@ -2637,7 +2641,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -2699,7 +2703,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -2761,7 +2765,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -3886,7 +3890,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -4003,7 +4007,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -4131,7 +4135,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -4261,7 +4265,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -4611,7 +4615,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -4670,7 +4674,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -4907,7 +4911,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -4973,7 +4977,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -5038,7 +5042,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -5098,7 +5102,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -5158,7 +5162,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -5219,7 +5223,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -5279,7 +5283,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -5337,7 +5341,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -5668,7 +5672,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -5733,7 +5737,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -6446,7 +6450,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -6512,7 +6516,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -6579,7 +6583,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -6641,7 +6645,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -6699,7 +6703,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optional diary of the places you use rootshell, and location data for solar background.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rootshell uses the microphone for dictation, which is transcribed on this device, and for voice agent mode, allowing you to speak naturally with the AI terminal assistant.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
