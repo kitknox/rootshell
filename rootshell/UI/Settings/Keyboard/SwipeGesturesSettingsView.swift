@@ -71,6 +71,13 @@ struct SwipeGesturesSettingsView: View {
 
     var body: some View {
         List {
+            #if !targetEnvironment(macCatalyst)
+            if shouldShowScrollModeWarning {
+                Section {
+                    scrollModeWarningRow
+                }
+            }
+            #endif
             if !manager.separateAreasEnabled {
                 quickSetupSection
                 directionsSection
@@ -125,11 +132,6 @@ struct SwipeGesturesSettingsView: View {
 
     private var quickSetupSection: some View {
         Section {
-            #if !targetEnvironment(macCatalyst)
-            if shouldShowScrollModeWarning {
-                scrollModeWarningRow
-            }
-            #endif
             ForEach(Self.quickSetupPairs) { pair in
                 quickSetupRow(pair)
             }
