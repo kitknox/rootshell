@@ -1170,6 +1170,7 @@ extension Ghostty {
         var twoFingerTapGesture: UITapGestureRecognizer?
         /// Swipe left gesture for next tab in scroll mode
         var tabSwipeLeftGesture: UISwipeGestureRecognizer?
+        var swipeStartAreas: [ObjectIdentifier: TerminalSwipeArea] = [:]
         /// Swipe right gesture for previous tab in scroll mode
         var tabSwipeRightGesture: UISwipeGestureRecognizer?
         /// Direct-finger pan gesture for interactive app-tab switching.
@@ -2192,16 +2193,13 @@ extension Ghostty {
             // — the runtime guards and gesture-delegate filters that previously blocked
             // them have been removed, and the capture scroll pan's direction gate
             // keeps horizontal swipes from leaking as mouse-forward pans.
-            let leftBinding = SwipeGestureManager.shared.binding(for: .left)
-            let rightBinding = SwipeGestureManager.shared.binding(for: .right)
+            let bindings = SwipeGestureManager.shared.activeTouchBindings
             tabSwipeLeftGesture?.isEnabled = scrollMode
-                && !leftBinding.isDisabled
-                && !leftBinding.isAppTabNavigation
+                && bindings.contains { !$0.isDisabled && !$0.isAppTabNavigation }
             tabSwipeRightGesture?.isEnabled = scrollMode
-                && !rightBinding.isDisabled
-                && !rightBinding.isAppTabNavigation
+                && bindings.contains { !$0.isDisabled && !$0.isAppTabNavigation }
             appTabSwipePanGesture?.isEnabled = scrollMode
-                && (leftBinding.isAppTabNavigation || rightBinding.isAppTabNavigation)
+                && bindings.contains { $0.isAppTabNavigation }
             // Not gated on capture: the cached state can lag the C side, and a
             // recognizer enabled once it catches up misses the touch in progress.
             // gestureRecognizerShouldBegin checks the live state instead.

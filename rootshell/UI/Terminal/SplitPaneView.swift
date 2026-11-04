@@ -204,14 +204,20 @@ extension SplitTree where ViewType == SplitPaneView {
 extension SplitPaneView {
 
     /// Ask the owning MainView to begin an app-tab swipe. Returns whether it
-    /// accepted (a target tab exists and no swipe is settling).
-    func requestAppTabSwipeBegin(direction: SwipeDirection, velocityX: CGFloat) -> Bool {
+    /// accepted (a target tab exists and no swipe is settling). A nil `preset`
+    /// means the shared binding for `direction`.
+    func requestAppTabSwipeBegin(
+        direction: SwipeDirection,
+        velocityX: CGFloat,
+        preset: SwipeGesturePreset? = nil
+    ) -> Bool {
         var accepted = false
         postAppTabSwipeNotification(
             .appTabSwipeBegan,
             direction: direction,
             translationX: 0,
             velocityX: velocityX,
+            preset: preset,
             accept: { if $0 { accepted = true } }
         )
         return accepted
@@ -222,6 +228,7 @@ extension SplitPaneView {
         direction: SwipeDirection,
         translationX: CGFloat,
         velocityX: CGFloat,
+        preset: SwipeGesturePreset? = nil,
         accept: ((Bool) -> Void)? = nil
     ) {
         var userInfo: [String: Any] = [
@@ -230,6 +237,9 @@ extension SplitPaneView {
             "velocityX": velocityX,
             "width": max(bounds.width, 1),
         ]
+        if let preset {
+            userInfo["preset"] = preset
+        }
         if let accept {
             userInfo["accept"] = accept
         }

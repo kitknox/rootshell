@@ -500,12 +500,12 @@ extension Ghostty.TerminalView {
     /// uses delaysTouchesBegan so a successful swipe never leaks a partial
     /// mouse drag to the captured app).
     @objc func handleTabSwipeLeft(_ gesture: UISwipeGestureRecognizer) {
-        performSwipeBinding(.left)
+        performSwipeBinding(.left, area: swipeStartAreas[ObjectIdentifier(gesture)])
     }
 
     /// Handle right swipe — see handleTabSwipeLeft.
     @objc func handleTabSwipeRight(_ gesture: UISwipeGestureRecognizer) {
-        performSwipeBinding(.right)
+        performSwipeBinding(.right, area: swipeStartAreas[ObjectIdentifier(gesture)])
     }
 
     @objc func handleAppTabSwipePan(_ gesture: UIPanGestureRecognizer) {
@@ -524,11 +524,12 @@ extension Ghostty.TerminalView {
             direction: direction
         )
         let velocityX = gesture.velocity(in: self).x
+        let preset = appTabSwipePreset(for: direction, gesture: gesture)
 
         switch gesture.state {
         case .began:
             if !activeAppTabSwipeAccepted {
-                activeAppTabSwipeAccepted = requestAppTabSwipeBegin(direction: direction, velocityX: velocityX)
+                activeAppTabSwipeAccepted = requestAppTabSwipeBegin(direction: direction, velocityX: velocityX, preset: preset)
             }
             guard activeAppTabSwipeAccepted else {
                 activeAppTabSwipeDirection = nil
@@ -536,7 +537,7 @@ extension Ghostty.TerminalView {
             }
         case .changed:
             guard activeAppTabSwipeAccepted else { return }
-            postAppTabSwipeNotification(.appTabSwipeChanged, direction: direction, translationX: normalizedTranslation, velocityX: velocityX)
+            postAppTabSwipeNotification(.appTabSwipeChanged, direction: direction, translationX: normalizedTranslation, velocityX: velocityX, preset: preset)
         case .ended:
             guard activeAppTabSwipeAccepted else {
                 activeAppTabSwipeDirection = nil
@@ -554,6 +555,11 @@ extension Ghostty.TerminalView {
         default:
             break
         }
+    }
+
+    /// The tab preset bound to `direction` in the area where the touch began.
+    func appTabSwipePreset(for direction: SwipeDirection, gesture: UIGestureRecognizer) -> SwipeGesturePreset? {
+        SwipeGestureManager.shared.binding(for: direction, area: swipeStartAreas[ObjectIdentifier(gesture)]).appTabPreset
     }
 
     // normalizedAppTabSwipeTranslation lives on SplitPaneView (shared with
@@ -3102,6 +3108,9 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
 
 extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        #if !targetEnvironment(macCatalyst)
+        swipeStartAreas[ObjectIdentifier(gestureRecognizer)] = touch.location(in: self).y < bounds.midY ? .top : .bottom
+        #endif
         // The brightness HUD is an interactive `UIHostingController` view (a
         // horizontal `Slider`) added as a subview of this terminal view. Without
         // this exclusion the terminal's tab-swipe pan (`appTabSwipePanGesture`)
@@ -3238,6 +3247,12 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
             }
         }
 
+        if gestureRecognizer === tabSwipeLeftGesture || gestureRecognizer === tabSwipeRightGesture {
+            let direction: SwipeDirection = gestureRecognizer === tabSwipeLeftGesture ? .left : .right
+            let binding = SwipeGestureManager.shared.binding(for: direction, area: swipeStartAreas[ObjectIdentifier(gestureRecognizer)])
+            return !binding.isDisabled && !binding.isAppTabNavigation
+        }
+
         if gestureRecognizer === appTabSwipePanGesture,
            let panGesture = gestureRecognizer as? UIPanGestureRecognizer {
             let velocity = panGesture.velocity(in: self)
@@ -3248,7 +3263,7 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
 
             let x = abs(velocity.x) >= abs(translation.x) ? velocity.x : translation.x
             let direction: SwipeDirection = x < 0 ? .left : .right
-            guard SwipeGestureManager.shared.binding(for: direction).isAppTabNavigation else {
+            guard let preset = appTabSwipePreset(for: direction, gesture: gestureRecognizer) else {
                 return false
             }
 
@@ -3258,7 +3273,7 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
                 return false
             }
 
-            guard requestAppTabSwipeBegin(direction: direction, velocityX: velocity.x) else {
+            guard requestAppTabSwipeBegin(direction: direction, velocityX: velocity.x, preset: preset) else {
                 activeAppTabSwipeDirection = nil
                 activeAppTabSwipeAccepted = false
                 return false

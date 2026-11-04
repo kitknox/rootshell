@@ -17,8 +17,8 @@ extension Ghostty.TerminalView {
     /// App-action presets post a notification (preserving the legacy tab-switch
     /// behavior); sequence presets and custom sequences write to the terminal
     /// via the shared `sendSequenceSteps` helper.
-    func performSwipeBinding(_ direction: SwipeDirection) {
-        let binding = SwipeGestureManager.shared.binding(for: direction)
+    func performSwipeBinding(_ direction: SwipeDirection, area: TerminalSwipeArea? = nil) {
+        let binding = SwipeGestureManager.shared.binding(for: direction, area: area)
         switch binding {
         case .preset(let preset):
             performPreset(preset)

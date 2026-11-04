@@ -71,8 +71,38 @@ struct SwipeGesturesSettingsView: View {
 
     var body: some View {
         List {
-            quickSetupSection
-            directionsSection
+            #if !targetEnvironment(macCatalyst)
+            if shouldShowScrollModeWarning {
+                Section {
+                    scrollModeWarningRow
+                }
+            }
+            #endif
+            if !manager.separateAreasEnabled {
+                quickSetupSection
+                directionsSection
+            }
+            #if targetEnvironment(macCatalyst)
+            if manager.separateAreasEnabled {
+                directionsSection
+            }
+            #endif
+            Section {
+                Toggle("Separate Top and Bottom Swipes", isOn: $manager.separateAreasEnabled)
+                    .themedRow()
+            } footer: {
+                Text("Assign different actions to swipes starting in the top and bottom halves of the terminal. Turning this off restores the shared swipe actions. Trackpad swipes always use the shared actions.")
+            }
+            if manager.separateAreasEnabled {
+                Section("Top Half") {
+                    directionRow(.left, area: .top)
+                    directionRow(.right, area: .top)
+                }
+                Section("Bottom Half") {
+                    directionRow(.left, area: .bottom)
+                    directionRow(.right, area: .bottom)
+                }
+            }
             captureModeNoteSection
             if manager.isCustomized {
                 resetSection
@@ -94,7 +124,7 @@ struct SwipeGesturesSettingsView: View {
                 manager.resetToDefaults()
             }
         } message: {
-            Text("Restore left swipe to Next Tab and right swipe to Previous Tab.")
+            Text("Restore left swipe to Next Tab and right swipe to Previous Tab for all areas, and turn off separate top and bottom swipes.")
         }
     }
 
@@ -102,11 +132,6 @@ struct SwipeGesturesSettingsView: View {
 
     private var quickSetupSection: some View {
         Section {
-            #if !targetEnvironment(macCatalyst)
-            if shouldShowScrollModeWarning {
-                scrollModeWarningRow
-            }
-            #endif
             ForEach(Self.quickSetupPairs) { pair in
                 quickSetupRow(pair)
             }
@@ -148,7 +173,7 @@ struct SwipeGesturesSettingsView: View {
     #if !targetEnvironment(macCatalyst)
     private var shouldShowScrollModeWarning: Bool {
         !scrollModeEnabled
-            && (!manager.leftBinding.isDisabled || !manager.rightBinding.isDisabled)
+            && manager.activeTouchBindings.contains { !$0.isDisabled }
     }
 
     private var scrollModeWarningRow: some View {
@@ -203,13 +228,13 @@ struct SwipeGesturesSettingsView: View {
         }
     }
 
-    private func directionRow(_ direction: SwipeDirection) -> some View {
+    private func directionRow(_ direction: SwipeDirection, area: TerminalSwipeArea? = nil) -> some View {
         NavigationLink {
             SwipeBindingPickerView(
                 direction: direction,
-                current: manager.binding(for: direction),
+                current: manager.binding(for: direction, area: area),
                 onSelect: { binding in
-                    manager.setBinding(binding, for: direction)
+                    manager.setBinding(binding, for: direction, area: area)
                 }
             )
         } label: {
@@ -221,7 +246,7 @@ struct SwipeGesturesSettingsView: View {
                             .foregroundStyle(.primary)
                         SettingPinTag(Settings.Gestures.swipeBindings.erased)
                     }
-                    Text(manager.binding(for: direction).displaySummary)
+                    Text(manager.binding(for: direction, area: area).displaySummary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
