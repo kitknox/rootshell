@@ -3,6 +3,52 @@
 All notable changes to the rootshell app for iPhone, iPad, Vision Pro, and Mac, newest first.
 Versions are listed as `release-build`, matching the version shown in Settings, About.
 
+## 1.0.16-174 - November 4, 2026
+
+### rootshell's On-Screen Keyboard
+
+- **Use in Text Fields:** Terminal Keyboard and Dictation now work in ordinary fields on iPhone and iPad, including Quick Connect. Password, one-time-code, and numeric fields keep Apple's keyboard; hands-free dictation never submits forms.
+- **International Layouts:** Added 21 layouts, including French AZERTY, German and English QWERTZ, Portuguese, Nordic, and Turkish, with language-specific long-press characters. Shift handles ẞ and Turkish İ, including modifier combinations. Prediction and suggestions remain English-only.
+- **Keyboard Menu:** Long-press the keyboard switch key for Placement, Style, or Layout. Space labels non-US layouts with a language code.
+- **Split Placement:** Placement > Split supports iPad thumb typing at the screen edges and Duo's flat inner display in either orientation. Duo's unsplit landscape keyboard and toolbar are narrower and centered.
+- **Steampunk Style:** Gears and a pressure gauge fill wide and split layouts and animate with nearby key presses.
+
+### Keyboard Toolbar and Gestures
+
+- **Separate Swipe Actions:** Swipe Gestures adds Separate Top and Bottom Swipes: assign different left and right actions to each half of the terminal. Touch swipes require Scroll Mode; trackpads use the shared actions.
+- **Drawer Gestures:** Swipe up or down from the drawer button to adjust rows. Slide sideways onto a key and release to send it and restore the prior drawer state. Works with Apple's keyboard and Terminal Keyboard.
+- **Custom Sequence Modifiers:** Fixed modifiers such as Ctrl+Shift being lost in multi-step custom toolbar and swipe sequences. Keys and text stay in order.
+
+### Tabs and Navigation
+
+- **Bottom Tab Bar:** Tab Bar Position can place any horizontal tab style below the terminal, above the keyboard or toolbar.
+- **Tab-Switching Swipes:** Swipes settle more smoothly. Trackpad swipes in mouse-capturing panes now settle when you lift your fingers.
+- **tmux and herdr Groups:** Groups show the profile or host above session details. On compact screens, new-window and session-list actions move to the long-press menu.
+- **Git Tab Icon:** Git tabs use a branch glyph instead of the red logo.
+
+### Session Restoration and Scrolling
+
+- **tssh Updates:** Added Zstandard output compression on compatible tsshd servers and more reliable KCP wakeup from idle.
+- **tssh Reattachment:** Restores full-screen contents, cursors, and terminal and keyboard modes for saved and local-shell connections. Redraws use the correct size; fresh remote shells clear stale modes.
+- **Mouse Capture Scrolling:** Fixed the first scrolling swipe doing nothing after a terminal app enabled mouse capture.
+
+### SSH Host Key Verification
+
+- **SSHFP Verification:** In Known Hosts, Verify Host Keys via DNS checks SSHFP records. Show in Prompt displays matches or warnings; Trust DNSSEC Matches connects automatically on a DNSSEC-validated match. Off by default.
+- **DNS over HTTPS:** Choose Cloudflare, Quad9, Google, Mullvad, or 360 Secure DNS. The resolver sees queried hostnames; IP addresses, single-label, .local, and .ts.net names are skipped.
+
+### Reliability and Connections
+
+- **Launch Before First Unlock:** Fixed default settings and missing tabs on launches before first unlock after reboot. Startup waits for protected data and keeps unreadable saved sessions for retry.
+- **External Config Files:** Fixed "Couldn't keep access to the selected file" when choosing an external config file on iOS.
+- **Kubernetes Connections:** Fixed missing AWS EKS clusters and failed kubeconfig imports.
+- **Tailscale HTTP Access:** Custom AI providers and port previews can use plain HTTP on Tailscale ts.net hostnames.
+- **Screen Sharing Clipboard:** Fixed text clipboard exchange in Standard Screen Sharing sessions.
+- **tssh Output Stalls:** Fixed burst-output stalls in tssh over rootshell Only Tailscale connections.
+- **SSH Channel Switching:** Channel switches cap buffered output to prevent excessive memory use; failed switches leave the existing session active.
+- **Tailscale Update:** Updated to 1.104.5, fixing direct connection drops after "unreachable" network errors and reducing stalls on lossy networks.
+- **Standalone Mac Local Shells:** Fixed "Login incorrect" after a new login. The helper exits with the app and cleans up shells promptly.
+
 ## 1.0.16-173 - October 31, 2026
 
 ### Terminal Layout and iPhone Duo
