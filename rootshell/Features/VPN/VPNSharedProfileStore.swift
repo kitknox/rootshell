@@ -270,6 +270,8 @@ nonisolated struct VPNTailnetSettings: Codable, Sendable, Hashable {
     var rules: [VPNRoutingRule] = []
     /// Resolvers for names Tailscale doesn't own; empty uses public defaults.
     var dnsServers: [String] = []
+    /// Coordination server, such as Headscale; empty uses Tailscale's.
+    var controlURL: String = ""
 
     init() {}
 
@@ -281,6 +283,21 @@ nonisolated struct VPNTailnetSettings: Codable, Sendable, Hashable {
         sendAllViaSSH = try c.decodeIfPresent(Bool.self, forKey: .sendAllViaSSH) ?? false
         rules = try c.decodeIfPresent([VPNRoutingRule].self, forKey: .rules) ?? []
         dnsServers = try c.decodeIfPresent([String].self, forKey: .dnsServers) ?? []
+        controlURL = try c.decodeIfPresent(String.self, forKey: .controlURL) ?? ""
+    }
+
+    /// `controlURL` as the engine takes it: "" for Tailscale's server, nil when
+    /// it isn't an http(s) URL. A bare host gets https://.
+    var normalizedControlURL: String? {
+        let trimmed = controlURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        guard var parts = URLComponents(string: trimmed.contains("://") ? trimmed : "https://" + trimmed),
+              let scheme = parts.scheme?.lowercased(), scheme == "https" || scheme == "http",
+              parts.host?.isEmpty == false, parts.user == nil, parts.query == nil, parts.fragment == nil
+        else { return nil }
+        parts.scheme = scheme
+        while parts.path.hasSuffix("/") { parts.path.removeLast() }
+        return parts.string
     }
 }
 
@@ -642,5 +659,45 @@ nonisolated enum TailnetKeychainState {
 
     static func deleteAll() {
         SecItemDelete(baseQuery(nil) as CFDictionary)
+    }
+}
+
+/// A key that signs a new device in without the login page, such as a
+/// Headscale pre-auth key. Deleted once the device is signed in.
+nonisolated enum TailnetAuthKey {
+    private static var query: [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.rootshell.tailscale.authkey",
+            kSecAttrAccessGroup as String: AppIdentifiers.keychainAccessGroup,
+        ]
+    }
+
+    static func read() -> String? {
+        var query = query
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data, let key = String(data: data, encoding: .utf8), !key.isEmpty
+        else { return nil }
+        return key
+    }
+
+    /// An empty key clears it.
+    static func store(_ key: String) {
+        let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return clear() }
+        let data = Data(key.utf8)
+        if SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary) == errSecItemNotFound {
+            var add = query
+            add[kSecValueData as String] = data
+            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            SecItemAdd(add as CFDictionary, nil)
+        }
+    }
+
+    static func clear() {
+        SecItemDelete(query as CFDictionary)
     }
 }

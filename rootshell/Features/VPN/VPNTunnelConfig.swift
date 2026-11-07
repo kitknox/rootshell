@@ -47,6 +47,8 @@ nonisolated struct VPNResolvedTailnet: Codable, Sendable {
     var importState: [String: Data]? = nil
     /// Come up without Tailscale or routes, only so the app can read the node state.
     var exportOnly: Bool? = nil
+    /// `TailnetAuthKey`, which the sysext can't read either.
+    var authKey: String? = nil
 }
 
 /// Runtime VPN tunnel config resolved inside the extension from the shared profile mirror.

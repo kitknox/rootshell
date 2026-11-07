@@ -18,6 +18,7 @@ struct TailnetSettingsView: View {
     @State private var engine = TailnetInAppEngine.shared
     @State private var profileManager = ConnectionProfileManager.shared
     @State private var settings = VPNTailnetProfile.settings()
+    @State private var authKey = TailnetAuthKey.read() ?? ""
     @State private var modeSettings = TailnetModeSettings.load()
     /// Settings the running tunnel started with (written by the extension).
     @State private var appliedSettings = VPNTailnetProfile.appliedSettings()
@@ -55,6 +56,7 @@ struct TailnetSettingsView: View {
             if let peers = status?.peers, !peers.isEmpty {
                 peersSection(peers)
             }
+            serverSection
             accountSection
         }
         .themedList()
@@ -92,6 +94,11 @@ struct TailnetSettingsView: View {
             if old.exitNodeID != new.exitNodeID || old.exitNodeAllowLAN != new.exitNodeAllowLAN {
                 Task { await engine.applyPrefs() }
             }
+        }
+        .onChange(of: authKey) { _, new in TailnetAuthKey.store(new) }
+        .onChange(of: status?.registered == true) { _, registered in
+            // The key is spent or unneeded.
+            if registered { authKey = "" }
         }
         .task(id: "\(isConnected)-\(mode.rawValue)") { await pollStatus() }
         .confirmationDialog(
@@ -198,6 +205,12 @@ struct TailnetSettingsView: View {
                 Text(statusText).foregroundStyle(.secondary)
             }
             .themedRow()
+            if status?.isRunning == false, let error = status?.error, !error.isEmpty {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .themedRow()
+            }
 
             if let node = status?.selfNode, status?.isRunning == true {
                 LabeledContent(node.displayName) {
@@ -236,7 +249,7 @@ struct TailnetSettingsView: View {
                 .themedRow()
             } else {
                 Button(String(localized: "Connect", comment: "Tailscale connect button")) { connect(restart: false) }
-                    .disabled(isWorking || handoffMessage != nil)
+                    .disabled(isWorking || handoffMessage != nil || settings.normalizedControlURL == nil)
                     .themedRow()
             }
         } header: {
@@ -397,6 +410,48 @@ struct TailnetSettingsView: View {
                 Text("Devices")
             }
         }
+    }
+
+    /// Locked while on: the engine reads both only at start.
+    private var serverSection: some View {
+        Section {
+            LabeledContent(String(localized: "Server", comment: "Tailscale coordination server row")) {
+                TextField(String(localized: "Tailscale", comment: "Coordination server placeholder: Tailscale's own server"), text: $settings.controlURL)
+                    .multilineTextAlignment(.trailing)
+                    .keyboardType(.URL)
+                    .textContentType(.URL)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+            }
+            .disabled(isActive)
+            .themedRow()
+            LabeledContent(String(localized: "Auth Key", comment: "Tailscale auth key row (signs in without the login page)")) {
+                SecureField(String(localized: "Optional", comment: "Tailscale auth key placeholder"), text: $authKey)
+                    .multilineTextAlignment(.trailing)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+            }
+            .disabled(isActive)
+            .themedRow()
+        } header: {
+            Text("Coordination Server")
+        } footer: {
+            Text(serverFooter)
+        }
+    }
+
+    private var serverFooter: String {
+        guard settings.normalizedControlURL != nil else {
+            return String(localized: "Enter the server's URL, like https://headscale.example.com.", comment: "Tailscale coordination server footer: invalid URL")
+        }
+        var parts = [
+            String(localized: "Leave the server empty to use Tailscale. For Headscale or another self-hosted server, enter its URL. Switching servers signs in again as a new device.", comment: "Tailscale coordination server footer"),
+            String(localized: "An auth key, like a Headscale pre-auth key, signs in a new device without the login page and is deleted once it has. Avoid ephemeral keys: the server removes the device soon after it goes offline.", comment: "Tailscale auth key footer"),
+        ]
+        if isActive {
+            parts.append(String(localized: "Disconnect to change these.", comment: "Tailscale coordination server footer while connected"))
+        }
+        return parts.joined(separator: " ")
     }
 
     @ViewBuilder

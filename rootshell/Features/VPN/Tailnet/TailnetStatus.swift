@@ -43,6 +43,8 @@ nonisolated struct TailnetStatus: Decodable, Sendable, Equatable {
     var state: String
     var authURL: String?
     var error: String?
+    /// The server accepted this device, even if it can't reach peers yet.
+    var registered: Bool?
     var tailnet: String?
     var magicDNSSuffix: String?
     var selfNode: Peer?
@@ -55,7 +57,7 @@ nonisolated struct TailnetStatus: Decodable, Sendable, Equatable {
     var stateVersion: Int?
 
     enum CodingKeys: String, CodingKey {
-        case state, authURL, error, tailnet, magicDNSSuffix, peers, peersTotal, egress
+        case state, authURL, error, registered, tailnet, magicDNSSuffix, peers, peersTotal, egress
         case exitNodeID, exitNodeOnline, stateVersion
         case selfNode = "self"
     }

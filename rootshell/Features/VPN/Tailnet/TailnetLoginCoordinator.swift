@@ -67,14 +67,18 @@ final class TailnetLoginCoordinator {
         let deadline = ContinuousClock.now + Self.startTimeout
         var sawTunnel = false
         while !Task.isCancelled {
-            // An open login page keeps the watch alive; otherwise it is bounded.
-            if presentedAuthURL == nil, ContinuousClock.now > deadline { return }
+            // An open login page, or an auth key the running tunnel hasn't
+            // spent yet, keeps the watch alive; otherwise it is bounded.
+            let pastDeadline = presentedAuthURL == nil && ContinuousClock.now > deadline
+            if pastDeadline, !sawTunnel || TailnetAuthKey.read() == nil { return }
             if TailnetController.isActive {
                 sawTunnel = true
                 let status = await TailnetController.status()
                 // cancel() may have run during the request; never present after it.
                 guard !Task.isCancelled, generation == current else { return }
                 if let status {
+                    // The Mac sysext can't delete the key itself.
+                    if status.registered == true { TailnetAuthKey.clear() }
                     if status.isRunning { return }
                     if status.needsLogin, let raw = status.authURL, raw != presentedAuthURL,
                        let url = URL(string: raw) {
@@ -85,7 +89,7 @@ final class TailnetLoginCoordinator {
             } else if sawTunnel {
                 return
             }
-            try? await Task.sleep(for: .seconds(1))
+            try? await Task.sleep(for: .seconds(pastDeadline ? 5 : 1))
         }
     }
 

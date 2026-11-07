@@ -274,8 +274,8 @@ class SSHVPNTunnelProvider: NEPacketTunnelProvider {
                 }
             }
             #endif
-            let (settings, egress) = try Self.tailnetInputs(resolved: tailnetResolved)
-            try await startTailnetTunnel(config: config, settings: settings, egress: egress, options: options)
+            let (settings, egress, authKey) = try Self.tailnetInputs(resolved: tailnetResolved)
+            try await startTailnetTunnel(config: config, settings: settings, egress: egress, authKey: authKey, options: options)
             return
         }
 

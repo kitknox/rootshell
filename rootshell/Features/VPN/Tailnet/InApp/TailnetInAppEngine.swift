@@ -193,6 +193,7 @@ final class TailnetInAppEngine {
         guard TailnetGo.isSupported else {
             throw TailnetGo.GoError(message: String(localized: "Tailscale isn't available in this build.", comment: "In-app Tailscale unsupported error"))
         }
+        guard let controlURL = VPNTailnetProfile.settings().normalizedControlURL else { throw VPNError.invalidControlURL }
         // One node key can't run in two processes.
         if TailnetPlatform.supportsWholeDevice {
             await VPNManager.shared.stopTailnetVPNAndWait()
@@ -208,6 +209,8 @@ final class TailnetInAppEngine {
             "acceptRoutes": settings.acceptRoutes,
             "exitNodeID": mode.exitNodeID ?? "",
             "exitNodeAllowLAN": mode.exitNodeAllowLAN,
+            "controlURL": controlURL,
+            "authKey": TailnetAuthKey.read() ?? "",
             "stateDir": stateDir,
         ]
         let json = String(decoding: try JSONSerialization.data(withJSONObject: config), as: UTF8.self)
@@ -355,9 +358,12 @@ final class TailnetInAppEngine {
         if newStatus?.state != status?.state {
             Self.debugLog("state \(newStatus?.state ?? "none")")
         }
+        let wasRegistered = status?.registered == true
         status = newStatus
         updateTrafficSampling()
         guard let newStatus else { return }
+        // Registered: the auth key is spent or unneeded.
+        if newStatus.registered == true, !wasRegistered { TailnetAuthKey.clear() }
         VPNTailnetProfile.recordBackendState(newStatus.state)
         if newStatus.isRunning {
             cachePeers(newStatus)
