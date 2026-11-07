@@ -423,7 +423,7 @@ extension SettingsSection {
         case .aiAssistant: ["providers", "mcp", "agent", "text size"]
         case .general: ["privacy", "data", "icloud", "location", "sync", "live activity",
                         "notifications", "sound", "bell", "reminders", "updates"]
-        case .vpn: ["networking", "tunnel", "tailscale", "tailnet", "wireguard", "disconnect", "dns servers",
+        case .vpn: ["networking", "tunnel", "tailscale", "tailnet", "headscale", "coordination server", "auth key", "pre-auth key", "wireguard", "disconnect", "dns servers",
                     "route exclusions", "split tunnel", "cidr", "auto recovery", "reconnect", "debug"]
         case .about: ["version", "acknowledgements", "licenses"]
         }

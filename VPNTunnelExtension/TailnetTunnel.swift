@@ -202,12 +202,15 @@ nonisolated final class TailnetSession: NSObject, VpntunnelTailscaleCallbackProt
         guard let stateJSON, let data = stateJSON.data(using: .utf8) else { return }
         struct Message: Decodable {
             var state: String
+            var registered: Bool?
             var settings: TailnetNetworkSettings?
         }
         guard let message = try? JSONDecoder().decode(Message.self, from: data) else { return }
         Self.logger.info("Tailscale state \(message.state, privacy: .public)")
         VPNConnectionDebugLogger.shared.log("tailscale", "state=\(message.state)")
         #if !os(macOS)
+        // Registered: the auth key is spent or unneeded.
+        if message.registered == true { TailnetAuthKey.clear() }
         // Widget starts may have stopped polling while Tailscale was still starting.
         if VPNTailnetProfile.recordBackendState(message.state) {
             WidgetCenter.shared.reloadTimelines(ofKind: SSHVPNTunnelProvider.widgetKind)
@@ -409,9 +412,10 @@ nonisolated final class TailnetSession: NSObject, VpntunnelTailscaleCallbackProt
 extension SSHVPNTunnelProvider {
     /// Starts Tailscale mode. Tailscale owns the tunnel; SSH egress, when
     /// configured, connects afterwards so a tailnet egress host is reachable.
-    /// Tailscale settings and SSH egress: from the app group on iOS; on macOS
-    /// from the host-resolved config, since the root sysext can't read the group.
-    static func tailnetInputs(resolved: VPNResolvedTailnet?) throws -> (VPNTailnetSettings, VPNTunnelConfig?) {
+    /// Tailscale settings, SSH egress and the auth key: from the app group and
+    /// keychain on iOS; on macOS from the host-resolved config, since the root
+    /// sysext can't read either.
+    static func tailnetInputs(resolved: VPNResolvedTailnet?) throws -> (VPNTailnetSettings, VPNTunnelConfig?, String?) {
         #if os(macOS)
         guard let resolved else { throw VPNError.configNotFound }
         var egress: VPNTunnelConfig?
@@ -422,7 +426,7 @@ extension SSHVPNTunnelProvider {
             egressConfig.extraJumpResolvedCredentials = resolved.egressExtraJumpCredentials
             egress = egressConfig
         }
-        return (resolved.settings, egress)
+        return (resolved.settings, egress, resolved.authKey)
         #else
         let settings = VPNTailnetProfile.settings()
         var egress: VPNTunnelConfig?
@@ -431,11 +435,11 @@ extension SSHVPNTunnelProvider {
             egressConfig.compactChannelWindows = true
             egress = egressConfig
         }
-        return (settings, egress)
+        return (settings, egress, TailnetAuthKey.read())
         #endif
     }
 
-    func startTailnetTunnel(config: VPNTunnelConfig, settings: VPNTailnetSettings, egress: VPNTunnelConfig?, options: [String: NSObject]?) async throws {
+    func startTailnetTunnel(config: VPNTunnelConfig, settings: VPNTailnetSettings, egress: VPNTunnelConfig?, authKey: String?, options: [String: NSObject]?) async throws {
         let debugLog = VPNConnectionDebugLogger.shared
         guard VpntunnelTailscaleSupported() else {
             throw VPNError.unsupportedTransport(config.transportType.rawValue)
@@ -497,7 +501,7 @@ extension SSHVPNTunnelProvider {
         // A capture that was recording resumes; Go reroutes only while it records.
         let json = CaptureBridge.attach(
             CaptureBridge.initialConfig(options: options),
-            to: try Self.tailnetGoConfigJSON(settings: settings, rules: rules, socksAddress: socksAddress,
+            to: try Self.tailnetGoConfigJSON(settings: settings, authKey: authKey, rules: rules, socksAddress: socksAddress,
                                              tsshEgress: egress?.transportType == .tssh)
         )
         var startError: NSError?
@@ -587,7 +591,7 @@ extension SSHVPNTunnelProvider {
         }
     }
 
-    private static func tailnetGoConfigJSON(settings: VPNTailnetSettings, rules: [VPNRoutingRule], socksAddress: String?, tsshEgress: Bool) throws -> String {
+    private static func tailnetGoConfigJSON(settings: VPNTailnetSettings, authKey: String?, rules: [VPNRoutingRule], socksAddress: String?, tsshEgress: Bool) throws -> String {
         struct Rule: Encodable {
             let pattern: String
             let action: String
@@ -599,6 +603,8 @@ extension SSHVPNTunnelProvider {
         struct Tailscale: Encodable {
             let hostname: String?
             let acceptRoutes: Bool
+            let controlURL: String?
+            let authKey: String?
             let stateDir: String
             let egress: String?
         }
@@ -609,6 +615,7 @@ extension SSHVPNTunnelProvider {
             let tailscale: Tailscale
             let routing: Routing
         }
+        guard let controlURL = settings.normalizedControlURL else { throw VPNError.invalidControlURL }
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         let config = GoConfig(
@@ -617,6 +624,8 @@ extension SSHVPNTunnelProvider {
             tailscale: Tailscale(
                 hostname: settings.hostname.isEmpty ? nil : settings.hostname,
                 acceptRoutes: settings.acceptRoutes,
+                controlURL: controlURL.isEmpty ? nil : controlURL,
+                authKey: authKey,
                 stateDir: caches.appendingPathComponent("tailscale").path,
                 egress: tsshEgress ? "tssh" : nil
             ),

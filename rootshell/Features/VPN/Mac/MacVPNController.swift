@@ -244,6 +244,7 @@ final class MacVPNController {
             tailnet.exportOnly = true
         } else {
             tailnet.importState = TailnetStateHandoff.stateForVPN()
+            tailnet.authKey = TailnetAuthKey.read()
         }
         var usesAgentSigning = false
         if !exportOnly, settings.sshEgressProfileID != nil {

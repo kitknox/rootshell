@@ -160,6 +160,7 @@ Built-in Tailscale is available on iPhone, iPad, and macOS Standalone. It is not
 - **No Tailscale App Needed** - Sign in under Settings → VPN → Tailscale and join your tailnet from rootshell itself, with MagicDNS names, subnet routes, and copyable peer hostnames and IPs
 - **Whole Device (VPN)** - Tailnet addresses become reachable from other apps. Optionally send traffic matching domain, wildcard, IP, or CIDR rules through a saved SSH or tssh host, or route everything else through it, and capture HTTP(S) traffic without leaving the tailnet. Disconnect the separate Tailscale app first
 - **rootshell Only** - Reach the tailnet from SSH, SFTP, Mosh, tssh, and Screen Sharing while another VPN stays connected; other apps are unaffected. Optional exit node with local network access, automatic connection on first use of a tailnet device, and tailnet access for `curl`, `git`, and `ping` in the iOS local shell (or an `ALL_PROXY` proxy for new Mac local shells)
+- **Headscale** - Set a custom coordination server to join a self-hosted Headscale tailnet instead of Tailscale's, and sign in with a pre-auth key instead of the login page
 - **Quick Controls** - Start Tailscale from the VPN widget, Control Center, or the Connect VPN shortcut, and follow uptime and traffic in VPN settings and the Live Activity
 - **Tailnet Discovery** - Device discovery and SSH to your tailnet with no-auth support
 

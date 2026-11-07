@@ -22,6 +22,7 @@ enum VPNError: LocalizedError {
     case biometricAuthRequired
     case vpnKeyStoreFailed(String)
     case unsupportedTransport(String)
+    case invalidControlURL
 
     var errorDescription: String? {
         switch self {
@@ -51,6 +52,8 @@ enum VPNError: LocalizedError {
             return String(localized: "Failed to store VPN key copy: \(detail)", comment: "VPN error: could not persist the key copy; detail is the reason")
         case .unsupportedTransport(let detail):
             return String(localized: "Unsupported VPN transport: \(detail)", comment: "VPN error: the requested transport is not supported; detail is the transport name")
+        case .invalidControlURL:
+            return String(localized: "The Tailscale coordination server isn't a valid URL.", comment: "Tailscale error: the custom coordination server setting can't be parsed")
         }
     }
 
