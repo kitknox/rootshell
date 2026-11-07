@@ -1027,12 +1027,12 @@ class SSHKeyManager: ObservableObject {
     /// real foreground resume will pick up the latest Keychain state.
     func refreshKeysAsync(shouldApply: (@MainActor () -> Bool)? = nil) async {
         let oldKeys = savedKeys
-        let oldKeysByID = Dictionary(uniqueKeysWithValues: oldKeys.map { ($0.id, $0) })
+        let oldKeysByID = Dictionary(oldKeys.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
         let (loaded, discovered) = await Task.detached(priority: .utility) {
             () -> (loaded: [SSHKey], discovered: [SSHKey]) in
             let loaded = Self.loadKeysFromKeychain()
-            let existingIDs = Set(loaded.map { $0.id.uuidString })
+            let existingIDs = Set(loaded.map(\.id))
             let discovered = Self.discoverSyncedKeysFromKeychain(existingIDs: existingIDs)
             return (loaded, discovered)
         }.value
@@ -1986,7 +1986,7 @@ class SSHKeyManager: ObservableObject {
 
     /// Discovers keys synced from other devices via iCloud Keychain
     private func discoverSyncedKeys() {
-        let existingIDs = Set(savedKeys.map { $0.id.uuidString })
+        let existingIDs = Set(savedKeys.map(\.id))
         let newKeys = Self.discoverSyncedKeysFromKeychain(existingIDs: existingIDs)
         if !newKeys.isEmpty {
             savedKeys.append(contentsOf: newKeys)
@@ -1996,20 +1996,24 @@ class SSHKeyManager: ObservableObject {
 
     /// Pure Keychain read for synced-key discovery. Safe to invoke from any
     /// thread; caller is responsible for applying results on the main actor.
-    private nonisolated static func discoverSyncedKeysFromKeychain(existingIDs: Set<String>) -> [SSHKey] {
+    private nonisolated static func discoverSyncedKeysFromKeychain(existingIDs: Set<UUID>) -> [SSHKey] {
         let km = KeychainManager.shared
         let discovered = km.discoverAllSSHKeyMetadata()
 
+        // Compare decoded UUIDs: account strings may differ in case from the metadata id.
+        var seenIDs = existingIDs
         var newKeys: [SSHKey] = []
         for (identifier, data, isSynced) in discovered {
-            guard !existingIDs.contains(identifier) else { continue }
+            if let accountID = UUID(uuidString: identifier), seenIDs.contains(accountID) { continue }
             guard isSynced else { continue }
 
             do {
                 let key = try JSONDecoder().decode(SSHKey.self, from: data)
+                guard !seenIDs.contains(key.id) else { continue }
                 guard try km.sshPrivateKeyExists(identifier: identifier, synchronizable: true) else {
                     throw KeychainManager.KeychainError.itemNotFound
                 }
+                seenIDs.insert(key.id)
                 newKeys.append(key)
                 logger.info("Discovered synced key: \(key.name)")
             } catch {
@@ -2029,11 +2033,14 @@ class SSHKeyManager: ObservableObject {
         let km = KeychainManager.shared
         let identifiers = km.listSSHKeyMetadataIdentifiers()
         var keys: [SSHKey] = []
+        var seenIDs = Set<UUID>()
 
         for identifier in identifiers {
             do {
                 let data = try km.loadSSHKeyMetadata(identifier: identifier)
                 let key = try JSONDecoder().decode(SSHKey.self, from: data)
+                // One key can have both a synced and a device-only metadata item.
+                guard seenIDs.insert(key.id).inserted else { continue }
                 keys.append(key)
             } catch {
                 logger.warning("Failed to load key metadata \(identifier): \(error.localizedDescription)")

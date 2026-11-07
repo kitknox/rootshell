@@ -130,8 +130,10 @@ enum BackupImporter {
         if let backupDefaults = backup.defaultKeyIDs, !backupDefaults.isEmpty,
            keyManager.defaultKeyIDs.isEmpty {
             // Build fingerprint → new UUID lookup from current state
+            // Fingerprints can repeat (e.g. a software key kept beside its YubiKey copy).
             let fingerprintToNewID: [String: UUID] = Dictionary(
-                uniqueKeysWithValues: keyManager.savedKeys.map { ($0.fingerprint, $0.id) }
+                keyManager.savedKeys.map { ($0.fingerprint, $0.id) },
+                uniquingKeysWith: { first, _ in first }
             )
 
             // Map old default UUIDs → fingerprints → new UUIDs, preserving order
