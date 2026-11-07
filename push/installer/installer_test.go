@@ -205,6 +205,165 @@ func TestUninstallLeavesSharedGroup(t *testing.T) {
 	}
 }
 
+func untaggedHook() map[string]any {
+	return map[string]any{"type": "command", "command": ClaudeCode.command(), "async": true, "timeout": 10}
+}
+
+func writeDoc(t *testing.T, path string, doc map[string]any) {
+	t.Helper()
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func oursIn(doc map[string]any, ev string) []map[string]any {
+	var ours []map[string]any
+	for _, g := range asList(hooksMap(doc)[ev]) {
+		for _, h := range asList(g.(map[string]any)["hooks"]) {
+			if isOurs(h) {
+				ours = append(ours, h.(map[string]any))
+			}
+		}
+	}
+	return ours
+}
+
+func TestInstallAdoptsUntaggedAndDropsDuplicates(t *testing.T) {
+	path := setupHome(t, ClaudeCode, "")
+	tagged := ourEntry("Stop", ClaudeCode)
+	writeDoc(t, path, map[string]any{"model": "x", "hooks": map[string]any{
+		"Stop": []any{
+			map[string]any{"hooks": []any{map[string]any{"type": "command", "command": "other"}, untaggedHook()}},
+			map[string]any{"hooks": []any{untaggedHook()}},
+			tagged,
+		},
+		"Notification": []any{
+			map[string]any{"hooks": []any{untaggedHook()}},
+			map[string]any{"hooks": []any{untaggedHook()}},
+		},
+		"PreToolUse": []any{map[string]any{"matcher": "AskUserQuestion", "hooks": []any{untaggedHook()}}},
+	}})
+	if st, err := GetStatus(ClaudeCode, false); err != nil || st.Installed || !st.Outdated {
+		t.Fatalf("pre-status: %+v %v", st, err)
+	}
+	if res, err := Install(ClaudeCode, false); err != nil || !res.Changed {
+		t.Fatalf("install: %+v %v", res, err)
+	}
+	doc := parse(t, path)
+	for _, ev := range ClaudeCode.events() {
+		ours := oursIn(doc, ev)
+		if len(ours) != 1 || ours[0][TagKey] != Tag || ours[0]["command"] != ClaudeCode.command() {
+			t.Fatalf("%s: want one tagged hook, got %v", ev, ours)
+		}
+	}
+	stop := asList(hooksMap(doc)["Stop"])
+	if len(stop) != 1 {
+		t.Fatalf("emptied duplicate groups not dropped: %v", stop)
+	}
+	if inner := asList(stop[0].(map[string]any)["hooks"]); len(inner) != 2 || inner[0].(map[string]any)["command"] != "other" {
+		t.Fatalf("shared group damaged: %v", inner)
+	}
+	if doc["model"] != "x" {
+		t.Fatalf("unrelated key changed: %v", doc["model"])
+	}
+	if st, err := GetStatus(ClaudeCode, false); err != nil || !st.Installed {
+		t.Fatalf("status after install: %+v %v", st, err)
+	}
+	if res, err := Install(ClaudeCode, false); err != nil || res.Changed {
+		t.Fatalf("second install: %+v %v", res, err)
+	}
+}
+
+func TestInstallKeepsCopiesUnderDifferentMatchers(t *testing.T) {
+	path := setupHome(t, ClaudeCode, "")
+	audit := map[string]any{"type": "command", "command": ClaudeCode.command() + "; ./audit.sh"}
+	writeDoc(t, path, map[string]any{"hooks": map[string]any{
+		"Notification": []any{
+			map[string]any{"matcher": "permission_prompt", "hooks": []any{untaggedHook()}},
+			map[string]any{"hooks": []any{untaggedHook(), audit}},
+			map[string]any{"matcher": "", "hooks": []any{untaggedHook()}},
+		},
+	}})
+	if res, err := Install(ClaudeCode, false); err != nil || !res.Changed {
+		t.Fatalf("install: %+v %v", res, err)
+	}
+	doc := parse(t, path)
+	groups := asList(hooksMap(doc)["Notification"])
+	if len(groups) != 2 {
+		t.Fatalf("want permission_prompt and catch-all groups, got %v", groups)
+	}
+	if m := groupMatcher(groups[0].(map[string]any)); m != "permission_prompt" {
+		t.Fatalf("restricted group lost: %v", groups)
+	}
+	inner := asList(groups[1].(map[string]any)["hooks"])
+	if len(inner) != 2 || inner[0].(map[string]any)[TagKey] != Tag || !reflect.DeepEqual(inner[1], audit) {
+		t.Fatalf("catch-all group: %v", inner)
+	}
+	if st, err := GetStatus(ClaudeCode, false); err != nil || !st.Installed {
+		t.Fatalf("status after install: %+v %v", st, err)
+	}
+	if res, err := Install(ClaudeCode, false); err != nil || res.Changed {
+		t.Fatalf("second install: %+v %v", res, err)
+	}
+	if res, err := Uninstall(ClaudeCode, false); err != nil || !res.Changed {
+		t.Fatalf("uninstall: %+v %v", res, err)
+	}
+	left := asList(hooksMap(parse(t, path))["Notification"])
+	if len(left) != 1 || !reflect.DeepEqual(asList(left[0].(map[string]any)["hooks"]), []any{audit}) {
+		t.Fatalf("uninstall must keep the user's suffixed command: %v", left)
+	}
+}
+
+func TestUninstallRemovesUntaggedHooks(t *testing.T) {
+	path := setupHome(t, ClaudeCode, "")
+	writeDoc(t, path, map[string]any{"hooks": map[string]any{
+		"Stop": []any{
+			map[string]any{"hooks": []any{untaggedHook(), map[string]any{"type": "command", "command": "other"}}},
+			map[string]any{"hooks": []any{untaggedHook()}},
+		},
+	}})
+	if res, err := Uninstall(ClaudeCode, false); err != nil || !res.Changed {
+		t.Fatalf("uninstall: %+v %v", res, err)
+	}
+	doc := parse(t, path)
+	if ours := oursIn(doc, "Stop"); len(ours) != 0 {
+		t.Fatalf("untagged hooks left: %v", ours)
+	}
+	if stop := asList(hooksMap(doc)["Stop"]); len(stop) != 1 {
+		t.Fatalf("foreign hook lost: %v", stop)
+	}
+	if res, _ := Uninstall(ClaudeCode, false); res.Changed {
+		t.Fatal("second uninstall changed file")
+	}
+}
+
+func TestIsOursMatchesOnlyOurCommand(t *testing.T) {
+	for cmd, want := range map[string]bool{
+		"rootshell-notify hook --agent claude-code":             true,
+		"rootshell-notify  hook   --agent codex":                true,
+		"rootshell-notify hook":                                 true,
+		"rootshell-notify hook --agent claude-code; ./audit.sh": false,
+		"rootshell-notify hook --agent claude-code\n./audit.sh": false,
+		"rootshell-notify hook --agent claude-code && ./a.sh":   false,
+		"rootshell-notify hook --agent pi":                      false,
+		"rootshell-notify hook-other":                           false,
+		"rootshell-notify status":                               false,
+		"echo rootshell-notify hook --agent codex":              false,
+		"/usr/bin/rootshell-notify hook --agent claude-code":    false,
+	} {
+		if got := isOurs(map[string]any{"type": "command", "command": cmd}); got != want {
+			t.Errorf("isOurs(%q) = %v, want %v", cmd, got, want)
+		}
+	}
+}
+
 func TestProjectPath(t *testing.T) {
 	p, _ := Path(Codex, true)
 	if p != filepath.Join(".codex", "hooks.json") {

@@ -528,6 +528,25 @@ func TestStatusIncludesInstalledExtensionAgents(t *testing.T) {
 	}
 }
 
+func TestStatusFromHomeShowsOneScope(t *testing.T) {
+	clearAgentOverrides(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv(config.EnvPath, filepath.Join(home, "config.json"))
+	t.Chdir(home)
+	if _, err := installer.Install(installer.ClaudeCode, false); err != nil {
+		t.Fatal(err)
+	}
+	old := updateBase
+	updateBase = "http://127.0.0.1:0"
+	t.Cleanup(func() { updateBase = old })
+	var out, errb bytes.Buffer
+	run([]string{"status"}, strings.NewReader(""), &out, &errb)
+	if !strings.Contains(out.String(), "Claude Code: user hook installed") || strings.Contains(out.String(), "Claude Code: project hook") {
+		t.Fatalf("status from $HOME: %s", out.String())
+	}
+}
+
 // setupEnv points HOME and the config at temp dirs and stands up a TLS relay.
 func setupEnv(t *testing.T) (home, bundle string) {
 	t.Helper()

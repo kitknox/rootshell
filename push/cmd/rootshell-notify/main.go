@@ -703,6 +703,22 @@ func agentPresent(t installer.Tool, project bool) bool {
 }
 
 // canonicalPath resolves symlinks in the longest existing prefix of path.
+// projectIsUser reports whether the project hook file is the user one, as when run from $HOME.
+func projectIsUser(t installer.Tool) bool {
+	user, err := installer.Path(t, false)
+	if err == nil {
+		user, err = canonicalPath(user)
+	}
+	if err != nil {
+		return false
+	}
+	project, err := installer.Path(t, true)
+	if err == nil {
+		project, err = canonicalPath(project)
+	}
+	return err == nil && project == user
+}
+
 func canonicalPath(path string) (string, error) {
 	path, err := filepath.Abs(path)
 	if err != nil {
@@ -921,6 +937,9 @@ func cmdStatus(stdout, stderr io.Writer) int {
 	code := exitOK
 	for _, t := range installer.Tools {
 		for _, project := range []bool{false, true} {
+			if project && projectIsUser(t) {
+				continue
+			}
 			st, err := installer.GetStatus(t, project)
 			scope := "user"
 			if project {

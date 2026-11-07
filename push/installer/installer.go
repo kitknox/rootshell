@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/kitknox/rootshell/push/config"
 )
@@ -250,9 +251,25 @@ func ourEntry(event string, t Tool) map[string]any {
 	return g
 }
 
+// isOurs also matches the exact commands we install, since tools that rewrite
+// the settings file can drop the tag. Anything appended makes it the user's.
 func isOurs(h any) bool {
 	m, ok := h.(map[string]any)
-	return ok && m[TagKey] == Tag
+	if !ok {
+		return false
+	}
+	if m[TagKey] == Tag {
+		return true
+	}
+	cmd, _ := m["command"].(string)
+	cmd = strings.Join(strings.Fields(cmd), " ")
+	return cmd == Command || cmd == ClaudeCode.command() || cmd == Codex.command()
+}
+
+// groupMatcher keys deduplication: copies under different matchers cover different events.
+func groupMatcher(g map[string]any) string {
+	s, _ := g["matcher"].(string)
+	return s
 }
 
 func groupHasOurs(g any) bool {
@@ -271,7 +288,7 @@ func groupHasOurs(g any) bool {
 
 func hookIsCurrent(h any, t Tool) bool {
 	m, ok := h.(map[string]any)
-	return ok && isOurs(m) && m["type"] == "command" && m["command"] == t.command() && m["async"] == t.hookAsync() && timeoutIsCurrent(m["timeout"], HookTimeout)
+	return ok && m[TagKey] == Tag && m["type"] == "command" && m["command"] == t.command() && m["async"] == t.hookAsync() && timeoutIsCurrent(m["timeout"], HookTimeout)
 }
 
 func timeoutIsCurrent(v any, want int) bool {
@@ -288,37 +305,29 @@ func timeoutIsCurrent(v any, want int) bool {
 	}
 }
 
-func groupHasCurrent(g any, t Tool) bool {
-	m, ok := g.(map[string]any)
-	if !ok {
-		return false
-	}
-	for _, h := range asList(m["hooks"]) {
-		if hookIsCurrent(h, t) {
-			return true
-		}
-	}
-	return false
-}
-
 func hooksMap(doc map[string]any) map[string]any {
 	m, _ := doc["hooks"].(map[string]any)
 	return m
 }
 
+// installed requires every event to have our hook, all current, at most one per matcher.
 func installed(doc map[string]any, t Tool) bool {
 	hooks := hooksMap(doc)
-	if hooks == nil {
-		return false
-	}
 	for _, ev := range t.events() {
-		found := false
+		seen := map[string]bool{}
 		for _, g := range asList(hooks[ev]) {
-			if groupHasCurrent(g, t) {
-				found = true
+			m, _ := g.(map[string]any)
+			for _, h := range asList(m["hooks"]) {
+				if !isOurs(h) {
+					continue
+				}
+				if seen[groupMatcher(m)] || !hookIsCurrent(h, t) {
+					return false
+				}
+				seen[groupMatcher(m)] = true
 			}
 		}
-		if !found {
+		if len(seen) == 0 {
 			return false
 		}
 	}
@@ -348,33 +357,52 @@ func install(doc map[string]any, t Tool) bool {
 	}
 	changed := false
 	for _, ev := range t.events() {
-		groups := asList(hooks[ev])
-		has := false
-		for _, g := range groups {
+		// Refresh the first of our hooks per matcher and drop further copies under it.
+		var kept []any
+		seen := map[string]bool{}
+		evChanged := false
+		for _, g := range asList(hooks[ev]) {
 			m, ok := g.(map[string]any)
-			if !ok {
+			if !ok || !groupHasOurs(m) {
+				kept = append(kept, g)
 				continue
 			}
+			matcher := groupMatcher(m)
+			var inner []any
 			for _, h := range asList(m["hooks"]) {
-				hm, ok := h.(map[string]any)
-				if !ok || !isOurs(hm) {
+				if !isOurs(h) {
+					inner = append(inner, h)
 					continue
 				}
-				has = true
+				if seen[matcher] {
+					evChanged = true
+					continue
+				}
+				seen[matcher] = true
+				hm := h.(map[string]any)
 				if !hookIsCurrent(hm, t) {
 					hm["type"] = "command"
 					hm["command"] = t.command()
 					hm["async"] = t.hookAsync()
 					hm["timeout"] = HookTimeout
-					changed = true
+					hm[TagKey] = Tag
+					evChanged = true
 				}
+				inner = append(inner, hm)
+			}
+			if len(inner) > 0 {
+				m["hooks"] = inner
+				kept = append(kept, m)
 			}
 		}
-		if has {
-			continue
+		if len(seen) == 0 {
+			kept = append(kept, ourEntry(ev, t))
+			evChanged = true
 		}
-		hooks[ev] = append(groups, ourEntry(ev, t))
-		changed = true
+		if evChanged {
+			hooks[ev] = kept
+			changed = true
+		}
 	}
 	if changed {
 		doc["hooks"] = hooks
