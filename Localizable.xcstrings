@@ -52969,7 +52969,7 @@
       }
     },
     "Add" : {
-      "comment" : "Add button",
+      "comment" : "Add button\nExternal SSH agents add discovered agent button\nLocal SSH agent audit action",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -75516,7 +75516,7 @@
       }
     },
     "Always" : {
-      "comment" : "Always On Display duration: never auto-lock\nCert validity: no start bound\nHole-punch mode: always perform\nLocation Diary authorization status\nPrediction mode: always show predictions\nShader animation: always\nTab hover preview activation",
+      "comment" : "Cert validity: no start bound\nHole-punch mode: always perform\nLocation Diary authorization status\nPrediction mode: always show predictions\nShader animation: always\nTab hover preview activation",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -77367,6 +77367,161 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "和號 &"
+          }
+        }
+      }
+    },
+    "An auth key, like a Headscale pre-auth key, signs in a new device without the login page and is deleted once it has. Avoid ephemeral keys: the server removes the device soon after it goes offline." : {
+      "comment" : "Tailscale auth key footer",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يسجّل مفتاح المصادقة، مثل مفتاح المصادقة المسبقة في Headscale، دخول جهاز جديد دون صفحة تسجيل الدخول، ثم يُحذف بعد ذلك. تجنّب المفاتيح المؤقتة: يزيل الخادم الجهاز بعد وقت قصير من انقطاع اتصاله."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una clau d'autenticació, com ara una clau de preautenticació de Headscale, inicia la sessió d'un dispositiu nou sense la pàgina d'inici de sessió i s'elimina un cop fet. Eviteu les claus efímeres: el servidor elimina el dispositiu poc després que es desconnecti."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ověřovací klíč, například předautorizační klíč Headscale, přihlásí nové zařízení bez přihlašovací stránky a poté se smaže. Nepoužívejte dočasné klíče: server zařízení odebere krátce poté, co přejde do režimu offline."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En godkendelsesnøgle, f.eks. en Headscale-pre-auth-nøgle, logger en ny enhed ind uden loginsiden og slettes, når det er sket. Undgå midlertidige nøgler: Serveren fjerner enheden kort efter, at den går offline."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein Auth-Schlüssel, etwa ein Headscale-Pre-Auth-Schlüssel, meldet ein neues Gerät ohne Anmeldeseite an und wird danach gelöscht. Vermeiden Sie temporäre Schlüssel: Der Server entfernt das Gerät bald, nachdem es offline gegangen ist."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una clave de autenticación, como una clave de preautenticación de Headscale, inicia sesión con un dispositivo nuevo sin la página de inicio de sesión y después se elimina. Evita las claves efímeras: el servidor elimina el dispositivo poco después de que se desconecte."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todennusavain, kuten Headscalen esitodennusavain, kirjaa uuden laitteen sisään ilman kirjautumissivua ja poistetaan sen jälkeen. Vältä väliaikaisia avaimia: palvelin poistaa laitteen pian sen jälkeen, kun se on mennyt offline-tilaan."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une clé d’authentification, comme une clé de pré-authentification Headscale, identifie un nouvel appareil sans passer par la page de connexion, puis elle est supprimée. Évitez les clés éphémères : le serveur retire l’appareil peu après sa mise hors ligne."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "מפתח אימות, כמו מפתח אימות מוקדם של Headscale, מחבר מכשיר חדש בלי דף ההתחברות ונמחק לאחר מכן. הימנע ממפתחות זמניים: השרת מסיר את המכשיר זמן קצר לאחר שהוא מתנתק."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A hitelesítési kulcs, például egy Headscale előhitelesítési kulcs, a bejelentkezési oldal nélkül jelentkeztet be egy új eszközt, majd törlődik. Kerülje az ideiglenes kulcsokat: a szerver nem sokkal azután eltávolítja az eszközt, hogy az offline állapotba kerül."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una chiave di autenticazione, come una chiave di pre-autenticazione di Headscale, fa accedere un nuovo dispositivo senza la pagina di accesso e poi viene eliminata. Evita le chiavi effimere: il server rimuove il dispositivo poco dopo che va offline."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "認証キー（Headscaleの事前認証キーなど）を使うと、ログインページを使わずに新しいデバイスをサインインでき、サインイン後にキーは削除されます。一時キーは使わないでください。デバイスがオフラインになると、サーバーがまもなくそのデバイスを削除します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인증 키(예: Headscale 사전 인증 키)를 사용하면 로그인 페이지 없이 새 기기로 로그인하며, 로그인 후 키는 삭제됩니다. 임시 키는 피하세요. 기기가 오프라인이 되면 서버가 곧 기기를 제거합니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En autentiseringsnøkkel, for eksempel en Headscale-forhåndsautentiseringsnøkkel, logger inn en ny enhet uten påloggingssiden og slettes etterpå. Unngå midlertidige nøkler: Serveren fjerner enheten kort tid etter at den er frakoblet."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Een authenticatiesleutel, zoals een pre-auth-sleutel van Headscale, meldt een nieuw apparaat aan zonder de inlogpagina en wordt daarna verwijderd. Vermijd tijdelijke sleutels: de server verwijdert het apparaat kort nadat het offline gaat."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klucz uwierzytelniający, na przykład klucz pre-auth Headscale, loguje nowe urządzenie bez strony logowania, a potem zostaje usunięty. Unikaj kluczy tymczasowych: serwer usuwa urządzenie wkrótce po przejściu w tryb offline."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uma chave de autenticação, como uma chave de pré-autenticação do Headscale, inicia sessão em um novo dispositivo sem a página de login e é apagada depois disso. Evite chaves temporárias: o servidor remove o dispositivo pouco depois que ele fica offline."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uma chave de autenticação, como uma chave de pré-autenticação do Headscale, inicia sessão num novo dispositivo sem a página de início de sessão e é eliminada depois disso. Evite chaves efémeras: o servidor remove o dispositivo pouco depois de este ficar offline."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O cheie de autentificare, cum ar fi o cheie de preautentificare Headscale, autentifică un dispozitiv nou fără pagina de conectare și este ștearsă după aceea. Evită cheile efemere: serverul elimină dispozitivul la scurt timp după ce acesta devine offline."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ključ za preverjanje pristnosti, na primer ključ za predhodno preverjanje pristnosti Headscale, prijavi novo napravo brez strani za prijavo in se nato izbriše. Izogibajte se začasnim ključem: strežnik napravo odstrani kmalu po tem, ko preide v način brez povezave."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En autentiseringsnyckel, till exempel en förautentiseringsnyckel från Headscale, loggar in en ny enhet utan inloggningssidan och raderas sedan. Undvik tillfälliga nycklar: servern tar bort enheten strax efter att den går offline."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ключ автентифікації, як-от ключ попередньої автентифікації Headscale, виконує вхід нового пристрою без сторінки входу й після цього видаляється. Уникайте тимчасових ключів: сервер вилучає пристрій невдовзі після того, як він переходить у режим офлайн."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khóa xác thực, chẳng hạn khóa xác thực trước của Headscale, đăng nhập thiết bị mới mà không cần trang đăng nhập và sẽ bị xóa sau khi dùng. Tránh dùng khóa tạm thời: máy chủ sẽ xóa thiết bị ngay sau khi thiết bị ngoại tuyến."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "认证密钥（如 Headscale 预认证密钥）可在不经过登录页面的情况下登录新设备，登录后即被删除。请避免使用临时密钥：设备离线后不久，服务器就会将其移除。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "驗證金鑰（如 Headscale 預先驗證金鑰）可在不經過登入頁面的情況下登入新裝置，登入後即被刪除。請避免使用臨時金鑰：裝置離線後不久，伺服器就會將其移除。"
           }
         }
       }
@@ -97742,6 +97897,161 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "極光"
+          }
+        }
+      }
+    },
+    "Auth Key" : {
+      "comment" : "Tailscale auth key row (signs in without the login page)",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "مفتاح المصادقة"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clau d'autenticació"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ověřovací klíč"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Godkendelsesnøgle"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auth-Schlüssel"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clave de autenticación"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todennusavain"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clé d’authentification"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "מפתח אימות"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hitelesítési kulcs"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chiave di autenticazione"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "認証キー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인증 키"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autentiseringsnøkkel"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authenticatiesleutel"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klucz uwierzytelniający"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chave de Autenticação"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chave de Autenticação"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cheie de autentificare"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ključ za preverjanje pristnosti"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autentiseringsnyckel"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ключ автентифікації"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khóa xác thực"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "认证密钥"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "驗證金鑰"
           }
         }
       }
@@ -154921,7 +155231,7 @@
       }
     },
     "Client" : {
-      "comment" : "HTTP capture field",
+      "comment" : "HTTP capture field\nLocal SSH agent client rule identity section",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -190608,8 +190918,162 @@
         }
       }
     },
+    "Coordination Server" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "خادم التنسيق"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Servidor de coordinació"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koordinační server"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koordinationsserver"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koordinationsserver"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Servidor de coordinación"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koordinointipalvelin"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Serveur de coordination"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "שרת תיאום"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koordinációs szerver"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server di coordinamento"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コーディネーションサーバー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "조정 서버"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koordineringsserver"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coördinatieserver"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Serwer koordynacyjny"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Servidor de Coordenação"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Servidor de Coordenação"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server de coordonare"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koordinacijski strežnik"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koordineringsserver"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сервер координації"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Máy chủ điều phối"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "协调服务器"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "協調伺服器"
+          }
+        }
+      }
+    },
     "Copied" : {
-      "comment" : "Clipboard entry source: explicit copy\nCopy button state: copied\nShare link: copied to clipboard",
+      "comment" : "Clipboard entry source: explicit copy\nCopy button state: copied\nLocal SSH agent export copied button\nShare link: copied to clipboard",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -236057,7 +236521,7 @@
       }
     },
     "Denied" : {
-      "comment" : "Location Diary authorization status",
+      "comment" : "Local SSH agent audit outcome\nLocation Diary authorization status",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -247846,6 +248310,161 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "閒置主機中斷連線時間（分鐘）"
+          }
+        }
+      }
+    },
+    "Disconnect to change these." : {
+      "comment" : "Tailscale coordination server footer while connected",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "افصل الاتصال لتغيير هذه الإعدادات."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desconnecteu per canviar aquests valors."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pro jejich změnu se odpojte."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afbryd forbindelsen for at ændre disse."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trennen Sie die Verbindung, um diese Einstellungen zu ändern."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desconecta para cambiar estos ajustes."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Katkaise yhteys muuttaaksesi näitä."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déconnectez-vous pour les modifier."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "התנתק כדי לשנות הגדרות אלה."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A módosításukhoz bontsa a kapcsolatot."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disconnettiti per modificarli."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "変更するには切断してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "변경하려면 연결을 해제하세요."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koble fra for å endre disse."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbreek de verbinding om deze te wijzigen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rozłącz się, aby je zmienić."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desconecte para alterá-los."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desligue para os alterar."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deconectează-te pentru a le modifica."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Za spremembo prekinite povezavo."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koppla från för att ändra dessa."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Від'єднайтеся, щоб змінити їх."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ngắt kết nối để thay đổi các mục này."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "断开连接后才能更改这些设置。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中斷連線後才能變更這些設定。"
           }
         }
       }
@@ -289066,6 +289685,161 @@
         }
       }
     },
+    "Enter the server's URL, like https://headscale.example.com." : {
+      "comment" : "Tailscale coordination server footer: invalid URL",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "أدخل عنوان URL للخادم، مثل https://headscale.example.com."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Introduïu l'URL del servidor, com ara https://headscale.example.com."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zadejte URL serveru, například https://headscale.example.com."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Angiv serverens URL, f.eks. https://headscale.example.com."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geben Sie die URL des Servers ein, etwa https://headscale.example.com."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Introduce la URL del servidor, como https://headscale.example.com."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anna palvelimen URL, esimerkiksi https://headscale.example.com."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saisissez l’URL du serveur, par exemple https://headscale.example.com."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הזן את כתובת ה-URL של השרת, למשל https://headscale.example.com."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adja meg a szerver URL-jét, például: https://headscale.example.com."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inserisci l'URL del server, ad esempio https://headscale.example.com."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サーバーのURLを入力してください（例: https://headscale.example.com）。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서버 URL을 입력하세요(예: https://headscale.example.com)."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skriv inn serverens URL, for eksempel https://headscale.example.com."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voer de URL van de server in, bijvoorbeeld https://headscale.example.com."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wprowadź adres URL serwera, na przykład https://headscale.example.com."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Digite a URL do servidor, como https://headscale.example.com."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Introduza o URL do servidor, por exemplo https://headscale.example.com."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Introdu URL-ul serverului, de exemplu https://headscale.example.com."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vnesite URL strežnika, na primer https://headscale.example.com."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ange serverns URL, till exempel https://headscale.example.com."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Введіть URL-адресу сервера, наприклад https://headscale.example.com."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nhập URL của máy chủ, ví dụ https://headscale.example.com."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入服务器的 URL，例如 https://headscale.example.com。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請輸入伺服器的 URL，例如 https://headscale.example.com。"
+          }
+        }
+      }
+    },
     "Enter the text to find." : {
       "comment" : "HTTP capture rewrite rule validation",
       "localizations" : {
@@ -301900,7 +302674,7 @@
       }
     },
     "Failed" : {
-      "comment" : "Tailscale SSH egress state",
+      "comment" : "Local SSH agent audit outcome\nTailscale SSH egress state",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -369261,7 +370035,7 @@
       }
     },
     "Identity" : {
-      "comment" : "OpenPubkey field: signed-in account",
+      "comment" : "Local SSH agent client rule identity key label\nOpenPubkey field: signed-in account",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -371427,7 +372201,7 @@
       }
     },
     "Import" : {
-      "comment" : "Import button",
+      "comment" : "External agent identity import button\nImport button",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -421330,7 +422104,7 @@
       }
     },
     "Last Used" : {
-      "comment" : "VPN quick connect: caption above the last VPN's name",
+      "comment" : "Local SSH agent client rule last used label\nVPN quick connect: caption above the last VPN's name",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -425183,6 +425957,161 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "大多數帳號的租用戶 ID 留空即可。僅在需要指定特定 Azure AD 租用戶時填寫。"
+          }
+        }
+      }
+    },
+    "Leave the server empty to use Tailscale. For Headscale or another self-hosted server, enter its URL. Switching servers signs in again as a new device." : {
+      "comment" : "Tailscale coordination server footer",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "اترك الخادم فارغًا لاستخدام Tailscale. لاستخدام Headscale أو خادم آخر مستضاف ذاتيًا، أدخل عنوان URL الخاص به. يؤدي تبديل الخادم إلى تسجيل الدخول مرة أخرى كجهاز جديد."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deixeu el servidor buit per utilitzar Tailscale. Per a Headscale o un altre servidor autoallotjat, introduïu-ne l'URL. En canviar de servidor, es torna a iniciar la sessió com a dispositiu nou."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pokud chcete používat Tailscale, nechte server prázdný. Pro Headscale nebo jiný server na vlastním hostingu zadejte jeho URL. Po změně serveru se zařízení znovu přihlásí jako nové."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lad serveren være tom for at bruge Tailscale. Til Headscale eller en anden selvhostet server skal du angive dens URL. Når du skifter server, logges der ind igen som en ny enhed."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lassen Sie den Server leer, um Tailscale zu verwenden. Geben Sie für Headscale oder einen anderen selbst gehosteten Server dessen URL ein. Bei einem Serverwechsel erfolgt eine erneute Anmeldung als neues Gerät."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deja el servidor vacío para usar Tailscale. Para Headscale u otro servidor autoalojado, introduce su URL. Al cambiar de servidor, se vuelve a iniciar sesión como un dispositivo nuevo."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jätä palvelin tyhjäksi, niin käytössä on Tailscale. Anna Headscalen tai muun itse isännöidyn palvelimen URL. Palvelimen vaihtaminen kirjautuu sisään uudelleen uutena laitteena."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laissez le serveur vide pour utiliser Tailscale. Pour Headscale ou un autre serveur auto-hébergé, saisissez son URL. Changer de serveur vous identifie à nouveau comme un nouvel appareil."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "השאר את השרת ריק כדי להשתמש ב-Tailscale. עבור Headscale או שרת אחר באירוח עצמי, הזן את כתובת ה-URL שלו. החלפת שרת מתחברת מחדש כמכשיר חדש."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Tailscale használatához hagyja üresen a szervert. Headscale vagy más saját üzemeltetésű szerver esetén adja meg annak URL-jét. Szerverváltáskor az eszköz új eszközként jelentkezik be újra."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lascia vuoto il server per usare Tailscale. Per Headscale o un altro server self-hosted, inseriscine l'URL. Cambiando server si accede di nuovo come nuovo dispositivo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tailscaleを使う場合は、サーバーを空欄のままにします。Headscaleなどのセルフホストサーバーを使う場合は、そのURLを入力してください。サーバーを切り替えると、新しいデバイスとして再度サインインします。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tailscale을 사용하려면 서버를 비워 두세요. Headscale 또는 다른 자체 호스팅 서버를 사용하려면 해당 URL을 입력하세요. 서버를 바꾸면 새 기기로 다시 로그인합니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La serveren stå tom for å bruke Tailscale. For Headscale eller en annen selvhostet server skriver du inn URL-en. Når du bytter server, logges det inn på nytt som en ny enhet."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laat de server leeg om Tailscale te gebruiken. Voer voor Headscale of een andere zelf gehoste server de URL ervan in. Na het wisselen van server meld je je opnieuw aan als nieuw apparaat."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pozostaw pole serwera puste, aby używać Tailscale. W przypadku Headscale lub innego serwera z własnym hostingiem wprowadź jego adres URL. Zmiana serwera powoduje ponowne zalogowanie jako nowe urządzenie."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deixe o servidor vazio para usar o Tailscale. Para o Headscale ou outro servidor auto-hospedado, digite a URL dele. Trocar de servidor inicia sessão novamente como um novo dispositivo."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deixe o servidor vazio para usar o Tailscale. Para o Headscale ou outro servidor auto-alojado, introduza o respetivo URL. Mudar de servidor inicia sessão novamente como um novo dispositivo."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lasă serverul gol pentru a folosi Tailscale. Pentru Headscale sau alt server autogăzduit, introdu URL-ul acestuia. Schimbarea serverului te autentifică din nou ca dispozitiv nou."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Strežnik pustite prazen, če želite uporabljati Tailscale. Za Headscale ali drug strežnik z lastnim gostovanjem vnesite njegov URL. Ob zamenjavi strežnika se znova prijavite kot nova naprava."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lämna servern tom för att använda Tailscale. För Headscale eller en annan server med egen värd anger du dess URL. När du byter server loggas du in igen som en ny enhet."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Залиште сервер порожнім, щоб використовувати Tailscale. Для Headscale або іншого сервера на власному хостингу введіть його URL-адресу. Після зміни сервера пристрій знову ввійде як новий."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Để trống máy chủ để dùng Tailscale. Với Headscale hoặc máy chủ tự lưu trữ khác, hãy nhập URL của máy chủ đó. Khi đổi máy chủ, ứng dụng sẽ đăng nhập lại như một thiết bị mới."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务器留空即使用 Tailscale。如需使用 Headscale 或其他自托管服务器，请输入其 URL。切换服务器后将作为新设备重新登录。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "伺服器留空即使用 Tailscale。若要使用 Headscale 或其他自行託管的伺服器，請輸入其 URL。切換伺服器後將以新裝置身分重新登入。"
           }
         }
       }
@@ -439090,7 +440019,7 @@
       }
     },
     "Local SSH Agent" : {
-      "comment" : "Setting title",
+      "comment" : "Local SSH agent settings title\nSetting title\nSettings row: local SSH agent",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -473071,7 +474000,7 @@
       }
     },
     "Name" : {
-      "comment" : "File manager column\nFile manager name placeholder\nHTTP capture CA field\nHTTP capture session name field\nStorage metadata field name placeholder\nStorage provider field",
+      "comment" : "File manager column\nFile manager name placeholder\nHTTP capture CA field\nHTTP capture session name field\nLocal SSH agent client rule identity name label\nStorage metadata field name placeholder\nStorage provider field",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -505186,7 +506115,7 @@
       }
     },
     "None" : {
-      "comment" : "Auth method: no authentication\nBackground effect: no effect active\nBell sound: completely silent\nBookmarked locations: none saved\nCursor effect: no effect\nHTTP capture: no host decrypted\nKey auth requirement: none\nKubernetes auth method: no authentication\nNotification sound: silent\nProfile folder: no folder selected\nQuick setup pair: disable both swipes\nSettings status: none configured\nSplit border style: no border\nTailscale SSH egress: none\nTailscale exit node: none\nVNC jump selection\nVNC security preference\nVPN excluded routes: none configured",
+      "comment" : "Auth method: no authentication\nBackground effect: no effect active\nBell sound: completely silent\nCursor effect: no effect\nHTTP capture: no host decrypted\nKey auth requirement: none\nKubernetes auth method: no authentication\nNotification sound: silent\nProfile folder: no folder selected\nQuick setup pair: disable both swipes\nSettings status: none configured\nSplit border style: no border\nTailscale SSH egress: none\nTailscale exit node: none\nVNC jump selection\nVNC security preference\nVPN excluded routes: none configured",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -515702,7 +516631,7 @@
       }
     },
     "Off" : {
-      "comment" : "Agent notification policy: never notify\nAlways On Display duration: disabled\nLive Activity agent messages option\nMod-tap: no active rules\nSSHFP host key verification mode\nScreen Sharing clipboard sync default\nSetting value display\nSettings VPN row: nothing running\nTailscale SSH egress state\nTailscale state\nTask notification policy: never notify\nToggle state: disabled\nTwo-finger long press: gesture disabled\nVNC keyboard toolbar preference",
+      "comment" : "Agent notification policy: never notify\nMod-tap: no active rules\nSSHFP host key verification mode\nScreen Sharing clipboard sync default\nSetting value display\nSettings VPN row: nothing running\nSettings status: disabled\nTailscale SSH egress state\nTailscale state\nTask notification policy: never notify\nToggle state: disabled\nTwo-finger long press: gesture disabled\nVNC keyboard toolbar preference",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -516321,7 +517250,7 @@
       }
     },
     "On" : {
-      "comment" : "Setting value display\nSettings VPN row: in-app Tailscale waits to start\nTailscale VPN is active\nToggle state: enabled\nVNC keyboard toolbar preference",
+      "comment" : "Setting value display\nSettings VPN row: in-app Tailscale waits to start\nSettings status: enabled\nTailscale VPN is active\nToggle state: enabled\nVNC keyboard toolbar preference",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -531311,7 +532240,7 @@
       }
     },
     "Optional" : {
-      "comment" : "Storage provider: placeholder for an optional field",
+      "comment" : "Storage provider: placeholder for an optional field\nTailscale auth key placeholder",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -544906,7 +545835,7 @@
       }
     },
     "Path" : {
-      "comment" : "Storage addressing style: bucket in the URL path",
+      "comment" : "Local SSH agent client rule identity path label\nStorage addressing style: bucket in the URL path",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -601435,7 +602364,7 @@
       }
     },
     "Remove" : {
-      "comment" : "Storage metadata: remove field",
+      "comment" : "Local SSH agent audit action\nStorage metadata: remove field",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -665069,7 +665998,7 @@
       }
     },
     "Server" : {
-      "comment" : "HTTP capture field",
+      "comment" : "HTTP capture field\nTailscale coordination server row",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -713482,7 +714411,7 @@
       }
     },
     "SSH Agent" : {
-      "comment" : "Setting group title",
+      "comment" : "Agent key section header\nSetting group title",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -754262,7 +755191,7 @@
       }
     },
     "Tailscale" : {
-      "comment" : "Name of the Tailscale VPN\nName of the Tailscale VPN profile\nTailscale VPN settings title\nTailscale error alert title\nVPN settings row",
+      "comment" : "Coordination server placeholder: Tailscale's own server\nName of the Tailscale VPN\nName of the Tailscale VPN profile\nTailscale VPN settings title\nTailscale error alert title\nVPN settings row",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -782521,6 +783450,161 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "分頁列的 + 一律開啟「連線」。tmux -CC 和 herdr 控制模式分頁會依照「終端多工器關閉分頁動作」，而非分頁確認；選擇「每次詢問」即可確認這些分頁的關閉。"
+          }
+        }
+      }
+    },
+    "The Tailscale coordination server isn't a valid URL." : {
+      "comment" : "Tailscale error: the custom coordination server setting can't be parsed",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "خادم تنسيق Tailscale ليس عنوان URL صالحًا."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El servidor de coordinació de Tailscale no és un URL vàlid."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koordinační server Tailscale není platná URL."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tailscale-koordinationsserveren er ikke en gyldig URL."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Tailscale-Koordinationsserver ist keine gültige URL."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El servidor de coordinación de Tailscale no es una URL válida."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tailscalen koordinointipalvelin ei ole kelvollinen URL."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur de coordination Tailscale n’est pas une URL valide."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "שרת התיאום של Tailscale אינו כתובת URL חוקית."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Tailscale koordinációs szerver nem érvényes URL."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il server di coordinamento di Tailscale non è un URL valido."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tailscaleのコーディネーションサーバーが有効なURLではありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tailscale 조정 서버가 유효한 URL이 아닙니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tailscale-koordineringsserveren er ikke en gyldig URL."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De Tailscale-coördinatieserver is geen geldige URL."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Serwer koordynacyjny Tailscale nie jest prawidłowym adresem URL."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O servidor de coordenação do Tailscale não é uma URL válida."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O servidor de coordenação do Tailscale não é um URL válido."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Serverul de coordonare Tailscale nu este un URL valid."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koordinacijski strežnik Tailscale ni veljaven URL."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tailscales koordineringsserver är inte en giltig URL."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сервер координації Tailscale не є дійсною URL-адресою."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Máy chủ điều phối Tailscale không phải là URL hợp lệ."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tailscale 协调服务器不是有效的 URL。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tailscale 協調伺服器不是有效的 URL。"
           }
         }
       }
@@ -882187,7 +883271,7 @@
       }
     },
     "Weekly" : {
-      "comment" : "Agent usage window title: weekly quota",
+      "comment" : "Agent usage window title: weekly quota\nUpdate interval: weekly",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
