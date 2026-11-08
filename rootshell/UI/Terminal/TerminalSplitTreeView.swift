@@ -33,6 +33,8 @@ struct TerminalSplitTreeView: UIViewRepresentable {
     /// True when the visible focused terminal presents OSC 9;4 progress on the
     /// integrated tab edge instead of as a duplicate straight pane-local bar.
     var routesFocusedProgressToIntegratedEdge: Bool = false
+    /// Pane-local progress bars hug the edge facing the visible tab strip.
+    var progressBarPosition: TabBarPosition = .top
     /// Set while Integrated tabs join the cards; the top rim opens under the tab.
     var integratedTabJoin: IntegratedTabJoin?
     /// An app-tab swipe is sliding this tab.
@@ -69,6 +71,7 @@ struct TerminalSplitTreeView: UIViewRepresentable {
         uiView.reservesTerminalBottomSafeArea = !duoLayout.extendsTerminalToVerticalEdges
         uiView.terminalTopSafeEdge = terminalTopSafeEdge
         uiView.routesFocusedProgressToIntegratedEdge = routesFocusedProgressToIntegratedEdge
+        uiView.progressBarPosition = progressBarPosition
         uiView.paneUnderlay = paneUnderlay
         uiView.update(tree: tree, focusedPane: focusedPane)
     }
@@ -464,6 +467,12 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
     var routesFocusedProgressToIntegratedEdge: Bool = false {
         didSet {
             guard routesFocusedProgressToIntegratedEdge != oldValue else { return }
+            refreshProgressBarRouting()
+        }
+    }
+    var progressBarPosition: TabBarPosition = .top {
+        didSet {
+            guard progressBarPosition != oldValue else { return }
             refreshProgressBarRouting()
         }
     }
@@ -1500,6 +1509,7 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
         let suppressesLocalBar = routesFocusedProgressToIntegratedEdge
             && isActiveTab
             && focusedID == identifier
+        scrollView.progressBarPosition = progressBarPosition
         scrollView.setProgressBarPresentationSuppressed(suppressesLocalBar)
     }
 

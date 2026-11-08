@@ -183,6 +183,15 @@ extension Ghostty {
     /// Progress bar view (for OSC 9;4 progress indicators)
     private var progressBarView: ProgressBarView?
 
+    /// The pane edge the progress bar hugs: the side the tab strip is on.
+    var progressBarPosition: TabBarPosition = .top {
+        didSet {
+            guard progressBarPosition != oldValue, progressBarView != nil else { return }
+            removeProgressBarView()
+            updateProgressBar(report: terminalView.progressReport)
+        }
+    }
+
     /// The active focused pane routes its OSC progress into the integrated tab
     /// edge. Observation stays alive while presentation is suppressed so the
     /// current report can be restored immediately when routing ends.
@@ -1386,7 +1395,9 @@ extension Ghostty {
             addSubview(barView)
 
             NSLayoutConstraint.activate([
-                barView.topAnchor.constraint(equalTo: topAnchor),
+                progressBarPosition == .bottom
+                    ? barView.bottomAnchor.constraint(equalTo: bottomAnchor)
+                    : barView.topAnchor.constraint(equalTo: topAnchor),
                 barView.leadingAnchor.constraint(equalTo: leadingAnchor),
                 barView.trailingAnchor.constraint(equalTo: trailingAnchor),
                 barView.heightAnchor.constraint(equalToConstant: 2)

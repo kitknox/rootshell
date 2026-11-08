@@ -1248,6 +1248,7 @@ extension MainView {
                                 terminalEffectsEnabled: terminalEffectsEnabled,
                                 routesFocusedProgressToIntegratedEdge: topTabStyle == .integrated
                                     && showsHorizontalTabs,
+                                progressBarPosition: horizontalTabPosition,
                                 integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs ? integratedTabJoin : nil,
                                 tracksSwipe: appTabSwipeState.map { $0.sourceTabID == tab.id || $0.targetTabID == tab.id } ?? false,
                                 paneUnderlay: tab.paneUnderlay,
