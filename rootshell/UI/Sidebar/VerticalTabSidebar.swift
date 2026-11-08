@@ -282,6 +282,14 @@ struct VerticalTabSidebar: View {
     @State private var dragStateExpirationTask: Task<Void, Never>?
     @State private var dragPreviewWidth = TabSidebarLayout.defaultWidth - 24
 
+    /// A newer selection cancels the pending reveal, so only the latest scrolls.
+    @State private var selectionRevealTask: Task<Void, Never>?
+    /// Consumed by the next selection change; a pane card's tab row can sit in
+    /// another section, so revealing it would scroll the tapped card away.
+    @State private var selectionRevealSkipID: UUID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Setting(Settings.Tabs.barAnimationsDisabled) private var tabAnimationsDisabled
+
     @Setting(Settings.Sidebar.largeControls) private var largeControls
 
     @Setting(Settings.Sidebar.rowLines) private var titleLines
@@ -492,6 +500,9 @@ struct VerticalTabSidebar: View {
             .onChange(of: projectGroupingActive, initial: true) { _, active in
                 tabsModel.projectScopedInboxEnabled = active
             }
+            .onChange(of: tabsModel.selectedTabID) { _, id in
+                revealSelection(id, proxy: proxy)
+            }
             .onAppear {
                 loadGroupOrder()
                 // @State survives presentations; onAppear fires on each open.
@@ -511,6 +522,8 @@ struct VerticalTabSidebar: View {
             .onDisappear {
                 arrowKeyRepeatManager.stop()
                 clearLocalDragState()
+                selectionRevealTask?.cancel()
+                selectionRevealTask = nil
             }
             // Docked: tapping empty space focuses search for arrow-key navigation.
             .contentShape(Rectangle())
@@ -926,6 +939,31 @@ struct VerticalTabSidebar: View {
         proxy.scrollTo(rows[next].id, anchor: nil)
     }
 
+    /// Scrolls just far enough to show a selection made elsewhere (keyboard,
+    /// top bar, new tab); an already visible row stays put.
+    private func revealSelection(_ id: UUID?, proxy: ScrollViewProxy) {
+        let skipID = selectionRevealSkipID
+        if skipID != nil { selectionRevealSkipID = nil }
+        selectionRevealTask?.cancel()
+        selectionRevealTask = nil
+        // Docked skips isPanelVisible: any window's floating toggle posts it.
+        guard let id, id != skipID,
+              isDocked || isPanelVisible,
+              searchText.isEmpty,
+              draggingRowID == nil, draggingSectionID == nil else { return }
+        let animation: Animation? = tabAnimationsDisabled || reduceMotion
+            ? nil
+            : .spring(response: 0.3, dampingFraction: 0.85)
+        // Next main-actor turn, after a just-inserted row has been laid out.
+        // Unknown ids (collapsed sections) are a no-op.
+        selectionRevealTask = Task { @MainActor in
+            guard !Task.isCancelled, tabsModel.selectedTabID == id else { return }
+            withAnimation(animation) {
+                proxy.scrollTo(id.uuidString, anchor: nil)
+            }
+        }
+    }
+
     /// Falls back to the first row, e.g. the top filter match.
     @discardableResult
     private func selectHighlighted(rows: [SidebarRow]) -> Bool {
@@ -992,6 +1030,7 @@ struct VerticalTabSidebar: View {
                 }
             }
         case .agentPane(let paneID):
+            selectionRevealSkipID = row.tab.id
             onSelectPane(row.tab.id, paneID)
         case .flat, .windowRow:
             onSelectTab(row.tab.id)
