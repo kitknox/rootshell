@@ -1728,8 +1728,7 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
     }
 
     private func applyCardShape(to container: UIView, rounded: Bool) {
-        container.layer.cornerRadius = rounded ? PaneCardStyle.cornerRadius : 0
-        container.layer.cornerCurve = .continuous
+        container.applyPaneCorners(rounded: rounded)
         #if targetEnvironment(macCatalyst)
         // TerminalScrollView always clips on Catalyst.
         container.clipsToBounds = rounded || container is Ghostty.TerminalScrollView
@@ -1817,7 +1816,8 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
             guard let container = attachedContainers[ObjectIdentifier(pane)] as? Ghostty.TerminalScrollView,
                   container.superview === self, !container.isHidden else { continue }
             panes.append(.init(
-                frame: container.frame, cornerRadius: container.layer.cornerRadius,
+                // Not the layer's radius, which doesn't report a corner configuration.
+                frame: container.frame, cornerRadius: roundsPanes ? PaneCardStyle.cornerRadius : 0,
                 color: cardSurfaceColor(for: container.terminalView).withAlphaComponent(opacity)))
         }
         let gaps = roundsPanes ? cardBackdropColor.map { PaneUnderlayModel.Gaps(path: cardGapPath(), color: $0) } : nil
