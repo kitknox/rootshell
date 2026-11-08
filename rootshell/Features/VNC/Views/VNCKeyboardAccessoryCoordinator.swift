@@ -2,8 +2,8 @@
 //  VNCKeyboardAccessoryCoordinator.swift
 //  rootshell
 //
-//  Hosts the terminal keyboard toolbar for a VNC pane and translates
-//  toolbar key strings into X11 keysym events on the pane's VNCSession.
+//  Hosts the terminal keyboard toolbar for a remote-screen pane and
+//  translates toolbar key strings into X11 keysym events for its session.
 //
 
 import UIKit
@@ -11,7 +11,7 @@ import Observation
 import os
 import rootshellVNC
 
-/// Keyboard-toolbar host for a `VNCPaneView`. Owns a
+/// Keyboard-toolbar host for a `RemoteScreenPane` (Screen Sharing or KVM). Owns a
 /// `TerminalKeyboardAccessoryController` (full toolbar UI, hardware-keyboard
 /// rules, bottom reservation) and delivers one atomic input-view snapshot to
 /// `VNCKeyboardCapture` so the package responder reloads its primary and
@@ -26,8 +26,7 @@ final class VNCKeyboardAccessoryCoordinator {
 
     private nonisolated static let logger = Logger(subsystem: "com.rootshell", category: "VNCKeyboardToolbar")
 
-    private weak var pane: VNCPaneView?
-    private let session: VNCSession
+    private weak var pane: (any RemoteScreenPane)?
     private let keyboardCapture: VNCKeyboardCapture
     private(set) var controller: TerminalKeyboardAccessoryController!
 
@@ -46,9 +45,8 @@ final class VNCKeyboardAccessoryCoordinator {
     /// keyboard is summoned again.
     private var manuallyDismissed = false
 
-    init(pane: VNCPaneView) {
+    init(pane: any RemoteScreenPane) {
         self.pane = pane
-        self.session = pane.session
         self.keyboardCapture = pane.keyboardCapture
         self.controller = TerminalKeyboardAccessoryController(host: self)
         controller.setupKeyboard(delegate: self)
@@ -66,9 +64,9 @@ final class VNCKeyboardAccessoryCoordinator {
         // The controller's own trait registration only reaches hosts that are
         // the host view themselves; re-register on the pane for this
         // coordinator-hosted setup.
-        pane.registerForTraitChanges([UITraitVerticalSizeClass.self, UITraitHorizontalSizeClass.self]) { (view: VNCPaneView, _: UITraitCollection) in
+        pane.registerForTraitChanges([UITraitVerticalSizeClass.self, UITraitHorizontalSizeClass.self]) { [weak self] (_: UIView, _: UITraitCollection) in
             Task { @MainActor in
-                view.keyboardCoordinator?.keyboardUpdateAccessoryForTraitCollection()
+                self?.keyboardUpdateAccessoryForTraitCollection()
             }
         }
     }
@@ -221,7 +219,7 @@ final class VNCKeyboardAccessoryCoordinator {
 // MARK: - TerminalKeyboardAccessoryHost
 
 extension VNCKeyboardAccessoryCoordinator: TerminalKeyboardAccessoryHost {
-    var keyboardHostView: UIView { pane ?? UIView() }
+    var keyboardHostView: UIView { (pane as UIView?) ?? UIView() }
 
     /// The package's remote input view holds real first-responder status and
     /// keeps it while captured; capture state is the truthful proxy.
@@ -275,7 +273,7 @@ extension VNCKeyboardAccessoryCoordinator: TerminalKeyboardAccessoryHost {
     }
 
     func keyboardPaste() {
-        pane?.clipboardSynchronizer.sendClipboard()
+        pane?.pasteFromKeyboardToolbar()
     }
 
     func keyboardToggleCompose() {}
@@ -297,7 +295,7 @@ extension VNCKeyboardAccessoryCoordinator: KeyboardButtonDelegate {
     /// so Option/Alt must be sent as `Meta_L` rather than `Alt_L` (which Apple
     /// reads as Command).
     private var appleModifierConvention: Bool {
-        session.serverUsesAppleModifierConvention
+        pane?.usesAppleModifierConvention ?? false
     }
 
     func keyPressed(_ key: String, modifiers: KeyModifiers) {
@@ -339,14 +337,14 @@ extension VNCKeyboardAccessoryCoordinator: KeyboardButtonDelegate {
     /// Modifier chord: modifiers down in order, key down+up, modifiers up in
     /// reverse.
     private func sendStroke(_ stroke: KeyStroke) {
-        guard stroke.keysym != 0 else { return }
+        guard stroke.keysym != 0, let pane else { return }
         for modifier in stroke.modifiers {
-            session.sendKeyEvent(downFlag: true, key: modifier)
+            pane.sendKeyboardToolbarKeysym(down: true, keysym: modifier)
         }
-        session.sendKeyEvent(downFlag: true, key: stroke.keysym)
-        session.sendKeyEvent(downFlag: false, key: stroke.keysym)
+        pane.sendKeyboardToolbarKeysym(down: true, keysym: stroke.keysym)
+        pane.sendKeyboardToolbarKeysym(down: false, keysym: stroke.keysym)
         for modifier in stroke.modifiers.reversed() {
-            session.sendKeyEvent(downFlag: false, key: modifier)
+            pane.sendKeyboardToolbarKeysym(down: false, keysym: modifier)
         }
     }
 

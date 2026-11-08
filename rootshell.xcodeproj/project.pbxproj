@@ -112,6 +112,12 @@
 		47AC7E5700000000000000A7 /* rootshell/Features/Herdr/HerdrReplyFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E5700000000000000B7 /* rootshell/Features/Herdr/HerdrReplyFilter.swift */; };
 		47AC7E5700000000000000A8 /* rootshell/Core/Terminal/TerminalGridReports.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E5700000000000000B8 /* rootshell/Core/Terminal/TerminalGridReports.swift */; };
 		47AC7E5700000000000000A9 /* rootshell/Core/Foundation/ByteSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E5700000000000000B9 /* rootshell/Core/Foundation/ByteSearch.swift */; };
+		47AC7E57000000000000C7A1 /* rootshell/Features/KVM/Protocol/KVMHIDFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000C7B1 /* rootshell/Features/KVM/Protocol/KVMHIDFrame.swift */; };
+		47AC7E57000000000000C7A2 /* rootshell/Features/KVM/Protocol/KVMKeyMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000C7B2 /* rootshell/Features/KVM/Protocol/KVMKeyMap.swift */; };
+		47AC7E57000000000000C7A3 /* rootshell/Features/KVM/Protocol/KVMMediaFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000C7B3 /* rootshell/Features/KVM/Protocol/KVMMediaFrame.swift */; };
+		47AC7E57000000000000C7A4 /* rootshell/Features/KVM/Protocol/KVMDModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000C7B4 /* rootshell/Features/KVM/Protocol/KVMDModels.swift */; };
+		47AC7E57000000000000C7A5 /* rootshell/Features/KVM/Video/AnnexB.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000C7B5 /* rootshell/Features/KVM/Video/AnnexB.swift */; };
+		47AC7E57000000000000C7A6 /* rootshell/Features/KVM/KVMInputTranslator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000C7B6 /* rootshell/Features/KVM/KVMInputTranslator.swift */; };
 		47AC7E57000000000000CB01 /* rootshell/UI/Keyboard/TerminalTouchKeyboardModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000CB02 /* rootshell/UI/Keyboard/TerminalTouchKeyboardModel.swift */; };
 		47AC7E57000000000000CB03 /* rootshell/UI/Keyboard/TerminalKeyboardEffectSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000CB04 /* rootshell/UI/Keyboard/TerminalKeyboardEffectSurface.swift */; };
 		47AC7E57000000000000CB05 /* rootshell/UI/Keyboard/TerminalTouchKeyboardLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000CB06 /* rootshell/UI/Keyboard/TerminalTouchKeyboardLayout.swift */; };
@@ -637,6 +643,12 @@
 		47AC7E5700000000000000B7 /* rootshell/Features/Herdr/HerdrReplyFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/Herdr/HerdrReplyFilter.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E5700000000000000B8 /* rootshell/Core/Terminal/TerminalGridReports.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Terminal/TerminalGridReports.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E5700000000000000B9 /* rootshell/Core/Foundation/ByteSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Foundation/ByteSearch.swift; sourceTree = SOURCE_ROOT; };
+		47AC7E57000000000000C7B1 /* rootshell/Features/KVM/Protocol/KVMHIDFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/KVM/Protocol/KVMHIDFrame.swift; sourceTree = SOURCE_ROOT; };
+		47AC7E57000000000000C7B2 /* rootshell/Features/KVM/Protocol/KVMKeyMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/KVM/Protocol/KVMKeyMap.swift; sourceTree = SOURCE_ROOT; };
+		47AC7E57000000000000C7B3 /* rootshell/Features/KVM/Protocol/KVMMediaFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/KVM/Protocol/KVMMediaFrame.swift; sourceTree = SOURCE_ROOT; };
+		47AC7E57000000000000C7B4 /* rootshell/Features/KVM/Protocol/KVMDModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/KVM/Protocol/KVMDModels.swift; sourceTree = SOURCE_ROOT; };
+		47AC7E57000000000000C7B5 /* rootshell/Features/KVM/Video/AnnexB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/KVM/Video/AnnexB.swift; sourceTree = SOURCE_ROOT; };
+		47AC7E57000000000000C7B6 /* rootshell/Features/KVM/KVMInputTranslator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/KVM/KVMInputTranslator.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E57000000000000CB02 /* rootshell/UI/Keyboard/TerminalTouchKeyboardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/UI/Keyboard/TerminalTouchKeyboardModel.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E57000000000000CB04 /* rootshell/UI/Keyboard/TerminalKeyboardEffectSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/UI/Keyboard/TerminalKeyboardEffectSurface.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E57000000000000CB06 /* rootshell/UI/Keyboard/TerminalTouchKeyboardLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/UI/Keyboard/TerminalTouchKeyboardLayout.swift; sourceTree = SOURCE_ROOT; };
@@ -1358,6 +1370,12 @@
 				47AF04870000000000000B01 /* rootshell/Core/Terminal/PaneCloseConfirmationPolicy.swift */,
 				47AF05A00000000000000B01 /* rootshell/Features/ProgramIdentity/ForegroundProgram.swift */,
 				47AF05A00000000000000B02 /* rootshell/Features/ProgramIdentity/ProgramNameNormalizer.swift */,
+				47AC7E57000000000000C7B1 /* rootshell/Features/KVM/Protocol/KVMHIDFrame.swift */,
+				47AC7E57000000000000C7B2 /* rootshell/Features/KVM/Protocol/KVMKeyMap.swift */,
+				47AC7E57000000000000C7B3 /* rootshell/Features/KVM/Protocol/KVMMediaFrame.swift */,
+				47AC7E57000000000000C7B4 /* rootshell/Features/KVM/Protocol/KVMDModels.swift */,
+				47AC7E57000000000000C7B5 /* rootshell/Features/KVM/Video/AnnexB.swift */,
+				47AC7E57000000000000C7B6 /* rootshell/Features/KVM/KVMInputTranslator.swift */,
 				47AF05A00000000000000B03 /* rootshell/Features/ProgramIdentity/ProgramCatalog.swift */,
 				47AF05A00000000000000B04 /* rootshell/Features/ProgramIdentity/ShellProgramReports.swift */,
 				47AF05A00000000000000B05 /* rootshell/Features/ProgramIdentity/ShellProgramReportEncoder.swift */,
@@ -2409,6 +2427,12 @@
 				47AF04870000000000000A01 /* rootshell/Core/Terminal/PaneCloseConfirmationPolicy.swift in Sources */,
 				47AF05A00000000000000A01 /* rootshell/Features/ProgramIdentity/ForegroundProgram.swift in Sources */,
 				47AF05A00000000000000A02 /* rootshell/Features/ProgramIdentity/ProgramNameNormalizer.swift in Sources */,
+				47AC7E57000000000000C7A1 /* rootshell/Features/KVM/Protocol/KVMHIDFrame.swift in Sources */,
+				47AC7E57000000000000C7A2 /* rootshell/Features/KVM/Protocol/KVMKeyMap.swift in Sources */,
+				47AC7E57000000000000C7A3 /* rootshell/Features/KVM/Protocol/KVMMediaFrame.swift in Sources */,
+				47AC7E57000000000000C7A4 /* rootshell/Features/KVM/Protocol/KVMDModels.swift in Sources */,
+				47AC7E57000000000000C7A5 /* rootshell/Features/KVM/Video/AnnexB.swift in Sources */,
+				47AC7E57000000000000C7A6 /* rootshell/Features/KVM/KVMInputTranslator.swift in Sources */,
 				47AF05A00000000000000A03 /* rootshell/Features/ProgramIdentity/ProgramCatalog.swift in Sources */,
 				47AF05A00000000000000A04 /* rootshell/Features/ProgramIdentity/ShellProgramReports.swift in Sources */,
 				47AF05A00000000000000A05 /* rootshell/Features/ProgramIdentity/ShellProgramReportEncoder.swift in Sources */,
@@ -6995,7 +7019,7 @@
 			repositoryURL = "https://github.com/kitknox/rootshell-vnc.git";
 			requirement = {
 				kind = exactVersion;
-				version = 0.1.9;
+				version = 0.1.10;
 			};
 		};
 		477408912ED51B9F0035CE92 /* XCRemoteSwiftPackageReference "Yams-rootshell" */ = {

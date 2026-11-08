@@ -19,7 +19,7 @@ extension MainView {
         guard let rawValue = notification.userInfo?[VNCReservedKeyboardShortcut.notificationUserInfoKey] as? String,
               let shortcut = VNCReservedKeyboardShortcut(rawValue: rawValue),
               terminals.indices.contains(selectedTabIndex),
-              let pane = terminals[selectedTabIndex].focusedPane as? VNCPaneView
+              let pane = terminals[selectedTabIndex].focusedPane as? any RemoteScreenPane
         else { return false }
         return pane.routeReservedKeyboardShortcutToVNC(shortcut)
     }
@@ -110,7 +110,7 @@ extension MainView {
 
     /// HUD "Enter/Exit Full Screen" (via `.vncToggleFullScreen`): route to
     /// the per-window PaneFullScreenController.
-    func toggleVNCFullScreen(for pane: VNCPaneView) {
+    func toggleVNCFullScreen(for pane: any RemoteScreenPane) {
         if pane.isDetachedForFullScreen {
             paneFullScreen.exit(animated: true)
             return
@@ -121,11 +121,11 @@ extension MainView {
 
     /// Honor a profile's enter-on-connect preference without pulling a pane
     /// from a background tab over whatever the user is currently viewing.
-    func automaticallyEnterVNCFullScreen(for pane: VNCPaneView) {
+    func automaticallyEnterVNCFullScreen(for pane: any RemoteScreenPane) {
         enterVNCFullScreen(for: pane, requiresSelectedTab: true)
     }
 
-    private func enterVNCFullScreen(for pane: VNCPaneView, requiresSelectedTab: Bool) {
+    private func enterVNCFullScreen(for pane: any RemoteScreenPane, requiresSelectedTab: Bool) {
         guard !pane.isDetachedForFullScreen, !paneFullScreen.isActive else { return }
         guard let index = tabsModel.tabs.firstIndex(where: { tab in
             tab.splitTree.contains(where: { $0 === pane })

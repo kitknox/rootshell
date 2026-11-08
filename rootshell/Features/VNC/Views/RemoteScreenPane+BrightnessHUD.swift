@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-extension VNCPaneView {
+extension RemoteScreenPane {
     private var edrPotentialHeadroom: CGFloat {
         #if os(visionOS)
         return 1.0

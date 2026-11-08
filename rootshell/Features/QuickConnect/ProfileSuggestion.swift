@@ -19,7 +19,7 @@ struct ProfileSuggestion: QuickConnectSuggestion {
 
     /// Complete with the connection string (vnc:// URL for Screen Sharing)
     var completionString: String {
-        if profile.connectionProtocol == .local { return profile.name }
+        if profile.connectionProtocol == .local || profile.connectionProtocol == .kvm { return profile.name }
         if profile.connectionProtocol == .vnc {
             let config = profile.vncConfig
             let host = config?.host ?? profile.sshConfig.host
@@ -46,6 +46,8 @@ struct ProfileSuggestion: QuickConnectSuggestion {
             parts.append("Roam")
         } else if profile.connectionProtocol == .vnc {
             parts.append("Screen Sharing")
+        } else if profile.connectionProtocol == .kvm {
+            parts.append("KVM")
         }
 
         // Show folder path if not root

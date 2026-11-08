@@ -465,8 +465,8 @@ final class TerminalSurfaceController: NSObject {
             Ghostty.logger.info("Surface config: Shell-launched Trzsz session - using external I/O (QUIC)")
         case .trzszTransfer:
             Ghostty.logger.info("Surface config: Trzsz transfer - using external I/O (QUIC)")
-        case .vnc:
-            Ghostty.logger.warning("Surface config: VNC on a terminal surface - handled by a VNC pane, not expected here")
+        case .vnc, .kvm:
+            Ghostty.logger.warning("Surface config: remote screen on a terminal surface - handled by its own pane, not expected here")
         }
     }
 

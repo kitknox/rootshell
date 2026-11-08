@@ -79,7 +79,7 @@ extension MainView {
                 return true
             case .local:
                 return terminal.hasActiveLocalTask
-            case .kubernetes, .console, .mosh, .trzszTransfer, .shellLaunchedMosh, .vnc:
+            case .kubernetes, .console, .mosh, .trzszTransfer, .shellLaunchedMosh, .vnc, .kvm:
                 // `.vnc` is unreachable here (a VNC pane is not a terminal
                 // leaf, so the session guard above rejects it). Counted below.
                 return false
@@ -105,8 +105,8 @@ extension MainView {
         var count = 0
         for tab in terminals {
             for pane in tab.splitTree {
-                guard let vncPane = pane as? VNCPaneView else { continue }
-                if vncPane.wantsBackgroundKeepaliveGrace { count += 1 }
+                guard let remotePane = pane as? any RemoteScreenPane else { continue }
+                if remotePane.wantsBackgroundKeepaliveGrace { count += 1 }
             }
         }
         return count
@@ -667,9 +667,9 @@ extension MainView {
             guard lifecycleScenePhase == .active else { return }
             for tab in terminals {
                 for pane in tab.splitTree {
-                    guard let vncPane = pane as? VNCPaneView else { continue }
-                    vncPane.resumePresentationAfterForeground()
-                    vncPane.nudgeRetryAfterForeground()
+                    guard let remotePane = pane as? any RemoteScreenPane else { continue }
+                    remotePane.resumePresentationAfterForeground()
+                    remotePane.nudgeRetryAfterForeground()
                 }
             }
         }

@@ -193,7 +193,7 @@ final class BackgroundTunnel {
                 try await connect(using: resolvedConfig)
                 await startPortForwards()
                 startHealthMonitoring()
-            case .vnc, .local:
+            case .vnc, .kvm, .local:
                 // VNC profiles are never VPN-capable (isVPNCapable excludes them)
                 throw TunnelError.connectionFailed("This profile type cannot run tunnels")
             }
@@ -692,7 +692,7 @@ final class BackgroundTunnel {
                 try await self.connect(using: resolvedConfig)
                 await self.startPortForwards()
                 self.startHealthMonitoring()
-            case .vnc, .local:
+            case .vnc, .kvm, .local:
                 // VNC profiles are never VPN-capable (isVPNCapable excludes them)
                 throw TunnelError.connectionFailed("This profile type cannot run tunnels")
             }

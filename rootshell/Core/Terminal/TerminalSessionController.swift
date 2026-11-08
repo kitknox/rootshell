@@ -191,8 +191,8 @@ final class TerminalSessionController {
         case .ssh, .kubernetes, .console, .ec2Console, .mosh, .trzsz:
             assertionFailure("Direct session was not started by TerminalSessionController")
             return true
-        case .vnc:
-            // VNC panes are not terminal sessions; VNCPaneView owns its own
+        case .vnc, .kvm:
+            // Remote-screen panes are not terminal sessions; VNCPaneView owns its own
             // VNCSession. A terminal surface should never carry this config.
             return false
         case .local:
@@ -997,7 +997,7 @@ final class TerminalSessionController {
             host.terminalWireAgentForwardingApprovals(on: trzszSession)
             return trzszSession
 
-        case .local, .shellLaunchedSSH, .shellLaunchedMosh, .shellLaunchedTrzsz, .trzszTransfer, .vnc:
+        case .local, .shellLaunchedSSH, .shellLaunchedMosh, .shellLaunchedTrzsz, .trzszTransfer, .vnc, .kvm:
             throw ReconnectionError.unsupportedSessionType
         }
     }

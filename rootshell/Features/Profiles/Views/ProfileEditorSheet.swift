@@ -112,6 +112,8 @@ struct ProfileEditorSheet: View {
     // Screen Sharing (VNC) state — form fields shared with the connect form
     @State private var vncForm = VNCFormState()
     @State private var hasExistingVNCPassword: Bool = false
+    @State private var kvmForm = KVMFormState()
+    @State private var hasExistingKVMPassword: Bool = false
     @State private var trzszTransportMode: ProfileTransportMode = .default
     @State private var trzszMTU: String = ""
     @State private var trzszConnectTimeoutSec: String = ""
@@ -307,6 +309,12 @@ struct ProfileEditorSheet: View {
                     form: $vncForm,
                     hasSavedPassword: hasExistingVNCPassword
                 )
+            } else if connectionProtocol == .kvm {
+                vncConnectionSection
+                KVMConnectionFormSections(
+                    form: $kvmForm,
+                    hasSavedPassword: hasExistingKVMPassword
+                )
             } else {
                 // Connection Section
                 connectionSection
@@ -439,7 +447,11 @@ struct ProfileEditorSheet: View {
     /// Host used for the website-icon option; VNC profiles keep their
     /// endpoint in vncForm, not the SSH host field
     private var iconHost: String {
-        connectionProtocol == .vnc ? vncForm.hostname : host
+        switch connectionProtocol {
+        case .vnc: vncForm.hostname
+        case .kvm: kvmForm.hostname
+        default: host
+        }
     }
 
     private var profileInfoSection: some View {
@@ -704,6 +716,11 @@ struct ProfileEditorSheet: View {
     private var protocolConversionNotice: String? {
         guard let existing = existingProfile,
               existing.connectionProtocol != connectionProtocol else { return nil }
+        if connectionProtocol == .kvm || existing.connectionProtocol == .kvm {
+            return String(
+                localized: "Saving replaces this profile's connection settings with \(connectionProtocol.displayName) settings.",
+                comment: "Profile editor footer shown when converting to or from a KVM profile")
+        }
         if connectionProtocol == .local {
             if existing.connectionProtocol == .vnc {
                 return String(localized: "Saving replaces this profile's Screen Sharing settings with Local Shell settings.")
@@ -1663,6 +1680,9 @@ struct ProfileEditorSheet: View {
         if connectionProtocol == .vnc {
             return nameValidationMessage == nil && vncForm.isValid
         }
+        if connectionProtocol == .kvm {
+            return nameValidationMessage == nil && kvmForm.isValid
+        }
         return nameValidationMessage == nil &&
         hostValidationMessage == nil &&
         portValidationMessage == nil &&
@@ -1736,6 +1756,21 @@ struct ProfileEditorSheet: View {
         from oldValue: ConnectionProtocol,
         to newValue: ConnectionProtocol
     ) {
+        // KVM keeps only the hostname in common with the other forms.
+        if newValue == .kvm {
+            if kvmForm.hostname.isEmpty {
+                kvmForm.hostname = oldValue == .vnc ? vncForm.hostname : host
+            }
+            return
+        }
+        if oldValue == .kvm {
+            if newValue == .vnc, vncForm.hostname.isEmpty {
+                vncForm.hostname = kvmForm.hostname
+            } else if newValue != .local, newValue != .vnc, host.isEmpty {
+                host = kvmForm.hostname
+            }
+            return
+        }
         // SSH / Roam / tssh all share one field set, so nothing to carry.
         guard oldValue != .local, newValue != .local,
               (oldValue == .vnc) != (newValue == .vnc) else { return }
@@ -1842,6 +1877,13 @@ struct ProfileEditorSheet: View {
                 if let vncConfig = profile.vncConfig {
                     vncForm = VNCFormState(config: vncConfig)
                     hasExistingVNCPassword = VNCPasswordManager.shared.hasPassword(for: vncConfig)
+                }
+                return
+            }
+            if profile.connectionProtocol == .kvm {
+                if let kvmConfig = profile.kvmConfig {
+                    kvmForm = KVMFormState(config: kvmConfig)
+                    hasExistingKVMPassword = VNCPasswordManager.kvm.hasPassword(for: kvmConfig.passwordKey)
                 }
                 return
             }
@@ -2038,6 +2080,10 @@ struct ProfileEditorSheet: View {
 
         if connectionProtocol == .vnc {
             saveVNCProfile()
+            return
+        }
+        if connectionProtocol == .kvm {
+            saveKVMProfile()
             return
         }
 
@@ -2326,6 +2372,7 @@ struct ProfileEditorSheet: View {
                 updated.tags = tags
                 updated.connectionProtocol = .vnc
                 updated.vncConfig = config
+                updated.kvmConfig = nil
                 updated.localConfig = nil
                 updated.themeName = profileThemeName.isEmpty ? nil : profileThemeName
                 updated.sshConfig = ConnectionProfile.vncPlaceholderSSHConfig(for: config)
@@ -2342,6 +2389,70 @@ struct ProfileEditorSheet: View {
                     folderPath: folderPath,
                     tags: tags,
                     extensionPayload: ProfileExtensionPayload(vncConfig: config, themeName: profileThemeName.isEmpty ? nil : profileThemeName)
+                )
+                persistDraftShortcut(for: created.id)
+            }
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Save a KVM profile like `saveVNCProfile`: config in the envelope, a
+    /// placeholder sshConfig, and the password in the KVM Keychain slot.
+    private func saveKVMProfile() {
+        let config: KVMConnectionConfig
+        do {
+            config = try kvmForm.buildConfig(sanitizeJumpPasswordForPersistence: true)
+        } catch {
+            errorMessage = (error as? VNCFormState.BuildError)?.message ?? error.localizedDescription
+            return
+        }
+
+        let passwords = VNCPasswordManager.kvm
+        if kvmForm.savePassword {
+            if !kvmForm.password.isEmpty {
+                do {
+                    try passwords.savePassword(kvmForm.password, for: config.passwordKey)
+                } catch {
+                    errorMessage = "Failed to save password: \(error.localizedDescription)"
+                    return
+                }
+            }
+        } else {
+            try? passwords.deletePassword(for: config.passwordKey)
+        }
+
+        do {
+            if let existing = existingProfile {
+                var updated = existing
+                updated.name = trimmedName
+                updated.notes = notes.isEmpty ? nil : notes
+                updated.iconName = iconName
+                updated.colorTag = colorTag
+                updated.folderPath = folderPath
+                updated.tags = tags
+                updated.connectionProtocol = .kvm
+                updated.kvmConfig = config
+                updated.vncConfig = nil
+                updated.localConfig = nil
+                updated.themeName = profileThemeName.isEmpty ? nil : profileThemeName
+                updated.sshConfig = ConnectionProfile.kvmPlaceholderSSHConfig(for: config)
+                try profileManager.updateProfile(updated)
+                persistDraftShortcut(for: updated.id)
+            } else {
+                let created = try profileManager.createProfile(
+                    name: trimmedName,
+                    sshConfig: ConnectionProfile.kvmPlaceholderSSHConfig(for: config),
+                    connectionProtocol: .kvm,
+                    notes: notes.isEmpty ? nil : notes,
+                    iconName: iconName,
+                    colorTag: colorTag,
+                    folderPath: folderPath,
+                    tags: tags,
+                    extensionPayload: ProfileExtensionPayload(
+                        kvmConfig: config,
+                        themeName: profileThemeName.isEmpty ? nil : profileThemeName)
                 )
                 persistDraftShortcut(for: created.id)
             }

@@ -2,7 +2,7 @@
 //  PaneFullScreenController.swift
 //  rootshell
 //
-//  In-window full-screen takeover for VNC panes: reparents the live pane
+//  In-window full-screen takeover for remote-screen panes (VNC, KVM): reparents the live pane
 //  into a window-bounds black container (hosting controller, viewport state,
 //  single-parented HEVC layer, and session all preserved) and hands it back
 //  to normal split layout on exit.
@@ -22,14 +22,14 @@ final class PaneFullScreenController {
 
     private nonisolated static let logger = Logger(subsystem: "com.rootshell", category: "PaneFullScreen")
 
-    private(set) weak var pane: VNCPaneView?
+    private(set) weak var pane: (any RemoteScreenPane)?
     private var container: PaneFullScreenContainerView?
     /// The pane's split hosting view at enter time; exit re-attaches through
     /// its normal layout once the detach flag clears.
     private weak var formerHost: SplitTreeHostingView?
     private weak var tabsModel: TabsModel?
-    private var onDidExit: ((VNCPaneView) -> Void)?
-    private var failureOverlayHost: UIHostingController<VNCPaneThemedSurface<VNCConnectionFailureCard>>?
+    private var onDidExit: ((any RemoteScreenPane) -> Void)?
+    private var failureOverlayHost: UIHostingController<RemoteScreenThemedSurface<VNCConnectionFailureCard>>?
     private var observationActive = false
     private var isExitAnimating = false
 
@@ -40,11 +40,11 @@ final class PaneFullScreenController {
     /// Check the pane out of split layout and take over the window.
     /// `onDidExit` runs after every exit that leaves the pane alive in a tab
     /// (focus restoration); teardown paths (pane closed, retargeted) skip it.
-    func enter(_ pane: VNCPaneView, tabsModel: TabsModel, onDidExit: ((VNCPaneView) -> Void)?) {
+    func enter(_ pane: any RemoteScreenPane, tabsModel: TabsModel, onDidExit: ((any RemoteScreenPane) -> Void)?) {
         guard container == nil else { return }
         guard !pane.isDetachedForFullScreen, let window = pane.window else { return }
 
-        Self.logger.info("Entering full screen for VNC pane \(pane.uuid)")
+        Self.logger.info("Entering full screen for pane \(pane.uuid)")
         self.pane = pane
         self.tabsModel = tabsModel
         self.onDidExit = onDidExit
@@ -174,7 +174,7 @@ final class PaneFullScreenController {
 
     /// The pane is closing (prepareForClose funnel): tear the container down
     /// without focus restoration; the close path owns the rest.
-    func paneDidClose(_ pane: VNCPaneView) {
+    func paneDidClose(_ pane: any RemoteScreenPane) {
         guard pane === self.pane else { return }
         onDidExit = nil
         finishExit()
@@ -252,39 +252,38 @@ final class PaneFullScreenController {
 
     private func observeSessionState() {
         guard observationActive, let pane else { return }
-        let state = withObservationTracking {
-            pane.session.connectionState
+        let failure = withObservationTracking {
+            pane.fullScreenFailureMessage
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 self?.observeSessionState()
             }
         }
-        applyFailureOverlay(for: state)
+        applyFailureOverlay(failure: failure)
     }
 
     /// Re-evaluated by the pane when a launcher (pre-session) failure is set
     /// or cleared, since those never move `connectionState`.
     func refreshFailureOverlay() {
         guard observationActive, let pane else { return }
-        applyFailureOverlay(for: pane.session.connectionState)
+        applyFailureOverlay(failure: pane.fullScreenFailureMessage)
     }
 
-    private func applyFailureOverlay(for state: VNCConnectionState) {
+    private func applyFailureOverlay(failure: String?) {
         guard observationActive, !isExitAnimating, let pane, let container else { return }
 
-        var message: String?
-        if case .failed(let reason) = state {
-            message = reason
-        }
-        message = message ?? pane.launchErrorMessage
+        let message = failure ?? pane.launchErrorMessage
 
         guard let message else {
             removeFailureOverlay()
             return
         }
 
-        let subtitle = pane.config.displayName
-        let overlay = VNCPaneThemedSurface(pane: pane) { [weak self, weak pane] in
+        let subtitle = pane.paneDisplayName
+        let overlay = RemoteScreenThemedSurface(
+            tabId: pane.containingTabID,
+            windowId: pane.windowId
+        ) { [weak self, weak pane] in
             VNCConnectionFailureCard(
                 subtitle: subtitle,
                 message: message,
@@ -320,7 +319,7 @@ final class PaneFullScreenController {
         if pane.launchErrorMessage != nil {
             pane.retryLaunch()
         } else {
-            pane.session.retryConnection()
+            pane.retryRemoteConnection()
         }
         refreshFailureOverlay()
     }

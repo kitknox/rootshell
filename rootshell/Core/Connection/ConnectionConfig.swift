@@ -55,6 +55,10 @@ enum ConnectionConfig: Equatable {
     /// surface; each split gets an independent session from the same config.
     case vnc(VNCConnectionConfig)
 
+    /// KVM over IP session (GL.iNet Comet and other kvmd devices), rendered
+    /// by a KVM pane; each split gets an independent session.
+    case kvm(KVMConnectionConfig)
+
     /// The underlying SSHConfig for connection types built on one. Used to
     /// derive a stable per-connection identity (user@host:port), e.g. for the
     /// tmux gateway's last-session-name persistence (TmuxGatewaySessionStore).
@@ -72,7 +76,7 @@ enum ConnectionConfig: Equatable {
             return config.sshConfig
         case .shellLaunchedMosh(let moshConfig, _):
             return moshConfig.sshConfig
-        case .local, .kubernetes, .console, .ec2Console, .trzszTransfer, .vnc:
+        case .local, .kubernetes, .console, .ec2Console, .trzszTransfer, .vnc, .kvm:
             return nil
         }
     }
@@ -104,6 +108,8 @@ enum ConnectionConfig: Equatable {
             return displayName
         case .vnc(let config):
             return "Screen Sharing — \(config.displayName)"
+        case .kvm(let config):
+            return "KVM — \(config.displayName)"
         }
     }
 
@@ -146,6 +152,8 @@ enum ConnectionConfig: Equatable {
             return "trzszTransfer"
         case .vnc:
             return "vnc"
+        case .kvm:
+            return "kvm"
         }
     }
 
@@ -163,6 +171,9 @@ enum ConnectionConfig: Equatable {
         case .vnc(let config):
             // Only when the transport jumps through SSH (host keys, auth)
             if case .none = config.effectiveJump { return false }
+            return true
+        case .kvm(let config):
+            if case .none = config.jump { return false }
             return true
         default:
             return false
@@ -342,6 +353,8 @@ enum ConnectionConfig: Equatable {
         case .vnc(let config):
             // Each split opens an independent VNC session from the same config
             return .vnc(config)
+        case .kvm(let config):
+            return .kvm(config)
         }
     }
 }
@@ -382,7 +395,7 @@ extension ConnectionConfig {
         case .shellLaunchedTrzsz(var config, let shellCwd):
             config.sshConfig.initialDirectory = directory
             return .shellLaunchedTrzsz(trzszConfig: config, shellWorkingDirectory: shellCwd)
-        case .kubernetes, .console, .ec2Console, .trzszTransfer, .vnc:
+        case .kubernetes, .console, .ec2Console, .trzszTransfer, .vnc, .kvm:
             return nil
         }
     }
@@ -391,7 +404,7 @@ extension ConnectionConfig {
         switch self {
         case .local:
             return .full
-        case .kubernetes, .console, .ec2Console, .trzszTransfer, .vnc:
+        case .kubernetes, .console, .ec2Console, .trzszTransfer, .vnc, .kvm:
             return .unsupported
         default:
             guard let ssh = underlyingSSHConfig else { return .unsupported }

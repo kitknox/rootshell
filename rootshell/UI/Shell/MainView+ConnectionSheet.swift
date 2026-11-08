@@ -42,6 +42,10 @@ extension MainView {
                 pendingBrowseSelection = nil
                 handleVNCConnection(config: vncConfig, splitOption: splitOption)
             },
+            onKVMConnect: { (kvmConfig: KVMConnectionConfig, splitOption: SSHConnectionView.SplitOption) in
+                pendingBrowseSelection = nil
+                handleKVMConnection(config: kvmConfig, splitOption: splitOption)
+            },
             onKubernetesConnect: { (k8sConfig: KubernetesNodeShellConfig, splitOption: SSHConnectionView.SplitOption) in
                 pendingBrowseSelection = nil
                 handleKubernetesConnection(config: k8sConfig, splitOption: splitOption)
@@ -87,6 +91,10 @@ extension MainView {
             onVNCConnect: { (vncConfig: VNCConnectionConfig, splitOption: SSHConnectionView.SplitOption) in
                 pendingBrowseSelection = nil  // Clear after use
                 handleVNCConnection(config: vncConfig, splitOption: splitOption)
+            },
+            onKVMConnect: { (kvmConfig: KVMConnectionConfig, splitOption: SSHConnectionView.SplitOption) in
+                pendingBrowseSelection = nil  // Clear after use
+                handleKVMConnection(config: kvmConfig, splitOption: splitOption)
             },
             onKubernetesConnect: { (k8sConfig: KubernetesNodeShellConfig, splitOption: SSHConnectionView.SplitOption) in
                 pendingBrowseSelection = nil  // Clear after use
@@ -301,6 +309,10 @@ extension MainView {
         // sshConfig is a display-only placeholder, never connectable.
         if profile.connectionProtocol == .vnc {
             connectToVNCProfile(profile, splitOption: splitOption)
+            return
+        }
+        if profile.connectionProtocol == .kvm {
+            connectToKVMProfile(profile, splitOption: splitOption)
             return
         }
 
@@ -547,12 +559,32 @@ extension MainView {
             } else {
                 Ghostty.logger.warning("connectWithConfig called for a VNC profile without a source profile - ignoring")
             }
+        case .kvm:
+            if let sourceProfileID,
+               let profile = ConnectionProfileManager.shared.profile(for: sourceProfileID) {
+                connectToKVMProfile(profile, splitOption: splitOption)
+            } else {
+                Ghostty.logger.warning("connectWithConfig called for a KVM profile without a source profile - ignoring")
+            }
         }
     }
 
     func handlePasswordSubmit(profile: ConnectionProfile, password: String, shouldSave: Bool) {
         showPasswordPromptSheet = false
         passwordPromptProfile = nil
+
+        if profile.connectionProtocol == .kvm {
+            guard let kvmConfig = profile.kvmConfig else { return }
+            if shouldSave {
+                try? VNCPasswordManager.kvm.savePassword(password, for: kvmConfig.passwordKey)
+            }
+            handleKVMConnection(
+                config: kvmConfig,
+                splitOption: passwordPromptSplitOption,
+                sourceProfileID: profile.id,
+                password: password)
+            return
+        }
 
         // Screen Sharing profiles: persist to the VNC Keychain slot when
         // requested and hand the typed password straight to the new pane.

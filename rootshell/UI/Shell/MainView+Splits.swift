@@ -145,6 +145,10 @@ extension MainView {
             createVNCSplit(with: vnc.config, direction: direction, sourceProfileID: vnc.sourceProfileID)
             return
         }
+        if let kvm = terminals[selectedTabIndex].focusedPane as? KVMPaneView {
+            createKVMSplit(with: kvm.config, direction: direction, sourceProfileID: kvm.sourceProfileID)
+            return
+        }
         guard let focusedTerminal = terminals[selectedTabIndex].focusedTerminal else { return }
 
         // tmux control mode: the tmux server owns this window's topology. Ask it

@@ -557,6 +557,50 @@ struct VNCConnectionFormSections: View {
 
     // MARK: Jump host
 
+    private var jumpSection: some View {
+        RemoteScreenJumpSection(
+            form: $form,
+            footer: String(localized: "Tunnel the Screen Sharing connection through an SSH host."))
+    }
+
+    // MARK: Session preferences
+
+    private var sessionPreferencesSection: some View {
+        Section {
+            Group {
+                Toggle("Enter Full Screen on Connect", isOn: $form.automaticallyEnterFullScreen)
+
+                Picker("Keyboard Toolbar", selection: $form.keyboardToolbar) {
+                    ForEach(VNCConnectionConfig.KeyboardToolbarPreference.allCases, id: \.self) { preference in
+                        Text(toolbarLabel(preference)).tag(preference)
+                    }
+                }
+            }
+            .themedRow()
+        } header: {
+            Text("Session")
+        } footer: {
+            Text("Full Screen expands this Screen Sharing pane after the connection succeeds. Keyboard Toolbar controls the toolbar above the software keyboard.")
+        }
+    }
+
+    private func toolbarLabel(_ preference: VNCConnectionConfig.KeyboardToolbarPreference) -> String {
+        switch preference {
+        case .followAppSetting: return String(localized: "Follow App Setting", comment: "VNC keyboard toolbar preference")
+        case .on: return String(localized: "On", comment: "VNC keyboard toolbar preference")
+        case .off: return String(localized: "Off", comment: "VNC keyboard toolbar preference")
+        }
+    }
+}
+
+// MARK: - Jump Host Section
+
+/// "Connect via" jump picker and fields, shared by the Screen Sharing and KVM
+/// forms. Only the `jump*` fields of `form` are read or written.
+struct RemoteScreenJumpSection: View {
+    @Binding var form: VNCFormState
+    let footer: String
+
     /// Adapter for JumpHostFormSection's enable toggle: "on" means manual
     /// jump is selected; switching it off falls back to a direct connection.
     private var manualJumpEnabled: Binding<Bool> {
@@ -574,7 +618,7 @@ struct VNCConnectionFormSections: View {
         ConnectionProfileManager.shared.profiles.filter { !$0.isDeleted && $0.connectionProtocol == .trzsz }
     }
 
-    private var jumpSection: some View {
+    var body: some View {
         Section {
             Group {
                 Picker("Connect via", selection: $form.jumpSelection) {
@@ -640,36 +684,7 @@ struct VNCConnectionFormSections: View {
         } header: {
             Text("Jump Host")
         } footer: {
-            Text("Tunnel the Screen Sharing connection through an SSH host.")
-        }
-    }
-
-    // MARK: Session preferences
-
-    private var sessionPreferencesSection: some View {
-        Section {
-            Group {
-                Toggle("Enter Full Screen on Connect", isOn: $form.automaticallyEnterFullScreen)
-
-                Picker("Keyboard Toolbar", selection: $form.keyboardToolbar) {
-                    ForEach(VNCConnectionConfig.KeyboardToolbarPreference.allCases, id: \.self) { preference in
-                        Text(toolbarLabel(preference)).tag(preference)
-                    }
-                }
-            }
-            .themedRow()
-        } header: {
-            Text("Session")
-        } footer: {
-            Text("Full Screen expands this Screen Sharing pane after the connection succeeds. Keyboard Toolbar controls the toolbar above the software keyboard.")
-        }
-    }
-
-    private func toolbarLabel(_ preference: VNCConnectionConfig.KeyboardToolbarPreference) -> String {
-        switch preference {
-        case .followAppSetting: return String(localized: "Follow App Setting", comment: "VNC keyboard toolbar preference")
-        case .on: return String(localized: "On", comment: "VNC keyboard toolbar preference")
-        case .off: return String(localized: "Off", comment: "VNC keyboard toolbar preference")
+            Text(footer)
         }
     }
 }

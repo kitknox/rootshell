@@ -43,6 +43,8 @@ struct ConnectionInfoSheet: View {
                         consoleContent(provider: provider, instance: instance)
                     case .vnc(let vncInfo):
                         vncContent(vncInfo)
+                    case .kvm(let kvmInfo):
+                        KVMConnectionInfoSections(info: kvmInfo)
                     case .tmux, .herdr:
                         EmptyView() // transportInfo unwraps all multiplexer layers.
                     }

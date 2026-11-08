@@ -118,6 +118,10 @@ struct SSHConnectionView: View {
     // Screen Sharing (VNC) form fields (shared with the profile editor)
     @State var vncForm = VNCFormState()
 
+    // KVM over IP form fields, shown in the Screen Sharing tab
+    @State var kvmForm = KVMFormState()
+    @State var screenSharingKind: ScreenSharingKind = .vnc
+
     // Keeps the host/username/jump fields when switching between the SSH and
     // Screen Sharing tabs, which present separate field sets
     @State private var endpointCarryOver = ConnectionEndpointCarryOver()
@@ -175,6 +179,9 @@ struct SSHConnectionView: View {
     /// Callback when a Screen Sharing (VNC) connection is initiated
     var onVNCConnect: ((VNCConnectionConfig, SplitOption) -> Void)? = nil
 
+    /// Callback when a KVM over IP connection is initiated
+    var onKVMConnect: ((KVMConnectionConfig, SplitOption) -> Void)? = nil
+
     /// Callback when Kubernetes node shell connection is initiated
     var onKubernetesConnect: ((KubernetesNodeShellConfig, SplitOption) -> Void)? = nil
     
@@ -216,6 +223,7 @@ struct SSHConnectionView: View {
         onMoshConnect: ((MoshConfig, SplitOption) -> Void)? = nil,
         onTrzszConnect: ((TrzszConfig, SplitOption) -> Void)? = nil,
         onVNCConnect: ((VNCConnectionConfig, SplitOption) -> Void)? = nil,
+        onKVMConnect: ((KVMConnectionConfig, SplitOption) -> Void)? = nil,
         onKubernetesConnect: ((KubernetesNodeShellConfig, SplitOption) -> Void)? = nil,
         onConsoleConnect: ((ConsoleConfig, SplitOption) -> Void)? = nil,
         onEC2ConsoleConnect: ((EC2ConsoleConfig, SplitOption) -> Void)? = nil,
@@ -231,6 +239,7 @@ struct SSHConnectionView: View {
         self.onMoshConnect = onMoshConnect
         self.onTrzszConnect = onTrzszConnect
         self.onVNCConnect = onVNCConnect
+        self.onKVMConnect = onKVMConnect
         self.onKubernetesConnect = onKubernetesConnect
         self.onConsoleConnect = onConsoleConnect
         self.onEC2ConsoleConnect = onEC2ConsoleConnect
@@ -703,7 +712,7 @@ struct SSHConnectionView: View {
                 // Screen Sharing has its own connection tab; the terminal
                 // protocols are the only valid choices here.
                 Picker("Protocol", selection: $connectionProtocol) {
-                    ForEach(ConnectionProtocol.allCases.filter { $0 != .vnc && $0 != .local }, id: \.self) { proto in
+                    ForEach(ConnectionProtocol.allCases.filter { $0 != .vnc && $0 != .kvm && $0 != .local }, id: \.self) { proto in
                         Label(proto.displayName, systemImage: proto.iconName).tag(proto)
                     }
                 }
@@ -2809,6 +2818,8 @@ struct SSHConnectionView: View {
                         close()
                     } else if profile.connectionProtocol == .vnc {
                         applyVNCProfile(profile)
+                    } else if profile.connectionProtocol == .kvm {
+                        applyKVMProfile(profile)
                     } else {
                         handleProfileAccepted(profile)
                     }

@@ -30,7 +30,7 @@ enum WindowSessionCensus {
     static func remoteSessionCount(in tabs: [TabModel]) -> Int {
         tabs.flatMap { $0.splitTree.terminalLeaves }.filter { terminal in
             switch terminal.connectionConfig {
-            case .ssh, .mosh, .trzsz, .trzszTransfer, .kubernetes, .console, .ec2Console, .shellLaunchedSSH, .shellLaunchedMosh, .shellLaunchedTrzsz, .vnc:
+            case .ssh, .mosh, .trzsz, .trzszTransfer, .kubernetes, .console, .ec2Console, .shellLaunchedSSH, .shellLaunchedMosh, .shellLaunchedTrzsz, .vnc, .kvm:
                 return true
             case .local:
                 return false
@@ -44,7 +44,7 @@ enum WindowSessionCensus {
     static func nonResilientSessionCount(in tabs: [TabModel]) -> Int {
         tabs.flatMap { $0.splitTree.terminalLeaves }.filter { terminal in
             switch terminal.connectionConfig {
-            case .ssh, .kubernetes, .console, .ec2Console, .shellLaunchedSSH, .vnc:
+            case .ssh, .kubernetes, .console, .ec2Console, .shellLaunchedSSH, .vnc, .kvm:
                 // VNC rides TCP with no roam-style resilience
                 return true
             case .local:
@@ -67,7 +67,7 @@ enum WindowSessionCensus {
             if let terminal = pane.asTerminal {
                 profileID = terminal.isTmuxPane ? nil : terminal.sourceProfileID
             } else {
-                profileID = (pane as? VNCPaneView)?.sourceProfileID
+                profileID = (pane as? any RemoteScreenPane)?.sourceProfileID
             }
             if let profileID {
                 profileCounts[profileID, default: 0] += 1
@@ -147,6 +147,11 @@ enum WindowSessionCensus {
             case .vnc(let config):
                 // Counted with SSH so a window with a live remote desktop
                 // reads as having remote sessions
+                sshCount += 1
+                if !hostNames.contains(config.host) {
+                    hostNames.append(config.host)
+                }
+            case .kvm(let config):
                 sshCount += 1
                 if !hostNames.contains(config.host) {
                     hostNames.append(config.host)

@@ -46,6 +46,8 @@ private extension ConnectionConfig {
             return "server.rack"
         case .vnc:
             return "display"
+        case .kvm:
+            return "pc"
         }
     }
 }

@@ -22,6 +22,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
         case shellLaunchedMosh
         case shellLaunchedTrzsz
         case vnc
+        case kvm
     }
 
     let type: ConfigType
@@ -35,6 +36,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
     let shellWorkingDirectory: String?  // For shell-launched sessions
     // Optional so window state written before this field decodes as nil
     let vncConfig: VNCConfigSafe?
+    var kvmConfig: KVMConfigSafe? = nil
 
     /// Mosh config with password cleared for safe persistence
     nonisolated struct MoshConfigSafe: Codable, Equatable, Sendable {
@@ -470,6 +472,64 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
         }
     }
 
+    /// KVM config safe for persistence; the device password is a Keychain lookup.
+    nonisolated struct KVMConfigSafe: Codable, Equatable, Sendable {
+        let host: String
+        let port: Int
+        let username: String
+        let jump: VNCConfigSafe.JumpSafe
+        let keyboardToolbar: VNCConnectionConfig.KeyboardToolbarPreference
+        let automaticallyEnterFullScreen: Bool
+        let hostKeyboardLayout: String
+
+        init(from config: KVMConnectionConfig) {
+            self.host = config.host
+            self.port = config.port
+            self.username = config.username
+            self.keyboardToolbar = config.keyboardToolbar
+            self.automaticallyEnterFullScreen = config.automaticallyEnterFullScreen
+            self.hostKeyboardLayout = config.hostKeyboardLayout
+            switch config.jump {
+            case .none:
+                self.jump = .none
+            case .sshProfile(let id):
+                self.jump = .sshProfile(id)
+            case .sshConfig(let ssh):
+                self.jump = .sshConfig(SSHConfigSafe(from: ssh))
+            case .tsshProfile(let id):
+                self.jump = .tsshProfile(id)
+            }
+        }
+
+        @MainActor
+        func toKVMConfig() -> KVMConnectionConfig {
+            let liveJump: VNCConnectionConfig.Jump
+            switch jump {
+            case .none:
+                liveJump = .none
+            case .sshProfile(let id):
+                liveJump = .sshProfile(id)
+            case .sshConfig(let safe):
+                liveJump = .sshConfig(safe.toSSHConfig())
+            case .tsshProfile(let id):
+                liveJump = .tsshProfile(id)
+            }
+            return KVMConnectionConfig(
+                host: host,
+                port: port,
+                username: username,
+                jump: liveJump,
+                keyboardToolbar: keyboardToolbar,
+                automaticallyEnterFullScreen: automaticallyEnterFullScreen,
+                hostKeyboardLayout: hostKeyboardLayout)
+        }
+
+        var needsPassword: Bool {
+            if case .sshConfig(let safe) = jump { return safe.needsPassword }
+            return false
+        }
+    }
+
     init(from config: ConnectionConfig) {
         switch config {
         case .local(let cwd):
@@ -623,6 +683,19 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
             self.ec2ConsoleConfig = nil
             self.shellWorkingDirectory = nil
             self.vncConfig = VNCConfigSafe(from: vnc)
+
+        case .kvm(let kvm):
+            self.type = .kvm
+            self.localWorkingDirectory = nil
+            self.sshConfig = nil
+            self.moshConfig = nil
+            self.trzszConfig = nil
+            self.kubernetesConfig = nil
+            self.consoleConfig = nil
+            self.ec2ConsoleConfig = nil
+            self.shellWorkingDirectory = nil
+            self.vncConfig = nil
+            self.kvmConfig = KVMConfigSafe(from: kvm)
         }
     }
 
@@ -681,6 +754,10 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
         case .vnc:
             guard let vnc = vncConfig else { return .local() }
             return .vnc(vnc.toVNCConfig())
+
+        case .kvm:
+            guard let kvm = kvmConfig else { return .local() }
+            return .kvm(kvm.toKVMConfig())
         }
     }
 
@@ -690,6 +767,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
             ?? moshConfig?.needsPassword
             ?? trzszConfig?.needsPassword
             ?? vncConfig?.needsPassword
+            ?? kvmConfig?.needsPassword
             ?? false
     }
 
@@ -718,6 +796,8 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
             return trzszConfig.map { "roam \($0.sshConfig.username)@\($0.sshConfig.host)" } ?? "Roam"
         case .vnc:
             return vncConfig.map { "vnc \($0.host)" } ?? "Screen Sharing"
+        case .kvm:
+            return kvmConfig.map { "kvm \($0.host)" } ?? "KVM"
         }
     }
 }

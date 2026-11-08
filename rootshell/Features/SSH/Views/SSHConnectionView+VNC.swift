@@ -9,6 +9,19 @@
 
 import SwiftUI
 
+/// Device type in the Screen Sharing tab.
+enum ScreenSharingKind: String, CaseIterable {
+    case vnc
+    case kvm
+
+    var displayName: String {
+        switch self {
+        case .vnc: String(localized: "VNC / Screen Sharing", comment: "Screen Sharing tab device type")
+        case .kvm: String(localized: "KVM over IP", comment: "Screen Sharing tab device type")
+        }
+    }
+}
+
 extension SSHConnectionView {
 
     // MARK: - Form
@@ -39,7 +52,22 @@ extension SSHConnectionView {
                 }
             }
 
-            VNCConnectionFormSections(form: $vncForm)
+            Section {
+                Picker("Device", selection: $screenSharingKind) {
+                    ForEach(ScreenSharingKind.allCases, id: \.self) { kind in
+                        Text(kind.displayName).tag(kind)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .themedRow()
+            }
+
+            switch screenSharingKind {
+            case .vnc:
+                VNCConnectionFormSections(form: $vncForm)
+            case .kvm:
+                KVMConnectionFormSections(form: $kvmForm)
+            }
         }
         .themedList()
 #if !os(visionOS)
@@ -50,18 +78,31 @@ extension SSHConnectionView {
     // MARK: - Validation
 
     var isVNCFormValid: Bool {
-        vncForm.isValid
+        screenSharingKind == .kvm ? kvmForm.isValid : vncForm.isValid
     }
 
     // MARK: - Populate helpers
 
     /// Populate the VNC form from a saved profile (QuickConnect suggestion
     /// accept). Mirrors handleProfileAccepted for SSH profiles.
+    /// Populate the KVM form from a saved profile.
+    func applyKVMProfile(_ profile: ConnectionProfile) {
+        guard let config = profile.kvmConfig else { return }
+        quickConnectProfile = profile
+        connectionType = .vnc
+        screenSharingKind = .kvm
+        kvmForm = KVMFormState(config: config)
+        if let saved = try? VNCPasswordManager.kvm.loadPassword(for: config.passwordKey) {
+            kvmForm.password = saved
+        }
+    }
+
     func applyVNCProfile(_ profile: ConnectionProfile) {
         guard let config = profile.vncConfig else { return }
 
         quickConnectProfile = profile
         connectionType = .vnc
+        screenSharingKind = .vnc
         vncForm = VNCFormState(config: config)
 
         // Prefill a saved password so connect works without a prompt.
@@ -75,6 +116,7 @@ extension SSHConnectionView {
     func applyVNCTarget(hostname: String, port: Int?) {
         quickConnectProfile = nil
         connectionType = .vnc
+        screenSharingKind = .vnc
         var form = VNCFormState()
         form.hostname = hostname
         form.port = "\(port ?? 5900)"
@@ -108,6 +150,10 @@ extension SSHConnectionView {
 
     func connectVNC() {
         errorMessage = nil
+        if screenSharingKind == .kvm {
+            connectKVM()
+            return
+        }
 
         let config: VNCConnectionConfig
         do {
@@ -155,6 +201,54 @@ extension SSHConnectionView {
             onProfileConnect(profile, splitOption)
         } else {
             onVNCConnect?(config, splitOption)
+        }
+        close()
+    }
+}
+
+// MARK: - KVM
+
+extension SSHConnectionView {
+    func connectKVM() {
+        let config: KVMConnectionConfig
+        do {
+            config = try kvmForm.buildConfig()
+        } catch {
+            errorMessage = (error as? VNCFormState.BuildError)?.message ?? error.localizedDescription
+            return
+        }
+
+        let jumpForm = kvmForm.jump
+        if jumpForm.jumpSelection == .manual,
+           jumpForm.jumpAuthMethod == .password,
+           jumpForm.saveJumpPassword,
+           !jumpForm.jumpPassword.isEmpty,
+           case .sshConfig(let jumpSSH) = config.jump {
+            _ = try? SSHPasswordManager.shared.savePassword(
+                jumpForm.jumpPassword,
+                host: jumpSSH.host,
+                port: jumpSSH.port,
+                username: jumpSSH.username)
+        }
+
+        let passwords = VNCPasswordManager.kvm
+        if !kvmForm.password.isEmpty {
+            // An unsaved password (or a Keychain failure) goes to the pane once.
+            let saved = kvmForm.savePassword
+                && (try? passwords.savePassword(kvmForm.password, for: config.passwordKey)) != nil
+            if !saved {
+                passwords.stashEphemeralPassword(kvmForm.password, for: config.passwordKey)
+            }
+        }
+
+        if var profile = quickConnectProfile,
+           profile.connectionProtocol == .kvm,
+           profile.kvmConfig?.host == config.host,
+           let onProfileConnect {
+            profile.kvmConfig = config
+            onProfileConnect(profile, splitOption)
+        } else {
+            onKVMConnect?(config, splitOption)
         }
         close()
     }

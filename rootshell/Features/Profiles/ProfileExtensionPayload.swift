@@ -25,6 +25,8 @@ struct ProfileExtensionPayload: Codable, Hashable, Sendable {
 
     /// Screen Sharing / VNC configuration, when this profile is a VNC profile.
     var vncConfig: VNCConnectionConfig?
+    /// KVM over IP configuration, when this profile is a KVM profile.
+    var kvmConfig: KVMConnectionConfig?
     var localConfig: LocalProfileConfig?
     var themeName: String?
     /// Independent revision for theme changes, including clearing an override.
@@ -34,6 +36,7 @@ struct ProfileExtensionPayload: Codable, Hashable, Sendable {
     init(
         version: Int = ProfileExtensionPayload.currentVersion,
         vncConfig: VNCConnectionConfig? = nil,
+        kvmConfig: KVMConnectionConfig? = nil,
         localConfig: LocalProfileConfig? = nil,
         themeName: String? = nil,
         themeModifiedAt: Date? = nil,
@@ -42,6 +45,7 @@ struct ProfileExtensionPayload: Codable, Hashable, Sendable {
         self.version = version
         self.trzszConnectTimeoutSec = trzszConnectTimeoutSec.flatMap { (1...120).contains($0) ? $0 : nil }
         self.vncConfig = vncConfig
+        self.kvmConfig = kvmConfig
         self.localConfig = localConfig
         self.themeName = themeName
         self.themeModifiedAt = themeModifiedAt
@@ -50,11 +54,11 @@ struct ProfileExtensionPayload: Codable, Hashable, Sendable {
     /// True when nothing meaningful is stored. Empty envelopes are omitted
     /// from profile JSON and never written to CKRecords.
     var isEmpty: Bool {
-        vncConfig == nil && localConfig == nil && themeName == nil && themeModifiedAt == nil && trzszConnectTimeoutSec == nil
+        vncConfig == nil && kvmConfig == nil && localConfig == nil && themeName == nil && themeModifiedAt == nil && trzszConnectTimeoutSec == nil
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, vncConfig, localConfig, themeName, themeModifiedAt, trzszConnectTimeoutSec
+        case version, vncConfig, kvmConfig, localConfig, themeName, themeModifiedAt, trzszConnectTimeoutSec
     }
 
     init(from decoder: Decoder) throws {
@@ -64,6 +68,7 @@ struct ProfileExtensionPayload: Codable, Hashable, Sendable {
         trzszConnectTimeoutSec = timeout.flatMap { (1...120).contains($0) ? $0 : nil }
         // Field-level tolerance: a bad vncConfig must not sink the envelope.
         vncConfig = (try? container.decodeIfPresent(VNCConnectionConfig.self, forKey: .vncConfig)) ?? nil
+        kvmConfig = (try? container.decodeIfPresent(KVMConnectionConfig.self, forKey: .kvmConfig)) ?? nil
         localConfig = try? container.decodeIfPresent(LocalProfileConfig.self, forKey: .localConfig)
         themeName = try? container.decodeIfPresent(String.self, forKey: .themeName)
         themeModifiedAt = try? container.decodeIfPresent(Date.self, forKey: .themeModifiedAt)
@@ -81,6 +86,7 @@ struct ProfileExtensionPayload: Codable, Hashable, Sendable {
         try container.encode(version, forKey: .version)
         try container.encodeIfPresent(trzszConnectTimeoutSec, forKey: .trzszConnectTimeoutSec)
         try container.encodeIfPresent(vncConfig, forKey: .vncConfig)
+        try container.encodeIfPresent(kvmConfig, forKey: .kvmConfig)
         try container.encodeIfPresent(localConfig, forKey: .localConfig)
         try container.encodeIfPresent(themeName, forKey: .themeName)
         try container.encodeIfPresent(themeModifiedAt, forKey: .themeModifiedAt)
