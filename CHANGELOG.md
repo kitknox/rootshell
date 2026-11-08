@@ -3,6 +3,34 @@
 All notable changes to the rootshell app for iPhone, iPad, Vision Pro, and Mac, newest first.
 Versions are listed as `release-build`, matching the version shown in Settings, About.
 
+## 1.0.16-175 - November 8, 2026
+
+### GL.iNet Comet KVM
+
+- **KVM over IP:** Screen Sharing > KVM over IP connects to GL.iNet Comet devices running firmware 1.4 or later, with direct H.264 video, keyboard and mouse control, and SSH jump host support.
+- **Keyboard Input and Paste:** Paste as Keystrokes types clipboard text into the remote computer. Choose Computer's Keyboard Layout for touch keyboard input, dictation, and paste; hardware keys follow the remote computer's layout.
+- **Session Controls:** Adjust Video Quality and Latency Mode, refresh video, and use power and reset controls where available. Supports full-screen sessions and two-factor authentication.
+- **Saved Connections:** Save KVM connections as profiles, with passwords stored in Keychain when enabled.
+
+### Headscale and Tailscale
+
+- **Custom Coordination Server:** Tailscale settings now accept a custom Coordination Server, including self-hosted Headscale, in Whole Device and rootshell Only modes. Leave Server empty to use Tailscale.
+- **Auth Key Registration:** An optional Auth Key signs in a new device without the login page and is deleted after registration. Switching servers signs in as a new device; disconnect before changing the server or key.
+- **Sign-In Status:** Sign-in failures, including refused auth keys, now appear in Status.
+
+### Keyboard and Display
+
+- **International Hardware Keyboards:** The § key on UK and international hardware keyboards now works in keybinds and as a mod-tap key, tapping Escape by default. Layouts that put § on another key retain their existing shortcuts.
+- **Focus Borders:** On iOS 26 and later, square split panes' focus borders follow rounded display or iPad window corners, keeping the border visible at screen edges, including on Duo.
+- **Terminal Task Indicators:** Percentage progress, ongoing activity, paused states, and errors now sit at the pane edge facing the tab bar. With bottom tabs, they appear at the bottom instead of behind the status bar.
+- **Vertical Tab Sidebar:** The sidebar now scrolls to reveal tabs selected from the keyboard, top bar, or by opening a new tab. It stays put when the selected tab is already visible.
+
+### Reliability
+
+- **Screen Sharing over SSH:** Fixed corrupted frames and dropped Adaptive Screen Sharing sessions over Connect via SSH. Tunneled screen updates stay in order, with less stale video buffered on slower connections.
+- **Duplicate SSH Key Metadata:** Fixed a crash when returning to the app if an SSH key had duplicate synced and device-only Keychain metadata. Key loading and backup restore now tolerate duplicate IDs.
+- **Notification Hook Cleanup:** rootshell-notify install and upgrade now remove duplicate hooks even if another tool stripped their identifying tag. Uninstall removes those hooks too, and status no longer lists the home folder twice.
+
 ## 1.0.16-174 - November 4, 2026
 
 ### rootshell's On-Screen Keyboard
