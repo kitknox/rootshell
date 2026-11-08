@@ -74,7 +74,7 @@ final class PaneFullScreenController {
         // grow it to the full window. Exit re-applies both through layout.
         pane.layer.borderWidth = 0
         pane.layer.borderColor = UIColor.clear.cgColor
-        pane.layer.cornerRadius = 0
+        pane.applyPaneCorners(rounded: false)
         pane.clipsToBounds = false
         pane.autoresizingMask = []
         container.insertSubview(pane, at: 0)
