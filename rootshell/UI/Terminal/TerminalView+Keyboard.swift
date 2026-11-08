@@ -112,9 +112,20 @@ extension Ghostty {
                 noteChordUse()
                 return false
             }
-            guard let rule = rules[key.keyCode] else { return false }
-            startPending(for: rule)
+            guard let rule = Self.rule(for: key, in: rules) else { return false }
+            startPending(for: rule, keyCode: key.keyCode)
             return true
+        }
+
+        /// § matches by its text at either ISO position, never by HID alone:
+        /// German prints < at Non-US Backslash.
+        static func rule(for key: UIKey, in rules: [UIKeyboardHIDUsage: ModTapRule]) -> ModTapRule? {
+            if KeyCode.sectionHIDUsages.contains(key.keyCode), KeyCode(uiKey: key) == .section,
+               let rule = rules[ModTapSourceKey.section.hidUsage], rule.sourceKey == .section {
+                return rule
+            }
+            guard let rule = rules[key.keyCode], rule.sourceKey != .section else { return nil }
+            return rule
         }
 
         func handlePressEnded(_ press: UIPress) -> Bool {
@@ -130,15 +141,17 @@ extension Ghostty {
             if state?.useInChord() == true { didResolveHold() }
         }
 
-        func startPending(for rule: ModTapRule) {
-            if state?.sourceKey == rule.sourceKey.hidUsage {
+        /// `keyCode` is the physical key whose release resolves the press.
+        func startPending(for rule: ModTapRule, keyCode: UIKeyboardHIDUsage? = nil) {
+            let sourceKey = keyCode ?? rule.sourceKey.hidUsage
+            if state?.sourceKey == sourceKey {
                 advanceThreshold()
                 return
             }
             reset()
             self.rule = rule
             state = ModTapState(
-                sourceKey: rule.sourceKey.hidUsage,
+                sourceKey: sourceKey,
                 holdModifier: rule.holdAction.uiKeyModifierFlag,
                 startedAt: ProcessInfo.processInfo.systemUptime,
                 threshold: Double(rule.holdThresholdMs) / 1000
@@ -287,8 +300,8 @@ extension Ghostty.TerminalView {
         // keys in the same delivery, then process each non-source exactly once.
         let modTapRules = ModTapManager.shared.activeRulesByKey
         let orderedPresses = remainingPresses.sorted {
-            let lhs = $0.key.map { modTapRules[$0.keyCode] != nil } ?? false
-            let rhs = $1.key.map { modTapRules[$0.keyCode] != nil } ?? false
+            let lhs = $0.key.map { Ghostty.ModTapInterceptor.rule(for: $0, in: modTapRules) != nil } ?? false
+            let rhs = $1.key.map { Ghostty.ModTapInterceptor.rule(for: $0, in: modTapRules) != nil } ?? false
             if lhs != rhs { return lhs }
             return ($0.key?.keyCode.rawValue ?? 0) < ($1.key?.keyCode.rawValue ?? 0)
         }
@@ -1451,6 +1464,21 @@ extension Ghostty.TerminalView {
 
         return nil
     }
+
+    /// The held ISO key the active layout prints § on; GCKeyboard alone only
+    /// says which keys are down, not which one typed the command's §.
+    func catalystSectionSourceHIDUsage(tracked: UIKeyboardHIDUsage?) -> UIKeyboardHIDUsage? {
+        guard let keyboardInput = GCKeyboard.coalesced?.keyboardInput else { return nil }
+        return ModTapState.sectionSourceKey(
+            tracked: tracked,
+            candidates: KeyCode.sectionHIDUsages,
+            isHeld: { keyboardInput.button(forKeyCode: GCKeyCode(rawValue: Int($0.rawValue)))?.isPressed == true },
+            printsSection: { usage in
+                guard let code = cgKeyCode(for: usage) else { return false }
+                return CatalystKeyboardLayout.shared.translateKey(cgKeyCode: UInt16(code), shift: false) == "§"
+            }
+        )
+    }
     #endif
 
     /// Re-translate a physical key after mod-tap changes its modifiers. UIKit
@@ -1513,8 +1541,7 @@ extension Ghostty.TerminalView {
             let text = printableTextForGhostty(
                 hidUsage: hidUsage, shift: false, command: modifiers.contains(.command)
             )
-            guard let key = text.flatMap({ KeyCode(uiKeyInput: $0.lowercased()) })
-                    ?? KeyCode(hidUsage: hidUsage) else { return nil }
+            guard let key = KeyCode(layoutText: text, hidUsage: hidUsage) else { return nil }
             return normalizedBindingTrigger(KeyTrigger(key: key, modifiers: KeybindModifiers(uiModifierFlags: modifiers)))
         }
         let originalTrigger = trigger(for: hardware)
@@ -1971,8 +1998,18 @@ extension Ghostty.TerminalView {
         guard command.modifierFlags.isEmpty, let input = command.input else { return }
 
         // Match command input back to an active mod-tap rule source key.
-        if let rule = inputController.modTapRule(forCommandInput: input) {
+        guard let rule = inputController.modTapRule(forCommandInput: input) else { return }
+        guard rule.sourceKey == .section else {
             modTapInterceptor.startPending(for: rule)
+            return
+        }
+        // The § command also fires where a layout prints § elsewhere (AZERTY
+        // 6). That key is not the source and its release could never resolve.
+        let tracked = modTapInterceptor.rule?.sourceKey == .section ? modTapInterceptor.state?.sourceKey : nil
+        if let usage = catalystSectionSourceHIDUsage(tracked: tracked) {
+            modTapInterceptor.startPending(for: rule, keyCode: usage)
+        } else {
+            insertText(input)
         }
     }
     #endif
@@ -2604,7 +2641,8 @@ extension Ghostty.TerminalView {
         guard let source = modTapInterceptor.state?.sourceKey else { return }
         if let command {
             // Escape/Tab/printable source commands also arrive on key repeat.
-            if command.modifierFlags.isEmpty, KeyCode(hidUsage: source)?.uiKeyInput == command.input { return }
+            if command.modifierFlags.isEmpty,
+               modTapInterceptor.rule?.sourceKey.keyCode?.uiKeyInput == command.input { return }
         } else if ModTapState.modifierFlag(for: source) == nil {
             // Menu/edit actions without a key identity only prove chord use
             // for modifier sources, not for a pending printable source key.

@@ -210,8 +210,7 @@ final class TerminalInputController {
     private func modTapSourceCommandInput(for sourceKey: ModTapSourceKey) -> String? {
         // Escape and Tab use dedicated handler paths to preserve existing behavior.
         guard sourceKey != .escape, sourceKey != .tab else { return nil }
-        guard let keyCode = KeyCode(hidUsage: sourceKey.hidUsage) else { return nil }
-        return keyCode.uiKeyInput
+        return sourceKey.keyCode?.uiKeyInput
     }
 
     /// Generate UIKeyCommands for active mod-tap source keys.

@@ -6,6 +6,27 @@ final class ModTapStateTests: XCTestCase {
         ModTapState(sourceKey: .keyboardLeftGUI, holdModifier: .control, startedAt: 10, threshold: 0.2)
     }
 
+    func testSectionSourceIsTheHeldKeyTheLayoutPrintsSectionOn() {
+        let candidates: [UIKeyboardHIDUsage] = [.keyboardNonUSBackslash, .keyboardGraveAccentAndTilde]
+        let both = Set(candidates)
+        let british: (UIKeyboardHIDUsage) -> Bool = { $0 == .keyboardNonUSBackslash }
+        func pick(tracked: UIKeyboardHIDUsage? = nil, held: Set<UIKeyboardHIDUsage>,
+                  prints: (UIKeyboardHIDUsage) -> Bool) -> UIKeyboardHIDUsage? {
+            ModTapState.sectionSourceKey(tracked: tracked, candidates: candidates,
+                                         isHeld: held.contains, printsSection: prints)
+        }
+        // AZERTY: 6 typed § while unrelated ISO keys are held.
+        XCTAssertNil(pick(held: both.union([.keyboard6]), prints: { _ in false }))
+        XCTAssertNil(pick(held: [.keyboard6], prints: { _ in true }))
+        // Both ISO keys held: only the one printing § is the source.
+        XCTAssertEqual(pick(held: both, prints: british), .keyboardNonUSBackslash)
+        XCTAssertEqual(pick(held: both, prints: { $0 == .keyboardGraveAccentAndTilde }), .keyboardGraveAccentAndTilde)
+        // Repeat keeps a held tracked source; a released one is re-resolved.
+        XCTAssertEqual(pick(tracked: .keyboardGraveAccentAndTilde, held: both, prints: british), .keyboardGraveAccentAndTilde)
+        XCTAssertEqual(pick(tracked: .keyboardGraveAccentAndTilde, held: [.keyboardNonUSBackslash], prints: british),
+                       .keyboardNonUSBackslash)
+    }
+
     func testOlderKeyReleaseDoesNotConsumePendingTap() {
         for source: UIKeyboardHIDUsage in [.keyboardCapsLock, .keyboardLeftGUI] {
             let state = ModTapState(sourceKey: source, holdModifier: .control, startedAt: 10, threshold: 0.2)

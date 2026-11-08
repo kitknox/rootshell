@@ -194,7 +194,7 @@ enum ModTapSourceKey: String, Codable, CaseIterable, Sendable {
     case digit5, digit6, digit7, digit8, digit9
 
     // Symbols
-    case grave, minus, equal
+    case section, grave, minus, equal
     case leftBracket, rightBracket, backslash
     case semicolon, quote, comma, period, slash
 
@@ -226,7 +226,7 @@ enum ModTapSourceKey: String, Codable, CaseIterable, Sendable {
         case .digit0, .digit1, .digit2, .digit3, .digit4,
              .digit5, .digit6, .digit7, .digit8, .digit9:
             return .digit
-        case .grave, .minus, .equal, .leftBracket, .rightBracket,
+        case .section, .grave, .minus, .equal, .leftBracket, .rightBracket,
              .backslash, .semicolon, .quote, .comma, .period, .slash:
             return .symbol
         }
@@ -281,6 +281,7 @@ enum ModTapSourceKey: String, Codable, CaseIterable, Sendable {
         case .digit7: return "7"
         case .digit8: return "8"
         case .digit9: return "9"
+        case .section: return "§ (Section)"
         case .grave: return "` (Grave)"
         case .minus: return "- (Minus)"
         case .equal: return "= (Equal)"
@@ -344,6 +345,8 @@ enum ModTapSourceKey: String, Codable, CaseIterable, Sendable {
         case .digit7: return .keyboard7
         case .digit8: return .keyboard8
         case .digit9: return .keyboard9
+        // Registration key only: presses match by resolving to KeyCode.section.
+        case .section: return .keyboardNonUSBackslash
         case .grave: return .keyboardGraveAccentAndTilde
         case .minus: return .keyboardHyphen
         case .equal: return .keyboardEqualSign
@@ -362,7 +365,7 @@ enum ModTapSourceKey: String, Codable, CaseIterable, Sendable {
     var defaultTapAction: ModTapAction {
         switch self {
         case .capsLock, .escape, .leftControl, .rightControl,
-             .leftShift, .rightShift, .leftAlt, .rightAlt:
+             .leftShift, .rightShift, .leftAlt, .rightAlt, .section:
             return .sendKey(.escape)
         case .leftCommand, .rightCommand:
             return .none
@@ -416,6 +419,12 @@ enum ModTapSourceKey: String, Codable, CaseIterable, Sendable {
         case .period: return .sendSequence(".")
         case .slash: return .sendSequence("/")
         }
+    }
+
+    /// The key a source's UIKeyCommand input names. § has no US HID identity,
+    /// and its HID usage prints other symbols on non-UK layouts.
+    var keyCode: KeyCode? {
+        self == .section ? .section : KeyCode(hidUsage: hidUsage)
     }
 
     /// Look up source key from HID usage code

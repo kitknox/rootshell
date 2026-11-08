@@ -128,6 +128,8 @@ enum KeyCode: String, Codable, CaseIterable, Hashable, Sendable {
     case period = "."
     case slash = "/"
     case grave = "`"
+    /// The ISO key Apple's UK and international layouts label §/±.
+    case section = "§"
 
     // Special keys
     case tab
@@ -215,6 +217,7 @@ enum KeyCode: String, Codable, CaseIterable, Hashable, Sendable {
         case .period: return "."
         case .slash: return "/"
         case .grave: return "`"
+        case .section: return "§"
 
         case .plus: return "+"
         case .underscore: return "_"
@@ -300,6 +303,7 @@ enum KeyCode: String, Codable, CaseIterable, Hashable, Sendable {
 
         let modifiers = modifiers ?? uiKey.modifierFlags
         var logicalKey = Self.printableKey(for: uiKey.charactersIgnoringModifiers)
+            ?? Self.sectionKey(for: uiKey)
         if modifiers.contains(.command) {
             // UIKey.characters preserves Command, but can also contain an
             // Option-composed character or a Control byte. Use it only when
@@ -352,6 +356,31 @@ enum KeyCode: String, Codable, CaseIterable, Hashable, Sendable {
               let ascii = text.utf8.first,
               (0x20..<0x7F).contains(ascii) else { return nil }
         return KeyCode(uiKeyInput: text)
+    }
+
+    /// Where the ISO § key can report from: Non-US Backslash on Apple
+    /// keyboards (kVK_ISO_Section), Grave when the ISO pair is swapped.
+    static let sectionHIDUsages: [UIKeyboardHIDUsage] = [.keyboardNonUSBackslash, .keyboardGraveAccentAndTilde]
+
+    /// § only at the ISO key's own position: AZERTY prints an unshifted § on
+    /// the 6 key, which must keep resolving as a digit for Cmd+6.
+    private static func sectionKey(for uiKey: UIKey) -> KeyCode? {
+        guard sectionHIDUsages.contains(uiKey.keyCode),
+              ["§", "±"].contains(uiKey.charactersIgnoringModifiers) else { return nil }
+        return .section
+    }
+
+    /// Layout text for a physical key, else its US identity. § counts only at
+    /// the ISO position, as in `init(uiKey:)`, so AZERTY's 6 stays a digit.
+    init?(layoutText text: String?, hidUsage: UIKeyboardHIDUsage) {
+        if let key = text.flatMap({ KeyCode(uiKeyInput: $0.lowercased()) }),
+           key != .section || Self.sectionHIDUsages.contains(hidUsage) {
+            self = key
+        } else if let key = KeyCode(hidUsage: hidUsage) {
+            self = key
+        } else {
+            return nil
+        }
     }
 
     /// Legacy terminal Ctrl encoding for a resolved logical key. Do not retry
@@ -514,6 +543,7 @@ enum KeyCode: String, Codable, CaseIterable, Hashable, Sendable {
         case ".": self = .period
         case "/": self = .slash
         case "`": self = .grave
+        case "§": self = .section
 
         case "+": self = .plus
         case "_": self = .underscore

@@ -55,6 +55,19 @@ struct ModTapState {
         return result
     }
 
+    /// The physical key a character-matched § source command came from. A held
+    /// tracked source is kept; otherwise only a held key the layout prints §
+    /// on qualifies. Nil means another key typed § (AZERTY 6): keep it text.
+    static func sectionSourceKey(
+        tracked: UIKeyboardHIDUsage?,
+        candidates: [UIKeyboardHIDUsage],
+        isHeld: (UIKeyboardHIDUsage) -> Bool,
+        printsSection: (UIKeyboardHIDUsage) -> Bool
+    ) -> UIKeyboardHIDUsage? {
+        if let tracked, candidates.contains(tracked), isHeld(tracked) { return tracked }
+        return candidates.first { isHeld($0) && printsSection($0) }
+    }
+
     /// Caps Lock is deliberately excluded: it is a toggle, with separate
     /// compensation in the terminal input path, rather than a held modifier.
     static func modifierFlag(for key: UIKeyboardHIDUsage) -> UIKeyModifierFlags? {

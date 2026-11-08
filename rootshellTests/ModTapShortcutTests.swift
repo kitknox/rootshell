@@ -360,5 +360,49 @@ final class ModTapShortcutTests: XCTestCase {
         let alias = KeyTrigger(key: .leftBrace, modifiers: .control)
         XCTAssertEqual(trigger.resolvingShiftedSymbol { $0 == alias }, trigger)
     }
+
+    func testSectionKeyParsesFromConfigAndKeyCommand() {
+        let plain = KeyTrigger(key: .section)
+        XCTAssertEqual(KeyTrigger(ghosttyFormat: "§"), plain)
+        XCTAssertEqual(KeyTrigger(ghosttyFormat: "shift+§"), KeyTrigger(key: .section, modifiers: .shift))
+        XCTAssertEqual(plain.ghosttyFormat, "§")
+        let command = UIKeyCommand(input: plain.uiKeyInput, modifierFlags: [], action: NSSelectorFromString("handleKeybindCommand:"))
+        XCTAssertEqual(KeyTrigger(uiKeyCommand: command), plain)
+    }
+
+    func testSectionKeyResolvesAtISOPositionOnly() {
+        for (usage, base, text, modifiers, expected): (UIKeyboardHIDUsage, String, String, UIKeyModifierFlags, KeyCode) in [
+            (.keyboardNonUSBackslash, "§", "§", [], .section),
+            (.keyboardNonUSBackslash, "§", "±", .shift, .section),
+            (.keyboardNonUSBackslash, "±", "±", .shift, .section),
+            (.keyboardNonUSBackslash, "§", "§", .command, .section),
+            (.keyboardGraveAccentAndTilde, "§", "§", [], .section),
+            (.keyboardGraveAccentAndTilde, "`", "`", [], .grave),
+            (.keyboardNonUSBackslash, "<", "<", [], .lessThan),
+            // AZERTY's unshifted § on 6 and German Shift+3 stay digits.
+            (.keyboard6, "§", "§", [], .digit6),
+            (.keyboard6, "§", "§", .command, .digit6),
+            (.keyboard3, "3", "§", .shift, .digit3)
+        ] {
+            let key = HardwareKey(usage, base: base, text: text, modifiers: modifiers)
+            XCTAssertEqual(KeyCode(uiKey: key), expected, "\(usage.rawValue) \(base) \(modifiers)")
+        }
+    }
+
+    func testSectionLayoutTextKeepsDigitFallbackOffISOPosition() {
+        for (text, usage, expected): (String?, UIKeyboardHIDUsage, KeyCode) in [
+            ("§", .keyboardNonUSBackslash, .section),
+            ("§", .keyboardGraveAccentAndTilde, .section),
+            // Catalyst's Option-chord resolver: AZERTY Option+6 stays alt+6.
+            ("§", .keyboard6, .digit6),
+            (nil, .keyboard6, .digit6),
+            ("é", .keyboard2, .digit2),
+            ("A", .keyboardQ, .a),
+            ("<", .keyboardNonUSBackslash, .lessThan)
+        ] {
+            XCTAssertEqual(KeyCode(layoutText: text, hidUsage: usage), expected, "\(String(describing: text)) \(usage.rawValue)")
+        }
+        XCTAssertNil(KeyCode(layoutText: "é", hidUsage: .keyboardNonUSPound))
+    }
 }
 #endif
