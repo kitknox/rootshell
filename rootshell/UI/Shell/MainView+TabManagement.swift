@@ -419,8 +419,8 @@ extension MainView {
               let pane = terminals[selectedTabIndex].focusedPane else {
             return NewTabRequest(target: .local, localDirectory: nil)
         }
-        if let vnc = pane as? VNCPaneView {
-            return NewTabRequest(target: .connection(.vnc(vnc.config), vnc.sourceProfileID), localDirectory: nil)
+        if let remote = pane as? any RemoteScreenPane {
+            return NewTabRequest(target: .connection(remote.connectionConfig, remote.sourceProfileID), localDirectory: nil)
         }
         guard let terminal = pane.asTerminal else {
             return NewTabRequest(target: .connections, localDirectory: nil)
@@ -524,6 +524,8 @@ extension MainView {
             }
         case .vnc(let vnc):
             createVNCTab(with: vnc, sourceProfileID: profileID)
+        case .kvm(let kvm):
+            createKVMTab(with: kvm, sourceProfileID: profileID)
         case .mosh(let mosh), .shellLaunchedMosh(let mosh, _):
             createMoshTab(with: mosh, sourceProfileID: profileID)
         case .trzsz(let trzsz), .shellLaunchedTrzsz(let trzsz, _):

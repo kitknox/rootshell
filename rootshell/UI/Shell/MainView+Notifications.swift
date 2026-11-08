@@ -123,8 +123,8 @@ extension MainView {
                   let pane = self.terminals[self.selectedTabIndex].focusedPane
             else { return }
 
-            if command == .toggleMouseCapture, let vncPane = pane as? VNCPaneView {
-                vncPane.keyboardCapture.toggleCaptureMode()
+            if command == .toggleMouseCapture, let remotePane = pane as? any RemoteScreenPane {
+                remotePane.keyboardCapture.toggleCaptureMode()
                 return
             }
             guard let terminal = pane as? Ghostty.TerminalView else { return }
@@ -200,19 +200,19 @@ extension MainView {
         }
 
         observerBag.observeOnMainActor(.vncToggleFullScreen) { [self] notification in
-            guard let pane = notification.object as? VNCPaneView else { return }
+            guard let pane = notification.object as? any RemoteScreenPane else { return }
             guard self.shouldHandleNotification(notification) else { return }
             self.toggleVNCFullScreen(for: pane)
         }
 
         observerBag.observeOnMainActor(.vncEnterFullScreen) { [self] notification in
-            guard let pane = notification.object as? VNCPaneView else { return }
+            guard let pane = notification.object as? any RemoteScreenPane else { return }
             guard self.shouldHandleNotification(notification) else { return }
             self.automaticallyEnterVNCFullScreen(for: pane)
         }
 
         observerBag.observeOnMainActor(.vncShowConnectionInfo) { [self] notification in
-            guard let pane = notification.object as? VNCPaneView else { return }
+            guard let pane = notification.object as? any RemoteScreenPane else { return }
             guard self.shouldHandleNotification(notification) else { return }
             if let info = pane.connectionInfo {
                 self.connectionInfoToShow = info
@@ -726,8 +726,8 @@ extension MainView {
                   let pane = self.terminals[self.selectedTabIndex].focusedPane
             else { return }
 
-            if let vncPane = pane as? VNCPaneView {
-                vncPane.toggleBrightnessHUD()
+            if let remotePane = pane as? any RemoteScreenPane {
+                remotePane.toggleBrightnessHUD()
             } else if let terminalView = pane as? Ghostty.TerminalView {
                 terminalView.toggleBrightnessHUD()
             }

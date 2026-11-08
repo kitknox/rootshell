@@ -478,6 +478,21 @@ extension MainView {
                 return .leaf(view: pane)
             }
 
+            if case .kvm(let kvmConfig) = connectionConfig {
+                ResumeDebugLogger.shared.log("buildNode leaf: uuid=\(leafData.terminalId.uuidString.prefix(8)), config=kvm")
+                let pane = makeKVMPane(
+                    config: kvmConfig,
+                    sourceProfileID: leafData.sourceProfileID,
+                    password: nil,
+                    uuid: leafData.terminalId,
+                    logicallyFocused: false
+                )
+                pane.userOverrideTitle = leafData.userOverrideTitle
+                pane.restorationState = .pendingReconnect
+                paneViews.append(pane)
+                return .leaf(view: pane)
+            }
+
             // For local shells, apply the saved working directory
             if case .local = connectionConfig,
                let cwd = leafData.lastKnownWorkingDirectory {
@@ -498,6 +513,7 @@ extension MainView {
             case .ec2Console: "ec2Console"
             case .trzszTransfer: "trzszTransfer"
             case .vnc: "vnc"
+            case .kvm: "kvm"
             }
             ResumeDebugLogger.shared.log("buildNode leaf: uuid=\(leafData.terminalId.uuidString.prefix(8)), config=\(configType)")
 

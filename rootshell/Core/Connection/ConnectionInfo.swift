@@ -16,6 +16,7 @@ enum ConnectionInfo: Identifiable, Sendable {
     case mosh(SSHConnectionInfo)
     case trzsz(SSHConnectionInfo, transportMode: String? = nil, transportRef: TSSHTransportRef? = nil)
     case vnc(VNCConnectionInfo)
+    case kvm(KVMConnectionInfo)
     indirect case tmux(TmuxConnectionInfo, transport: ConnectionInfo?)
     indirect case herdr(HerdrConnectionInfo, transport: ConnectionInfo?)
 
@@ -32,6 +33,7 @@ enum ConnectionInfo: Identifiable, Sendable {
         case .mosh(let info): return "mosh-\(info.host)-\(info.port)"
         case .trzsz(let info, _, _): return "trzsz-\(info.host)-\(info.port)"
         case .vnc(let info): return "vnc-\(info.host)-\(info.port)"
+        case .kvm(let info): return "kvm-\(info.host)-\(info.port)"
         }
     }
 
@@ -47,6 +49,7 @@ enum ConnectionInfo: Identifiable, Sendable {
         case .mosh: return "Mosh"
         case .trzsz: return "Trzsz"
         case .vnc: return "VNC"
+        case .kvm: return "KVM"
         }
     }
 
@@ -62,6 +65,7 @@ enum ConnectionInfo: Identifiable, Sendable {
         case .mosh(let info): return info.connectedAt
         case .trzsz(let info, _, _): return info.connectedAt
         case .vnc(let info): return info.connectedAt
+        case .kvm(let info): return info.connectedAt
         }
     }
 
@@ -81,6 +85,8 @@ enum ConnectionInfo: Identifiable, Sendable {
             return info.host
         case .vnc(let info):
             return info.host
+        case .kvm(let info):
+            return info.host
         case .local, .kubernetes, .console:
             return nil
         }
@@ -92,7 +98,7 @@ enum ConnectionInfo: Identifiable, Sendable {
         case .tmux(_, let transport), .herdr(_, let transport): return transport?.copyableIPAddress
         case .ssh(let info), .mosh(let info), .trzsz(let info, _, _):
             return info.resolvedIP
-        case .local, .kubernetes, .console, .vnc:
+        case .local, .kubernetes, .console, .vnc, .kvm:
             return nil
         }
     }

@@ -21,12 +21,16 @@ import os.log
 class VNCPasswordManager {
     private nonisolated static let logger = Logger(subsystem: "com.rootshell", category: "VNCPasswordManager")
 
-    static let shared = VNCPasswordManager()
+    static let shared = VNCPasswordManager(service: "com.ghostty.vnc.password")
+    /// KVM over IP device passwords, keyed by `KVMConnectionConfig.passwordKey`.
+    static let kvm = VNCPasswordManager(service: "com.rootshell.kvm.password")
 
-    private nonisolated static let service = "com.ghostty.vnc.password"
+    private nonisolated let service: String
     private nonisolated static let accessGroup = AppIdentifiers.keychainAccessGroup
 
-    private init() {}
+    private init(service: String) {
+        self.service = service
+    }
 
     /// One-shot in-memory passwords for connections the user chose not to
     /// persist (typed in the connect form or a profile prompt with "Save
@@ -56,7 +60,7 @@ class VNCPasswordManager {
         // Update-first so a routine re-save can't duplicate the item.
         let matchQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.service,
+            kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecAttrAccessGroup as String: Self.accessGroup,
             kSecAttrSynchronizable as String: kSecAttrSynchronizableAny
@@ -73,7 +77,7 @@ class VNCPasswordManager {
 
         let addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.service,
+            kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecAttrAccessGroup as String: Self.accessGroup,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
@@ -91,7 +95,7 @@ class VNCPasswordManager {
     func loadPassword(for key: String) throws -> String {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.service,
+            kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecAttrAccessGroup as String: Self.accessGroup,
             kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
@@ -120,7 +124,7 @@ class VNCPasswordManager {
     func hasPassword(for key: String) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.service,
+            kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecAttrAccessGroup as String: Self.accessGroup,
             kSecAttrSynchronizable as String: kSecAttrSynchronizableAny
@@ -134,7 +138,7 @@ class VNCPasswordManager {
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.service,
+            kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecAttrAccessGroup as String: Self.accessGroup,
             kSecAttrSynchronizable as String: kSecAttrSynchronizableAny

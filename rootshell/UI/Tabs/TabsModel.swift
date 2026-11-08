@@ -361,7 +361,7 @@ final class TabModel: Identifiable {
     /// Resolve the focused pane first, including tmux's transport-independent
     /// gateway. Projected windows and restored placeholders have no own session.
     var connectionInfo: ConnectionInfo? {
-        if let info = (focusedPane as? VNCPaneView)?.connectionInfo {
+        if let info = (focusedPane as? any RemoteScreenPane)?.connectionInfo {
             return info
         }
         let terminal = focusedTerminal
@@ -544,11 +544,11 @@ final class TabModel: Identifiable {
             return
         }
         guard let focusedTerminal = pane.asTerminal else {
-            // Only VNC panes publish a title; others keep the current one.
-            if let vncPane = pane as? VNCPaneView {
+            // Only remote-screen panes publish a title; others keep the current one.
+            if let remotePane = pane as? any RemoteScreenPane {
                 let titlePublisher = preserveExistingTitle
-                    ? vncPane.$displayTitle.dropFirst().eraseToAnyPublisher()
-                    : vncPane.$displayTitle.eraseToAnyPublisher()
+                    ? remotePane.displayTitlePublisher.dropFirst().eraseToAnyPublisher()
+                    : remotePane.displayTitlePublisher
                 titlePublisher
                     .receive(on: DispatchQueue.main)
                     .sink { [weak self] newTitle in
@@ -703,6 +703,7 @@ final class TabModel: Identifiable {
         case .trzszTransfer(_, let displayName, _): return displayName
         // Unreachable for terminals; kept for exhaustiveness.
         case .vnc(let config): return config.displayName
+        case .kvm(let config): return config.displayName
         }
     }
 
@@ -1913,8 +1914,8 @@ final class TabsModel {
     }
 
     private static func groupingConnectionConfig(for pane: SplitPaneView) -> ConnectionConfig? {
-        if let vncPane = pane as? VNCPaneView {
-            return .vnc(vncPane.config)
+        if let remotePane = pane as? any RemoteScreenPane {
+            return remotePane.connectionConfig
         }
         guard let terminal = pane.asTerminal else { return nil }
         if let embeddedProvider = terminal.session as? EmbeddedConnectionConfigProviding,
@@ -1939,6 +1940,8 @@ final class TabsModel {
             return TabGroupID.normalizeHost(console.instanceLabel)
         case .vnc(let vnc):
             return TabGroupID.normalizeHost(vnc.host)
+        case .kvm(let kvm):
+            return TabGroupID.normalizeHost(kvm.host)
         default:
             return nil
         }

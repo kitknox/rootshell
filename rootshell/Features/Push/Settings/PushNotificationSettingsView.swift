@@ -287,7 +287,7 @@ struct PushPairingView: View {
             return info.host
         case .trzsz(let info, _, _):
             return info.host
-        case .local, .kubernetes, .console, .vnc, .tmux, .herdr:
+        case .local, .kubernetes, .console, .vnc, .kvm, .tmux, .herdr:
             return nil
         }
     }

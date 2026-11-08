@@ -165,6 +165,19 @@ extension SplitTree where ViewType == SplitPaneView {
             // Screen Sharing pane: the connection config carries everything
             // needed to reconnect (password is a runtime Keychain lookup);
             // terminal-only fields stay nil.
+            if let kvmPane = pane as? KVMPaneView {
+                return .leaf(SerializableSplitTree.SerializableNode.LeafData(
+                    terminalId: kvmPane.uuid,
+                    connectionConfig: SerializableConnectionConfig(from: .kvm(kvmPane.config)),
+                    userOverrideTitle: kvmPane.userOverrideTitle,
+                    lastKnownWorkingDirectory: nil,
+                    sourceProfileID: kvmPane.sourceProfileID,
+                    fontSizeOverride: nil,
+                    trzszLastConnectedAt: nil,
+                    wasTmuxGateway: nil,
+                    tmuxResumeCancelRequested: nil
+                ))
+            }
             if let vncPane = pane as? VNCPaneView {
                 return .leaf(SerializableSplitTree.SerializableNode.LeafData(
                     terminalId: vncPane.uuid,

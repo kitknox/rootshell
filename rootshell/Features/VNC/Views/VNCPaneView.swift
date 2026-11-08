@@ -1267,6 +1267,31 @@ extension VNCPaneView {
     }
 }
 
+// MARK: - RemoteScreenPane
+
+extension VNCPaneView: RemoteScreenPane {
+    var paneDisplayName: String { config.displayName }
+    var connectionConfig: ConnectionConfig { .vnc(config) }
+    var displayTitlePublisher: AnyPublisher<String, Never> { $displayTitle.eraseToAnyPublisher() }
+    var fullScreenFailureMessage: String? {
+        if case .failed(let reason) = session.connectionState { return reason }
+        return nil
+    }
+    var usesAppleModifierConvention: Bool { session.serverUsesAppleModifierConvention }
+
+    func retryRemoteConnection() {
+        session.retryConnection()
+    }
+
+    func sendKeyboardToolbarKeysym(down: Bool, keysym: UInt32) {
+        session.sendKeyEvent(downFlag: down, key: keysym)
+    }
+
+    func pasteFromKeyboardToolbar() {
+        clipboardSynchronizer.sendClipboard()
+    }
+}
+
 // MARK: - Root View
 
 /// SwiftUI content for a VNC pane. rootshell owns the recovery chrome so VNC
@@ -1400,13 +1425,27 @@ struct VNCPaneThemedSurface<Content: View>: View {
     @ObservedObject var pane: VNCPaneView
     @ViewBuilder let content: () -> Content
 
+    var body: some View {
+        RemoteScreenThemedSurface(
+            tabId: pane.containingTabID,
+            windowId: pane.windowId,
+            content: content)
+    }
+}
+
+/// `VNCPaneThemedSurface` by value, for any remote-screen pane's chrome.
+struct RemoteScreenThemedSurface<Content: View>: View {
+    let tabId: UUID?
+    let windowId: String
+    @ViewBuilder let content: () -> Content
+
     @Setting(Settings.Theme.themedUI) private var themedUIEnabled
     @Environment(\.colorScheme) private var systemColorScheme
 
     var body: some View {
         let theme = VNCPaneTheme.resolve(
-            tabId: pane.containingTabID,
-            windowId: pane.windowId,
+            tabId: tabId,
+            windowId: windowId,
             themedUIEnabled: themedUIEnabled
         )
         content()
@@ -1521,7 +1560,7 @@ private struct VNCFirstFrameWaitCard: View {
     }
 }
 
-private struct VNCConnectingCard: View {
+struct VNCConnectingCard: View {
     let subtitle: String
     let status: String
     let onCancel: () -> Void
@@ -1558,7 +1597,7 @@ private struct VNCConnectingCard: View {
 /// A compact, centered glass panel over a softly dimmed desktop. Keeping the
 /// scrim translucent is important: Liquid Glass can pick up the remote
 /// desktop's color and depth instead of reading as an opaque gray dialog.
-private struct VNCOverlayCard<Icon: View, Content: View>: View {
+struct VNCOverlayCard<Icon: View, Content: View>: View {
     let title: String
     let subtitle: String
     @ViewBuilder let icon: () -> Icon
@@ -1678,7 +1717,7 @@ private struct VNCPasswordPromptCard: View {
     }
 }
 
-private struct VNCReconnectCard: View {
+struct VNCReconnectCard: View {
     let subtitle: String
     let attempt: Int
     let delay: TimeInterval

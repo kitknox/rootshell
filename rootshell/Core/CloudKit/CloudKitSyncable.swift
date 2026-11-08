@@ -451,7 +451,7 @@ extension ConnectionProfile: CloudKitSyncable {
                     logger.debug("Raw sshConfig JSON: \(jsonString)")
                 }
             }
-        } else if connectionProtocol != .vnc && connectionProtocol != .local {
+        } else if connectionProtocol != .vnc && connectionProtocol != .kvm && connectionProtocol != .local {
             logger.warning("ConnectionProfile '\(name)' missing sshConfig data")
         }
 
@@ -468,6 +468,9 @@ extension ConnectionProfile: CloudKitSyncable {
                 logger.warning("VNC profile '\(name)' has no decodable envelope - materializing with placeholder")
             }
             validSSHConfig = ConnectionProfile.vncPlaceholderSSHConfig(for: extensionPayload?.vncConfig)
+        } else if connectionProtocol == .kvm {
+            // KVM records omit sshConfig like VNC ones.
+            validSSHConfig = ConnectionProfile.kvmPlaceholderSSHConfig(for: extensionPayload?.kvmConfig)
         } else {
             return nil
         }

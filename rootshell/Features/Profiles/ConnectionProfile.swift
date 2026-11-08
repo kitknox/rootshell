@@ -31,6 +31,8 @@ enum ConnectionProtocol: String, Codable, CaseIterable, Sendable {
     case trzsz
     /// Screen Sharing / VNC remote desktop connection
     case vnc
+    /// KVM over IP (GL.iNet Comet and other kvmd devices)
+    case kvm
 
     var displayName: String {
         switch self {
@@ -39,6 +41,7 @@ enum ConnectionProtocol: String, Codable, CaseIterable, Sendable {
         case .mosh: return String(localized: "Roam - mosh compatible", comment: "Connection protocol: mosh")
         case .trzsz: return String(localized: "Roam - tssh", comment: "Connection protocol: trzsz")
         case .vnc: return String(localized: "Screen Sharing", comment: "Connection protocol: VNC")
+        case .kvm: return String(localized: "KVM over IP", comment: "Connection protocol: KVM")
         }
     }
 
@@ -49,6 +52,7 @@ enum ConnectionProtocol: String, Codable, CaseIterable, Sendable {
         case .mosh: return String(localized: "Mobile shell - better for unreliable networks", comment: "Connection protocol description: mosh")
         case .trzsz: return String(localized: "QUIC-based mobile shell - modern roaming protocol", comment: "Connection protocol description: trzsz")
         case .vnc: return String(localized: "Remote desktop via VNC / Apple Screen Sharing", comment: "Connection protocol description: VNC")
+        case .kvm: return String(localized: "Keyboard, video and mouse through a GL.iNet Comet KVM", comment: "Connection protocol description: KVM")
         }
     }
 
@@ -59,6 +63,7 @@ enum ConnectionProtocol: String, Codable, CaseIterable, Sendable {
         case .mosh: return "antenna.radiowaves.left.and.right"
         case .trzsz: return "antenna.radiowaves.left.and.right"
         case .vnc: return "display"
+        case .kvm: return "pc"
         }
     }
 }
@@ -473,6 +478,47 @@ struct ConnectionProfile: Codable, Identifiable, Hashable, SyncableRecord {
         }
     }
 
+    /// The KVM config in the extension envelope, recovered from the mirrored
+    /// endpoint when the envelope cannot decode.
+    var kvmConfig: KVMConnectionConfig? {
+        get {
+            if let config = extensionPayload?.kvmConfig {
+                return config
+            }
+            guard connectionProtocol == .kvm, !sshConfig.host.isEmpty else {
+                return nil
+            }
+            return KVMConnectionConfig(
+                host: sshConfig.host,
+                port: sshConfig.port,
+                username: sshConfig.username.isEmpty ? KVMConnectionConfig.defaultUsername : sshConfig.username)
+        }
+        set {
+            if let newValue {
+                var payload = extensionPayload ?? ProfileExtensionPayload()
+                payload.kvmConfig = newValue
+                extensionPayload = payload
+            } else {
+                extensionPayload?.kvmConfig = nil
+                if extensionPayload?.isEmpty == true {
+                    extensionPayload = nil
+                }
+            }
+        }
+    }
+
+    /// Placeholder SSHConfig for KVM profiles, like `vncPlaceholderSSHConfig`.
+    static func kvmPlaceholderSSHConfig(for config: KVMConnectionConfig?) -> SSHConfig {
+        var ssh = SSHConfig(
+            host: config?.host ?? "",
+            port: config?.port ?? KVMConnectionConfig.defaultPort,
+            username: config?.username ?? "",
+            password: ""
+        )
+        ssh.authMethod = .none
+        return ssh
+    }
+
     /// Placeholder SSHConfig for VNC profiles (sshConfig is non-optional).
     /// Mirrors host/port/username for display fallbacks; never connectable.
     static func vncPlaceholderSSHConfig(for config: VNCConnectionConfig?) -> SSHConfig {
@@ -504,6 +550,9 @@ struct ConnectionProfile: Codable, Identifiable, Hashable, SyncableRecord {
         if connectionProtocol == .vnc, let vncConfig {
             return vncConfig.displayName
         }
+        if connectionProtocol == .kvm, let kvmConfig {
+            return kvmConfig.displayName
+        }
         let hostPart: String
         if sshConfig.port == 22 {
             hostPart = "\(sshConfig.username)@\(sshConfig.host)"
@@ -526,6 +575,8 @@ struct ConnectionProfile: Codable, Identifiable, Hashable, SyncableRecord {
             return "trzsz \(displayString)"
         case .vnc:
             return "vnc \(displayString)"
+        case .kvm:
+            return "kvm \(displayString)"
         }
     }
 

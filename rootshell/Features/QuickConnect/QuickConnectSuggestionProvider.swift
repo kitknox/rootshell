@@ -88,7 +88,7 @@ class QuickConnectSuggestionProvider: ObservableObject {
 
         // History suggestions
         let history = historyManager.entries
-            .filter { context == .connectionLauncher || ($0.connectionProtocol != .vnc && $0.connectionProtocol != .local) }
+            .filter { context == .connectionLauncher || ($0.connectionProtocol != .vnc && $0.connectionProtocol != .kvm && $0.connectionProtocol != .local) }
             .map { HistorySuggestion(entry: $0) }
             .filter { searchText.isEmpty || $0.matches(searchText, mode: mode) }
             .map { AnyQuickConnectSuggestion($0) }

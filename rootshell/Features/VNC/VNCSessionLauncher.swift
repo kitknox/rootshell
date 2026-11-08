@@ -61,112 +61,17 @@ enum VNCSessionLauncher {
             logger.warning("Ignoring jump configuration for High Performance connection")
         }
 
-        switch config.effectiveJump {
-        case .none:
-            #if !CHINA_BUILD
-            // In-app Tailscale: the stream and High Performance media both ride
-            // the tailnet. The datagram path goes first so .adaptive survives.
-            if let ip = await TailnetDialer.route(config.host) {
-                configuration.datagramProvider = TailnetVNCTransport.datagramProvider
-                configuration.transportProvider = { _, port in TailnetVNCTransport(host: ip, port: port) }
-            }
-            #endif
-
-        case .sshProfile(let profileID):
-            guard let profile = ConnectionProfileManager.shared.profile(for: profileID) else {
-                throw VNCLaunchError.jumpProfileNotFound
-            }
-            let resolved = try await resolveJumpSSHConfig(profile.sshConfig, profileID: profileID)
-            configuration.transportProvider = sshProvider(
-                config: resolved,
-                onHostKeyValidation: onHostKeyValidation
-            )
-
-        case .sshConfig(let sshConfig):
-            let resolved = try await resolveJumpSSHConfig(sshConfig, profileID: nil)
-            configuration.transportProvider = sshProvider(
-                config: resolved,
-                onHostKeyValidation: onHostKeyValidation
-            )
-
-        case .tsshProfile(let profileID):
-            guard let profile = ConnectionProfileManager.shared.profile(for: profileID) else {
-                throw VNCLaunchError.jumpProfileNotFound
-            }
-            let resolved = try await resolveJumpSSHConfig(profile.sshConfig, profileID: profileID)
-            let transportMode = profile.trzszTransportMode
-            let udpPortMin = profile.trzszPortMin ?? TrzszConfig.preferredUDPPortMin
-            let udpPortMax = profile.trzszPortMax ?? TrzszConfig.preferredUDPPortMax
-            let mtu = profile.trzszMTU ?? 0
-            let connectTimeoutSec = profile.trzszConnectTimeoutSec
-            let serverPath = profile.trzszServerPath
-            configuration.transportProvider = { host, port in
-                TSSHTunnelVNCTransport(
-                    sshConfig: resolved,
-                    transportMode: transportMode,
-                    udpPortMin: udpPortMin,
-                    udpPortMax: udpPortMax,
-                    mtu: mtu,
-                    connectTimeoutSec: connectTimeoutSec,
-                    serverPath: serverPath,
-                    vncHost: host,
-                    vncPort: port,
-                    onHostKeyValidation: onHostKeyValidation
-                )
-            }
+        let providers = try await RemoteScreenTransportFactory.providers(
+            jump: config.effectiveJump,
+            host: config.host,
+            onHostKeyValidation: onHostKeyValidation)
+        if let datagram = providers.datagram {
+            configuration.datagramProvider = datagram
+        }
+        if let transport = providers.transport {
+            configuration.transportProvider = transport
         }
 
         return (credentials, configuration)
-    }
-
-    // MARK: - Jump resolution
-
-    /// Resolve a jump SSH config to a directly connectable one: key UUIDs
-    /// via ConnectionKeyResolver (device overrides included), then saved
-    /// passwords inlined from the Keychain. Mirrors connectToProfile's
-    /// resolve-then-config sequence, minus the interactive fallbacks
-    /// (unresolved keys throw instead of opening a resolution sheet).
-    private static func resolveJumpSSHConfig(
-        _ config: SSHConfig,
-        profileID: UUID?
-    ) async throws -> SSHConfig {
-        var working = config
-
-        switch ConnectionKeyResolver.resolve(config: working, profileID: profileID) {
-        case .resolved(let resolved):
-            working = resolved
-        case .unresolved(_, let unresolvedKeys):
-            let ids = unresolvedKeys
-                .map { String($0.originalKeyID.uuidString.prefix(8)) }
-                .joined(separator: ", ")
-            throw VNCLaunchError.jumpKeysUnresolved(ids)
-        }
-
-        // Password auth with no inline value: fall back to a stored
-        // password when one exists (same as connectToProfile).
-        if case .password(let pwd) = working.authMethod, pwd.isEmpty,
-           SSHPasswordManager.shared.hasPassword(
-               host: working.host, port: working.port, username: working.username
-           ) {
-            working.authMethod = .savedPassword
-        }
-
-        return try await working.resolvedConfig()
-    }
-
-    /// Provider closure for the SSH jump. Captures only Sendable resolved
-    /// values; runs off the main actor once per connection attempt.
-    private static func sshProvider(
-        config: SSHConfig,
-        onHostKeyValidation: (@Sendable (HostKeyValidationRequest) async -> HostKeyValidationResult)?
-    ) -> VNCTransportProvider {
-        { host, port in
-            SSHTunnelVNCTransport(
-                sshConfig: config,
-                vncHost: host,
-                vncPort: port,
-                onHostKeyValidation: onHostKeyValidation
-            )
-        }
     }
 }

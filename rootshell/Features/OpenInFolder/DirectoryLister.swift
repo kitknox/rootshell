@@ -44,7 +44,7 @@ enum DirectoryListerFactory {
         switch owner.connectionConfig {
         case .local:
             return .available(LocalDirectoryLister(targetKey: targetKey, helperFallback: owner))
-        case .kubernetes, .console, .ec2Console, .trzszTransfer, .vnc:
+        case .kubernetes, .console, .ec2Console, .trzszTransfer, .vnc, .kvm:
             return .unavailable(.unsupportedTarget)
         case .mosh(let config), .shellLaunchedMosh(let config, _):
             return .available(MoshSideConnectionDirectoryLister(targetKey: targetKey, config: config.sshConfig))

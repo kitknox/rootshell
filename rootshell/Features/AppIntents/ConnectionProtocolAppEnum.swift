@@ -14,6 +14,7 @@ enum ConnectionProtocolAppEnum: String, AppEnum {
     case mosh
     case trzsz
     case vnc
+    case kvm
 
     nonisolated static var typeDisplayRepresentation: TypeDisplayRepresentation {
         TypeDisplayRepresentation(name: "Connection Protocol")
@@ -30,6 +31,7 @@ enum ConnectionProtocolAppEnum: String, AppEnum {
             .mosh:  "Roam - mosh compatible",
             .trzsz: "Roam - tssh",
             .vnc:   "Screen Sharing",
+            .kvm:   "KVM over IP",
         ]
     }
 
@@ -40,6 +42,7 @@ enum ConnectionProtocolAppEnum: String, AppEnum {
         case .mosh: return .mosh
         case .trzsz: return .trzsz
         case .vnc: return .vnc
+        case .kvm: return .kvm
         }
     }
 }
