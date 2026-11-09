@@ -3,7 +3,8 @@
 //  rootshell
 //
 //  Hardware H.264 decode of kvmd-media access units into BGRA IOSurface
-//  buffers for the shared video layer. Everything runs on one serial queue.
+//  buffers for the shared video layer. Frames are submitted from one serial
+//  queue and decoded asynchronously, so the hardware works on several at once.
 //
 
 import CoreMedia
@@ -24,9 +25,11 @@ nonisolated struct KVMVideoFormat: Equatable, Sendable {
 
 nonisolated final class KVMH264Decoder: @unchecked Sendable {
     private static let logger = Logger(subsystem: "com.rootshell", category: "KVM")
-    /// Frames waiting on the queue before new P-frames are dropped and a
-    /// keyframe is requested instead of building latency.
-    private static let maximumBacklog = 6
+    /// Frames waiting on the queue before P-frames are dropped for a fresh
+    /// keyframe. Only a decoder that can't keep up gets here: Wi-Fi delivers
+    /// frames in clumps, and each requested keyframe costs the KVM a large
+    /// frame, so GL's own client never asks for one.
+    private static let maximumBacklog = 120
 
     private let queue = DispatchQueue(label: "com.rootshell.kvm.decode", qos: .userInteractive)
     private let onFrame: @Sendable (KVMDecodedFrame) -> Void
@@ -149,13 +152,22 @@ nonisolated final class KVMH264Decoder: @unchecked Sendable {
         }
         frameNumber += 1
 
+        // Waiting for each frame before the next held a busy screen's video
+        // seconds behind. A clump catches up without producing older images.
+        let isStale = backlogLock.withLock { backlog } > 1
+        var flags: VTDecodeFrameFlags = [._EnableAsynchronousDecompression]
+        if isStale { flags.insert(._DoNotOutputFrame) }
         let status = VTDecompressionSessionDecodeFrame(
             session,
             sampleBuffer: sample,
-            flags: [],
+            flags: flags,
             infoFlagsOut: nil
-        ) { [onFrame] status, _, imageBuffer, _, _ in
-            guard status == noErr, let imageBuffer else { return }
+        ) { [weak self, onFrame] status, _, imageBuffer, _, _ in
+            guard status == noErr else {
+                self?.outputFailed(status)
+                return
+            }
+            guard let imageBuffer else { return }
             onFrame(KVMDecodedFrame(pixelBuffer: imageBuffer))
         }
         guard status == noErr else {
@@ -172,6 +184,13 @@ nonisolated final class KVMH264Decoder: @unchecked Sendable {
     private func requestKeyframe() {
         awaitingKeyframe = true
         onNeedsKeyframe()
+    }
+
+    /// Asynchronous decode reports frame errors here, off the queue.
+    private func outputFailed(_ status: OSStatus) {
+        backlogLock.withLock { decodeErrors += 1 }
+        Self.logger.error("KVM H.264 frame decode failed: \(status)")
+        queue.async { [self] in requestKeyframe() }
     }
 
     private func updateFormat(sps: Data, pps: Data) -> Bool {
@@ -248,6 +267,7 @@ nonisolated final class KVMH264Decoder: @unchecked Sendable {
 
     private func invalidateSession() {
         if let session {
+            VTDecompressionSessionWaitForAsynchronousFrames(session)
             VTDecompressionSessionInvalidate(session)
         }
         session = nil
