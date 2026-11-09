@@ -336,11 +336,15 @@ nonisolated extension Settings {
             "screenSharingCursorSizeDefault", default: ScreenSharingCursorSizeDefault.medium, group: .screenSharing,
             configKey: "screen-sharing-cursor-size-default",
             title: String(localized: "Cursor Size", comment: "Setting title"))
+        static let kvmLocalCursorDefault = SettingKey(
+            "screenSharingKVMLocalCursorDefault", default: false, group: .screenSharing,
+            configKey: "screen-sharing-kvm-local-cursor-default",
+            title: String(localized: "KVM Local Cursor", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
             clipboardSyncDefault.erased, panningDefault.erased,
             pointerModeDefault.erased, pointerSpeed.erased,
-            cursorRenderingDefault.erased, cursorSizeDefault.erased,
+            cursorRenderingDefault.erased, cursorSizeDefault.erased, kvmLocalCursorDefault.erased,
             controlOptionAsCommandDefault.erased, routeReservedShortcutsToVNCDefault.erased,
         ]
     }
