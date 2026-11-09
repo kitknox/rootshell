@@ -37,6 +37,9 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
     @Published private(set) var launchErrorMessage: String?
     /// A destructive power action waiting for confirmation.
     @Published var pendingATXAction: KVMATXAction?
+    /// Dot at the local pointer, ahead of the pointer in the video.
+    @Published var showsLocalCursor = SettingsStore.shared.value(
+        Settings.ScreenSharing.kvmLocalCursorDefault)
 
     var onHostKeyValidation: (@Sendable (HostKeyValidationRequest) async -> HostKeyValidationResult)?
     var onCertificateValidation: VNCConfiguration.CertificateValidationHandler?

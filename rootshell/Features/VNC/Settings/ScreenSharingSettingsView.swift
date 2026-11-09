@@ -14,6 +14,7 @@ struct ScreenSharingSettingsView: View {
     @Setting(Settings.ScreenSharing.pointerSpeed) private var pointerSpeed
     @Setting(Settings.ScreenSharing.cursorRenderingDefault) private var cursorRenderingDefault
     @Setting(Settings.ScreenSharing.cursorSizeDefault) private var cursorSizeDefault
+    @Setting(Settings.ScreenSharing.kvmLocalCursorDefault) private var kvmLocalCursorDefault
     @Setting(Settings.ScreenSharing.controlOptionAsCommandDefault) private var controlOptionAsCommandDefault
     @Setting(Settings.ScreenSharing.routeReservedShortcutsToVNCDefault) private var routeReservedShortcutsToVNCDefault
 
@@ -162,6 +163,21 @@ struct ScreenSharingSettingsView: View {
                 Text(cursorRenderingDefault == .local
                     ? "Local draws the Trackpad pointer on this device, sharp at any zoom. Size applies to that pointer; Medium is the Mac's own. Rendering applies to new connections."
                     : "Remote lets the Mac draw the pointer into the picture: every shape, moving with the picture rather than your finger. Rendering applies to new connections.")
+            }
+
+            Section {
+                Toggle(isOn: $kvmLocalCursorDefault) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "smallcircle.filled.circle")
+                        Text("Local Cursor")
+                    }
+                    .settingRow(Settings.ScreenSharing.kvmLocalCursorDefault)
+                }
+                .themedRow()
+            } header: {
+                SettingGroupHeader("KVM", group: .screenSharing)
+            } footer: {
+                Text("Draws a dot where your pointer is, ahead of the remote computer’s own pointer in the video. Sets the default for new KVM sessions; change it for the current session from the Screen Sharing menu.")
             }
         }
         .themedList()

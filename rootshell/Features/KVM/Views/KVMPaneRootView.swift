@@ -22,6 +22,7 @@ struct KVMPaneRootView: View {
                     pane: pane,
                     pointerSpeed: pointerSpeed,
                     cursorHeight: cursorSizeDefault.points,
+                    showsLocalCursor: pane.showsLocalCursor,
                     brightnessGain: brightnessManager.effectiveGain)
 
                 KVMSessionOverlay(pane: pane)
@@ -72,13 +73,21 @@ private struct KVMScreenContent: View {
     @Bindable private var session: KVMSession
     let pointerSpeed: Double
     let cursorHeight: CGFloat
+    let showsLocalCursor: Bool
     let brightnessGain: Double
 
-    init(pane: KVMPaneView, pointerSpeed: Double, cursorHeight: CGFloat, brightnessGain: Double) {
+    init(
+        pane: KVMPaneView,
+        pointerSpeed: Double,
+        cursorHeight: CGFloat,
+        showsLocalCursor: Bool,
+        brightnessGain: Double
+    ) {
         self.pane = pane
         self._session = Bindable(wrappedValue: pane.session)
         self.pointerSpeed = pointerSpeed
         self.cursorHeight = cursorHeight
+        self.showsLocalCursor = showsLocalCursor
         self.brightnessGain = brightnessGain
     }
 
@@ -97,6 +106,7 @@ private struct KVMScreenContent: View {
             pointerSpeed: pointerSpeed,
             cursorHeight: cursorHeight,
             serverRendersCursor: true,
+            showsLocalCursorDot: showsLocalCursor,
             brightnessGain: brightnessGain,
             disconnect: { session.disconnect() },
             hudMenuExtras: { KVMHUDMenuExtras(pane: pane) })
@@ -205,6 +215,7 @@ private struct KVMHUDMenuExtras: View {
             #if !os(visionOS)
             KVMKeyboardToolbarToggle(pane: pane)
             #endif
+            KVMLocalCursorToggle(pane: pane)
             Button {
                 NotificationCenter.default.post(name: .vncShowConnectionInfo, object: pane)
             } label: {
@@ -251,6 +262,16 @@ private struct KVMKeyboardToolbarToggle: View {
     }
 }
 #endif
+
+private struct KVMLocalCursorToggle: View {
+    @ObservedObject var pane: KVMPaneView
+
+    var body: some View {
+        Toggle(isOn: $pane.showsLocalCursor) {
+            Label("Local Cursor", systemImage: "smallcircle.filled.circle")
+        }
+    }
+}
 
 // MARK: - Session cards
 
