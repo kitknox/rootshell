@@ -31,6 +31,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             ("appState", String(describing: UIApplication.shared.applicationState)),
             ("backgroundLaunch", UIApplication.shared.applicationState == .background),
         ])
+        SystemKeyboardCrashGuard.install()
         ForegroundWedgeWatchdog.shared.noteMainActorServiced("AppDelegate.launch")
         LifecycleDebugLogger.shared.logMarker("APP LAUNCH")
         TmuxDebugLogger.shared.marker("APP LAUNCH")
