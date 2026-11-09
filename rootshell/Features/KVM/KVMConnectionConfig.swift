@@ -30,6 +30,9 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
     /// kvmd keymap for the remote computer's keyboard layout. Text without a
     /// physical key (touch keyboard, dictation, paste) is typed with it.
     var hostKeyboardLayout: String
+    /// Usually wanted for a Mac, which reverses a USB wheel with its own
+    /// natural scrolling setting.
+    var reverseScrolling: Bool
 
     init(
         host: String,
@@ -38,7 +41,8 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         jump: Jump = .none,
         keyboardToolbar: KeyboardToolbarPreference = .followAppSetting,
         automaticallyEnterFullScreen: Bool = false,
-        hostKeyboardLayout: String = KVMInputTranslator.usLayout
+        hostKeyboardLayout: String = KVMInputTranslator.usLayout,
+        reverseScrolling: Bool = false
     ) {
         self.host = host
         self.port = port
@@ -47,13 +51,14 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         self.keyboardToolbar = keyboardToolbar
         self.automaticallyEnterFullScreen = automaticallyEnterFullScreen
         self.hostKeyboardLayout = hostKeyboardLayout
+        self.reverseScrolling = reverseScrolling
     }
 
     // MARK: - Codable (lossy per field)
 
     private enum CodingKeys: String, CodingKey {
         case host, port, username, jump, keyboardToolbar
-        case automaticallyEnterFullScreen, hostKeyboardLayout
+        case automaticallyEnterFullScreen, hostKeyboardLayout, reverseScrolling
     }
 
     init(from decoder: Decoder) throws {
@@ -72,6 +77,7 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         automaticallyEnterFullScreen = ((try? container.decodeIfPresent(Bool.self, forKey: .automaticallyEnterFullScreen)) ?? nil) ?? false
         let layout = ((try? container.decodeIfPresent(String.self, forKey: .hostKeyboardLayout)) ?? nil) ?? ""
         hostKeyboardLayout = layout.isEmpty ? KVMInputTranslator.usLayout : layout
+        reverseScrolling = ((try? container.decodeIfPresent(Bool.self, forKey: .reverseScrolling)) ?? nil) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -83,6 +89,7 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         try container.encode(keyboardToolbar, forKey: .keyboardToolbar)
         try container.encode(automaticallyEnterFullScreen, forKey: .automaticallyEnterFullScreen)
         try container.encode(hostKeyboardLayout, forKey: .hostKeyboardLayout)
+        try container.encode(reverseScrolling, forKey: .reverseScrolling)
     }
 
     // MARK: - Computed

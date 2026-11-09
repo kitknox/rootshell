@@ -17,6 +17,7 @@ struct KVMFormState: Hashable {
     var keyboardToolbar: VNCConnectionConfig.KeyboardToolbarPreference = .followAppSetting
     var automaticallyEnterFullScreen = false
     var hostKeyboardLayout = KVMInputTranslator.usLayout
+    var reverseScrolling = false
     /// Only the `jump*` fields are used; Screen Sharing's jump UI and builder edit them.
     var jump = VNCFormState()
 
@@ -31,6 +32,7 @@ struct KVMFormState: Hashable {
         keyboardToolbar = config.keyboardToolbar
         automaticallyEnterFullScreen = config.automaticallyEnterFullScreen
         hostKeyboardLayout = config.hostKeyboardLayout
+        reverseScrolling = config.reverseScrolling
         var jumpForm = VNCFormState(config: VNCConnectionConfig(host: config.host, quality: .standard, jump: config.jump))
         jumpForm.quality = .standard
         jump = jumpForm
@@ -54,7 +56,8 @@ struct KVMFormState: Hashable {
             jump: built.jump,
             keyboardToolbar: keyboardToolbar,
             automaticallyEnterFullScreen: automaticallyEnterFullScreen,
-            hostKeyboardLayout: hostKeyboardLayout)
+            hostKeyboardLayout: hostKeyboardLayout,
+            reverseScrolling: reverseScrolling)
     }
 
     /// Host and port validate and build through the Screen Sharing form.
@@ -129,6 +132,15 @@ struct KVMConnectionFormSections: View {
             Text("Keyboard")
         } footer: {
             Text("Hardware keys are sent by position. Text from the touch keyboard, dictation and paste is typed using this layout, so pick the one the remote computer uses.")
+        }
+
+        Section {
+            Toggle("Reverse Scroll Direction", isOn: $form.reverseScrolling)
+                .themedRow()
+        } header: {
+            Text("Mouse")
+        } footer: {
+            Text("Turn this on if scrolling moves the wrong way. A Mac usually needs it, because it applies its own natural scrolling to the KVM's mouse.")
         }
 
         RemoteScreenJumpSection(
