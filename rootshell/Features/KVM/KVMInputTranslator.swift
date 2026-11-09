@@ -21,6 +21,9 @@ nonisolated struct KVMInputTranslator {
     /// kvmd keymap name for the remote computer's keyboard layout.
     var hostLayout = Self.usLayout
     var mouseAbsolute = true
+    /// Flips both wheel axes for a Mac, which applies its own natural
+    /// scrolling to the KVM's USB mouse on top of the local direction.
+    var reverseScrolling = false
     var frameWidth = 0
     var frameHeight = 0
 
@@ -132,17 +135,19 @@ nonisolated struct KVMInputTranslator {
         }
 
         let pressed = mask & ~buttonMask
-        if pressed & 0x08 != 0 { output.append(.frame(KVMHIDFrame.wheel(dx: 0, dy: 1))) }
-        if pressed & 0x10 != 0 { output.append(.frame(KVMHIDFrame.wheel(dx: 0, dy: -1))) }
-        if pressed & 0x20 != 0 { output.append(.frame(KVMHIDFrame.wheel(dx: -1, dy: 0))) }
-        if pressed & 0x40 != 0 { output.append(.frame(KVMHIDFrame.wheel(dx: 1, dy: 0))) }
+        let tick: Int8 = reverseScrolling ? -1 : 1
+        if pressed & 0x08 != 0 { output.append(.frame(KVMHIDFrame.wheel(dx: 0, dy: tick))) }
+        if pressed & 0x10 != 0 { output.append(.frame(KVMHIDFrame.wheel(dx: 0, dy: -tick))) }
+        if pressed & 0x20 != 0 { output.append(.frame(KVMHIDFrame.wheel(dx: -tick, dy: 0))) }
+        if pressed & 0x40 != 0 { output.append(.frame(KVMHIDFrame.wheel(dx: tick, dy: 0))) }
         buttonMask = mask
         return output
     }
 
     /// Whole wheel units; positive `wheelY` scrolls up, positive `wheelX` right.
     mutating func scroll(x: Int, y: Int, wheelX: Int, wheelY: Int) -> [KVMInputOutput] {
-        move(x: x, y: y) + KVMHIDFrame.splitDelta(dx: wheelX, dy: wheelY).map {
+        let sign = reverseScrolling ? -1 : 1
+        return move(x: x, y: y) + KVMHIDFrame.splitDelta(dx: wheelX * sign, dy: wheelY * sign).map {
             .frame(KVMHIDFrame.wheel(dx: $0.dx, dy: $0.dy))
         }
     }

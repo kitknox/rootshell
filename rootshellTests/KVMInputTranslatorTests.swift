@@ -112,6 +112,16 @@ final class KVMInputTranslatorTests: XCTestCase {
         XCTAssertEqual(output.last, .frame(KVMHIDFrame.wheel(dx: 0, dy: 73)))
     }
 
+    func testReverseScrollingFlipsBothAxes() {
+        var translator = KVMInputTranslator()
+        translator.frameWidth = 100
+        translator.frameHeight = 100
+        translator.reverseScrolling = true
+        XCTAssertEqual(translator.scroll(x: 5, y: 5, wheelX: 2, wheelY: 3).last, .frame(KVMHIDFrame.wheel(dx: -2, dy: -3)))
+        XCTAssertEqual(translator.pointer(buttonMask: 0x08, x: 5, y: 5), [.frame(KVMHIDFrame.wheel(dx: 0, dy: -1))])
+        XCTAssertEqual(translator.pointer(buttonMask: 0x40, x: 5, y: 5), [.frame(KVMHIDFrame.wheel(dx: -1, dy: 0))])
+    }
+
     // MARK: Reset
 
     func testReleaseAllLetsGoOfKeysAndButtons() {

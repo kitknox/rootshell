@@ -86,8 +86,8 @@ nonisolated final class KVMMediaChannel: @unchecked Sendable {
             guard KVMMediaFrame.advertisesH264(announcement) == true else {
                 throw KVMDError.directVideoUnavailable
             }
+            // The server already starts each new client on a keyframe.
             try await task.send(.string(KVMMediaFrame.startH264Message))
-            requestKeyframe()
             startPings()
             onEvent(.streaming)
 

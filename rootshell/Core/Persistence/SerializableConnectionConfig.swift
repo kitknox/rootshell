@@ -481,6 +481,8 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
         let keyboardToolbar: VNCConnectionConfig.KeyboardToolbarPreference
         let automaticallyEnterFullScreen: Bool
         let hostKeyboardLayout: String
+        /// Optional so sessions saved before the field still decode.
+        let reverseScrolling: Bool?
 
         init(from config: KVMConnectionConfig) {
             self.host = config.host
@@ -489,6 +491,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
             self.keyboardToolbar = config.keyboardToolbar
             self.automaticallyEnterFullScreen = config.automaticallyEnterFullScreen
             self.hostKeyboardLayout = config.hostKeyboardLayout
+            self.reverseScrolling = config.reverseScrolling
             switch config.jump {
             case .none:
                 self.jump = .none
@@ -521,7 +524,8 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
                 jump: liveJump,
                 keyboardToolbar: keyboardToolbar,
                 automaticallyEnterFullScreen: automaticallyEnterFullScreen,
-                hostKeyboardLayout: hostKeyboardLayout)
+                hostKeyboardLayout: hostKeyboardLayout,
+                reverseScrolling: reverseScrolling ?? false)
         }
 
         var needsPassword: Bool {

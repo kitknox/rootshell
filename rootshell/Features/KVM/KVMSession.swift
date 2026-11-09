@@ -93,15 +93,16 @@ final class KVMSession {
     // MARK: Input internals
 
     @ObservationIgnored private var translator = KVMInputTranslator()
-    @ObservationIgnored private var outbound: [KVMInputOutput] = []
+    @ObservationIgnored private var outbound = KVMInputQueue()
     @ObservationIgnored private var framesInFlight = 0
     @ObservationIgnored private var typingTask: Task<Void, Never>?
-    private static let maximumFramesInFlight = 32
+    @ObservationIgnored private var pumpTask: Task<Void, Never>?
 
     init(config: KVMConnectionConfig) {
         self.config = config
         renderer = VideoBandLayerRenderer()
         translator.hostLayout = config.hostKeyboardLayout
+        translator.reverseScrolling = config.reverseScrolling
         renderer.configureExpectedBandCount(1)
         decoder = makeDecoder()
     }
@@ -528,8 +529,6 @@ final class KVMSession {
         videoFormat = format
         framebufferSize = CGSize(width: format.width, height: format.height)
         renderer.setScreenSize(width: format.width, height: format.height)
-        translator.frameWidth = format.width
-        translator.frameHeight = format.height
     }
 
     private func present(_ frame: KVMDecodedFrame) {
@@ -614,6 +613,8 @@ final class KVMSession {
         eventSocket = nil
         typingTask?.cancel()
         typingTask = nil
+        pumpTask?.cancel()
+        pumpTask = nil
         isTypingText = false
         outbound.removeAll()
         framesInFlight = 0
@@ -654,10 +655,12 @@ final class KVMSession {
         RemoteScreenInput(
             sendPointer: { [weak self] mask, x, y in
                 guard let self else { return }
+                self.syncPointerFrame()
                 self.enqueue(self.translator.pointer(buttonMask: mask, x: Int(x), y: Int(y)))
             },
             sendScroll: { [weak self] event in
                 guard let self else { return }
+                self.syncPointerFrame()
                 // Apple scroll deltas are positive up and positive left.
                 self.enqueue(self.translator.scroll(
                     x: Int(event.x), y: Int(event.y),
@@ -689,44 +692,54 @@ final class KVMSession {
     }
 
     func cancelTyping() {
-        outbound.removeAll { if case .text = $0 { true } else { false } }
+        outbound.removeText()
         typingTask?.cancel()
+    }
+
+    /// Pointer input is in the input layer's frame, which stands in for the
+    /// video until it arrives, so a sleeping computer still gets real positions.
+    private func syncPointerFrame() {
+        let size = interactionFrameSize
+        translator.frameWidth = Int(size.width)
+        translator.frameHeight = Int(size.height)
     }
 
     private func enqueue(_ outputs: [KVMInputOutput]) {
         guard eventSocket != nil, !outputs.isEmpty else { return }
-        for output in outputs {
-            switch (output, outbound.last) {
-            case (.frame(let frame), .frame(let last)?) where frame.first == 0x03 && last.first == 0x03:
-                // Only the newest absolute position matters.
-                outbound[outbound.count - 1] = output
-            case (.text(let text), .text(let previous)?):
-                outbound[outbound.count - 1] = .text(previous + text)
-            default:
-                outbound.append(output)
-            }
-        }
+        outbound.append(outputs)
         pump()
     }
 
-    /// Frames go out in order; text waits for earlier frames and later frames
-    /// wait for the text, so a held modifier wraps device-typed characters.
     private func pump() {
-        while let next = outbound.first, typingTask == nil {
-            switch next {
-            case .frame(let data):
-                guard framesInFlight < Self.maximumFramesInFlight, let socket = eventSocket else { return }
-                outbound.removeFirst()
-                framesInFlight += 1
+        while typingTask == nil, let socket = eventSocket {
+            switch outbound.next(now: ProcessInfo.processInfo.systemUptime, framesInFlight: framesInFlight) {
+            case .frames(let frames):
                 let owner = KVMWeakSession(self)
-                socket.send(.data(data)) { _ in
-                    Task { @MainActor in owner.session?.frameSent(on: socket) }
+                for data in frames {
+                    framesInFlight += 1
+                    socket.send(.data(data)) { _ in
+                        Task { @MainActor in owner.session?.frameSent(on: socket) }
+                    }
                 }
             case .text(let text):
-                guard framesInFlight == 0, let client else { return }
-                outbound.removeFirst()
+                guard let client else { return }
                 startTyping(text, client: client)
+            case .wait(let delay):
+                schedulePump(after: delay)
+                return
+            case .none:
+                return
             }
+        }
+    }
+
+    private func schedulePump(after delay: TimeInterval) {
+        guard pumpTask == nil else { return }
+        pumpTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay), tolerance: .milliseconds(1))
+            guard !Task.isCancelled, let self else { return }
+            self.pumpTask = nil
+            self.pump()
         }
     }
 
