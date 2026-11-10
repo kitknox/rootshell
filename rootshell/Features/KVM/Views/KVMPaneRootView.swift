@@ -14,6 +14,7 @@ struct KVMPaneRootView: View {
     @Bindable private var brightnessManager = BrightnessManager.shared
     @Setting(Settings.ScreenSharing.pointerSpeed) private var pointerSpeed
     @Setting(Settings.ScreenSharing.cursorSizeDefault) private var cursorSizeDefault
+    private var touchGestures = ScreenSharingTouchGestureSettings()
 
     var body: some View {
         RemoteScreenThemedSurface(tabId: pane.containingTabID, windowId: pane.windowId) {
@@ -22,6 +23,7 @@ struct KVMPaneRootView: View {
                     pane: pane,
                     pointerSpeed: pointerSpeed,
                     cursorHeight: cursorSizeDefault.points,
+                    touchGestures: touchGestures.configuration,
                     showsLocalCursor: pane.showsLocalCursor,
                     brightnessGain: brightnessManager.effectiveGain)
 
@@ -73,6 +75,7 @@ private struct KVMScreenContent: View {
     @Bindable private var session: KVMSession
     let pointerSpeed: Double
     let cursorHeight: CGFloat
+    let touchGestures: RemoteTouchGestureConfiguration
     let showsLocalCursor: Bool
     let brightnessGain: Double
 
@@ -80,6 +83,7 @@ private struct KVMScreenContent: View {
         pane: KVMPaneView,
         pointerSpeed: Double,
         cursorHeight: CGFloat,
+        touchGestures: RemoteTouchGestureConfiguration,
         showsLocalCursor: Bool,
         brightnessGain: Double
     ) {
@@ -87,6 +91,7 @@ private struct KVMScreenContent: View {
         self._session = Bindable(wrappedValue: pane.session)
         self.pointerSpeed = pointerSpeed
         self.cursorHeight = cursorHeight
+        self.touchGestures = touchGestures
         self.showsLocalCursor = showsLocalCursor
         self.brightnessGain = brightnessGain
     }
@@ -107,6 +112,7 @@ private struct KVMScreenContent: View {
             cursorHeight: cursorHeight,
             serverRendersCursor: true,
             showsLocalCursorDot: showsLocalCursor,
+            touchGestures: touchGestures,
             brightnessGain: brightnessGain,
             disconnect: { session.disconnect() },
             hudMenuExtras: { KVMHUDMenuExtras(pane: pane) })

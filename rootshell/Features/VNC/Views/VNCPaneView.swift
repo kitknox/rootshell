@@ -1304,6 +1304,7 @@ struct VNCPaneRootView: View {
     // as a live value, so a change in Settings reaches an open session.
     @Setting(Settings.ScreenSharing.pointerSpeed) private var pointerSpeed
     @Setting(Settings.ScreenSharing.cursorSizeDefault) private var cursorSizeDefault
+    private var touchGestures = ScreenSharingTouchGestureSettings()
 
     var body: some View {
         // The themed surface wraps the package view too: its residual chrome
@@ -1324,6 +1325,7 @@ struct VNCPaneRootView: View {
                     initialPointerMode: pane.initialPointerMode,
                     pointerSpeed: pointerSpeed,
                     cursorHeight: cursorSizeDefault.points,
+                    touchGestures: touchGestures.configuration,
                     onSharedClipboardUserChange: { _ in
                         pane.sharedClipboardDidChangeByUser()
                     },

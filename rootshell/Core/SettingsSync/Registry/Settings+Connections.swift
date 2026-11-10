@@ -22,6 +22,7 @@ extension ScreenSharingPanningDefault: SettingValue {}
 extension ScreenSharingPointerModeDefault: SettingValue {}
 extension ScreenSharingCursorRenderingDefault: SettingValue {}
 extension ScreenSharingCursorSizeDefault: SettingValue {}
+extension ScreenSharingSwipeAction: SettingValue {}
 extension PasteInsertFormat: SettingValue {}
 extension HostKeyDNSVerification: SettingValue {}
 extension SSHFPDoHProvider: SettingValue {}
@@ -340,12 +341,38 @@ nonisolated extension Settings {
             "screenSharingKVMLocalCursorDefault", default: false, group: .screenSharing,
             configKey: "screen-sharing-kvm-local-cursor-default",
             title: String(localized: "KVM Local Cursor", comment: "Setting title"))
+        static let touchHoldDelay = SettingKey(
+            "screenSharingTouchHoldDelay", default: 0.3, group: .screenSharing,
+            configKey: "screen-sharing-touch-hold-delay", range: 0.15...1.0,
+            title: String(localized: "Touch Hold Delay", comment: "Setting title"))
+        static let showsHeldButton = SettingKey(
+            "screenSharingShowsHeldButton", default: true, group: .screenSharing,
+            configKey: "screen-sharing-shows-held-button",
+            title: String(localized: "Show Held Button", comment: "Setting title"))
+        static let swipeUpAction = SettingKey(
+            "screenSharingSwipeUpAction", default: ScreenSharingSwipeAction.missionControl, group: .screenSharing,
+            configKey: "screen-sharing-swipe-up-action",
+            title: String(localized: "Three-Finger Swipe Up", comment: "Setting title"))
+        static let swipeDownAction = SettingKey(
+            "screenSharingSwipeDownAction", default: ScreenSharingSwipeAction.applicationWindows, group: .screenSharing,
+            configKey: "screen-sharing-swipe-down-action",
+            title: String(localized: "Three-Finger Swipe Down", comment: "Setting title"))
+        static let swipeLeftAction = SettingKey(
+            "screenSharingSwipeLeftAction", default: ScreenSharingSwipeAction.moveRightASpace, group: .screenSharing,
+            configKey: "screen-sharing-swipe-left-action",
+            title: String(localized: "Three-Finger Swipe Left", comment: "Setting title"))
+        static let swipeRightAction = SettingKey(
+            "screenSharingSwipeRightAction", default: ScreenSharingSwipeAction.moveLeftASpace, group: .screenSharing,
+            configKey: "screen-sharing-swipe-right-action",
+            title: String(localized: "Three-Finger Swipe Right", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
             clipboardSyncDefault.erased, panningDefault.erased,
             pointerModeDefault.erased, pointerSpeed.erased,
             cursorRenderingDefault.erased, cursorSizeDefault.erased, kvmLocalCursorDefault.erased,
             controlOptionAsCommandDefault.erased, routeReservedShortcutsToVNCDefault.erased,
+            touchHoldDelay.erased, showsHeldButton.erased,
+            swipeUpAction.erased, swipeDownAction.erased, swipeLeftAction.erased, swipeRightAction.erased,
         ]
     }
 
