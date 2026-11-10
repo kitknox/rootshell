@@ -642,6 +642,9 @@ struct ConnectionInfoSheet: View {
             }
             if session.isHighPerformanceMode {
                 infoRow("Remote Audio", value: session.configuration.enableRemoteAudio ? "On" : "Off")
+                if session.configuration.enableRemoteAudio {
+                    infoRow("Sync Video to Audio", value: session.configuration.syncVideoToRemoteAudio ? "On" : "Off")
+                }
             }
             if session.supportsCurtainMode {
                 infoRow("Curtain Mode", value: session.isCurtained ? "On" : "Off")

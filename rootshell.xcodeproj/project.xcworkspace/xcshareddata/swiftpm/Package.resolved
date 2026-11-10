@@ -150,8 +150,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kitknox/rootshell-vnc.git",
       "state" : {
-        "revision" : "3c0924c9e7769b93fabd8e811e603c68909aa4d1",
-        "version" : "0.1.12"
+        "revision" : "aefab3f6a82a5f5d8d7b3fcd262246573e6b01c6",
+        "version" : "0.1.13"
       }
     },
     {
@@ -401,8 +401,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kitknox/trzsz-ssh-rootshell.git",
       "state" : {
-        "revision" : "334e303c821ff0e315fb1b43e97c24eac48698d3",
-        "version" : "0.2.25"
+        "revision" : "2cc682a69c166345af1b4ec04303f7cc1e5b525c",
+        "version" : "0.2.26"
       }
     },
     {

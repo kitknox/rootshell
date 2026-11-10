@@ -50,6 +50,7 @@ struct VNCFormState: Hashable {
     var displaySizingModeRaw: String?
     var displayModeRaw: String?
     var enableRemoteAudio: Bool = true
+    var syncVideoToAudio: Bool = false
     var promptForLoginPasswordAtLoginWindow: Bool = true
 
     var jumpSelection: VNCJumpSelection = .none
@@ -85,6 +86,7 @@ struct VNCFormState: Hashable {
         displaySizingModeRaw = config.displaySizingModeRaw
         displayModeRaw = config.displayModeRaw
         enableRemoteAudio = config.enableRemoteAudio
+        syncVideoToAudio = config.syncVideoToAudio
         promptForLoginPasswordAtLoginWindow =
             config.promptForLoginPasswordAtLoginWindow
 
@@ -216,6 +218,7 @@ struct VNCFormState: Hashable {
             displaySizingModeRaw: displaySizingModeRaw,
             displayModeRaw: displayModeRaw,
             enableRemoteAudio: enableRemoteAudio,
+            syncVideoToAudio: syncVideoToAudio,
             promptForLoginPasswordAtLoginWindow:
                 promptForLoginPasswordAtLoginWindow,
             jump: jump,
@@ -549,9 +552,20 @@ struct VNCConnectionFormSections: View {
     // MARK: Audio
 
     private var audioSection: some View {
-        Section("Audio") {
-            Toggle("Play Remote Audio", isOn: $form.enableRemoteAudio)
-                .themedRow()
+        Section {
+            Group {
+                Toggle("Play Remote Audio", isOn: $form.enableRemoteAudio)
+                if form.enableRemoteAudio {
+                    Toggle("Sync Video to Audio", isOn: $form.syncVideoToAudio)
+                }
+            }
+            .themedRow()
+        } header: {
+            Text("Audio")
+        } footer: {
+            if form.enableRemoteAudio {
+                Text("Sync Video to Audio holds the screen back to match the sound. Better for watching video, slower for everything else.")
+            }
         }
     }
 
