@@ -197,6 +197,9 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
     /// Whether negotiated remote system audio should play on this device.
     var enableRemoteAudio: Bool
 
+    /// Whether video is held back to stay in sync with remote audio.
+    var syncVideoToAudio: Bool
+
     /// Whether detecting a Mac Login Window or lock screen should offer to
     /// type the saved connection password after user confirmation.
     var promptForLoginPasswordAtLoginWindow: Bool
@@ -223,6 +226,7 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         displaySizingModeRaw: String? = nil,
         displayModeRaw: String? = nil,
         enableRemoteAudio: Bool = true,
+        syncVideoToAudio: Bool = false,
         promptForLoginPasswordAtLoginWindow: Bool = true,
         jump: Jump = .none,
         keyboardToolbar: KeyboardToolbarPreference = .followAppSetting,
@@ -237,6 +241,7 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         self.displaySizingModeRaw = displaySizingModeRaw
         self.displayModeRaw = displayModeRaw
         self.enableRemoteAudio = enableRemoteAudio
+        self.syncVideoToAudio = syncVideoToAudio
         self.promptForLoginPasswordAtLoginWindow = promptForLoginPasswordAtLoginWindow
         self.jump = jump
         self.keyboardToolbar = keyboardToolbar
@@ -249,7 +254,7 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case host, port, username, quality, security
         case displaySizingModeRaw, displayModeRaw
-        case enableRemoteAudio, promptForLoginPasswordAtLoginWindow
+        case enableRemoteAudio, syncVideoToAudio, promptForLoginPasswordAtLoginWindow
         case jump, keyboardToolbar, remoteSystem
         case automaticallyEnterFullScreen
     }
@@ -278,6 +283,9 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         enableRemoteAudio = Self.lossyBool(
             in: container,
             forKey: .enableRemoteAudio) ?? true
+        syncVideoToAudio = Self.lossyBool(
+            in: container,
+            forKey: .syncVideoToAudio) ?? false
         promptForLoginPasswordAtLoginWindow = Self.lossyBool(
             in: container,
             forKey: .promptForLoginPasswordAtLoginWindow) ?? true
@@ -368,6 +376,7 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         try container.encodeIfPresent(displaySizingModeRaw, forKey: .displaySizingModeRaw)
         try container.encodeIfPresent(displayModeRaw, forKey: .displayModeRaw)
         try container.encode(enableRemoteAudio, forKey: .enableRemoteAudio)
+        try container.encode(syncVideoToAudio, forKey: .syncVideoToAudio)
         try container.encode(
             promptForLoginPasswordAtLoginWindow,
             forKey: .promptForLoginPasswordAtLoginWindow)
@@ -442,6 +451,7 @@ extension VNCConnectionConfig {
             configuration.displayMode = mode
         }
         configuration.enableRemoteAudio = enableRemoteAudio
+        configuration.syncVideoToRemoteAudio = syncVideoToAudio
         configuration.promptForLoginPasswordAtLoginWindow =
             promptForLoginPasswordAtLoginWindow
         configuration.cursorRendering = Self.resolvedCursorRendering()

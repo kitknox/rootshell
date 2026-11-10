@@ -386,6 +386,8 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
         let displaySizingModeRaw: String?
         let displayModeRaw: String?
         let enableRemoteAudio: Bool
+        /// Optional for window state written before the setting existed.
+        let syncVideoToAudio: Bool?
         /// Optional keeps window-state decoding compatible with builds that
         /// predate login detection. Missing values default on in live configs.
         let promptForLoginPasswordAtLoginWindow: Bool?
@@ -414,6 +416,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
             self.displaySizingModeRaw = config.displaySizingModeRaw
             self.displayModeRaw = config.displayModeRaw
             self.enableRemoteAudio = config.enableRemoteAudio
+            self.syncVideoToAudio = config.syncVideoToAudio
             self.promptForLoginPasswordAtLoginWindow =
                 config.promptForLoginPasswordAtLoginWindow
             self.keyboardToolbar = config.keyboardToolbar
@@ -455,6 +458,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
                 displaySizingModeRaw: displaySizingModeRaw,
                 displayModeRaw: displayModeRaw,
                 enableRemoteAudio: enableRemoteAudio,
+                syncVideoToAudio: syncVideoToAudio ?? false,
                 promptForLoginPasswordAtLoginWindow:
                     promptForLoginPasswordAtLoginWindow ?? true,
                 jump: liveJump,
