@@ -17,6 +17,12 @@ struct ScreenSharingSettingsView: View {
     @Setting(Settings.ScreenSharing.kvmLocalCursorDefault) private var kvmLocalCursorDefault
     @Setting(Settings.ScreenSharing.controlOptionAsCommandDefault) private var controlOptionAsCommandDefault
     @Setting(Settings.ScreenSharing.routeReservedShortcutsToVNCDefault) private var routeReservedShortcutsToVNCDefault
+    @Setting(Settings.ScreenSharing.touchHoldDelay) private var touchHoldDelay
+    @Setting(Settings.ScreenSharing.showsHeldButton) private var showsHeldButton
+    @Setting(Settings.ScreenSharing.swipeUpAction) private var swipeUpAction
+    @Setting(Settings.ScreenSharing.swipeDownAction) private var swipeDownAction
+    @Setting(Settings.ScreenSharing.swipeLeftAction) private var swipeLeftAction
+    @Setting(Settings.ScreenSharing.swipeRightAction) private var swipeRightAction
 
     private var resolvedClipboardSyncDefault: ScreenSharingClipboardSyncDefault {
         clipboardSyncDefault
@@ -130,6 +136,54 @@ struct ScreenSharingSettingsView: View {
             }
 
             Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        HStack(spacing: 12) {
+                            SettingsIcon(systemName: "hand.tap")
+                            Text("Hold Delay")
+                        }
+                        .settingRow(Settings.ScreenSharing.touchHoldDelay)
+                        Spacer()
+                        Text(String(format: "%.2f s", touchHoldDelay))
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
+                            .frame(width: 56, alignment: .trailing)
+                    }
+                    Slider(value: $touchHoldDelay, in: 0.15...1.0, step: 0.05)
+                }
+                .padding(.vertical, 4)
+                .themedRow()
+
+                Toggle(isOn: $showsHeldButton) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "computermouse")
+                        Text("Show Held Button")
+                    }
+                    .settingRow(Settings.ScreenSharing.showsHeldButton)
+                }
+                .themedRow()
+            } header: {
+                SettingGroupHeader("Mouse Buttons", group: .screenSharing)
+            } footer: {
+                Text("Works in Touch and Trackpad modes. Three-finger tap to middle-click. Hold two fingers still, then drag with the right button held; hold three fingers for the middle button. Hold Delay is how long fingers rest before a button goes down, one-finger drags included. Show Held Button names the button while it is held.")
+            }
+
+            Section {
+                swipePicker("Swipe Up", systemImage: "arrow.up", selection: $swipeUpAction,
+                            key: Settings.ScreenSharing.swipeUpAction)
+                swipePicker("Swipe Down", systemImage: "arrow.down", selection: $swipeDownAction,
+                            key: Settings.ScreenSharing.swipeDownAction)
+                swipePicker("Swipe Left", systemImage: "arrow.left", selection: $swipeLeftAction,
+                            key: Settings.ScreenSharing.swipeLeftAction)
+                swipePicker("Swipe Right", systemImage: "arrow.right", selection: $swipeRightAction,
+                            key: Settings.ScreenSharing.swipeRightAction)
+            } header: {
+                SettingGroupHeader("Three-Finger Swipes", group: .screenSharing)
+            } footer: {
+                Text("Sends the Mac keyboard shortcut for each action, so the defaults match a Mac trackpad. Turn them off for computers that are not Macs. Applies to touch on iPhone and iPad.")
+            }
+
+            Section {
                 Picker(selection: $cursorRenderingDefault) {
                     ForEach(ScreenSharingCursorRenderingDefault.allCases, id: \.rawValue) { rendering in
                         Text(rendering.displayName).tag(rendering)
@@ -183,6 +237,26 @@ struct ScreenSharingSettingsView: View {
         .themedList()
         .navigationTitle("Screen Sharing")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func swipePicker(
+        _ title: LocalizedStringKey,
+        systemImage: String,
+        selection: Binding<ScreenSharingSwipeAction>,
+        key: SettingKey<ScreenSharingSwipeAction>
+    ) -> some View {
+        Picker(selection: selection) {
+            ForEach(ScreenSharingSwipeAction.allCases, id: \.rawValue) { action in
+                Text(action.displayName).tag(action)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                SettingsIcon(systemName: systemImage)
+                Text(title)
+            }
+            .settingRow(key)
+        }
+        .themedRow()
     }
 
     /// The slider steps by 0.25, so half steps need only one decimal. Printing

@@ -155,3 +155,28 @@ enum ScreenSharingPointerModeDefault: String, CaseIterable, Sendable {
         }
     }
 }
+
+/// What a three-finger swipe sends. The shortcuts are the Mac's own, so
+/// other remote systems may want these off.
+enum ScreenSharingSwipeAction: String, CaseIterable, Sendable {
+    case off
+    case missionControl
+    case applicationWindows
+    case moveLeftASpace
+    case moveRightASpace
+
+    var displayName: String {
+        switch self {
+        case .off:
+            return String(localized: "Off", comment: "Screen Sharing three-finger swipe action")
+        case .missionControl:
+            return String(localized: "Mission Control", comment: "Screen Sharing three-finger swipe action")
+        case .applicationWindows:
+            return String(localized: "Application Windows", comment: "Screen Sharing three-finger swipe action")
+        case .moveLeftASpace:
+            return String(localized: "Move Left a Space", comment: "Screen Sharing three-finger swipe action")
+        case .moveRightASpace:
+            return String(localized: "Move Right a Space", comment: "Screen Sharing three-finger swipe action")
+        }
+    }
+}
