@@ -17,18 +17,18 @@ import RFBTransport
 /// available in the connection editor, but is intentionally not part of this
 /// quick switch.
 fileprivate enum VNCQuickMode: CaseIterable, Hashable {
-    case standard
+    case standardRemote
+    case standardMatchClient
     case highPerformanceRemote
     case highPerformanceMatchClient
 
     init?(configuration: VNCConfiguration) {
+        let matchesClient = configuration.displaySizingMode == .matchClient
         switch configuration.videoQualityMode {
         case .standard:
-            self = .standard
+            self = matchesClient ? .standardMatchClient : .standardRemote
         case .adaptive:
-            self = configuration.displaySizingMode == .matchClient
-                ? .highPerformanceMatchClient
-                : .highPerformanceRemote
+            self = matchesClient ? .highPerformanceMatchClient : .highPerformanceRemote
         case .fullQuality:
             return nil
         }
@@ -36,8 +36,10 @@ fileprivate enum VNCQuickMode: CaseIterable, Hashable {
 
     var title: String {
         switch self {
-        case .standard:
-            return String(localized: "Standard", comment: "VNC HUD quick mode")
+        case .standardRemote:
+            return String(localized: "Standard · Remote Display", comment: "VNC HUD quick mode")
+        case .standardMatchClient:
+            return String(localized: "Standard · Match Client", comment: "VNC HUD quick mode")
         case .highPerformanceRemote:
             return String(localized: "High Performance · Remote Display", comment: "VNC HUD quick mode")
         case .highPerformanceMatchClient:
@@ -47,8 +49,10 @@ fileprivate enum VNCQuickMode: CaseIterable, Hashable {
 
     var systemImage: String {
         switch self {
-        case .standard:
+        case .standardRemote:
             return "network"
+        case .standardMatchClient:
+            return "aspectratio"
         case .highPerformanceRemote:
             return "display"
         case .highPerformanceMatchClient:
@@ -57,18 +61,15 @@ fileprivate enum VNCQuickMode: CaseIterable, Hashable {
     }
 
     var requiresHighPerformance: Bool {
-        self != .standard
+        self == .highPerformanceRemote || self == .highPerformanceMatchClient
     }
 
     func apply(to configuration: inout VNCConfiguration) {
+        configuration.videoQualityMode = requiresHighPerformance ? .adaptive : .standard
         switch self {
-        case .standard:
-            configuration.videoQualityMode = .standard
-        case .highPerformanceRemote:
-            configuration.videoQualityMode = .adaptive
+        case .standardRemote, .highPerformanceRemote:
             configuration.displaySizingMode = .remoteDisplay
-        case .highPerformanceMatchClient:
-            configuration.videoQualityMode = .adaptive
+        case .standardMatchClient, .highPerformanceMatchClient:
             configuration.displaySizingMode = .matchClient
         }
     }

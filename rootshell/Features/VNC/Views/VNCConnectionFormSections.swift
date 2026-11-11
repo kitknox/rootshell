@@ -492,15 +492,22 @@ struct VNCConnectionFormSections: View {
     // MARK: Display sizing
 
     /// Typed views over the raw stored values, defaulted like the package
-    /// configuration (matchClient / oneDisplay).
+    /// configuration (Match Client only for High Performance / oneDisplay).
     private var displaySizing: Binding<VNCConfiguration.DisplaySizingMode> {
         Binding(
             get: {
                 form.displaySizingModeRaw.flatMap {
                     VNCConfiguration.DisplaySizingMode(rawValue: $0)
-                } ?? .matchClient
+                } ?? (form.quality == .adaptive ? .matchClient : .remoteDisplay)
             },
-            set: { form.displaySizingModeRaw = $0.rawValue }
+            set: { sizing in
+                form.displaySizingModeRaw = sizing.rawValue
+                // A stored combined topology would reset sizing to Remote Display.
+                if sizing == .matchClient,
+                   form.displayModeRaw == VNCConfiguration.DisplayMode.allDisplaysCombined.rawValue {
+                    form.displayModeRaw = VNCConfiguration.DisplayMode.oneDisplay.rawValue
+                }
+            }
         )
     }
 
@@ -518,7 +525,7 @@ struct VNCConnectionFormSections: View {
     private var displaySizingSection: some View {
         Section("Remote Display Size") {
             Group {
-                if form.quality == .adaptive, displaySizing.wrappedValue == .matchClient {
+                if displaySizing.wrappedValue == .matchClient {
                     LabeledContent("Display Mode", value: String(localized: "One Virtual Display"))
                     Text("Match Client creates one client-sized virtual display.")
                         .font(.caption)
@@ -532,18 +539,16 @@ struct VNCConnectionFormSections: View {
                     }
                 }
 
-                if form.quality == .adaptive {
-                    Picker("Sizing", selection: displaySizing) {
-                        ForEach(VNCConfiguration.DisplaySizingMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
+                Picker("Sizing", selection: displaySizing) {
+                    ForEach(VNCConfiguration.DisplaySizingMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
                     }
-                    .pickerStyle(.segmented)
-
-                    Text(displaySizing.wrappedValue.explanation)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
+                .pickerStyle(.segmented)
+
+                Text(displaySizing.wrappedValue.explanation)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
             .themedRow()
         }
