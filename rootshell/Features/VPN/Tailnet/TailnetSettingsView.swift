@@ -442,7 +442,7 @@ struct TailnetSettingsView: View {
 
     private var serverFooter: String {
         guard settings.normalizedControlURL != nil else {
-            return String(localized: "Enter the server's URL, like https://headscale.example.com.", comment: "Tailscale coordination server footer: invalid URL")
+            return String(localized: "Enter the server's HTTPS URL, like https://headscale.example.com.", comment: "Tailscale coordination server footer: invalid URL")
         }
         var parts = [
             String(localized: "Leave the server empty to use Tailscale. For Headscale or another self-hosted server, enter its URL. Switching servers signs in again as a new device.", comment: "Tailscale coordination server footer"),

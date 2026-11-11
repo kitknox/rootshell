@@ -287,15 +287,16 @@ nonisolated struct VPNTailnetSettings: Codable, Sendable, Hashable {
     }
 
     /// `controlURL` as the engine takes it: "" for Tailscale's server, nil when
-    /// it isn't an http(s) URL. A bare host gets https://.
+    /// it isn't an https URL. Plain http would let an on-path attacker swap the
+    /// server's Noise key and read the auth key. A bare host gets https://.
     var normalizedControlURL: String? {
         let trimmed = controlURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
         guard var parts = URLComponents(string: trimmed.contains("://") ? trimmed : "https://" + trimmed),
-              let scheme = parts.scheme?.lowercased(), scheme == "https" || scheme == "http",
+              parts.scheme?.lowercased() == "https",
               parts.host?.isEmpty == false, parts.user == nil, parts.query == nil, parts.fragment == nil
         else { return nil }
-        parts.scheme = scheme
+        parts.scheme = "https"
         while parts.path.hasSuffix("/") { parts.path.removeLast() }
         return parts.string
     }
