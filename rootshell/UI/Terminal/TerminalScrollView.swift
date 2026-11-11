@@ -349,15 +349,9 @@ extension Ghostty {
                 return hitView
             }
 
-            #if !targetEnvironment(macCatalyst)
-            if let overlayView = terminalView.dimensionOverlayHost?.view,
-               overlayView.alpha > 0 {
-                let overlayPoint = convert(point, to: overlayView)
-                if let hitView = overlayView.hitTest(overlayPoint, with: event) {
-                    return hitView
-                }
+            if let hitView = dimensionOverlayHitTest(point, with: event) {
+                return hitView
             }
-            #endif
 
             let terminalPoint = convert(point, to: terminalView)
             if let overlayHit = terminalView.hitTestCollapsedKeyboardToolbarButton(terminalPoint, with: event) {
@@ -403,6 +397,10 @@ extension Ghostty {
             return hitView
         }
 
+        if let hitView = dimensionOverlayHitTest(point, with: event) {
+            return hitView
+        }
+
         let terminalPoint = convert(point, to: terminalView)
         if terminalView.bounds.contains(terminalPoint) {
             if let event {
@@ -430,6 +428,14 @@ extension Ghostty {
         }
         let hudPoint = convert(point, to: hudView)
         return hudView.hitTest(hudPoint, with: event)
+    }
+
+    /// The pinch-zoom size overlay's Reset button, when showing under `point`.
+    private func dimensionOverlayHitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard let overlayView = terminalView.dimensionOverlayHost?.view, overlayView.alpha > 0 else {
+            return nil
+        }
+        return overlayView.hitTest(convert(point, to: overlayView), with: event)
     }
 
     /// If the SSH auth-banner card covers `point`, return the hit subview so
@@ -475,6 +481,19 @@ extension Ghostty {
     /// horizontal-intent decision to the terminal so the pan stands aside.
     func yieldNativePanToTrackpadTabSwipe(_ shouldYield: @escaping (UIPanGestureRecognizer) -> Bool) {
         (scrollView as? TabSwipeYieldingScrollView)?.yieldsToTabSwipe = shouldYield
+    }
+
+    /// Moves native scrollback by a finger delta, the way a trackpad scroll
+    /// does. False once the content is at either end.
+    @discardableResult
+    func scrollByTouch(deltaY: CGFloat) -> Bool {
+        guard scrollView.isScrollEnabled else { return false }
+        let current = scrollView.contentOffset.y
+        let target = clampedScrollModelOffsetY(current - deltaY)
+        guard abs(target - current) > 0.01 else { return false }
+        terminalView.cancelHerdrReturnToLive()
+        scrollView.contentOffset = CGPoint(x: 0, y: target)
+        return true
     }
 
     var isNativeScrollPanActive: Bool {
@@ -1920,10 +1939,10 @@ extension Ghostty {
         scrollView.decelerationRate = .normal
         #if !targetEnvironment(macCatalyst)
         isTouchScrolling = scrollView.panGestureRecognizer.numberOfTouches > 0
+        #endif
         // Handles are window overlays; hide while the scroll view and Ghostty
         // viewport are moving, then restore once scrolling has settled.
         terminalView.hideSelectionHandles(animated: false)
-        #endif
         let currentOffsetY = scrollView.contentOffset.y
         lastTouchScrollOffsetY = shouldUseRubberBandScrollback ? clampedScrollModelOffsetY(currentOffsetY) : currentOffsetY
     }
@@ -1968,9 +1987,7 @@ extension Ghostty {
         if !decelerate {
             settleSmoothScrollAtBounds()
             isLiveScrolling = false
-            #if !targetEnvironment(macCatalyst)
             terminalView.scheduleSelectionHandleSync(afterGhosttyAppTick: true)
-            #endif
             applyVerticalScrollState(isCaptured: terminalView.isMouseCaptured)
         }
         isTouchScrolling = false
@@ -2002,9 +2019,7 @@ extension Ghostty {
         updateTerminalBottomInsetSuppression(rubberBanding: false)
         isTouchScrollbarDrag = false
         #endif
-        #if !targetEnvironment(macCatalyst)
         terminalView.scheduleSelectionHandleSync(afterGhosttyAppTick: true)
-        #endif
         applyVerticalScrollState(isCaptured: terminalView.isMouseCaptured)
     }
 

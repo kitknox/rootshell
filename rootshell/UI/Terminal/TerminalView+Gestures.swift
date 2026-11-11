@@ -62,7 +62,6 @@ extension Ghostty.TerminalView {
             return
         }
 
-        #if !targetEnvironment(macCatalyst)
         // Clear any existing text selection by sending a click at the tap location.
         // Only for finger taps — mouse/trackpad clicks already send press/release
         // via touchesBegan/touchesEnded. Adding more here for mouse would double-count
@@ -76,7 +75,6 @@ extension Ghostty.TerminalView {
             sendMouseButton(GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT)
             sendMouseButton(GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_LEFT)
         }
-        #endif
     }
 
     #if !targetEnvironment(macCatalyst)
@@ -202,7 +200,6 @@ extension Ghostty.TerminalView {
         }
     }
 
-    #if !targetEnvironment(macCatalyst)
     /// Handle single-finger pan for text selection on iOS/iPadOS
     /// Uses movement (not long press) to trigger selection, avoiding conflict with context menu
     @objc func handleSelectionPan(_ gesture: UIPanGestureRecognizer) {
@@ -364,6 +361,13 @@ extension Ghostty.TerminalView {
     func presentTransientEditMenu(at point: CGPoint, fullContextMenu: Bool = false) {
         cancelPendingDoubleTapAction()
 
+        #if targetEnvironment(macCatalyst)
+        // presentEditMenu(with:) is not supported on Mac Catalyst.
+        presentTouchMenuFromAnchor(
+            at: fullContextMenu ? point : preferredSelectionEditMenuPoint(fallback: point),
+            fullContextMenu: fullContextMenu
+        )
+        #else
         // Remove any existing transient edit menu
         if let existing = editMenuInteraction {
             removeInteraction(existing)
@@ -380,6 +384,58 @@ extension Ghostty.TerminalView {
         let sourcePoint = fullContextMenu ? point : preferredSelectionEditMenuPoint(fallback: point)
         let config = UIEditMenuConfiguration(identifier: nil, sourcePoint: sourcePoint)
         interaction.presentEditMenu(with: config)
+        #endif
+    }
+
+    #if targetEnvironment(macCatalyst)
+    /// Pops the selection or context menu from an invisible button at `point`,
+    /// the supported way to open a menu from code on Mac.
+    private func presentTouchMenuFromAnchor(at point: CGPoint, fullContextMenu: Bool) {
+        let linkURL = probeForLink(at: point)
+        let menu: UIMenu
+        if fullContextMenu {
+            menu = buildContextMenu(linkURL: linkURL)
+        } else {
+            var items = linkMenuItems(for: linkURL)
+            let hasSelection = herdrEndpointPane?.hasSelection
+                ?? surface.map { ghostty_surface_has_selection($0) } ?? false
+            if hasSelection {
+                items.append(UIAction(title: String(localized: "Copy"), image: UIImage(systemName: "doc.on.doc")) { [weak self] _ in
+                    self?.copy(nil)
+                })
+            }
+            items.append(UIAction(title: String(localized: "Paste"), image: UIImage(systemName: "doc.on.clipboard")) { [weak self] _ in
+                self?.paste(nil)
+            })
+            menu = UIMenu(children: items)
+        }
+
+        let anchor = touchMenuAnchorButton ?? {
+            let button = UIButton(type: .custom)
+            button.showsMenuAsPrimaryAction = true
+            button.isAccessibilityElement = false
+            addSubview(button)
+            touchMenuAnchorButton = button
+            return button
+        }()
+        anchor.frame = CGRect(x: point.x, y: point.y, width: 1, height: 1)
+        anchor.menu = menu
+        anchor.performPrimaryAction()
+    }
+    #endif
+
+    /// Open Link / Copy Link for a probed hyperlink; empty without one.
+    private func linkMenuItems(for linkURL: String?) -> [UIMenuElement] {
+        guard let linkURL, let url = URL(string: linkURL) else { return [] }
+        return [
+            UIAction(title: String(localized: "Open Link"), image: UIImage(systemName: "safari")) { _ in
+                UIApplication.shared.open(url)
+            },
+            UIAction(title: String(localized: "Copy Link"), image: UIImage(systemName: "link")) { _ in
+                UIPasteboard.general.string = linkURL
+                ClipboardHistoryManager.shared.record(linkURL, source: .copyLink)
+            },
+        ]
     }
 
     func scheduleDoubleTapContextMenu(at point: CGPoint) {
@@ -572,7 +628,7 @@ extension Ghostty.TerminalView {
         NotificationCenter.default.post(name: .newTab, object: self)
     }
 
-    /// Handle pinch gesture for font size adjustment in scroll mode
+    /// Handle pinch gesture for font size adjustment (scroll mode on iOS, touch displays on Mac)
     @objc func handlePinchZoom(_ gesture: UIPinchGestureRecognizer) {
         guard surface != nil, ghosttyApp != nil else { return }
 
@@ -715,7 +771,6 @@ extension Ghostty.TerminalView {
             self?.dimensionOverlayHost = nil
         })
     }
-    #endif
 
     #if targetEnvironment(macCatalyst)
     @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
@@ -1682,17 +1737,9 @@ extension Ghostty.TerminalView {
         noteUserInputForOutputCoalescing()
         // Track that user has typed (for tmux discovery overlay)
         if !hasUserTyped { hasUserTyped = true }
-        #if targetEnvironment(macCatalyst)
-        // For Catalyst: Sessions (SSH or local shell) handle their own I/O.
-        // A tmux control mode pane has no session, so route its input to the
-        // surface, whose tmux backend emits `send-keys` (mirrors the iOS path).
-        if let session = session {
-            session.sendInput(data)
-        } else {
-            sendInputToPaneSurface(data)
-        }
-        #else
-        // For iOS/visionOS: Send to session or Ghostty
+        // Sessions (SSH or local shell) handle their own I/O. A tmux control
+        // mode pane has no session, so route its input to the surface, whose
+        // tmux backend emits `send-keys`.
         if let session = session {
             session.sendInput(data)
         } else {
@@ -1702,7 +1749,6 @@ extension Ghostty.TerminalView {
         if selectionHandlesVisible || activeHandleDrag != nil {
             scheduleSelectionHandleSync(afterGhosttyAppTick: true)
         }
-        #endif
     }
 
     /// Send already-encoded input bytes to a tmux control-mode pane surface
@@ -2042,7 +2088,6 @@ extension Ghostty.TerminalView {
     /// Track which mouse button is currently pressed for proper release event
     static var pressedMouseButton: ghostty_input_mouse_button_e = GHOSTTY_MOUSE_LEFT
 
-    #if !targetEnvironment(macCatalyst)
     // Track if mouse down was cancelled because touch became multi-finger (scroll gesture)
     // If cancelled, don't send mouse up on touch end
     private static var mouseDownCancelledKey: UInt8 = 0
@@ -2116,7 +2161,6 @@ extension Ghostty.TerminalView {
         handleMouseUp(at: point)
         return true
     }
-    #endif
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         // Safety net: if we're logically focused but not first responder,
@@ -2143,7 +2187,6 @@ extension Ghostty.TerminalView {
 
         let allTouches = event?.allTouches ?? touches
 
-        #if !targetEnvironment(macCatalyst)
         // Track touch type for context menu gating in scroll mode
         lastContextMenuTriggerWasFinger = touch.isScreenContact
         lastContextMenuTriggerWasPencil = (touch.type == .pencil)
@@ -2156,9 +2199,7 @@ extension Ghostty.TerminalView {
         if touch.type == .direct {
             updateSelectionSuppressionForDirectTouches(touches, event: event)
         }
-        #endif
 
-        #if !targetEnvironment(macCatalyst)
         // If second finger arrives while we have a finger or pencil drag active,
         // cancel it. This converts the interaction from a drag to a two-finger scroll
         if allTouches.count > 1 && (fingerDragActive || pencilPointerDragActive) {
@@ -2179,12 +2220,10 @@ extension Ghostty.TerminalView {
         if allTouches.count > 1 {
             cancelCaptureTapCandidate()
         }
-        #endif
 
         // Only cancel momentum for single-finger touches (taps, mouse clicks)
         // Multi-finger touches are scroll gestures - let gesture recognizer handle those
         let cancelledMomentumForTouch = allTouches.count == 1 && cancelMomentumScrolling()
-
         // Check if this is a mouse/trackpad event
         if touch.type == .indirectPointer {
             let point = touch.location(in: self)
@@ -2194,7 +2233,6 @@ extension Ghostty.TerminalView {
             return
         }
 
-        #if !targetEnvironment(macCatalyst)
         // Apple Pencil: a precise pointer while the app captures the mouse —
         // pen-down is an immediate left button-down, uniform across scroll
         // modes and without the capture magnifier. Not captured, the pencil
@@ -2246,7 +2284,6 @@ extension Ghostty.TerminalView {
                 return
             }
         }
-        #endif
 
         // Finger touches in non-capture mode are handled by:
         // - UIScrollView for scrolling
@@ -2261,7 +2298,6 @@ extension Ghostty.TerminalView {
             return
         }
 
-        #if !targetEnvironment(macCatalyst)
         if touch.type == .direct {
             updateSelectionSuppressionForDirectTouches(touches, event: event)
             updateCaptureTapCandidate(touch)
@@ -2270,7 +2306,6 @@ extension Ghostty.TerminalView {
             lastPencilLocation = touch.location(in: self)
             lastPencilLocationTimestamp = touch.timestamp
         }
-        #endif
 
         if touch.type == .indirectPointer && mousePressed {
             let point = touch.location(in: self)
@@ -2278,7 +2313,6 @@ extension Ghostty.TerminalView {
             return
         }
 
-        #if !targetEnvironment(macCatalyst)
         if touch.type == .pencil, pencilPointerDragActive {
             handleMouseMove(at: touch.location(in: self))
             return
@@ -2291,7 +2325,6 @@ extension Ghostty.TerminalView {
             updateCaptureMagnifier(at: point)
             return
         }
-        #endif
 
         super.touchesMoved(touches, with: event)
     }
@@ -2302,11 +2335,9 @@ extension Ghostty.TerminalView {
             return
         }
 
-        #if !targetEnvironment(macCatalyst)
         if touch.type == .direct {
             updateSelectionSuppressionForDirectTouches(touches, event: event)
         }
-        #endif
 
         if touch.type == .indirectPointer {
             let point = touch.location(in: self)
@@ -2316,7 +2347,6 @@ extension Ghostty.TerminalView {
             return
         }
 
-        #if !targetEnvironment(macCatalyst)
         // Handle pencil release for a captured pointer drag
         if touch.type == .pencil, pencilPointerDragActive {
             if !mouseDownCancelled {
@@ -2350,7 +2380,6 @@ extension Ghostty.TerminalView {
         if remainingTouches.isEmpty {
             mouseDownCancelled = false
         }
-        #endif
 
         // Restore full keyboard from toolbar-only mode on tap
         // (unless the user pinned it hidden via chevron long-press)
@@ -2376,12 +2405,10 @@ extension Ghostty.TerminalView {
             return
         }
 
-        #if !targetEnvironment(macCatalyst)
         if touch.type == .direct {
             updateSelectionSuppressionForDirectTouches(touches, event: event)
             cancelCaptureTapCandidate()
         }
-        #endif
 
         if touch.type == .indirectPointer {
             let point = touch.location(in: self)
@@ -2404,7 +2431,6 @@ extension Ghostty.TerminalView {
             return
         }
 
-        #if !targetEnvironment(macCatalyst)
         if touch.type == .pencil, pencilPointerDragActive {
             // Pencil cancelled during a captured pointer drag
             if !mouseDownCancelled {
@@ -2427,7 +2453,6 @@ extension Ghostty.TerminalView {
             mouseDownCancelled = false
             return
         }
-        #endif
 
         super.touchesCancelled(touches, with: event)
     }
@@ -2548,7 +2573,6 @@ extension Ghostty.TerminalView: UIPointerInteractionDelegate {
 
 // MARK: - UIEditMenuInteractionDelegate
 
-#if !targetEnvironment(macCatalyst)
 extension Ghostty.TerminalView: UIEditMenuInteractionDelegate {
     public func editMenuInteraction(
         _ interaction: UIEditMenuInteraction,
@@ -2566,20 +2590,9 @@ extension Ghostty.TerminalView: UIEditMenuInteractionDelegate {
             return buildContextMenu(linkURL: probedLink, suggestedEditActions: suggestedActions)
         }
 
-        // Build a simple Copy/Paste menu for text selection
-        var items: [UIMenuElement] = []
-
-        // Probe for link at the menu's source point
-        let linkURL = probeForLink(at: configuration.sourcePoint)
-        if let linkURL, let url = URL(string: linkURL) {
-            items.append(UIAction(title: String(localized: "Open Link"), image: UIImage(systemName: "safari")) { _ in
-                UIApplication.shared.open(url)
-            })
-            items.append(UIAction(title: String(localized: "Copy Link"), image: UIImage(systemName: "link")) { _ in
-                UIPasteboard.general.string = linkURL
-                ClipboardHistoryManager.shared.record(linkURL, source: .copyLink)
-            })
-        }
+        // Build a simple Copy/Paste menu for text selection, led by the
+        // actions for a link at the menu's source point.
+        var items = linkMenuItems(for: probeForLink(at: configuration.sourcePoint))
 
         // UIKit's suggested commands carry the system's verified edit-menu
         // intent. Recreating visually identical Copy/Paste items loses it.
@@ -2603,7 +2616,6 @@ extension Ghostty.TerminalView: UIEditMenuInteractionDelegate {
         }
     }
 }
-#endif
 
 // MARK: - UIContextMenuInteractionDelegate
 
@@ -2612,10 +2624,17 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
         _ interaction: UIContextMenuInteraction,
         configurationForMenuAtLocation location: CGPoint
     ) -> UIContextMenuConfiguration? {
+        #if targetEnvironment(macCatalyst)
+        // A right-click need not pass through touchesBegan, so the finger flag
+        // can be left over from an earlier touch.
+        let fingerTrigger = lastContextMenuTriggerWasFinger && !lastPointerEventWasSecondaryClick
+        #else
+        let fingerTrigger = lastContextMenuTriggerWasFinger
+        #endif
+
         // When terminal has mouse capture (tmux, vim), don't show context menu
         // Instead, send right-click to terminal and start tracking for drag/release
         if let surface = surface, ghostty_surface_mouse_captured(surface) {
-            #if !targetEnvironment(macCatalyst)
             // A captured pencil hold is already a left-button drag; firing the
             // right-click press here would corrupt it. Barrel tap is the
             // pencil's right-click.
@@ -2625,10 +2644,11 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
 
             // In scroll mode, don't intercept finger long-press for right-click
             // Let capture gestures (scroll pan, long press) handle the touch instead
-            if isTouchScrollMode && lastContextMenuTriggerWasFinger {
+            if isTouchScrollMode && fingerTrigger {
                 return nil
             }
 
+            #if !targetEnvironment(macCatalyst)
             // Ensure view is first responder so touch events are delivered
             if !isFirstResponder {
                 _ = becomeFirstResponder()
@@ -2655,19 +2675,17 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
             // Removing it mid-touch causes touch events to not be delivered
             return nil
         }
-        #if !targetEnvironment(macCatalyst)
         // In scroll mode, suppress context menu from finger long press
         // (long press is used for text selection instead; two-finger tap shows menu via edit menu)
         // Mouse right-click (.indirectPointer) still shows the full context menu
-        if isTouchScrollMode && lastContextMenuTriggerWasFinger {
+        if isTouchScrollMode && fingerTrigger {
             return nil
         }
-        #endif
 
         // Suppress context menu for trackpad/mouse primary-button long-press.
         // Only right-click (secondary button) should trigger the context menu from pointer devices.
         // This prevents the "lift" animation and menu from interfering with click-and-drag text selection.
-        if !lastContextMenuTriggerWasFinger && !lastPointerEventWasSecondaryClick {
+        if !fingerTrigger && !lastPointerEventWasSecondaryClick {
             return nil
         }
 
@@ -3108,9 +3126,7 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
 
 extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        #if !targetEnvironment(macCatalyst)
         swipeStartAreas[ObjectIdentifier(gestureRecognizer)] = touch.location(in: self).y < bounds.midY ? .top : .bottom
-        #endif
         // The brightness HUD is an interactive `UIHostingController` view (a
         // horizontal `Slider`) added as a subview of this terminal view. Without
         // this exclusion the terminal's tab-swipe pan (`appTabSwipePanGesture`)
@@ -3131,7 +3147,6 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
             return false
         }
 
-        #if !targetEnvironment(macCatalyst)
         // App-tab dragging owns the active one-finger horizontal gesture. If the
         // terminal scroll/capture pans also receive it, the tab slides sideways
         // while the terminal contents scroll or drag vertically underneath.
@@ -3143,6 +3158,13 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
         // Whichever recognizes first wins: quick movement → scroll; hold still 0.5s → selection
         if gestureRecognizer === selectionLongPressGesture,
            otherGestureRecognizer.view is UIScrollView { return false }
+        #if targetEnvironment(macCatalyst)
+        // Same rule for the Mac's finger scrollback pan.
+        if (gestureRecognizer === selectionLongPressGesture && isCatalystTouchScrollPan(otherGestureRecognizer))
+            || (otherGestureRecognizer === selectionLongPressGesture && isCatalystTouchScrollPan(gestureRecognizer)) {
+            return false
+        }
+        #endif
 
         // Capture long press and capture scroll pan are mutually exclusive
         // Quick movement → scroll; hold still 0.3s → mouse click
@@ -3150,7 +3172,6 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
            (gestureRecognizer === captureScrollPanGesture && otherGestureRecognizer === captureLongPressGesture) {
             return false
         }
-        #endif
         // Allow simultaneous gesture recognition by default
         // Scroll handling is managed by TerminalScrollView
         return true
@@ -3209,7 +3230,6 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
         }
         #endif
 
-        #if !targetEnvironment(macCatalyst)
         // Don't let terminal gesture recognizers steal touches from the dimension overlay
         // (e.g., captureLongPressGesture would cancel the Reset button tap after 0.3s)
         if let overlayView = dimensionOverlayHost?.view, overlayView.alpha > 0 {
@@ -3219,10 +3239,12 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
             }
         }
 
+        #if !targetEnvironment(macCatalyst)
         // Only allow right-click pan gesture when we're tracking a right-click
         if gestureRecognizer === rightClickPanGesture {
             return Self.rightClickTrackingView != nil
         }
+        #endif
 
         // Handle drag gesture: allow when handles visible and touch is near a handle.
         // We check at shouldBegin time but use a generous hit area since the finger
@@ -3292,6 +3314,11 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
             return false
         }
 
+        #if targetEnvironment(macCatalyst)
+        if let shouldBegin = shouldBeginCatalystTouchScrollPan(gestureRecognizer) {
+            return shouldBegin
+        }
+        #else
         // Don't start scroll pan gesture if we're text selecting
         if gestureRecognizer === scrollPanGesture && isSelecting {
             return false
@@ -3302,6 +3329,7 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
         if gestureRecognizer === scrollPanGesture && mousePressed {
             return false
         }
+        #endif
 
         // Compute whether scroll mode overrides capture behavior
         let scrollModeCaptureActive = isMouseCaptured && isTouchScrollMode
@@ -3333,8 +3361,10 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
             return scrollModeCaptureActive
         }
 
+        #if !targetEnvironment(macCatalyst)
         // In mouse capture mode, disable long press and tap gestures
         // (unless scroll mode overrides capture for specific gestures)
+        // Not on Mac: its pointer tap and long press stay live under capture.
         if gestureRecognizer is UILongPressGestureRecognizer && isMouseCaptured {
             // captureLongPressGesture is handled above
             return false
@@ -3346,6 +3376,7 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
             }
             return false
         }
+        #endif
 
         // Disable scroll mode gestures in capture mode (unless scroll mode is active)
         if gestureRecognizer === selectionLongPressGesture && isMouseCaptured {
@@ -3359,7 +3390,6 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
         // mouse on, where the user wants a swipe to send Ctrl+B+n). The swipe
         // recognizer's delaysTouchesBegan ensures a successful swipe doesn't leak
         // a partial mouse drag to the captured app.
-        #endif
         return true
     }
 }
@@ -3405,7 +3435,6 @@ extension Ghostty.TerminalView {
 
 // MARK: - Selection Handles
 
-#if !targetEnvironment(macCatalyst)
 extension Ghostty.TerminalView {
 
     private func selectionHandleStemHeight(for cellHeight: Double) -> CGFloat {
@@ -3618,7 +3647,7 @@ extension Ghostty.TerminalView {
     }
 
     private var prefersNativeSelectionLoupe: Bool {
-        #if os(iOS)
+        #if os(iOS) && !targetEnvironment(macCatalyst)
         UserPreferences.useNativeSelectionLoupe
         #else
         false
@@ -4318,7 +4347,6 @@ extension Ghostty.TerminalView {
         }
     }
 }
-#endif
 
 // MARK: - Data Extensions
 
@@ -4474,7 +4502,6 @@ extension Ghostty.TerminalView {
 
 /// Liquid glass overlay showing terminal dimensions (cols × rows) during pinch-to-zoom.
 /// Uses `.glassEffect` on iOS 26+, falls back to `.ultraThinMaterial` on earlier versions.
-#if !targetEnvironment(macCatalyst)
 struct DimensionOverlayView: View {
     let text: String
     var onReset: (() -> Void)?
@@ -4537,7 +4564,6 @@ struct InputModeOverlayView: View {
             .dimensionOverlayBackground()
     }
 }
-#endif
 
 // MARK: - Apple Pencil Interactions
 

@@ -292,7 +292,6 @@ extension MainView {
                 setTabOcclusion(tabID: previous.targetTabID, visible: false)
             }
 
-            #if !targetEnvironment(macCatalyst)
             // Release swipe-suppression on any tab from the previous (non-settling)
             // swipe that THIS swipe won't re-suppress. Without this, if the
             // selected tab changed between swipes the previous source/target could
@@ -303,16 +302,13 @@ extension MainView {
             where !newSwipeTabs.contains(staleTab) {
                 setTabSelectionUISwipeSuppressed(staleTab, false)
             }
-            #endif
         }
 
         setTabOcclusion(tabID: targetID, visible: true)
-        #if !targetEnvironment(macCatalyst)
         // Hide selection handles on both sliding tabs for the duration of the
         // swipe; they're recreated at the settled position when finish() runs.
         setTabSelectionUISwipeSuppressed(sourceID, true)
         setTabSelectionUISwipeSuppressed(targetID, true)
-        #endif
         appTabSwipeState = AppTabSwipeState(
             sourceTabID: sourceID,
             targetTabID: targetID,
@@ -421,14 +417,12 @@ extension MainView {
         ])
         // A target that revealed mid-settle skipped the source's cleanup.
         occludeTabIfNoLongerShown(state.sourceTabID)
-        #if !targetEnvironment(macCatalyst)
         // Both tabs have settled at offset 0; recreate selection handles at
         // their final position. The target (now selected) re-presents any
         // touch selection's handles; the source is occluded, so its handles
         // stay hidden — this just clears its swipe-suppressed flag.
         setTabSelectionUISwipeSuppressed(state.sourceTabID, false)
         setTabSelectionUISwipeSuppressed(state.targetTabID, false)
-        #endif
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
         // Skip on Catalyst: a no-op on Macs without a Force Touch trackpad.
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -454,13 +448,11 @@ extension MainView {
             LifecycleDebugLogger.shared.checkpoint("FG.appTabSwipe.finish", ms: nil, [
                 ("path", "cancel"),
             ])
-            #if !targetEnvironment(macCatalyst)
             // The source tab has slid back to offset 0 and stays selected;
             // recreate its selection handles at the settled position. The target
             // is occluded, so clearing its flag leaves its handles hidden.
             self.setTabSelectionUISwipeSuppressed(state.sourceTabID, false)
             self.setTabSelectionUISwipeSuppressed(state.targetTabID, false)
-            #endif
         }
 
         if animationsDisabled {
@@ -506,10 +498,8 @@ extension MainView {
         if tabsModel.selectedTabID != state.targetTabID {
             setTabOcclusion(tabID: state.targetTabID, visible: false)
         }
-        #if !targetEnvironment(macCatalyst)
         setTabSelectionUISwipeSuppressed(state.sourceTabID, false)
         setTabSelectionUISwipeSuppressed(state.targetTabID, false)
-        #endif
         LifecycleDebugLogger.shared.checkpoint("FG.appTabSwipe.forceClear", ms: nil, [
             ("reason", reason),
             ("source", String(state.sourceTabID.uuidString.prefix(8))),
@@ -526,7 +516,6 @@ extension MainView {
         }
     }
 
-    #if !targetEnvironment(macCatalyst)
     /// Suppress (or restore) touch-selection handles on a tab's terminals for
     /// the duration of an app-tab swipe slide. The handles are window-anchored
     /// and can't follow the SwiftUI `.offset(x:)` slide, so presenting them
@@ -539,7 +528,6 @@ extension MainView {
             terminal.setSelectionUISwipeSuppressed(suppressed)
         }
     }
-    #endif
 
     /// Drives a tab-bar selection change. The mutation is unanimated globally
     /// so the terminal-content opacity flip in `MainViewTerminalContent`'s
@@ -568,9 +556,7 @@ extension MainView {
         if isAnySheetPresented {
             setOverlayOwnsKeyboardForAllTerminals(true)
         }
-        #if !targetEnvironment(macCatalyst)
         setSelectionUIOccludedByPresentation(true)
-        #endif
         UIApplication.shared.sendAction(
             #selector(UIResponder.resignFirstResponder),
             to: nil,
@@ -579,7 +565,6 @@ extension MainView {
         )
     }
 
-    #if !targetEnvironment(macCatalyst)
     func setSelectionUIOccludedByPresentation(_ occluded: Bool) {
         for tab in terminals {
             for terminal in tab.splitTree.terminalLeaves {
@@ -587,7 +572,6 @@ extension MainView {
             }
         }
     }
-    #endif
 
     /// Push the per-window keyboard-ownership gate to every terminal in this
     /// window. While an overlay (tab sidebar, connection sidebar, any sheet)
@@ -689,7 +673,6 @@ extension MainView {
     }
 
     func resyncSelectionHandlesAfterTransientOcclusion() {
-        #if !targetEnvironment(macCatalyst)
         // Settings uses a fullScreenCover on iPad, and UIKit can keep the
         // presented controller attached past the first few run-loop turns.
         let delays: [TimeInterval] = [0, 0.1, 0.35, 0.7, 1.0]
@@ -704,7 +687,6 @@ extension MainView {
                 }
             }
         }
-        #endif
     }
 
     func refreshSelectionAfterExternalTabMutation(allowFocus: Bool) {

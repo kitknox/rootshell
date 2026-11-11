@@ -3,11 +3,9 @@
 //  rootshell
 //
 //  Lollipop-style visual handles for text selection boundaries.
-//  Only used on touch devices (iOS/iPadOS), excluded from Mac Catalyst.
+//  Used for finger selections: iOS/iPadOS, and Macs with a touch display.
 //  Dragging is handled by pan gestures attached to these handle views.
 //
-
-#if !targetEnvironment(macCatalyst)
 
 import UIKit
 
@@ -527,4 +525,3 @@ extension Ghostty {
     }
 }
 
-#endif

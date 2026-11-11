@@ -231,10 +231,8 @@ final class HerdrEndpointPane {
     }
 
     private func syncSelectionUI() {
-        #if !targetEnvironment(macCatalyst)
         view?.updateSelectionHandlePositions()
         view?.syncSelectionHandlesForSurfaceActivity()
-        #endif
     }
 
     func copy() {
