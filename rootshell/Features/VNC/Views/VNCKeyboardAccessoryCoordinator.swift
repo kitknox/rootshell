@@ -79,6 +79,15 @@ final class VNCKeyboardAccessoryCoordinator {
         reconcilePresentation(forceReload: true)
         observeSoftwareKeyboardRequest()
         observeCapture()
+        #if targetEnvironment(macCatalyst) && STANDALONE
+        // Capture stays on under the credential prompts, which take local text.
+        RemoteInputSourceHotKeys.shared.register(self) { [weak self] in
+            guard let self, let pane = self.pane else { return false }
+            return self.keyboardIsFirstResponder && pane.remoteSessionIsConnected
+                && pane.window?.isKeyWindow == true
+        }
+        observeRemoteConnection()
+        #endif
 
         // The controller's own trait registration only reaches hosts that are
         // the host view themselves; re-register on the pane for this
@@ -91,6 +100,9 @@ final class VNCKeyboardAccessoryCoordinator {
     }
 
     func tearDown() {
+        #if targetEnvironment(macCatalyst) && STANDALONE
+        RemoteInputSourceHotKeys.shared.unregister(self)
+        #endif
         keyboardCapture.inputViews = .packageDefault
         keyboardCapture.supplementalModifiers = []
         keyboardCapture.onSupplementalModifiersConsumed = nil
@@ -127,6 +139,9 @@ final class VNCKeyboardAccessoryCoordinator {
         } else {
             controller.releaseTouchKeyboardState()
         }
+        #if targetEnvironment(macCatalyst) && STANDALONE
+        RemoteInputSourceHotKeys.shared.update()
+        #endif
         if reconcilePresentation() {
             EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
         }
@@ -144,6 +159,20 @@ final class VNCKeyboardAccessoryCoordinator {
             }
         }
     }
+
+    #if targetEnvironment(macCatalyst) && STANDALONE
+    private func observeRemoteConnection() {
+        withObservationTracking {
+            _ = pane?.remoteSessionIsConnected
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.observeRemoteConnection()
+                RemoteInputSourceHotKeys.shared.update()
+            }
+        }
+    }
+    #endif
 
     private var presentation: Presentation {
         if manuallyDismissed {

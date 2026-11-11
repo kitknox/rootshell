@@ -648,17 +648,24 @@ struct VNCConnectionFormSections: View {
             Group {
                 Toggle("Enter Full Screen on Connect", isOn: $form.automaticallyEnterFullScreen)
 
+                // No software keyboard on Mac, so no toolbar to show.
+                #if !targetEnvironment(macCatalyst)
                 Picker("Keyboard Toolbar", selection: $form.keyboardToolbar) {
                     ForEach(VNCConnectionConfig.KeyboardToolbarPreference.allCases, id: \.self) { preference in
                         Text(toolbarLabel(preference)).tag(preference)
                     }
                 }
+                #endif
             }
             .themedRow()
         } header: {
             Text("Session")
         } footer: {
+            #if targetEnvironment(macCatalyst)
+            Text("Full Screen expands this Screen Sharing pane after the connection succeeds.")
+            #else
             Text("Full Screen expands this Screen Sharing pane after the connection succeeds. Keyboard Toolbar controls the toolbar above the software keyboard.")
+            #endif
         }
     }
 

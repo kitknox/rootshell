@@ -40,6 +40,8 @@ protocol RemoteScreenPane: SplitPaneView {
     var keyboardCoordinator: VNCKeyboardAccessoryCoordinator? { get }
     var effectiveKeyboardToolbarPreference: VNCConnectionConfig.KeyboardToolbarPreference { get }
     var usesAppleModifierConvention: Bool { get }
+    /// Observable through `withObservationTracking`.
+    var remoteSessionIsConnected: Bool { get }
     func captureKeyboard()
     func sendKeyboardToolbarKeysym(down: Bool, keysym: UInt32)
     func pasteFromKeyboardToolbar()

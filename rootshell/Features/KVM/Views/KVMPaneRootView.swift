@@ -223,7 +223,7 @@ private struct KVMHUDMenuExtras: View {
         }
 
         Menu {
-            #if !os(visionOS)
+            #if !os(visionOS) && !targetEnvironment(macCatalyst)
             KVMKeyboardToolbarToggle(pane: pane)
             #endif
             KVMLocalCursorToggle(pane: pane)
@@ -259,7 +259,7 @@ private struct KVMHUDMenuExtras: View {
     }
 }
 
-#if !os(visionOS)
+#if !os(visionOS) && !targetEnvironment(macCatalyst)
 private struct KVMKeyboardToolbarToggle: View {
     @ObservedObject var pane: KVMPaneView
 

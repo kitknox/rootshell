@@ -1397,6 +1397,7 @@ extension VNCPaneView: RemoteScreenPane {
         return nil
     }
     var usesAppleModifierConvention: Bool { session.serverUsesAppleModifierConvention }
+    var remoteSessionIsConnected: Bool { session.connectionState.isConnected }
 
     func retryRemoteConnection() {
         session.retryConnection()
@@ -1453,7 +1454,7 @@ struct VNCPaneRootView: View {
                     brightnessGain: brightnessManager.effectiveGain,
                     hudMenuExtras: {
                         Menu {
-                            #if !os(visionOS)
+                            #if !os(visionOS) && !targetEnvironment(macCatalyst)
                             VNCKeyboardToolbarMenuToggle(pane: pane)
                             #endif
                             VNCQuickModeMenu(pane: pane)
@@ -2145,7 +2146,7 @@ private struct VNCConnectionInfoMenuItem: View {
     }
 }
 
-#if !os(visionOS)
+#if !os(visionOS) && !targetEnvironment(macCatalyst)
 /// HUD menu extra: per-pane keyboard toolbar on/off. Flips a runtime
 /// override on the pane (defaulting from the connection's configured
 /// tri-state); the persisted setting lives in the form/profile editor.

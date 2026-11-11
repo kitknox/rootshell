@@ -567,6 +567,7 @@ extension KVMPaneView: RemoteScreenPane {
         return reason
     }
     var usesAppleModifierConvention: Bool { false }
+    var remoteSessionIsConnected: Bool { session.connectionState.isConnected }
 
     func sendKeyboardToolbarKeysym(down: Bool, keysym: UInt32) {
         session.sendKeysym(down: down, keysym: keysym)

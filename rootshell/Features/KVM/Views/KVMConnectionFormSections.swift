@@ -150,11 +150,13 @@ struct KVMConnectionFormSections: View {
         Section {
             Group {
                 Toggle("Enter Full Screen on Connect", isOn: $form.automaticallyEnterFullScreen)
+                #if !targetEnvironment(macCatalyst)
                 Picker("Keyboard Toolbar", selection: $form.keyboardToolbar) {
                     Text("Follow App Setting").tag(VNCConnectionConfig.KeyboardToolbarPreference.followAppSetting)
                     Text("On").tag(VNCConnectionConfig.KeyboardToolbarPreference.on)
                     Text("Off").tag(VNCConnectionConfig.KeyboardToolbarPreference.off)
                 }
+                #endif
             }
             .themedRow()
         } header: {
