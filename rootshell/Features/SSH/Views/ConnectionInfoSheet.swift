@@ -641,6 +641,10 @@ struct ConnectionInfoSheet: View {
                 infoRow("Remote Clipboard", value: "Yes")
             }
             if session.isHighPerformanceMode {
+                infoRow(
+                    "Bandwidth",
+                    value: session.configuration.highPerformanceBandwidth == .constrained
+                        ? "Low (0.3-6 Mbps)" : "Full (20-60 Mbps)")
                 infoRow("Remote Audio", value: session.configuration.enableRemoteAudio ? "On" : "Off")
                 if session.configuration.enableRemoteAudio {
                     infoRow("Sync Video to Audio", value: session.configuration.syncVideoToRemoteAudio ? "On" : "Off")

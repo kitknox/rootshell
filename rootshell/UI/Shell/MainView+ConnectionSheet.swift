@@ -206,48 +206,6 @@ extension MainView {
         sourceProfileID: UUID? = nil,
         password: String? = nil
     ) {
-        let network = NetworkReachabilityMonitor.shared
-        let supportsHighPerformance = network.isConnected
-            && (network.connectionType == .wifi || network.connectionType == .wired)
-        #if !CHINA_BUILD
-        // In-app Tailscale carries the media itself, so the mesh-VPN caveat is moot.
-        let routing = TailnetRouting.shared
-        let meshCaveat = config.usesMeshVPNHostname
-            && !(routing.state.enabled && routing.looksLikeTailnet(config.host))
-        #else
-        let meshCaveat = config.usesMeshVPNHostname
-        #endif
-
-        if config.quality == .adaptive,
-           !supportsHighPerformance || meshCaveat {
-            alerts.handleVNCHighPerformanceTransportWarning(
-                MainAlertController.PendingVNCHighPerformanceConnection(
-                    config: config,
-                    splitOption: splitOption,
-                    sourceProfileID: sourceProfileID,
-                    password: password
-                )
-            )
-            return
-        }
-
-        performVNCConnection(
-            config: config,
-            splitOption: splitOption,
-            sourceProfileID: sourceProfileID,
-            password: password
-        )
-    }
-
-    /// Create a Screen Sharing pane after any user-initiated transport
-    /// warning has been resolved. Window restoration deliberately calls the
-    /// lower-level pane factory directly and therefore remains non-blocking.
-    func performVNCConnection(
-        config: VNCConnectionConfig,
-        splitOption: SSHConnectionView.SplitOption,
-        sourceProfileID: UUID? = nil,
-        password: String? = nil
-    ) {
         switch splitOption {
         case .newTab:
             createVNCTab(with: config, sourceProfileID: sourceProfileID, password: password)

@@ -41,6 +41,7 @@ struct VNCFormState: Hashable {
     var savePassword: Bool = true
     var security: VNCConnectionConfig.SecurityPreference = .automatic
     var quality: VNCConnectionConfig.QualityMode = .adaptive
+    var highPerformanceBandwidth: VNCConnectionConfig.HighPerformanceBandwidth = .automatic
     var keyboardToolbar: VNCConnectionConfig.KeyboardToolbarPreference = .followAppSetting
     var remoteSystem: VNCConnectionConfig.RemoteSystemPreference = .automatic
     var automaticallyEnterFullScreen: Bool = false
@@ -80,6 +81,7 @@ struct VNCFormState: Hashable {
         username = config.username ?? ""
         security = config.security
         quality = config.quality
+        highPerformanceBandwidth = config.highPerformanceBandwidth
         keyboardToolbar = config.keyboardToolbar
         remoteSystem = config.remoteSystem
         automaticallyEnterFullScreen = config.automaticallyEnterFullScreen
@@ -214,6 +216,7 @@ struct VNCFormState: Hashable {
             port: portNum,
             username: trimmedUsername.isEmpty ? nil : trimmedUsername,
             quality: quality,
+            highPerformanceBandwidth: highPerformanceBandwidth,
             security: security,
             displaySizingModeRaw: displaySizingModeRaw,
             displayModeRaw: displayModeRaw,
@@ -469,11 +472,23 @@ struct VNCConnectionFormSections: View {
                             Text(choice.displayName).tag(choice)
                         }
                     }
+                } else {
+                    Picker("Bandwidth", selection: $form.highPerformanceBandwidth) {
+                        ForEach(VNCConnectionConfig.HighPerformanceBandwidth.allCases, id: \.self) { choice in
+                            Text(choice.displayName).tag(choice)
+                        }
+                    }
                 }
 
                 Text(packageQualityMode.explanation)
                     .font(.caption)
                     .foregroundColor(.secondary)
+
+                if form.quality == .adaptive {
+                    Text(bandwidthExplanation)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
             .themedRow()
         } header: {
@@ -482,6 +497,17 @@ struct VNCConnectionFormSections: View {
             if form.quality == .adaptive {
                 Text("High Performance uses UDP and cannot be tunneled through SSH.")
             }
+        }
+    }
+
+    private var bandwidthExplanation: String {
+        switch form.highPerformanceBandwidth {
+        case .automatic:
+            String(localized: "Uses Low Bandwidth on cellular and mesh VPN connections such as Tailscale, and Full otherwise.")
+        case .full:
+            String(localized: "Asks the Mac for 20 to 60 Mbps. Sharpest motion, but needs a fast, direct network.")
+        case .low:
+            String(localized: "Asks the Mac for 0.3 to 6 Mbps. Keeps working on slow networks; fast motion looks softer.")
         }
     }
 

@@ -10,6 +10,7 @@ import Foundation
 #if canImport(rootshellVNC)
 import rootshellVNC
 import RFBProtocol
+import RFBTransport
 #endif
 
 /// App-side configuration for a VNC / Apple Screen Sharing connection.
@@ -44,6 +45,27 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
                 return String(localized: "Standard", comment: "VNC quality mode")
             case .fullQuality:
                 return String(localized: "Full Quality", comment: "VNC quality mode")
+            }
+        }
+    }
+
+    /// High Performance bitrate range. Raw values are persisted.
+    nonisolated enum HighPerformanceBandwidth: String, Codable, CaseIterable, Hashable, Sendable {
+        /// Low Bandwidth on cellular and mesh VPN paths, Full otherwise.
+        case automatic
+        /// The Mac's own 20 to 60 Mbps range.
+        case full
+        /// 0.3 to 6 Mbps: keeps working on slow paths, softer under heavy motion.
+        case low
+
+        var displayName: String {
+            switch self {
+            case .automatic:
+                return String(localized: "Automatic", comment: "VNC High Performance bandwidth")
+            case .full:
+                return String(localized: "Full", comment: "VNC High Performance bandwidth")
+            case .low:
+                return String(localized: "Low Bandwidth", comment: "VNC High Performance bandwidth")
             }
         }
     }
@@ -182,6 +204,9 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
     /// Connection quality profile.
     var quality: QualityMode
 
+    /// Bitrate range High Performance asks the Mac for.
+    var highPerformanceBandwidth: HighPerformanceBandwidth
+
     /// Preferred RFB security type.
     var security: SecurityPreference
 
@@ -222,6 +247,7 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         port: Int = 5900,
         username: String? = nil,
         quality: QualityMode = .adaptive,
+        highPerformanceBandwidth: HighPerformanceBandwidth = .automatic,
         security: SecurityPreference = .automatic,
         displaySizingModeRaw: String? = nil,
         displayModeRaw: String? = nil,
@@ -237,6 +263,7 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         self.port = port
         self.username = username
         self.quality = quality
+        self.highPerformanceBandwidth = highPerformanceBandwidth
         self.security = security
         self.displaySizingModeRaw = displaySizingModeRaw
         self.displayModeRaw = displayModeRaw
@@ -252,7 +279,7 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
     // MARK: - Codable (backward-compatible)
 
     private enum CodingKeys: String, CodingKey {
-        case host, port, username, quality, security
+        case host, port, username, quality, highPerformanceBandwidth, security
         case displaySizingModeRaw, displayModeRaw
         case enableRemoteAudio, syncVideoToAudio, promptForLoginPasswordAtLoginWindow
         case jump, keyboardToolbar, remoteSystem
@@ -272,6 +299,10 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         quality = qualityRaw.flatMap(QualityMode.init(rawValue:))
             ?? Self.legacyQuality(rawValue: qualityRaw)
             ?? .adaptive
+
+        highPerformanceBandwidth = Self.lossyString(in: container, forKey: .highPerformanceBandwidth)
+            .flatMap(HighPerformanceBandwidth.init(rawValue:))
+            ?? .automatic
 
         let securityRaw = Self.lossyString(in: container, forKey: .security)
         security = securityRaw.flatMap(SecurityPreference.init(rawValue:))
@@ -372,6 +403,7 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         try container.encode(port, forKey: .port)
         try container.encodeIfPresent(username, forKey: .username)
         try container.encode(quality, forKey: .quality)
+        try container.encode(highPerformanceBandwidth, forKey: .highPerformanceBandwidth)
         try container.encode(security, forKey: .security)
         try container.encodeIfPresent(displaySizingModeRaw, forKey: .displaySizingModeRaw)
         try container.encodeIfPresent(displayModeRaw, forKey: .displayModeRaw)
@@ -394,18 +426,43 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         quality != .adaptive
     }
 
-    /// Whether the destination uses a well-known mesh VPN DNS namespace.
-    /// High Performance Screen Sharing's direct UDP transport tends to be
-    /// less reliable over these overlay paths than Standard's TCP transport.
+    /// Whether the destination is a mesh VPN name or a 100.64.0.0/10 address,
+    /// the range Tailscale and NetBird assign. These paths are often relayed.
     var usesMeshVPNHostname: Bool {
         let normalizedHost = host
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
             .trimmingCharacters(in: CharacterSet(charactersIn: "."))
 
+        let octets = normalizedHost.split(separator: ".").compactMap { UInt8($0) }
+        if octets.count == 4, octets[0] == 100, (64...127).contains(octets[1]) {
+            return true
+        }
         return ["ts.net", "netbird.cloud", "netbird.selfhosted"].contains { suffix in
             normalizedHost == suffix || normalizedHost.hasSuffix(".\(suffix)")
         }
+    }
+
+    /// Whether High Performance asks the Mac for its low-bandwidth range:
+    /// Automatic picks it off Wi-Fi and wired, and on mesh VPN paths that the
+    /// in-app tailnet does not carry itself.
+    var usesLowBandwidthHighPerformance: Bool {
+        switch highPerformanceBandwidth {
+        case .full: return false
+        case .low: return true
+        case .automatic: break
+        }
+        let network = NetworkReachabilityMonitor.shared
+        let localBearer = network.isConnected
+            && (network.connectionType == .wifi || network.connectionType == .wired)
+        #if !CHINA_BUILD
+        let routing = TailnetRouting.shared
+        let meshPath = usesMeshVPNHostname
+            && !(routing.state.enabled && routing.looksLikeTailnet(host))
+        #else
+        let meshPath = usesMeshVPNHostname
+        #endif
+        return !localBearer || meshPath
     }
 
     /// The jump actually applied at connect time (High Performance forces direct).
@@ -450,6 +507,8 @@ extension VNCConnectionConfig {
            let mode = VNCConfiguration.DisplayMode(rawValue: raw) {
             configuration.displayMode = mode
         }
+        configuration.highPerformanceBandwidth =
+            usesLowBandwidthHighPerformance ? .constrained : .full
         configuration.enableRemoteAudio = enableRemoteAudio
         configuration.syncVideoToRemoteAudio = syncVideoToAudio
         configuration.promptForLoginPasswordAtLoginWindow =
