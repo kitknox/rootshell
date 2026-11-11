@@ -57,6 +57,12 @@ final class PaneFullScreenController {
         container.onExitRequested = { [weak self] in self?.exit(animated: true) }
         window.addSubview(container)
         self.container = container
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        // A detached keyboard card is a window subview too and stays on top.
+        if let card = TerminalTouchKeyboardWindowState.forWindow(window).overlay {
+            window.bringSubviewToFront(card)
+        }
+        #endif
 
         pane.isDetachedForFullScreen = true
         pane.fullScreenController = self

@@ -96,4 +96,12 @@ extension Ghostty.TerminalView: TerminalTouchKeyboardHost {
     func touchKeyboardInvalidateSuggestions() { invalidateWritingAssistance() }
 }
 
+// TerminalKeyboardAccessoryHost
+extension Ghostty.TerminalView {
+    var keyboardTouchKeyboardHost: TerminalTouchKeyboardHost? { self }
+    var keyboardTabID: UUID? { containingTabID }
+    var keyboardLostFocusOutsideWindow: Bool { lostFocusOutsideWindow }
+    func keyboardPrepareTouchKeyboardSwitch() { prepareTouchKeyboardSwitch() }
+}
+
 #endif

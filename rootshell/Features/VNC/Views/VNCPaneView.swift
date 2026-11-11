@@ -351,6 +351,7 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
     func captureKeyboard() {
         KeyboardTracker.shared.setInputOwnerWindow(window)
         keyboardCapture.capture()
+        keyboardCoordinator?.captureDidChange()
     }
 
     // MARK: - Lifecycle
@@ -376,6 +377,10 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
 
     override var keyboardAccessoryFrameInScreen: CGRect? {
         keyboardCoordinator?.keyboardAccessoryFrameInScreen
+    }
+
+    override var dockedTouchKeyboardFrameInScreen: CGRect? {
+        keyboardCoordinator?.dockedTouchKeyboardFrameInScreen
     }
 
     /// Bottom inset the keyboard toolbar reserves when pinned at the bottom

@@ -2,8 +2,8 @@
 //  VNCKeyboardAccessoryCoordinator.swift
 //  rootshell
 //
-//  Hosts the terminal keyboard toolbar for a remote-screen pane and
-//  translates toolbar key strings into X11 keysym events for its session.
+//  Hosts the terminal keyboard and its toolbar for a remote-screen pane and
+//  translates their key strings into X11 keysym events for its session.
 //
 
 import UIKit
@@ -34,9 +34,19 @@ final class VNCKeyboardAccessoryCoordinator {
         case hidden
         case systemKeyboardWithAccessory
         case accessoryOnly
+        /// Capture lapsed under the terminal keyboard. An empty input keeps
+        /// Apple's keyboard from standing in until capture returns.
+        case touchKeyboardParked
     }
 
-    private var appliedPresentation: Presentation?
+    /// What the package responder was last given. The terminal keyboard rides
+    /// along with every presentation and takes over once keys are requested.
+    private struct AppliedInputViews: Equatable {
+        var presentation: Presentation
+        var touchKeyboard: ObjectIdentifier?
+    }
+
+    private var appliedInputViews: AppliedInputViews?
 
     /// Set by the toolbar's dismiss button (non-persistent mode). The package
     /// responder never resigns on dismissal (hardware keys must keep flowing
@@ -44,6 +54,13 @@ final class VNCKeyboardAccessoryCoordinator {
     /// resign-first-responder signal and hides the toolbar until the software
     /// keyboard is summoned again.
     private var manuallyDismissed = false
+
+    /// Bumped by every key this coordinator sends for the user. Hardware keys
+    /// bypass it; see `dictationInputGeneration`.
+    private var inputGeneration: UInt64 = 0
+
+    /// Text the pane typed for the user by another route, such as a paste.
+    func noteUserInput() { inputGeneration &+= 1 }
 
     init(pane: any RemoteScreenPane) {
         self.pane = pane
@@ -56,10 +73,12 @@ final class VNCKeyboardAccessoryCoordinator {
             self?.keyboardCapture.supplementalModifiers = Self.vncModifiers(modifiers)
         }
         keyboardCapture.onSupplementalModifiersConsumed = { [weak self] in
-            self?.controller.activeToolbarView?.clearOneShotModifiers()
+            self?.controller.clearOneShotModifiers()
         }
+        if keyboardIsFirstResponder { controller.activateTouchKeyboardState() }
         reconcilePresentation(forceReload: true)
         observeSoftwareKeyboardRequest()
+        observeCapture()
 
         // The controller's own trait registration only reaches hosts that are
         // the host view themselves; re-register on the pane for this
@@ -92,8 +111,38 @@ final class VNCKeyboardAccessoryCoordinator {
             controller.activeToolbarView?.clearModifiers()
         }
         manuallyDismissed = false
+        // The reset above also took down a detached card.
+        controller.scheduleFloatingTouchKeyboardUpdate()
         reconcilePresentation(forceReload: true)
         EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
+    }
+
+    /// The pane captured or released the keyboard. Claims the window's
+    /// terminal keyboard before the responder asks for its input views.
+    func captureDidChange() {
+        if keyboardIsFirstResponder {
+            controller.activateTouchKeyboardState()
+            // A detached card returns with capture.
+            controller.scheduleFloatingTouchKeyboardUpdate()
+        } else {
+            controller.releaseTouchKeyboardState()
+        }
+        if reconcilePresentation() {
+            EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
+        }
+    }
+
+    /// The package also captures on its own, when the remote screen is touched.
+    private func observeCapture() {
+        withObservationTracking {
+            _ = keyboardCapture.isCaptured
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.observeCapture()
+                self.captureDidChange()
+            }
+        }
     }
 
     private var presentation: Presentation {
@@ -105,6 +154,10 @@ final class VNCKeyboardAccessoryCoordinator {
             } else {
                 return .hidden
             }
+        }
+        if !keyboardIsFirstResponder, keyboardCapture.softwareKeyboardRequested,
+           appliedInputViews?.touchKeyboard != nil || appliedInputViews?.presentation == .touchKeyboardParked {
+            return .touchKeyboardParked
         }
         guard !controller.keyboardToolbarCollapsed else { return .hidden }
 
@@ -132,22 +185,31 @@ final class VNCKeyboardAccessoryCoordinator {
     /// mismatches that displaced the accessory during repeated HUD toggles.
     @discardableResult
     private func reconcilePresentation(forceReload: Bool = false) -> Bool {
-        let next = presentation
-        guard forceReload || appliedPresentation != next else { return false }
-        appliedPresentation = next
+        let presentation = presentation
+        let touchInput = presentation == .touchKeyboardParked ? nil : controller.touchKeyboardInputOnRequest
+        let touchObject: AnyObject? = touchInput.flatMap { $0.controller ?? $0.view }
+        let next = AppliedInputViews(
+            presentation: presentation,
+            touchKeyboard: touchObject.map { ObjectIdentifier($0) })
+        guard forceReload || appliedInputViews != next else { return false }
+        appliedInputViews = next
 
-        switch next {
+        var inputViews: VNCKeyboardInputViews
+        switch presentation {
         case .hidden:
-            keyboardCapture.inputViews = .packageDefault
-        case .systemKeyboardWithAccessory:
-            keyboardCapture.inputViews = VNCKeyboardInputViews(
+            inputViews = .packageDefault
+        case .systemKeyboardWithAccessory, .accessoryOnly:
+            inputViews = VNCKeyboardInputViews(
                 primary: .systemKeyboardWhenRequested(otherwise: controller.accessoryOnlyInputView),
                 accessory: controller.keyboardAccessory)
-        case .accessoryOnly:
-            keyboardCapture.inputViews = VNCKeyboardInputViews(
-                primary: .systemKeyboardWhenRequested(otherwise: controller.accessoryOnlyInputView),
-                accessory: controller.keyboardAccessory)
+        case .touchKeyboardParked:
+            inputViews = VNCKeyboardInputViews(primary: .custom(controller.accessoryOnlyInputView))
         }
+        // It carries its own toolbar row, whatever this connection's toolbar preference.
+        inputViews.hostKeyboard = touchInput.map {
+            VNCHostKeyboard(inputView: $0.view, inputViewController: $0.controller)
+        }
+        keyboardCapture.inputViews = inputViews
         return true
     }
 
@@ -172,16 +234,31 @@ final class VNCKeyboardAccessoryCoordinator {
         if keyboardCapture.softwareKeyboardRequested,
            controller.toolbarOnlyMode {
             controller.exitToolbarOnlyMode()
+            controller.softwareKeyboardRequestDidChange()
             return
         }
 
+        controller.softwareKeyboardRequestDidChange()
         reconcilePresentation(forceReload: true)
         EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
     }
 
+    /// False under the terminal keyboard, which replaces the accessory.
+    private var showsAccessory: Bool {
+        guard !controller.usesFullTouchKeyboard else { return false }
+        switch presentation {
+        case .systemKeyboardWithAccessory, .accessoryOnly: return true
+        case .hidden, .touchKeyboardParked: return false
+        }
+    }
+
     var keyboardAccessoryFrameInScreen: CGRect? {
-        guard presentation != .hidden else { return nil }
+        guard showsAccessory else { return nil }
         return controller.keyboardAccessoryFrameInScreen
+    }
+
+    var dockedTouchKeyboardFrameInScreen: CGRect? {
+        controller.dockedTouchKeyboardFrameInScreen
     }
 
     /// Bottom inset the pane must reserve whenever the toolbar is visible.
@@ -194,7 +271,7 @@ final class VNCKeyboardAccessoryCoordinator {
         #if os(visionOS) || targetEnvironment(macCatalyst)
         return 0
         #else
-        guard presentation != .hidden,
+        guard showsAccessory,
               let pane,
               keyboardIsFirstResponder else { return 0 }
         let fallbackHeight = KeyboardSizes.current(traitCollection: pane.traitCollection).toolbar.height
@@ -287,6 +364,86 @@ extension VNCKeyboardAccessoryCoordinator: TerminalKeyboardAccessoryHost {
     }
 }
 
+// MARK: - Terminal keyboard
+
+#if !os(visionOS) && !targetEnvironment(macCatalyst)
+extension VNCKeyboardAccessoryCoordinator: TerminalTouchKeyboardHost {
+    var keyboardTouchKeyboardHost: TerminalTouchKeyboardHost? { self }
+    var keyboardTabID: UUID? { pane?.containingTabID }
+    var keyboardSoftwareKeyboardRequest: Bool? { keyboardCapture.softwareKeyboardRequested }
+
+    var touchKeyboardThemeColors: ThemeManager.ThemeInfo.ThemeColors? {
+        guard let pane else { return nil }
+        let (name, _) = ThemeOverrideManager.shared.resolveTheme(tabId: pane.containingTabID, windowId: pane.windowId)
+        return ThemeManager.shared.themeInfo(for: name)?.colors
+    }
+
+    /// Keys go straight to the session, so a card keeps typing even while
+    /// the system briefly holds first responder (a Duo fold).
+    var touchKeyboardCanSend: Bool { keyboardIsFirstResponder }
+    var touchKeyboardSuggestionContext: TerminalTouchKeyboardModel.SuggestionContext? { nil }
+
+    func touchKeyboardInsert(_ text: String) {
+        guard touchKeyboardCanSend else { return }
+        inputGeneration &+= 1
+        sendTranslated(text)
+    }
+
+    func touchKeyboardSend(_ key: String, modifiers: KeyModifiers, shifted: Character?) {
+        guard touchKeyboardCanSend else { return }
+        keyPressed(key, modifiers: modifiers, shifted: shifted)
+    }
+
+    func touchKeyboardAccept(_ text: String, context: TerminalTouchKeyboardModel.SuggestionContext) {}
+    func touchKeyboardInvalidateSuggestions() {}
+}
+#endif
+
+#if canImport(FluidAudio) && !CHINA_BUILD
+/// The keyboard's Dictation page types into the remote screen.
+extension VNCKeyboardAccessoryCoordinator: DictationTarget {
+    var dictationCanReceive: Bool { keyboardIsFirstResponder }
+    var dictationAgentName: String? { nil }
+    var dictationScreenText: String? { nil }
+    /// Keys sent here, plus the ones the package responder sent itself.
+    var dictationInputGeneration: UInt64 { inputGeneration &+ keyboardCapture.keyboardInputGeneration }
+    var dictationPreferredStyle: DictationFormatter.Style? { .prose }
+    /// Return acts on whatever the remote screen has focused.
+    var dictationAllowsAutoSubmit: Bool { false }
+
+    func dictationInsert(_ text: String) {
+        guard dictationCanReceive else { return }
+        sendTranslated(text)
+    }
+
+    func dictationSubmit() {
+        dictationTap(KeyboardInputHandler.keysymReturn)
+    }
+
+    func dictationSend(_ key: DictationKey) {
+        switch key {
+        case .escape: dictationTap(KeyboardInputHandler.keysymEscape)
+        case .tab: dictationTap(KeyboardInputHandler.keysymTab)
+        case .up: dictationTap(KeyboardInputHandler.keysymUp)
+        case .down: dictationTap(KeyboardInputHandler.keysymDown)
+        case .backspace: dictationTap(KeyboardInputHandler.keysymBackspace)
+        case .control(let character):
+            dictationTap(KeyboardInputHandler.keysymForCharacter(character),
+                         modifiers: [KeyboardInputHandler.keysymControlL])
+        }
+    }
+
+    func dictationDeleteBackward(_ count: Int) {
+        for _ in 0..<max(0, count) { dictationTap(KeyboardInputHandler.keysymBackspace) }
+    }
+
+    private func dictationTap(_ keysym: UInt32, modifiers: [UInt32] = []) {
+        guard dictationCanReceive else { return }
+        sendStroke(KeyStroke(modifiers: modifiers, keysym: keysym))
+    }
+}
+#endif
+
 // MARK: - KeyboardButtonDelegate (keysym bridge)
 
 extension VNCKeyboardAccessoryCoordinator: KeyboardButtonDelegate {
@@ -299,7 +456,13 @@ extension VNCKeyboardAccessoryCoordinator: KeyboardButtonDelegate {
     }
 
     func keyPressed(_ key: String, modifiers: KeyModifiers) {
-        if let keysym = Self.namedKeysyms[key] {
+        keyPressed(key, modifiers: modifiers, shifted: nil)
+    }
+
+    /// `shifted` is a keyboard layout's Shift output for the key; nil keeps US casing.
+    private func keyPressed(_ key: String, modifiers: KeyModifiers, shifted: Character?) {
+        inputGeneration &+= 1
+        if let keysym = Self.namedKeysyms[key] ?? Self.functionKeysym(key) {
             sendStroke(KeyStroke(
                 modifiers: Self.modifierKeysyms(
                     modifiers, appleModifierConvention: appleModifierConvention),
@@ -310,7 +473,7 @@ extension VNCKeyboardAccessoryCoordinator: KeyboardButtonDelegate {
             // Shifted characters carry the shifted keysym (like a real
             // keyboard) with the Shift modifier still pressed around them.
             let effective = modifiers.contains(.shift)
-                ? Ghostty.TerminalView.shiftedCharacter(char)
+                ? shifted ?? Ghostty.TerminalView.shiftedCharacter(char)
                 : char
             sendStroke(KeyStroke(
                 modifiers: Self.modifierKeysyms(
@@ -324,19 +487,26 @@ extension VNCKeyboardAccessoryCoordinator: KeyboardButtonDelegate {
     }
 
     func sendRawData(_ data: Data) {
+        inputGeneration &+= 1
         sendTranslated(String(decoding: data, as: UTF8.self))
+    }
+
+    /// "F1" through "F12", as the terminal keyboard names them.
+    private static func functionKeysym(_ key: String) -> UInt32? {
+        guard key.hasPrefix("F"), let number = UInt32(key.dropFirst()), (1...12).contains(number) else { return nil }
+        return KeyboardInputHandler.keysymF1 + number - 1
     }
 
     // MARK: Stroke primitives
 
-    private struct KeyStroke {
+    fileprivate struct KeyStroke {
         var modifiers: [UInt32]
         var keysym: UInt32
     }
 
     /// Modifier chord: modifiers down in order, key down+up, modifiers up in
     /// reverse.
-    private func sendStroke(_ stroke: KeyStroke) {
+    fileprivate func sendStroke(_ stroke: KeyStroke) {
         guard stroke.keysym != 0, let pane else { return }
         for modifier in stroke.modifiers {
             pane.sendKeyboardToolbarKeysym(down: true, keysym: modifier)
@@ -392,7 +562,7 @@ extension VNCKeyboardAccessoryCoordinator: KeyboardButtonDelegate {
     /// sequences, swipe bindings) into keysym strokes: recognizes the
     /// CSI/SS3 sequences the app's own toolbar generates, maps C0 controls
     /// to Ctrl chords, and taps everything else as a character keysym.
-    private func sendTranslated(_ text: String) {
+    fileprivate func sendTranslated(_ text: String) {
         for stroke in Self.strokes(
             for: text, appleModifierConvention: appleModifierConvention) {
             sendStroke(stroke)
