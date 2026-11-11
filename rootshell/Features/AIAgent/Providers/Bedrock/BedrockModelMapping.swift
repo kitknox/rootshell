@@ -31,9 +31,9 @@ enum BedrockModelMapping {
     }
 
     private static let definitions: [String: ModelDefinition] = [
-        "bedrock-claude-fable-5-1": ModelDefinition(
-            foundationID: "anthropic.claude-fable-5-1",
-            geographies: ["us", "global"]
+        "bedrock-claude-fable-5-2": ModelDefinition(
+            foundationID: "anthropic.claude-fable-5-2",
+            geographies: ["global"]
         ),
         "bedrock-claude-opus-5-5": ModelDefinition(
             foundationID: "anthropic.claude-opus-5-5",
@@ -65,7 +65,7 @@ enum BedrockModelMapping {
     /// share the same model capabilities.
     static func anthropicFamilyID(internalID: String) -> String? {
         switch internalID {
-        case "bedrock-claude-fable-5-1": return "claude-fable-5-1"
+        case "bedrock-claude-fable-5-2": return "claude-fable-5-2"
         case "bedrock-claude-opus-5-5":  return "claude-opus-5-5"
         case "bedrock-claude-sonnet-5-5": return "claude-sonnet-5-5"
         case "bedrock-claude-haiku-5-5": return "claude-haiku-5-5"

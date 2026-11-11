@@ -216,10 +216,10 @@ extension AIProviderModel.ModelSource {
 extension AIProviderModel {
     /// Available Anthropic models
     static let anthropicModels: [AIProviderModel] = [
-        // Premium tier - Claude Fable 5.1, thinking always on (1M context)
+        // Premium tier - Claude Fable 5.2, thinking always on (1M context)
         .init(
-            id: "claude-fable-5-1",
-            displayName: "Claude Fable 5.1",
+            id: "claude-fable-5-2",
+            displayName: "Claude Fable 5.2",
             description: "Most capable, for the hardest long-running work",
             tier: .premium,
             supportsTools: true,
@@ -298,8 +298,8 @@ extension AIProviderModel {
     /// underlying model is the same — only the transport differs.
     static let bedrockModels: [AIProviderModel] = [
         .init(
-            id: "bedrock-claude-fable-5-1",
-            displayName: "Claude Fable 5.1 (Bedrock)",
+            id: "bedrock-claude-fable-5-2",
+            displayName: "Claude Fable 5.2 (Bedrock)",
             description: "Most capable, for the hardest long-running work",
             tier: .premium,
             supportsTools: true,

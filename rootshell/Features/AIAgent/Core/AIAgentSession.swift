@@ -144,7 +144,7 @@ final class AIAgentSession {
     /// Unique identifier for this session
     let id: UUID
 
-    /// Built on the first request and reused until the conversation resets. Fable 5.1 and
+    /// Built on the first request and reused until the conversation resets. Fable 5.2 and
     /// Opus 5.5 reject replayed thinking blocks once the system prompt changes.
     private var conversationSystemPrompt: String?
 
