@@ -559,7 +559,7 @@ extension Ghostty.TerminalView {
 
     /// The tab preset bound to `direction` in the area where the touch began.
     func appTabSwipePreset(for direction: SwipeDirection, gesture: UIGestureRecognizer) -> SwipeGesturePreset? {
-        SwipeGestureManager.shared.binding(for: direction, area: swipeStartAreas[ObjectIdentifier(gesture)]).appTabPreset
+        appTabPreset(for: SwipeGestureManager.shared.binding(for: direction, area: swipeStartAreas[ObjectIdentifier(gesture)]))
     }
 
     // normalizedAppTabSwipeTranslation lives on SplitPaneView (shared with
@@ -3188,9 +3188,9 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
             // mode this scroll gesture otherwise always wins, starving the tab
             // swipe — so a horizontal swipe on a mouse-captured tab can no longer
             // switch tabs. Yield this recognizer when the movement is a
-            // horizontal swipe bound to app-tab navigation so the tab-swipe
-            // gesture drives the switch; vertical (and non-tab-nav) movement
-            // still forwards to the captured app as a mouse scroll.
+            // horizontal swipe bound to app-tab or pane navigation so the
+            // tab-swipe gesture drives it; vertical (and other bindings')
+            // movement still forwards to the captured app as a mouse scroll.
             if let pan = gestureRecognizer as? UIPanGestureRecognizer {
                 let velocity = pan.velocity(in: self)
                 let translation = pan.translation(in: self)
@@ -3200,7 +3200,7 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
                 if horizontalIntent, x != 0 {
                     let direction: SwipeDirection = x < 0 ? .left : .right
                     let binding = SwipeGestureManager.shared.binding(for: direction)
-                    if binding.isAppTabNavigation && !binding.isDisabled {
+                    if binding.drivesAppTabSwipe {
                         return false
                     }
                 }
@@ -3250,7 +3250,7 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
         if gestureRecognizer === tabSwipeLeftGesture || gestureRecognizer === tabSwipeRightGesture {
             let direction: SwipeDirection = gestureRecognizer === tabSwipeLeftGesture ? .left : .right
             let binding = SwipeGestureManager.shared.binding(for: direction, area: swipeStartAreas[ObjectIdentifier(gestureRecognizer)])
-            return !binding.isDisabled && !binding.isAppTabNavigation
+            return !binding.isDisabled && appTabPreset(for: binding) == nil
         }
 
         if gestureRecognizer === appTabSwipePanGesture,

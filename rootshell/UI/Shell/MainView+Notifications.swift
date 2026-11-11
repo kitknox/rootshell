@@ -225,6 +225,16 @@ extension MainView {
             self.toggleSplitZoom()
         }
 
+        observerBag.observeOnMainActor(.nextPaneZoom) { [self] notification in
+            guard self.shouldHandleNotification(notification) else { return }
+            self.cyclePaneZoom(forward: true)
+        }
+
+        observerBag.observeOnMainActor(.previousPaneZoom) { [self] notification in
+            guard self.shouldHandleNotification(notification) else { return }
+            self.cyclePaneZoom(forward: false)
+        }
+
         observerBag.observeOnMainActor(.equalizeSplits) { [self] notification in
             // Handle both UIKeyCommand (with terminal) and SwiftUI Commands (nil object)
             guard self.shouldHandleNotification(notification) else { return }

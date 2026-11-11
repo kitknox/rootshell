@@ -317,6 +317,45 @@ extension MainView {
         terminals[selectedTabIndex].splitTree = terminals[selectedTabIndex].splitTree.toggleZoom(for: currentNode)
     }
 
+    /// Pane swipe presets: all panes, each pane zoomed in tree order, then all
+    /// panes again. A tab with one pane switches tabs instead.
+    func cyclePaneZoom(forward: Bool) {
+        guard terminals.indices.contains(selectedTabIndex) else { return }
+        let tab = terminals[selectedTabIndex]
+        guard !tab.paneMove.isPending, tabsModel.fullScreenPaneID == nil else { return }
+        let tree = tab.splitTree
+        let panes = Array(tree)
+        guard panes.count > 1 else {
+            if forward { nextTab() } else { previousTab() }
+            return
+        }
+        var zoomedPane: SplitPaneView?
+        if case .leaf(let view) = tree.zoomed { zoomedPane = view }
+        let zoomedIndex = zoomedPane.flatMap { zoomed in panes.firstIndex { $0 === zoomed } }
+        let target = PaneZoomCycle.target(zoomedIndex: zoomedIndex, count: panes.count, forward: forward)
+            .map { panes[$0] }
+
+        // Server-owned zoom; the layout reconcile projects it back into the tree.
+        if panes.contains(where: { $0.asTerminal.map { $0.isTmuxPane || $0.isHerdrPane } ?? false }) {
+            if let target {
+                SplitTreeHostingView.paneZoomRequest(for: tree.terminalLeaves)?(target.uuid)
+            } else if let zoomedTerminal = zoomedPane?.asTerminal {
+                if zoomedTerminal.isTmuxPane {
+                    zoomedTerminal.requestTmuxToggleZoom()
+                } else {
+                    zoomedTerminal.requestHerdrToggleZoom()
+                }
+            }
+            return
+        }
+
+        terminals[selectedTabIndex].splitTree = SplitTree(
+            root: tree.root, zoomed: target.flatMap { tree.root?.node(view: $0) })
+        if let target {
+            setFocusedPane(target, inTab: selectedTabIndex)
+        }
+    }
+
     func closeSplit(targeting targetPane: SplitPaneView? = nil, leaveMuxSession: Bool = false) {
         Ghostty.logger.info("closeSplit() called (target=\(targetPane?.uuid.uuidString.prefix(8).description ?? "nil"), leaveMux=\(leaveMuxSession))")
 

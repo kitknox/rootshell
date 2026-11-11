@@ -69,6 +69,16 @@ enum SwipeGestureBinding: Codable, Hashable, Sendable {
         appTabPreset != nil
     }
 
+    var isPaneCycle: Bool {
+        guard case .preset(let preset) = self else { return false }
+        return preset.isPaneCycle
+    }
+
+    /// Pane presets drive the tab slide on single-pane tabs.
+    var drivesAppTabSwipe: Bool {
+        isAppTabNavigation || isPaneCycle
+    }
+
     // MARK: - Codable
 
     private enum CodingKeys: String, CodingKey {
@@ -99,7 +109,9 @@ enum SwipeGestureBinding: Codable, Hashable, Sendable {
         let kind = try container.decode(Kind.self, forKey: .kind)
         switch kind {
         case .preset:
-            self = .preset(try container.decode(SwipeGesturePreset.self, forKey: .value))
+            // An unknown preset from a newer build must not fail the whole decode.
+            let raw = try container.decode(String.self, forKey: .value)
+            self = .preset(SwipeGesturePreset(rawValue: raw) ?? .none)
         case .sequence:
             self = .sequence(try container.decode([SequenceStep].self, forKey: .value))
         case .customKeyRef:
@@ -115,6 +127,8 @@ enum SwipeGesturePreset: String, Codable, CaseIterable, Identifiable, Hashable, 
     case none
     case nextTab
     case previousTab
+    case nextPane
+    case previousPane
     case tmuxNextWindow
     case tmuxPreviousWindow
     case tmuxNextSession
@@ -132,6 +146,10 @@ enum SwipeGesturePreset: String, Codable, CaseIterable, Identifiable, Hashable, 
             return String(localized: "Next Tab", comment: "Swipe preset: switch to next app tab")
         case .previousTab:
             return String(localized: "Previous Tab", comment: "Swipe preset: switch to previous app tab")
+        case .nextPane:
+            return String(localized: "Next Pane", comment: "Swipe preset: zoom the next split pane, then return to all panes")
+        case .previousPane:
+            return String(localized: "Previous Pane", comment: "Swipe preset: zoom the previous split pane, then return to all panes")
         case .tmuxNextWindow:
             return String(localized: "Tmux: Next Window", comment: "Swipe preset: send tmux next-window prefix sequence")
         case .tmuxPreviousWindow:
@@ -151,11 +169,26 @@ enum SwipeGesturePreset: String, Codable, CaseIterable, Identifiable, Hashable, 
         self == .nextTab || self == .previousTab
     }
 
+    var isPaneCycle: Bool {
+        self == .nextPane || self == .previousPane
+    }
+
+    /// The tab preset a pane preset becomes on a tab with one pane.
+    var tabFallback: SwipeGesturePreset? {
+        switch self {
+        case .nextPane: return .nextTab
+        case .previousPane: return .previousTab
+        default: return nil
+        }
+    }
+
     /// For app-action presets, the notification name to post. Nil for terminal sequences.
     var notificationName: Notification.Name? {
         switch self {
         case .nextTab: return .nextTab
         case .previousTab: return .previousTab
+        case .nextPane: return .nextPaneZoom
+        case .previousPane: return .previousPaneZoom
         default: return nil
         }
     }

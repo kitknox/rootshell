@@ -42,3 +42,16 @@ struct PaneZoomSelection<PaneID: Hashable> {
         return result
     }
 }
+
+/// Swipe stepping: all panes, then each pane zoomed in tree order, then all again.
+enum PaneZoomCycle {
+    /// The pane index to zoom next, or nil to unzoom.
+    static func target(zoomedIndex: Int?, count: Int, forward: Bool) -> Int? {
+        guard count > 0 else { return nil }
+        guard let zoomedIndex, (0..<count).contains(zoomedIndex) else {
+            return forward ? 0 : count - 1
+        }
+        let next = zoomedIndex + (forward ? 1 : -1)
+        return (0..<count).contains(next) ? next : nil
+    }
+}

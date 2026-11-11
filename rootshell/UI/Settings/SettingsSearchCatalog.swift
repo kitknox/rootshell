@@ -215,7 +215,8 @@ extension SettingsSearchDestination {
         case .swipeGestures:
             Meta(section: .terminal, title: String(localized: "Swipe Gestures"), systemImage: "hand.draw",
                  keywords: ["swipe", "gesture", "left swipe", "right swipe", "app tabs", "tmux windows",
-                            "tmux sessions", "zellij tabs", "navigation"])
+                            "tmux sessions", "zellij tabs", "navigation", "next pane", "previous pane",
+                            "pane", "zoom", "split"])
         case .promptAndUsername:
             Meta(section: .terminal, title: String(localized: "Prompt & Username"), systemImage: "person.text.rectangle",
                  keywords: ["starship", "username", "shell prompt"])

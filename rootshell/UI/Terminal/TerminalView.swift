@@ -2199,7 +2199,7 @@ extension Ghostty {
             tabSwipeRightGesture?.isEnabled = scrollMode
                 && bindings.contains { !$0.isDisabled && !$0.isAppTabNavigation }
             appTabSwipePanGesture?.isEnabled = scrollMode
-                && bindings.contains { $0.isAppTabNavigation }
+                && bindings.contains { $0.drivesAppTabSwipe }
             // Not gated on capture: the cached state can lag the C side, and a
             // recognizer enabled once it catches up misses the touch in progress.
             // gestureRecognizerShouldBegin checks the live state instead.
