@@ -25,7 +25,8 @@ struct KVMPaneRootView: View {
                     cursorHeight: cursorSizeDefault.points,
                     touchGestures: touchGestures.configuration,
                     showsLocalCursor: pane.showsLocalCursor,
-                    brightnessGain: brightnessManager.effectiveGain)
+                    brightnessGain: brightnessManager.effectiveGain,
+                    hudSafeAreaEdges: pane.hudSafeAreaEdges)
 
                 KVMSessionOverlay(pane: pane)
             }
@@ -78,6 +79,7 @@ private struct KVMScreenContent: View {
     let touchGestures: RemoteTouchGestureConfiguration
     let showsLocalCursor: Bool
     let brightnessGain: Double
+    let hudSafeAreaEdges: Edge.Set
 
     init(
         pane: KVMPaneView,
@@ -85,7 +87,8 @@ private struct KVMScreenContent: View {
         cursorHeight: CGFloat,
         touchGestures: RemoteTouchGestureConfiguration,
         showsLocalCursor: Bool,
-        brightnessGain: Double
+        brightnessGain: Double,
+        hudSafeAreaEdges: Edge.Set
     ) {
         self.pane = pane
         self._session = Bindable(wrappedValue: pane.session)
@@ -94,6 +97,7 @@ private struct KVMScreenContent: View {
         self.touchGestures = touchGestures
         self.showsLocalCursor = showsLocalCursor
         self.brightnessGain = brightnessGain
+        self.hudSafeAreaEdges = hudSafeAreaEdges
     }
 
     var body: some View {
@@ -105,7 +109,8 @@ private struct KVMScreenContent: View {
             keyboardCapture: pane.keyboardCapture,
             isFullScreen: pane.isDetachedForFullScreen,
             toggleFullScreen: { pane.requestToggleFullScreen() },
-            keyboardAvoidanceMode: pane.isDetachedForFullScreen ? .automatic : .hostManaged,
+            keyboardAvoidanceMode: .hostManaged,
+            hudSafeAreaEdges: hudSafeAreaEdges,
             initialViewportPanningMode: pane.initialViewportPanningMode,
             initialPointerMode: pane.initialPointerMode,
             pointerSpeed: pointerSpeed,

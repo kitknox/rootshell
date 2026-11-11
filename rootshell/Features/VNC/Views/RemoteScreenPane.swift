@@ -57,6 +57,16 @@ protocol RemoteScreenPane: SplitPaneView {
 }
 
 extension RemoteScreenPane {
+    /// The full-screen takeover covers a Duo's side rail, whose column the
+    /// window still reports as safe area; the HUD may dock at that edge.
+    var hudSafeAreaEdges: Edge.Set {
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        isDetachedForFullScreen && DuoHingeEvents.hasHinge ? .vertical : .all
+        #else
+        .all
+        #endif
+    }
+
     /// Chord for a rootshell-reserved shortcut sent to the remote computer.
     static func reservedShortcutChord(
         _ shortcut: VNCReservedKeyboardShortcut

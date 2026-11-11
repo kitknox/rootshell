@@ -1348,7 +1348,8 @@ struct VNCPaneRootView: View {
                     keyboardCapture: pane.keyboardCapture,
                     isFullScreen: pane.isDetachedForFullScreen,
                     toggleFullScreen: { pane.requestToggleFullScreen() },
-                    keyboardAvoidanceMode: pane.isDetachedForFullScreen ? .automatic : .hostManaged,
+                    keyboardAvoidanceMode: .hostManaged,
+                    hudSafeAreaEdges: pane.hudSafeAreaEdges,
                     clipboardSynchronizer: pane.clipboardSynchronizer,
                     initialViewportPanningMode: pane.initialViewportPanningMode,
                     initialPointerMode: pane.initialPointerMode,
@@ -1378,9 +1379,8 @@ struct VNCPaneRootView: View {
         }
         // Match the terminal's full-screen layout: let the remote desktop
         // occupy the container safe areas, including the home-indicator
-        // strip. RemoteDesktopView continues to measure docked keyboard and
-        // accessory obstruction independently through its automatic keyboard
-        // avoidance mode.
+        // strip. PaneFullScreenController ends the pane above a docked
+        // keyboard or toolbar.
         .ignoresSafeArea(
             .container,
             edges: pane.isDetachedForFullScreen ? .all : []

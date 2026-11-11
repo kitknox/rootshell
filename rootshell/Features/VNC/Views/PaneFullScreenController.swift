@@ -31,6 +31,9 @@ final class PaneFullScreenController {
     private var onDidExit: ((any RemoteScreenPane) -> Void)?
     private var failureOverlayHost: UIHostingController<RemoteScreenThemedSurface<VNCConnectionFailureCard>>?
     private var observationActive = false
+    private var isEnterAnimating = false
+    /// One keyboard observation loop per takeover; a stale one ends itself.
+    private var keyboardObservationGeneration = 0
     private var isExitAnimating = false
 
     var isActive: Bool { container != nil }
@@ -55,8 +58,10 @@ final class PaneFullScreenController {
         let container = PaneFullScreenContainerView(frame: window.bounds)
         container.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         container.onExitRequested = { [weak self] in self?.exit(animated: true) }
+        container.onLayout = { [weak self] in self?.layoutPane(animated: false) }
         window.addSubview(container)
         self.container = container
+        isEnterAnimating = true
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
         // A detached keyboard card is a window subview too and stays on top.
         if let card = TerminalTouchKeyboardWindowState.forWindow(window).overlay {
@@ -95,23 +100,82 @@ final class PaneFullScreenController {
             pane.rehostHostingController(under: root)
         }
 
+        let target = paneFrame(for: pane, in: container)
         UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
-            pane.frame = container.bounds
+            pane.frame = target
             pane.layoutIfNeeded()
-        } completion: { [weak self, weak pane] _ in
-            // Track window resize/rotation from here on, re-snapping to the
-            // live container bounds in case a rotation landed mid-animation.
-            // Skip when an exit raced the enter animation and already
-            // re-attached the pane.
-            guard let pane, pane.isDetachedForFullScreen else { return }
-            if let container = self?.container, pane.superview === container {
-                pane.frame = container.bounds
-            }
-            pane.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        } completion: { [weak self] _ in
+            // Re-snap in case a rotation or keyboard change landed
+            // mid-animation; a no-op once an exit has taken the pane back.
+            self?.isEnterAnimating = false
+            self?.layoutPane(animated: false)
         }
 
         formerHost?.setNeedsLayout()
         startSessionObservation()
+        keyboardObservationGeneration &+= 1
+        observeKeyboardLayout(generation: keyboardObservationGeneration)
+    }
+
+    // MARK: - Pane layout
+
+    /// The window, less what a docked keyboard or keyboard toolbar covers.
+    /// The pane owns its keyboard clearance here as it does in a tab, from
+    /// the same frames, so the terminal keyboard counts wherever it is hosted.
+    private func paneFrame(for pane: any RemoteScreenPane, in container: UIView) -> CGRect {
+        let bounds = container.bounds
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        guard let window = container.window else { return bounds }
+        func local(_ frame: CGRect) -> CGRect {
+            container.convert(frame, from: window.screen.coordinateSpace)
+        }
+        let keyboard = pane.dockedTouchKeyboardFrameInScreen.map(local)
+            ?? TerminalKeyboardGeometry.includingAccessory(
+                keyboard: local(EffectManager.shared.keyboardFrame),
+                accessory: pane.keyboardAccessoryFrameInScreen.map(local),
+                container: bounds)
+        // Full width and on the bottom edge: floating and split keyboards
+        // sit over the remote screen instead.
+        let keyboardCover = keyboard.maxY >= bounds.maxY - 50
+            ? TerminalKeyboardGeometry.overlapHeight(keyboard: keyboard, container: bounds) : 0
+        // A toolbar with no keyboard under it stands on the bottom edge.
+        let cover = max(keyboardCover, pane.reservedKeyboardToolbarHeightAtBottom)
+        // Never collapse the screen for a frame that makes no sense.
+        guard cover > 0, cover < bounds.height - 80 else { return bounds }
+        return CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: bounds.height - cover)
+        #else
+        return bounds
+        #endif
+    }
+
+    private func layoutPane(animated: Bool) {
+        guard let container, let pane, pane.superview === container,
+              !isEnterAnimating, !isExitAnimating else { return }
+        let target = paneFrame(for: pane, in: container)
+        guard pane.frame != target else { return }
+        guard animated else {
+            pane.frame = target
+            return
+        }
+        UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) {
+            pane.frame = target
+            pane.layoutIfNeeded()
+        }
+    }
+
+    /// Keyboard frame and toolbar changes both land on EffectManager.
+    private func observeKeyboardLayout(generation: Int) {
+        guard container != nil, generation == keyboardObservationGeneration else { return }
+        withObservationTracking {
+            _ = EffectManager.shared.keyboardFrame
+            _ = EffectManager.shared.keyboardStateVersion
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.observeKeyboardLayout(generation: generation)
+                self.layoutPane(animated: true)
+            }
+        }
     }
 
     // MARK: - Exit
@@ -205,8 +269,10 @@ final class PaneFullScreenController {
 
     private func finishExit() {
         guard let container else { return }
+        isEnterAnimating = false
         isExitAnimating = false
         observationActive = false
+        keyboardObservationGeneration &+= 1
         removeFailureOverlay()
 
         #if !targetEnvironment(macCatalyst) && !os(visionOS)
@@ -350,6 +416,13 @@ final class PaneFullScreenController {
 final class PaneFullScreenContainerView: UIView {
 
     var onExitRequested: (() -> Void)?
+    /// Window resize and rotation: the controller re-fits the pane.
+    var onLayout: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayout?()
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
