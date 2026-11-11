@@ -30,6 +30,13 @@ nonisolated final class KVMH264Decoder: @unchecked Sendable {
     /// frames in clumps, and each requested keyframe costs the KVM a large
     /// frame, so GL's own client never asks for one.
     private static let maximumBacklog = 120
+    /// Hard caps that keyframes obey too, so a server can't grow the queue
+    /// without bound.
+    private static let maximumQueuedFrames = maximumBacklog + 16
+    private static let maximumQueuedBytes = 64 * 1024 * 1024
+    /// Re-ask while frames arrive without a keyframe; longer than
+    /// KVMSession's 0.5 s request throttle, which drops rather than delays.
+    private static let keyframeRetryInterval: Duration = .seconds(1)
 
     private let queue = DispatchQueue(label: "com.rootshell.kvm.decode", qos: .userInteractive)
     private let onFrame: @Sendable (KVMDecodedFrame) -> Void
@@ -38,6 +45,7 @@ nonisolated final class KVMH264Decoder: @unchecked Sendable {
 
     private let backlogLock = NSLock()
     private var backlog = 0
+    private var backlogBytes = 0
     private var decodeErrors = 0
 
     // Queue-confined.
@@ -47,6 +55,7 @@ nonisolated final class KVMH264Decoder: @unchecked Sendable {
     private var pps: Data?
     private var format: KVMVideoFormat?
     private var awaitingKeyframe = true
+    private var lastKeyframeRequest: ContinuousClock.Instant?
     private var frameNumber: Int64 = 0
 
     init(
@@ -68,22 +77,29 @@ nonisolated final class KVMH264Decoder: @unchecked Sendable {
     }
 
     func submit(_ accessUnit: Data, isKeyframe: Bool) {
-        let overloaded: Bool = backlogLock.withLock {
-            if backlog >= Self.maximumBacklog, !isKeyframe { return true }
+        let size = accessUnit.count
+        let admitted: Bool = backlogLock.withLock {
+            let frameLimit = isKeyframe ? Self.maximumQueuedFrames : Self.maximumBacklog
+            guard backlog < frameLimit,
+                  backlogBytes == 0 || backlogBytes + size <= Self.maximumQueuedBytes else { return false }
             backlog += 1
-            return false
+            backlogBytes += size
+            return true
         }
-        if overloaded {
+        guard admitted else {
+            // A dropped keyframe may be the one already requested; ask again.
             queue.async { [self] in
-                if !awaitingKeyframe {
-                    awaitingKeyframe = true
-                    onNeedsKeyframe()
-                }
+                if isKeyframe || !awaitingKeyframe { requestKeyframe() }
             }
             return
         }
         queue.async { [self] in
-            defer { backlogLock.withLock { backlog -= 1 } }
+            defer {
+                backlogLock.withLock {
+                    backlog -= 1
+                    backlogBytes -= size
+                }
+            }
             decode(accessUnit)
         }
     }
@@ -138,7 +154,12 @@ nonisolated final class KVMH264Decoder: @unchecked Sendable {
 
         guard !slices.isEmpty else { return }
         if awaitingKeyframe {
-            guard containsIDR, session != nil else { return }
+            guard containsIDR, session != nil else {
+                // The last request may have been throttled or its answer dropped.
+                if let lastKeyframeRequest, .now - lastKeyframeRequest < Self.keyframeRetryInterval { return }
+                requestKeyframe()
+                return
+            }
             awaitingKeyframe = false
         }
         guard let session, let formatDescription else { return }
@@ -183,6 +204,7 @@ nonisolated final class KVMH264Decoder: @unchecked Sendable {
 
     private func requestKeyframe() {
         awaitingKeyframe = true
+        lastKeyframeRequest = .now
         onNeedsKeyframe()
     }
 
