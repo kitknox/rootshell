@@ -382,6 +382,8 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
         let port: Int
         let username: String?
         let quality: VNCConnectionConfig.QualityMode
+        /// Optional for window state written before the setting existed.
+        let highPerformanceBandwidth: VNCConnectionConfig.HighPerformanceBandwidth?
         let security: VNCConnectionConfig.SecurityPreference
         let displaySizingModeRaw: String?
         let displayModeRaw: String?
@@ -412,6 +414,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
             self.port = config.port
             self.username = config.username
             self.quality = config.quality
+            self.highPerformanceBandwidth = config.highPerformanceBandwidth
             self.security = config.security
             self.displaySizingModeRaw = config.displaySizingModeRaw
             self.displayModeRaw = config.displayModeRaw
@@ -454,6 +457,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
                 port: port,
                 username: username,
                 quality: quality,
+                highPerformanceBandwidth: highPerformanceBandwidth ?? .automatic,
                 security: security,
                 displaySizingModeRaw: displaySizingModeRaw,
                 displayModeRaw: displayModeRaw,

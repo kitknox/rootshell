@@ -38,7 +38,6 @@ import UserNotifications
         case herdrTakeControl
         case profileUnavailable
         case vncProfileInvalid
-        case vncHighPerformanceTransport
         case vncCertificate
         case agentApproval
         case gpgAgentApproval
@@ -96,19 +95,6 @@ import UserNotifications
     /// A Screen Sharing profile with no usable VNC configuration (e.g.
     /// synced from a newer build whose envelope this build can't decode).
     var showVNCProfileInvalidAlert = false
-
-    /// A user-initiated High Performance Screen Sharing connection awaiting a
-    /// transport warning decision. The password is a one-shot value and is
-    /// removed from this queue as soon as the user chooses a mode.
-    struct PendingVNCHighPerformanceConnection {
-        var config: VNCConnectionConfig
-        let splitOption: SSHConnectionView.SplitOption
-        let sourceProfileID: UUID?
-        let password: String?
-    }
-
-    var vncHighPerformanceConnectionQueue: [PendingVNCHighPerformanceConnection] = []
-    var showVNCHighPerformanceTransportAlert = false
 
     struct VNCCertificateValidationData {
         let endpoint: String
@@ -223,8 +209,6 @@ import UserNotifications
             return showProfileUnavailableAlert
         case .vncProfileInvalid:
             return showVNCProfileInvalidAlert
-        case .vncHighPerformanceTransport:
-            return !vncHighPerformanceConnectionQueue.isEmpty
         case .vncCertificate:
             return showVNCCertificateAlert
         case .agentApproval:
@@ -273,11 +257,6 @@ import UserNotifications
             pendingKinds.insert(.gpgAgentApproval, at: 0)
         }
 
-        if kind == .vncHighPerformanceTransport, !vncHighPerformanceConnectionQueue.isEmpty,
-           !pendingKinds.contains(.vncHighPerformanceTransport) {
-            pendingKinds.insert(.vncHighPerformanceTransport, at: 0)
-        }
-
         #if targetEnvironment(macCatalyst) && STANDALONE
         if kind == .localAgentApproval, !localAgentApprovalQueue.isEmpty,
            !pendingKinds.contains(.localAgentApproval) {
@@ -314,8 +293,6 @@ import UserNotifications
             showProfileUnavailableAlert = false
         case .vncProfileInvalid:
             showVNCProfileInvalidAlert = false
-        case .vncHighPerformanceTransport:
-            showVNCHighPerformanceTransportAlert = false
         case .vncCertificate:
             showVNCCertificateAlert = false
             vncCertificateValidationData = nil
@@ -339,24 +316,6 @@ import UserNotifications
         fileOpenErrorMessage = message
         showFileOpenFailedAlert = true
         enqueue(.fileOpenFailed)
-    }
-
-    // MARK: - High Performance Screen Sharing Transport Warning
-
-    func handleVNCHighPerformanceTransportWarning(_ request: PendingVNCHighPerformanceConnection) {
-        vncHighPerformanceConnectionQueue.append(request)
-        showVNCHighPerformanceTransportAlert = true
-    }
-
-    func takeNextVNCHighPerformanceConnection() -> PendingVNCHighPerformanceConnection? {
-        guard !vncHighPerformanceConnectionQueue.isEmpty else {
-            showVNCHighPerformanceTransportAlert = false
-            return nil
-        }
-
-        let request = vncHighPerformanceConnectionQueue.removeFirst()
-        showVNCHighPerformanceTransportAlert = !vncHighPerformanceConnectionQueue.isEmpty
-        return request
     }
 
     // MARK: - SSH Host Key Validation
