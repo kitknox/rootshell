@@ -3,6 +3,52 @@
 All notable changes to the rootshell app for iPhone, iPad, Vision Pro, and Mac, newest first.
 Versions are listed as `release-build`, matching the version shown in Settings, About.
 
+## 1.0.16-176 - November 11, 2026
+
+### Pane Swipe Presets
+
+- **Pane Navigation:** Swipe Gestures adds Next/Previous Pane and Panes quick setup. Zoom each pane in turn, then show all; single-pane tabs switch tabs. Supports tmux and herdr control mode and three-finger swipes in Screen Sharing and KVM splits on iPhone and iPad.
+
+### Screen Sharing: Connection Actions
+
+- **Before Disconnecting:** Set a per-connection action to lock the screen, log out a Mac user, send Ctrl-Alt-Del or a custom shortcut, or run a command through an SSH profile. It runs when closing the connection, pane, or tab, excluding network drops, reconnects, and backgrounding.
+- **Action Failures:** Failed actions or commands exceeding 20 seconds offer Stay Connected or Disconnect Anyway. Mac logout skips confirmation; unsaved changes may block it.
+- **Type Password Only:** Enters the saved password without Return. Outside the Mac Login Window, it uses the focused field.
+
+### Screen Sharing: Display, Files and Clipboard
+
+- **Match Client Display:** Standard mode adds Match Client on compatible Macs: a virtual display follows your pane size. Select it under Remote Display Size or in the menu; Remote Display remains the default.
+- **Resizing and Layout:** Fixed redraws after resizing and full-screen keyboard and toolbar clearance in Screen Sharing and KVM. Menu buttons stay correctly sized and positioned, including on Duo.
+- **File Transfers:** Transfer files and folders with compatible Macs. Drop onto a remote folder or desktop to upload; drag remote files to the download target at the top to download. File Transfers offers progress, cancellation, and Save to Files.
+- **Rich Clipboard:** Shared and manual clipboard transfers preserve images and rich text with compatible Mac and other VNC servers, with plain-text fallback.
+
+### Screen Sharing: Keyboard and Pointer
+
+- **Terminal Touch Keyboard:** The terminal touch keyboard works in Screen Sharing and KVM on iPhone and iPad when enabled, docked or floating. Dictation types remotely without auto-submitting.
+- **Mouse Button Gestures:** In Touch and Trackpad modes, tap three fingers to middle-click. Hold two fingers then drag for a right-button drag; hold three for a middle-button drag.
+- **Hold Settings:** Set Hold Delay and Show Held Button in Screen Sharing settings. The indicator shows buttons and modifiers; the delay includes one-finger drags.
+- **Three-Finger Shortcuts:** Three-finger swipes send Mac shortcuts for Mission Control, application windows, and Spaces. Customize or disable each direction. These touch settings also apply to KVM.
+- **Modifiers and Scrolling:** On-screen modifiers now apply to remote clicks and drags, including alongside hardware keys. Pointer movement stops scroll flings.
+
+### Screen Sharing: Performance
+
+- **Bandwidth Modes:** High Performance adds Full (20–60 Mbps), Low Bandwidth (0.3–6 Mbps), and Automatic. Low Bandwidth supports slower links with softer motion. Automatic selects it on cellular and external mesh VPN paths and Full on other Wi-Fi and wired connections.
+- **Video and Audio:** Video no longer waits for audio by default. Enable Sync Video to Audio for synchronized playback. Improved bandwidth feedback, audio buffering, recovery, and startup for sleeping Macs.
+- **Connection Fallback:** High Performance can retry at Low Bandwidth, then Standard if video fails. Working Low Bandwidth video stays active; saved preferences are preserved.
+- **Proxy and Input:** Fixed system SOCKS5 proxy connection stalls. Added encrypted keyboard and pointer input for compatible Macs in Standard and High Performance.
+
+### GL.iNet Comet KVM
+
+- **Latency and Recovery:** Reduced mouse lag, stale video, and video memory use. Improved recovery; keyboard and mouse work without video to wake the computer.
+- **Local Cursor:** Draws a dot ahead of the remote cursor. Toggle it in the menu; set its default in Screen Sharing settings.
+- **Scroll Direction:** Reverse Scroll Direction corrects backwards scrolling, including on Macs using natural scrolling.
+
+### Tailscale and AI Agent
+
+- **Custom Server HTTPS:** Custom Tailscale and Headscale servers require HTTPS. Bare hostnames get HTTPS automatically; HTTP is rejected.
+- **Screen Sharing Reconnection:** Fixed Screen Sharing reconnect loops over in-app Tailscale.
+- **Claude Fable 5.2:** Replaces 5.1 for Anthropic and Bedrock, migrating saved selections. Bedrock uses the global inference profile.
+
 ## 1.0.16-175 - November 8, 2026
 
 ### GL.iNet Comet KVM
