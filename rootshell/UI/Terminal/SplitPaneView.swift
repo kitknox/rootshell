@@ -203,6 +203,33 @@ extension SplitTree where ViewType == SplitPaneView {
 /// window, so any pane in the tree may post these.
 extension SplitPaneView {
 
+    /// The tab preset `binding` drives from this pane. A pane preset falls back
+    /// to its tab preset when the tab has fewer than two panes.
+    func appTabPreset(for binding: SwipeGestureBinding) -> SwipeGesturePreset? {
+        if let preset = binding.appTabPreset { return preset }
+        guard case .preset(let preset) = binding, let fallback = preset.tabFallback,
+              (enclosingSplitHost?.paneCount ?? 0) < 2 else { return nil }
+        return fallback
+    }
+
+    /// The half where `pan` started, matching the terminal's area-specific swipes.
+    func swipeStartArea(of pan: UIPanGestureRecognizer) -> TerminalSwipeArea {
+        pan.location(in: self).y - pan.translation(in: self).y < bounds.midY ? .top : .bottom
+    }
+
+    /// Ends a remote-screen pane's 3-finger pan bound to a pane preset; fires
+    /// once when it travelled or flicked far enough in `direction`.
+    func finishPaneCycleSwipe(_ preset: SwipeGesturePreset, direction: SwipeDirection,
+                              translationX: CGFloat, velocityX: CGFloat) {
+        let sign: CGFloat = direction == .left ? -1 : 1
+        guard translationX * sign > 40 || velocityX * sign > 500,
+              preset.isPaneCycle, let name = preset.notificationName else { return }
+        #if !os(visionOS)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        #endif
+        NotificationCenter.default.post(name: name, object: self)
+    }
+
     /// Ask the owning MainView to begin an app-tab swipe. Returns whether it
     /// accepted (a target tab exists and no swipe is settling). A nil `preset`
     /// means the shared binding for `direction`.

@@ -446,8 +446,8 @@ extension Ghostty.TerminalView {
         trackpadTabSwipePhase.reset()
         trackpadScrollAxis = .horizontal
 
-        if binding.isAppTabNavigation {
-            guard requestAppTabSwipeBegin(direction: direction, velocityX: velocity.x) else {
+        if let preset = appTabPreset(for: binding) {
+            guard requestAppTabSwipeBegin(direction: direction, velocityX: velocity.x, preset: preset) else {
                 tabSwipeTriggered = false
                 trackpadAppTabSwipeDirection = nil
                 return false
@@ -543,8 +543,8 @@ extension Ghostty.TerminalView {
             return true
         }
 
-        if SwipeGestureManager.shared.binding(for: direction).isAppTabNavigation {
-            guard requestAppTabSwipeBegin(direction: direction, velocityX: 0) else {
+        if let preset = appTabPreset(for: SwipeGestureManager.shared.binding(for: direction)) {
+            guard requestAppTabSwipeBegin(direction: direction, velocityX: 0, preset: preset) else {
                 return false
             }
             trackpadAppTabSwipeDirection = direction
@@ -553,7 +553,8 @@ extension Ghostty.TerminalView {
                 .appTabSwipeChanged,
                 direction: direction,
                 translationX: normalizedTrackpadAppTabSwipeTranslation(tabSwipeCumulativeX, direction: direction),
-                velocityX: 0
+                velocityX: 0,
+                preset: preset
             )
             return true
         }

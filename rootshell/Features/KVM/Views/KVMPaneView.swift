@@ -97,6 +97,7 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
     private var tabSwipePanGesture: UIPanGestureRecognizer?
     private var activeAppTabSwipeDirection: SwipeDirection?
     private var activeAppTabSwipeAccepted = false
+    private var activePaneCycle: (direction: SwipeDirection, preset: SwipeGesturePreset)?
 
     init(config: KVMConnectionConfig, windowId: String, uuid: UUID = UUID()) {
         self.config = config
@@ -606,8 +607,10 @@ extension KVMPaneView: UIGestureRecognizerDelegate {
 
     /// The remote-screen view consumes one- and two-finger touches, so a
     /// three-finger pan is the iPhone path to other tabs (as on VNC panes).
+    /// iPad installs it for pane presets only: zoom has no on-screen exit.
     private func installTabSwipeGestureIfNeeded() {
-        guard tabSwipePanGesture == nil, UIDevice.current.userInterfaceIdiom == .phone else { return }
+        let idiom = UIDevice.current.userInterfaceIdiom
+        guard tabSwipePanGesture == nil, idiom == .phone || idiom == .pad else { return }
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handleAppTabSwipePan))
         pan.minimumNumberOfTouches = 3
         pan.maximumNumberOfTouches = 3
@@ -627,8 +630,16 @@ extension KVMPaneView: UIGestureRecognizerDelegate {
         guard abs(velocity.x) > abs(velocity.y) || abs(translation.x) > abs(translation.y) else { return false }
         let x = abs(velocity.x) >= abs(translation.x) ? velocity.x : translation.x
         let direction: SwipeDirection = x < 0 ? .left : .right
-        guard SwipeGestureManager.shared.binding(for: direction).isAppTabNavigation,
-              requestAppTabSwipeBegin(direction: direction, velocityX: velocity.x) else {
+        let binding = SwipeGestureManager.shared.binding(for: direction, area: swipeStartArea(of: pan))
+        activePaneCycle = nil
+        guard let preset = appTabPreset(for: binding) else {
+            // Multi-pane tab with a pane preset: fire on release.
+            guard case .preset(let panePreset) = binding, panePreset.isPaneCycle else { return false }
+            activePaneCycle = (direction, panePreset)
+            return true
+        }
+        guard UIDevice.current.userInterfaceIdiom == .phone,
+              requestAppTabSwipeBegin(direction: direction, velocityX: velocity.x, preset: preset) else {
             activeAppTabSwipeDirection = nil
             activeAppTabSwipeAccepted = false
             return false
@@ -646,6 +657,21 @@ extension KVMPaneView: UIGestureRecognizerDelegate {
     }
 
     @objc private func handleAppTabSwipePan(_ gesture: UIPanGestureRecognizer) {
+        if let paneCycle = activePaneCycle {
+            switch gesture.state {
+            case .ended:
+                activePaneCycle = nil
+                finishPaneCycleSwipe(paneCycle.preset, direction: paneCycle.direction,
+                                     translationX: gesture.translation(in: self).x,
+                                     velocityX: gesture.velocity(in: self).x)
+            case .cancelled, .failed:
+                activePaneCycle = nil
+            default:
+                break
+            }
+            return
+        }
+
         let direction: SwipeDirection
         if let active = activeAppTabSwipeDirection {
             direction = active

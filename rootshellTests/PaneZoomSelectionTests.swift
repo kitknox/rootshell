@@ -8,6 +8,32 @@ final class PaneZoomSelectionTests: XCTestCase {
         XCTAssertEqual(selection.consume("2"), .selected(91))
     }
 
+    func testPaneCycleForwardRunsUnzoomedThroughEachPaneAndBack() {
+        var zoomed: Int?
+        var visited: [Int?] = []
+        for _ in 0..<4 {
+            zoomed = PaneZoomCycle.target(zoomedIndex: zoomed, count: 3, forward: true)
+            visited.append(zoomed)
+        }
+        XCTAssertEqual(visited, [0, 1, 2, nil])
+    }
+
+    func testPaneCycleBackwardStartsAtLastPane() {
+        var zoomed: Int?
+        var visited: [Int?] = []
+        for _ in 0..<4 {
+            zoomed = PaneZoomCycle.target(zoomedIndex: zoomed, count: 3, forward: false)
+            visited.append(zoomed)
+        }
+        XCTAssertEqual(visited, [2, 1, 0, nil])
+    }
+
+    func testPaneCycleTreatsUnknownZoomAsUnzoomed() {
+        XCTAssertEqual(PaneZoomCycle.target(zoomedIndex: 5, count: 2, forward: true), 0)
+        XCTAssertEqual(PaneZoomCycle.target(zoomedIndex: -1, count: 2, forward: false), 1)
+        XCTAssertNil(PaneZoomCycle.target(zoomedIndex: nil, count: 0, forward: true))
+    }
+
     func testTwoPaneSwapHasOneSelectableTarget() throws {
         var selection = try XCTUnwrap(PaneZoomSelection(paneIDs: [42, 7], excludingPaneID: 42))
         XCTAssertEqual(selection.labels, ["1"])

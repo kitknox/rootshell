@@ -206,7 +206,7 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
     var canChoosePaneToZoom: Bool {
         guard isActiveTab, let panes = tree?.terminalLeaves, panes.count > 1,
               panes.count == tree?.count else { return false }
-        return paneZoomRequest(for: panes) != nil
+        return Self.paneZoomRequest(for: panes) != nil
     }
 
     var canChoosePaneToSwap: Bool {
@@ -243,9 +243,15 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
         }
     }
 
+    /// Panes a pane-cycle swipe steps through.
+    var paneCount: Int {
+        tree?.count ?? 0
+    }
+
     /// Capture server IDs separately from the view IDs used by the picker.
     /// herdr can rebind an existing terminal view when a pane moves.
-    private func paneZoomRequest(for panes: [Ghostty.TerminalView]) -> ((UUID) -> Void)? {
+    /// nil unless every pane belongs to one tmux or herdr window.
+    static func paneZoomRequest(for panes: [Ghostty.TerminalView]) -> ((UUID) -> Void)? {
         if let binding = panes.first?.tmuxPaneBinding,
            let controller = TmuxController.controller(forOwnerSurface: binding.parentSurface),
            controller.isActive,
@@ -329,7 +335,7 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
         let source: Ghostty.TerminalView?
         switch action {
         case .zoom:
-            request = paneZoomRequest(for: panes)
+            request = Self.paneZoomRequest(for: panes)
             source = nil
         case .swap:
             request = paneSwapRequest(for: panes)
@@ -2286,6 +2292,8 @@ extension Notification.Name {
     static let sshHealthProbeIntervalChanged = Notification.Name("com.rootshell.sshHealthProbeIntervalChanged")
     static let closeSplit = Notification.Name("com.rootshell.closeSplit")
     static let toggleSplitZoom = Notification.Name("com.rootshell.toggleSplitZoom")
+    static let nextPaneZoom = Notification.Name("com.rootshell.nextPaneZoom")
+    static let previousPaneZoom = Notification.Name("com.rootshell.previousPaneZoom")
     static let equalizeSplits = Notification.Name("com.rootshell.equalizeSplits")
     static let choosePaneToZoom = Notification.Name("com.rootshell.choosePaneToZoom")
     static let choosePaneToSwap = Notification.Name("com.rootshell.choosePaneToSwap")

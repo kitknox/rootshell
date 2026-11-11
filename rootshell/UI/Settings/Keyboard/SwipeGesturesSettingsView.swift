@@ -47,6 +47,13 @@ struct SwipeGesturesSettingsView: View {
             right: .preset(.previousTab)
         ),
         .init(
+            id: "panes",
+            title: String(localized: "Panes", comment: "Quick setup pair: zoom split panes one at a time"),
+            icon: "rectangle.split.2x1",
+            left: .preset(.nextPane),
+            right: .preset(.previousPane)
+        ),
+        .init(
             id: "tmuxWindows",
             title: String(localized: "Tmux Windows", comment: "Quick setup pair: switch tmux windows"),
             icon: "rectangle.stack",
@@ -305,6 +312,7 @@ private struct SwipeBindingPickerView: View {
     var body: some View {
         List {
             appPresetsSection
+            panePresetsSection
             tmuxPresetsSection
             zellijPresetsSection
             if !toolbarManager.customKeys.isEmpty {
@@ -324,6 +332,18 @@ private struct SwipeBindingPickerView: View {
             }
         } header: {
             Text("App")
+        }
+    }
+
+    private var panePresetsSection: some View {
+        Section {
+            ForEach([SwipeGesturePreset.nextPane, .previousPane]) { preset in
+                presetRow(preset)
+            }
+        } header: {
+            Text("Panes")
+        } footer: {
+            Text("Zooms each split pane in turn, then shows all panes again. On a tab with one pane, switches tabs instead. Includes tmux and herdr control mode panes.")
         }
     }
 
@@ -466,6 +486,8 @@ private struct SwipeBindingPickerView: View {
         case .none: return "nosign"
         case .nextTab: return "arrow.right.square"
         case .previousTab: return "arrow.left.square"
+        case .nextPane: return "rectangle.righthalf.inset.filled"
+        case .previousPane: return "rectangle.lefthalf.inset.filled"
         case .tmuxNextWindow, .zellijNextTab: return "rectangle.stack.badge.plus"
         case .tmuxPreviousWindow, .zellijPreviousTab: return "rectangle.stack.badge.minus"
         case .tmuxNextSession: return "macwindow.badge.plus"
