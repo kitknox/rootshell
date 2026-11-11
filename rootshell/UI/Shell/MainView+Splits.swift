@@ -657,7 +657,7 @@ extension MainView {
             pendingTabClose = PendingTabClose(tabID: tab.id, lastPaneID: resolved.pane.uuid)
             return
         }
-        closeSplit(targeting: resolved.pane)
+        closeSplitAfterPreDisconnect(resolved.pane)
     }
 
     /// Closes the pane captured when the confirmation was requested, rather
@@ -670,7 +670,7 @@ extension MainView {
             tab.splitTree.first(where: { $0.uuid == paneID })
         }).first else { return }
 
-        closeSplit(targeting: pane)
+        closeSplitAfterPreDisconnect(pane)
     }
 
     /// Closes the current window/scene properly

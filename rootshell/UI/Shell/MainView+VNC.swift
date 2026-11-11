@@ -239,3 +239,61 @@ extension MainAlertController {
         }
     }
 }
+
+// MARK: - Pre-Disconnect Actions
+
+extension MainView {
+
+    /// Run each Screen Sharing pane's pre-disconnect action in turn, then
+    /// `close`. Synchronous when no pane has one. A pane the user chooses to
+    /// keep connected ends the chain, so `close` never runs.
+    func runPreDisconnectActions(
+        for panes: [SplitPaneView],
+        then close: @escaping @MainActor () -> Void
+    ) {
+        let screenPanes = panes.compactMap { $0 as? VNCPaneView }
+        guard let pane = screenPanes.first else {
+            close()
+            return
+        }
+        let rest = Array(screenPanes.dropFirst())
+        pane.runPreDisconnectAction { [self] in
+            runPreDisconnectActions(for: rest, then: close)
+        }
+    }
+
+    /// User-initiated pane close, after the pane's pre-disconnect action.
+    func closeSplitAfterPreDisconnect(_ pane: SplitPaneView) {
+        runPreDisconnectActions(for: [pane]) { [self] in
+            // closeSplit falls back to the focused pane for a missing target.
+            guard terminals.contains(where: { tab in
+                tab.splitTree.contains(where: { $0 === pane })
+            }) else { return }
+            closeSplit(targeting: pane)
+        }
+    }
+
+    /// User-initiated tab close, after its panes' pre-disconnect actions.
+    func closeTabAfterPreDisconnect(id tabID: UUID, dismissSwitcherWhenEmpty: Bool = false) {
+        guard let tab = terminals.first(where: { $0.id == tabID }) else { return }
+        runPreDisconnectActions(for: tab.splitTree.map { $0 }) { [self] in
+            guard let index = terminals.firstIndex(where: { $0.id == tabID }) else { return }
+            closeTab(at: index)
+            if dismissSwitcherWhenEmpty, terminals.isEmpty {
+                // Last tab closed: get out of the way before the
+                // connection sidebar takes over.
+                showingTabSwitcher = false
+            }
+        }
+    }
+
+    /// A failed pre-disconnect action asks the user what to do inside its
+    /// pane, so bring that pane forward.
+    func revealPaneForPreDisconnectFailure(_ pane: VNCPaneView) {
+        guard let tab = terminals.first(where: { tab in
+            tab.splitTree.contains(where: { $0 === pane })
+        }) else { return }
+        // Also clears a sibling's zoom or full-screen takeover.
+        navigateToTerminal(tabID: tab.id, surfaceID: pane.uuid)
+    }
+}

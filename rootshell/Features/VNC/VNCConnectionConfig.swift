@@ -242,6 +242,9 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
     /// its initial connection becomes operational.
     var automaticallyEnterFullScreen: Bool
 
+    /// Runs on the remote computer before an intentional disconnect.
+    var preDisconnectAction: VNCPreDisconnectAction
+
     init(
         host: String,
         port: Int = 5900,
@@ -257,7 +260,8 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         jump: Jump = .none,
         keyboardToolbar: KeyboardToolbarPreference = .followAppSetting,
         remoteSystem: RemoteSystemPreference = .automatic,
-        automaticallyEnterFullScreen: Bool = false
+        automaticallyEnterFullScreen: Bool = false,
+        preDisconnectAction: VNCPreDisconnectAction = VNCPreDisconnectAction()
     ) {
         self.host = host
         self.port = port
@@ -274,6 +278,7 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         self.keyboardToolbar = keyboardToolbar
         self.remoteSystem = remoteSystem
         self.automaticallyEnterFullScreen = automaticallyEnterFullScreen
+        self.preDisconnectAction = preDisconnectAction
     }
 
     // MARK: - Codable (backward-compatible)
@@ -284,6 +289,7 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         case enableRemoteAudio, syncVideoToAudio, promptForLoginPasswordAtLoginWindow
         case jump, keyboardToolbar, remoteSystem
         case automaticallyEnterFullScreen
+        case preDisconnectAction
     }
 
     init(from decoder: Decoder) throws {
@@ -330,6 +336,9 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         automaticallyEnterFullScreen = Self.lossyBool(
             in: container,
             forKey: .automaticallyEnterFullScreen) ?? false
+        preDisconnectAction = ((try? container.decodeIfPresent(
+            VNCPreDisconnectAction.self,
+            forKey: .preDisconnectAction)) ?? nil) ?? VNCPreDisconnectAction()
     }
 
     private static func lossyString(
@@ -416,6 +425,10 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         try container.encode(keyboardToolbar, forKey: .keyboardToolbar)
         try container.encode(remoteSystem, forKey: .remoteSystem)
         try container.encode(automaticallyEnterFullScreen, forKey: .automaticallyEnterFullScreen)
+        // Omitted when unset so existing profiles encode unchanged.
+        if preDisconnectAction.isEnabled {
+            try container.encode(preDisconnectAction, forKey: .preDisconnectAction)
+        }
     }
 
     // MARK: - Computed Properties

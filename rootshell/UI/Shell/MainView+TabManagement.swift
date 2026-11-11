@@ -957,7 +957,7 @@ extension MainView {
             isEnabled: SettingsStore.shared.value(Settings.Window.confirmBeforeClosingTab),
             closesViaMultiplexer: closesViaMultiplexer(tab)
         ) else {
-            closeTab(at: index)
+            closeTabAfterPreDisconnect(id: tab.id)
             return
         }
         pendingTabClose = PendingTabClose(tabID: tab.id, lastPaneID: nil)
@@ -972,14 +972,9 @@ extension MainView {
             guard let pane = terminals.lazy.compactMap({ tab in
                 tab.splitTree.first(where: { $0.uuid == paneID })
             }).first else { return }
-            closeSplit(targeting: pane)
-        } else if let index = terminals.firstIndex(where: { $0.id == pending.tabID }) {
-            closeTab(at: index)
-            if terminals.isEmpty {
-                // Last tab closed: get out of the way before the
-                // connection sidebar takes over.
-                showingTabSwitcher = false
-            }
+            closeSplitAfterPreDisconnect(pane)
+        } else {
+            closeTabAfterPreDisconnect(id: pending.tabID, dismissSwitcherWhenEmpty: true)
         }
     }
 

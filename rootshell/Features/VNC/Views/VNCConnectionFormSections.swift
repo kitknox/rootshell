@@ -54,6 +54,9 @@ struct VNCFormState: Hashable {
     var syncVideoToAudio: Bool = false
     var promptForLoginPasswordAtLoginWindow: Bool = true
 
+    /// Action run before an intentional disconnect.
+    var preDisconnect = VNCPreDisconnectAction()
+
     var jumpSelection: VNCJumpSelection = .none
     var jumpSSHProfileID: UUID?
     var jumpTsshProfileID: UUID?
@@ -91,6 +94,7 @@ struct VNCFormState: Hashable {
         syncVideoToAudio = config.syncVideoToAudio
         promptForLoginPasswordAtLoginWindow =
             config.promptForLoginPasswordAtLoginWindow
+        preDisconnect = config.preDisconnectAction
 
         switch config.jump {
         case .none:
@@ -130,6 +134,17 @@ struct VNCFormState: Hashable {
         guard !hostname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let portNum = Int(port), portNum > 0 && portNum <= 65535 else {
             return false
+        }
+
+        switch preDisconnect.kind {
+        case .shortcut:
+            guard preDisconnect.shortcut.isValid else { return false }
+        case .command:
+            guard preDisconnect.sshProfileID != nil,
+                  !preDisconnect.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return false }
+        case .none, .lockScreen, .logOut, .controlAltDelete:
+            break
         }
 
         // Jump requirements only apply to the TCP quality modes.
@@ -184,6 +199,22 @@ struct VNCFormState: Hashable {
         }
         let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        switch preDisconnect.kind {
+        case .shortcut:
+            guard preDisconnect.shortcut.isValid else {
+                throw BuildError(message: String(localized: "Please choose a key for the keyboard shortcut sent before disconnecting."))
+            }
+        case .command:
+            guard preDisconnect.sshProfileID != nil else {
+                throw BuildError(message: String(localized: "Please select an SSH profile for the command run before disconnecting."))
+            }
+            guard !preDisconnect.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw BuildError(message: String(localized: "Please enter the command to run before disconnecting."))
+            }
+        case .none, .lockScreen, .logOut, .controlAltDelete:
+            break
+        }
+
         let jump: VNCConnectionConfig.Jump
         if quality == .adaptive {
             jump = .none
@@ -227,7 +258,8 @@ struct VNCFormState: Hashable {
             jump: jump,
             keyboardToolbar: keyboardToolbar,
             remoteSystem: remoteSystem,
-            automaticallyEnterFullScreen: automaticallyEnterFullScreen
+            automaticallyEnterFullScreen: automaticallyEnterFullScreen,
+            preDisconnectAction: preDisconnect.normalized
         )
     }
 
@@ -322,6 +354,7 @@ struct VNCConnectionFormSections: View {
         }
 
         sessionPreferencesSection
+        preDisconnectSection
     }
 
     // MARK: Server
@@ -626,6 +659,115 @@ struct VNCConnectionFormSections: View {
             Text("Session")
         } footer: {
             Text("Full Screen expands this Screen Sharing pane after the connection succeeds. Keyboard Toolbar controls the toolbar above the software keyboard.")
+        }
+    }
+
+    // MARK: Before disconnecting
+
+    /// "Character" row of the key picker; special keys use their raw value.
+    private static let characterKeyTag = ""
+
+    private var sshCommandProfiles: [ConnectionProfile] {
+        ConnectionProfileManager.shared.profiles.filter(VNCPreDisconnectRunner.canRunCommand(through:))
+    }
+
+    private var shortcutKeyChoice: Binding<String> {
+        Binding(
+            get: { form.preDisconnect.shortcut.specialKey?.rawValue ?? Self.characterKeyTag },
+            set: { form.preDisconnect.shortcut.key = $0 }
+        )
+    }
+
+    /// Keeps the typed key to its last character.
+    private var shortcutCharacter: Binding<String> {
+        Binding(
+            get: { form.preDisconnect.shortcut.character.map(String.init) ?? "" },
+            set: { form.preDisconnect.shortcut.key = String($0.suffix(1)) }
+        )
+    }
+
+    private var preDisconnectSection: some View {
+        Section {
+            Group {
+                Picker("Action", selection: $form.preDisconnect.kind) {
+                    ForEach(VNCPreDisconnectAction.Kind.allCases, id: \.self) { kind in
+                        Text(kind.displayName).tag(kind)
+                    }
+                }
+
+                switch form.preDisconnect.kind {
+                case .none, .lockScreen:
+                    EmptyView()
+
+                case .logOut:
+                    Text("Logs out of the Mac without asking. Apps with unsaved changes can still stop the logout.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                case .controlAltDelete:
+                    Text("For Windows and Linux computers. A Mac ignores it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                case .shortcut:
+                    Toggle("Control", isOn: $form.preDisconnect.shortcut.control)
+                    Toggle("Option", isOn: $form.preDisconnect.shortcut.option)
+                    Toggle("Shift", isOn: $form.preDisconnect.shortcut.shift)
+                    Toggle("Command", isOn: $form.preDisconnect.shortcut.command)
+
+                    Picker("Key", selection: shortcutKeyChoice) {
+                        Text("Character").tag(Self.characterKeyTag)
+                        ForEach(VNCPreDisconnectShortcut.SpecialKey.allCases, id: \.self) { key in
+                            Text(key.displayName).tag(key.rawValue)
+                        }
+                    }
+
+                    if form.preDisconnect.shortcut.specialKey == nil {
+                        HStack {
+                            Text("Character")
+                            Spacer()
+                            TextField("Q", text: shortcutCharacter)
+                                .autocapitalization(.none)
+                                .autocorrectionDisabled()
+                                .multilineTextAlignment(.trailing)
+                                .frame(maxWidth: 100)
+                        }
+                    }
+
+                    if form.preDisconnect.shortcut.isValid {
+                        LabeledContent("Sends", value: form.preDisconnect.shortcut.displayName)
+                    }
+
+                case .command:
+                    if sshCommandProfiles.isEmpty {
+                        Text("No usable SSH profiles. Create one that signs in with a key or saved password from the Profiles tab first.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Picker("SSH Profile", selection: $form.preDisconnect.sshProfileID) {
+                            Text("Select a Profile").tag(UUID?.none)
+                            ForEach(sshCommandProfiles) { profile in
+                                Text(profile.name).tag(Optional(profile.id))
+                            }
+                        }
+                    }
+
+                    TextField("Command", text: $form.preDisconnect.command, axis: .vertical)
+                        .autocapitalization(.none)
+                        .autocorrectionDisabled()
+                        .font(.body.monospaced())
+                        .lineLimit(1...4)
+
+                    Text("Runs in the login shell of the SSH profile's user. A command that fails or takes longer than 20 seconds asks before disconnecting.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .themedRow()
+        } header: {
+            Text("Before Disconnecting")
+        } footer: {
+            Text("Runs when you close this connection or its tab. It does not run when the connection drops, reconnects, or the app moves to the background.")
         }
     }
 

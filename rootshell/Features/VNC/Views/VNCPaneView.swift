@@ -336,6 +336,14 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
             self?.handleReservedHostShortcut(shortcut)
         }
 
+        // The HUD Close Connection item runs the pre-disconnect action first.
+        session.userDisconnectHandler = { [weak self] in
+            guard let self else { return }
+            self.runPreDisconnectAction { [weak self] in
+                self?.session.disconnect()
+            }
+        }
+
         observeSession()
         installTabSwipeGestureIfNeeded()
     }
@@ -552,6 +560,82 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
     func cancelConnectionAttempt() {
         guard !isClosed else { return }
         requestPaneClose()
+    }
+
+    // MARK: - Pre-disconnect action
+
+    enum PreDisconnectPhase: Equatable {
+        case running
+        case failed(String)
+    }
+
+    /// Non-nil while the saved pre-disconnect action runs or waits for the
+    /// user to decide after it failed.
+    @Published private(set) var preDisconnectPhase: PreDisconnectPhase?
+    private var preDisconnectTask: Task<Void, Never>?
+    private var preDisconnectCompletion: (@MainActor () -> Void)?
+
+    /// Run the connection's pre-disconnect action, then `disconnect`. Only an
+    /// intentional close comes through here; drops, backgrounding and
+    /// reconnects never do. Calls `disconnect` at once when there is nothing
+    /// to run.
+    func runPreDisconnectAction(then disconnect: @escaping @MainActor () -> Void) {
+        // Closed meanwhile: nothing to run, but a tab close chain continues.
+        guard !isClosed else {
+            disconnect()
+            return
+        }
+        // Already in flight: its card owns the decision.
+        guard preDisconnectPhase == nil else { return }
+        let action = config.preDisconnectAction
+        guard action.isEnabled, session.connectionState.isConnected else {
+            disconnect()
+            return
+        }
+
+        preDisconnectCompletion = disconnect
+        preDisconnectPhase = .running
+        let session = self.session
+        let onHostKeyValidation = self.onHostKeyValidation
+        preDisconnectTask = Task { [weak self] in
+            do {
+                try await VNCPreDisconnectRunner.run(
+                    action,
+                    session: session,
+                    onHostKeyValidation: onHostKeyValidation)
+                guard let self, !Task.isCancelled, !self.isClosed else { return }
+                self.finishPreDisconnect()
+            } catch {
+                guard let self, !Task.isCancelled, !self.isClosed else { return }
+                Self.logger.error("Pre-disconnect action failed: \(error.localizedDescription)")
+                self.preDisconnectTask = nil
+                self.preDisconnectPhase = .failed(error.localizedDescription)
+                // Bring a background tab forward so the choice is visible.
+                NotificationCenter.default.post(name: .vncPreDisconnectFailed, object: self)
+            }
+        }
+    }
+
+    /// Disconnect without waiting for the action, or after it failed.
+    func disconnectIgnoringPreDisconnectAction() {
+        preDisconnectTask?.cancel()
+        finishPreDisconnect()
+    }
+
+    /// Abandon the close and keep the session.
+    func cancelPreDisconnect() {
+        preDisconnectTask?.cancel()
+        preDisconnectTask = nil
+        preDisconnectCompletion = nil
+        preDisconnectPhase = nil
+    }
+
+    private func finishPreDisconnect() {
+        let completion = preDisconnectCompletion
+        preDisconnectTask = nil
+        preDisconnectCompletion = nil
+        preDisconnectPhase = nil
+        completion?()
     }
 
     /// Retry after a launcher failure: clears the error and re-runs the
@@ -1062,6 +1146,10 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
         connectionTask = nil
         debugHeartbeatTask?.cancel()
         debugHeartbeatTask = nil
+        preDisconnectTask?.cancel()
+        preDisconnectTask = nil
+        preDisconnectCompletion = nil
+        session.userDisconnectHandler = nil
         VNCDebugLogger.shared.event("PANE", "pane closing host=\(config.host)")
         isPreparingConnection = false
         // Closed while full screen: tear the takeover container down first
@@ -1258,6 +1346,8 @@ extension Notification.Name {
     /// Posted by a VNCPaneView (object) to present the Connection Info sheet;
     /// handled by the owning MainView.
     static let vncShowConnectionInfo = Notification.Name("com.rootshell.vncShowConnectionInfo")
+    /// A pane's pre-disconnect action failed and needs the user's decision.
+    static let vncPreDisconnectFailed = Notification.Name("com.rootshell.vncPreDisconnectFailed")
 }
 
 // MARK: - Connection Info
@@ -1508,7 +1598,15 @@ private struct VNCSessionOverlay: View {
 
     @ViewBuilder
     var body: some View {
-        if pane.needsPassword {
+        if let phase = pane.preDisconnectPhase {
+            VNCPreDisconnectCard(
+                subtitle: pane.config.displayName,
+                actionName: pane.config.preDisconnectAction.kind.displayName,
+                phase: phase,
+                onDisconnect: { pane.disconnectIgnoringPreDisconnectAction() },
+                onStay: { pane.cancelPreDisconnect() }
+            )
+        } else if pane.needsPassword {
             VNCPasswordPromptCard(
                 subtitle: pane.config.displayName,
                 onSubmit: { password, save in
@@ -1745,6 +1843,94 @@ private struct VNCPasswordPromptCard: View {
     private func submit() {
         guard !password.isEmpty else { return }
         onSubmit(password, savePassword)
+    }
+}
+
+/// Progress and failure prompt for a connection's pre-disconnect action.
+/// A failure never disconnects on its own: the user chooses.
+private struct VNCPreDisconnectCard: View {
+    let subtitle: String
+    let actionName: String
+    let phase: VNCPaneView.PreDisconnectPhase
+    let onDisconnect: () -> Void
+    let onStay: () -> Void
+
+    var body: some View {
+        switch phase {
+        case .running:
+            VNCOverlayCard(
+                title: String(localized: "Disconnecting…"),
+                subtitle: subtitle,
+                icon: {
+                    ProgressView()
+                        .controlSize(.large)
+                },
+                content: {
+                    VStack(spacing: 14) {
+                        Text("Running \(actionName) before disconnecting.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+
+                        buttons(disconnectTitle: String(localized: "Disconnect Now"))
+                    }
+                }
+            )
+        case .failed(let message):
+            VNCOverlayCard(
+                title: String(localized: "\(actionName) Failed"),
+                subtitle: subtitle,
+                icon: {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 30, weight: .medium))
+                        .foregroundStyle(.orange)
+                        .symbolRenderingMode(.hierarchical)
+                },
+                content: {
+                    VStack(spacing: 14) {
+                        Text(message)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(8)
+                            .frame(maxWidth: 320)
+
+                        buttons(disconnectTitle: String(localized: "Disconnect Anyway"))
+                    }
+                }
+            )
+        }
+    }
+
+    private func buttons(disconnectTitle: String) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                stayButton
+                disconnectButton(title: disconnectTitle)
+            }
+            VStack(spacing: 10) {
+                stayButton
+                disconnectButton(title: disconnectTitle)
+            }
+        }
+    }
+
+    private var stayButton: some View {
+        Button(role: .cancel, action: onStay) {
+            Label("Stay Connected", systemImage: "arrow.uturn.backward")
+                .frame(minWidth: 140)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+    }
+
+    private func disconnectButton(title: String) -> some View {
+        Button(role: .destructive, action: onDisconnect) {
+            Label(title, systemImage: "xmark")
+                .frame(minWidth: 140)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
     }
 }
 

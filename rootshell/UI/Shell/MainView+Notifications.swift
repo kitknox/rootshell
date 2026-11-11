@@ -219,6 +219,12 @@ extension MainView {
             }
         }
 
+        observerBag.observeOnMainActor(.vncPreDisconnectFailed) { [self] notification in
+            guard let pane = notification.object as? VNCPaneView else { return }
+            guard self.shouldHandleNotification(notification) else { return }
+            self.revealPaneForPreDisconnectFailure(pane)
+        }
+
         observerBag.observeOnMainActor(.toggleSplitZoom) { [self] notification in
             // Handle both UIKeyCommand (with terminal) and SwiftUI Commands (nil object)
             guard self.shouldHandleNotification(notification) else { return }

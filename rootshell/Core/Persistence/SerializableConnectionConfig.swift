@@ -400,6 +400,8 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
         let automaticallyEnterFullScreen: Bool?
         /// Optional for window state written before the setting existed.
         let remoteSystem: VNCConnectionConfig.RemoteSystemPreference?
+        /// Optional for window state written before the setting existed.
+        let preDisconnectAction: VNCPreDisconnectAction?
 
         /// Jump routing with the inline SSH config password-stripped.
         nonisolated enum JumpSafe: Codable, Equatable, Sendable {
@@ -425,6 +427,8 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
             self.keyboardToolbar = config.keyboardToolbar
             self.automaticallyEnterFullScreen = config.automaticallyEnterFullScreen
             self.remoteSystem = config.remoteSystem
+            self.preDisconnectAction = config.preDisconnectAction.isEnabled
+                ? config.preDisconnectAction : nil
             switch config.jump {
             case .none:
                 self.jump = .none
@@ -468,7 +472,8 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
                 jump: liveJump,
                 keyboardToolbar: keyboardToolbar,
                 remoteSystem: remoteSystem ?? .automatic,
-                automaticallyEnterFullScreen: automaticallyEnterFullScreen ?? false
+                automaticallyEnterFullScreen: automaticallyEnterFullScreen ?? false,
+                preDisconnectAction: preDisconnectAction ?? VNCPreDisconnectAction()
             )
         }
 

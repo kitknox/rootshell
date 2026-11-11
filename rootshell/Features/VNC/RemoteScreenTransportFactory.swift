@@ -87,7 +87,8 @@ enum RemoteScreenTransportFactory {
     /// passwords inlined from the Keychain. Mirrors connectToProfile's
     /// resolve-then-config sequence, minus the interactive fallbacks
     /// (unresolved keys throw instead of opening a resolution sheet).
-    private static func resolveJumpSSHConfig(
+    /// Also resolves the SSH profile a pre-disconnect command runs through.
+    static func resolveJumpSSHConfig(
         _ config: SSHConfig,
         profileID: UUID?
     ) async throws -> SSHConfig {
