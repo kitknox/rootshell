@@ -509,6 +509,7 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
     // Observer for layout invalidation notifications
     private var layoutInvalidationObserver: NSObjectProtocol?
     private var overlayPreservationEndedObserver: NSObjectProtocol?
+    private var keyboardSettleObserver: NSObjectProtocol?
     private var paneBackgroundObserver: NSObjectProtocol?
 
     /// Re-pushes the tmux window size once a keyboard show/hide animation
@@ -606,6 +607,19 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
             }
         }
 
+        keyboardSettleObserver = NotificationCenter.default.addObserver(
+            forName: .keyboardLayoutDidSettle,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.layoutIfNeeded()
+                self.pushTmuxClientSizeIfNeeded()
+                self.pushHerdrTabSizeIfNeeded()
+            }
+        }
+
         overlayPreservationEndedObserver = NotificationCenter.default.addObserver(
             forName: .overlayKeyboardPreservationEnded,
             object: nil,
@@ -635,6 +649,9 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
             NotificationCenter.default.removeObserver(observer)
         }
         if let observer = overlayPreservationEndedObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = keyboardSettleObserver {
             NotificationCenter.default.removeObserver(observer)
         }
         if let observer = paneBackgroundObserver {
@@ -816,14 +833,13 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
     /// Guarded to the active tab; the controller dedups so this can fire on every
     /// layout pass without a command storm.
     private func pushTmuxClientSizeIfNeeded() {
-        // Interpolated bounds during a keyboard show/hide are not real sizes:
+        // Bounds while a keyboard show/hide settles are not real sizes:
         // pushing them sends several stale refresh-client -C sizes per bounce,
         // each of which SIGWINCH-storms the window's apps mid-output. Mirrors
-        // TerminalView.sizeDidChange's gate; keyboardAnimationTask re-pushes
-        // the steady-state size once the animation ends. Gated here (not at
-        // the layoutSubviews call site) so every caller is covered while the
-        // dead-margin overlay update keeps running during the animation.
-        guard !KeyboardTracker.shared.isKeyboardAnimating else { return }
+        // TerminalView.sizeDidChange's gate; the settle observer re-pushes
+        // the final size. Gated here (not at the layoutSubviews call site) so
+        // every caller is covered while the dead-margin overlay keeps updating.
+        guard !KeyboardTracker.shared.isHoldingResizesForKeyboard else { return }
         // Same rationale as TerminalSurfaceController's overlay gate: the
         // container safe-area shuffle during an overlay round trip wobbles
         // bounds by the home-indicator inset. Window-scoped so another
@@ -920,7 +936,7 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
     /// see the window grow. Background tabs prepare here too, with their
     /// renderers still occluded. The controller dedupes repeated sizes.
     private func pushHerdrTabSizeIfNeeded() {
-        guard !KeyboardTracker.shared.isKeyboardAnimating else { return }
+        guard !KeyboardTracker.shared.isHoldingResizesForKeyboard else { return }
         guard !KeyboardTracker.shared.isPreservingKeyboardForOverlay(in: window) else { return }
         guard let tree,
               let pane = tree.terminalLeaves.first(where: { $0.isHerdrPane && hasLaidOutHerdrPane($0) }) else { return }

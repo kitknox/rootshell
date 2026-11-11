@@ -506,10 +506,28 @@ extension HerdrController {
         let tabId = binding.tabId
         guard maySizeTab(tab, claiming: tabGeometryStates[tabId]?.hasPendingClaim == true) else { return }
         tabGeometryStates[tabId, default: .init()].update(size)
-        guard geometryTasks[tabId] == nil,
-              tabGeometryStates[tabId]?.isConfirmed == false || claimGeneration(for: tabId) != nil else { return }
+        // The first size after a keyboard change is that change's final size
+        // and skips the settle tick. Any other size in the window (a live
+        // drag) keeps the debounce.
+        let keyboardGeneration = KeyboardTracker.shared.keyboardGeometryGeneration
+        if KeyboardTracker.shared.keyboardGeometryChangedRecently,
+           keyboardSettledGenerations[tabId] != keyboardGeneration {
+            keyboardSettledGenerations[tabId] = keyboardGeneration
+            keyboardSettledGeometry[tabId] = size
+        } else if keyboardSettledGeometry[tabId] != size {
+            keyboardSettledGeometry[tabId] = nil
+        }
+        guard geometryTasks[tabId] == nil else { return }
+        // No push follows: the marker must not outlive the size it describes.
+        guard tabGeometryStates[tabId]?.isConfirmed == false || claimGeneration(for: tabId) != nil else {
+            keyboardSettledGeometry[tabId] = nil
+            return
+        }
         // A protocol 1 server always claims; only send its size when we may.
-        guard capabilities.supportsSharedViewing || tabGeometryStates[tabId]?.mayClaim != false else { return }
+        guard capabilities.supportsSharedViewing || tabGeometryStates[tabId]?.mayClaim != false else {
+            keyboardSettledGeometry[tabId] = nil
+            return
+        }
         let generation = streamGeneration
         geometryTasks[tabId] = Task { @MainActor [weak self, weak tab] in
             guard let self, let tab else { return }
@@ -517,6 +535,7 @@ extension HerdrController {
                 if self.streamGeneration == generation, self.tabs[tabId] === tab {
                     self.geometryTasks.removeValue(forKey: tabId)
                 }
+                self.keyboardSettledGeometry[tabId] = nil
             }
             var failures = 0
             var movingSince: ContinuousClock.Instant?
@@ -530,7 +549,10 @@ extension HerdrController {
                 // the settle: it rarely changes the size.
                 let desired = self.tabGeometryStates[tabId]?.desired
                 var overdue = false
-                if self.tabGeometryStates[tabId]?.hasRequested == true, self.claimGeneration(for: tabId) == nil {
+                let settled = desired != nil && self.keyboardSettledGeometry[tabId] == desired
+                self.keyboardSettledGeometry[tabId] = nil
+                if !settled, self.tabGeometryStates[tabId]?.hasRequested == true,
+                   self.claimGeneration(for: tabId) == nil {
                     do { try await Task.sleep(for: .milliseconds(100)) }
                     catch { return }
                     if self.tabGeometryStates[tabId]?.desired != desired {
@@ -606,7 +628,7 @@ extension HerdrController {
     private func tabGeometry(from view: Ghostty.TerminalView) -> HerdrTabGeometryState.Size? {
         guard mode == .raw, isActive, !didEnd,
               !view.suppressPTYSizeUpdates,
-              !KeyboardTracker.shared.isKeyboardAnimating,
+              !KeyboardTracker.shared.isHoldingResizesForKeyboard,
               !KeyboardTracker.shared.isPreservingKeyboardForOverlay(in: view.window),
               let binding = view.herdrPaneBinding, binding.gatewayUUID == gatewayUUID,
               let tab = tabs[binding.tabId], tab.id == view.containingTabID,

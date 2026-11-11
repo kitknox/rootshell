@@ -219,6 +219,10 @@ final class HerdrController {
     /// lost server-side, so no redraw is guaranteed to restore them.
     var clientDetourMinimums: [String: (cols: Int, rows: Int)] = [:]
     var geometryTasks: [String: Task<Void, Never>] = [:]
+    /// Sizes a keyboard change produced; a push of exactly that size skips the tick.
+    var keyboardSettledGeometry: [String: HerdrTabGeometryState.Size] = [:]
+    /// Keyboard change each tab last took a settled size from.
+    var keyboardSettledGenerations: [String: UInt64] = [:]
     var activation = HerdrActivation()
     /// Undrained output or a client-only resize needs a fresh server snapshot.
     var resizeRecoveries: [String: HerdrResizeRecovery] = [:]

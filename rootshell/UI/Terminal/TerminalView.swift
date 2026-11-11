@@ -2277,6 +2277,19 @@ extension Ghostty {
         #endif
 
         private func setupOverlayPreservationFlushObserver() {
+            // The keyboard's end-frame layout settled: apply the resize held
+            // since willShow/willHide while the keyboard is still moving.
+            let settleObserver = NotificationCenter.default.addObserver(
+                forName: .keyboardLayoutDidSettle,
+                object: nil,
+                queue: nil
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.flushOverlayPreservationSuppressedResize()
+                }
+            }
+            cancellables.insert(AnyCancellable { NotificationCenter.default.removeObserver(settleObserver) })
+
             let observer = NotificationCenter.default.addObserver(
                 forName: .overlayKeyboardPreservationEnded,
                 object: nil,
@@ -3871,9 +3884,9 @@ extension Ghostty {
             // growing into the strip and snapping back. Deduped internally.
             updateBottomInset()
 
-            // sizeDidChange itself gates on KeyboardTracker.isKeyboardAnimating
-            // so interpolated bounds during keyboard show/hide are skipped here
-            // and re-applied once the animation settles.
+            // sizeDidChange itself gates on the keyboard resize hold, so
+            // bounds seen while a show/hide settles are skipped here and
+            // re-applied by the settle flush.
             sizeDidChange(bounds.size)
 
             #if targetEnvironment(macCatalyst)
@@ -5026,7 +5039,7 @@ extension Ghostty.TerminalView: TerminalKeyboardAccessoryHost {
         // inset and size, in the same order as a normal layout pass.
         DispatchQueue.main.async { [weak self] in
             guard let self, self.window != nil,
-                  !KeyboardTracker.shared.isKeyboardAnimating,
+                  !KeyboardTracker.shared.isHoldingResizesForKeyboard,
                   !self.surfaceController.sizeUpdatesSuppressed else { return }
             self.setNeedsLayout()
             self.layoutIfNeeded()

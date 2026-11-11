@@ -164,7 +164,7 @@ extension HerdrController {
     private func endpointGeometry() -> HerdrTabGeometryState.Size? {
         guard let tab = tabs.values.first(where: { $0.id == tabsModel.selectedTabID }),
               let view = tab.splitTree.terminalLeaves.first(where: { $0.enclosingSplitHost?.hasLaidOutHerdrPane($0) == true }),
-              !view.suppressPTYSizeUpdates, !KeyboardTracker.shared.isKeyboardAnimating,
+              !view.suppressPTYSizeUpdates, !KeyboardTracker.shared.isHoldingResizesForKeyboard,
               let size = view.enclosingSplitHost?.herdrWindowGeometry() else { return nil }
         var gutterX = 2, gutterY = 2
         if let id = tab.herdrTabId, let layout = endpointLayouts[id], let tree = HerdrLayoutTree.build(layout) {

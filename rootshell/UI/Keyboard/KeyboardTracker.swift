@@ -81,6 +81,30 @@ class KeyboardTracker {
     @MainActor
     private(set) var isKeyboardAnimating: Bool = false
 
+    /// True from willShow/willHide until the layout driven by the keyboard's
+    /// end frame has settled. Terminal resizes wait only this long, so the
+    /// grid reaches its final size while the keyboard is still moving.
+    @MainActor @ObservationIgnored
+    private(set) var isHoldingResizesForKeyboard: Bool = false
+
+    /// When the keyboard's end frame last changed or its layout settled.
+    @MainActor @ObservationIgnored
+    private var keyboardGeometryChangedAt: ContinuousClock.Instant? {
+        didSet { keyboardGeometryGeneration &+= 1 }
+    }
+
+    /// Counts keyboard geometry changes, so a consumer can act once per change.
+    @MainActor @ObservationIgnored
+    private(set) var keyboardGeometryGeneration: UInt64 = 0
+
+    /// A layout change this soon after a keyboard change is the keyboard's
+    /// own discrete step, not a live drag, and needs no size debounce.
+    @MainActor
+    var keyboardGeometryChangedRecently: Bool {
+        guard let changedAt = keyboardGeometryChangedAt else { return false }
+        return changedAt.duration(to: .now) < .milliseconds(300)
+    }
+
     /// True while iOS is hiding the software keyboard as part of an app
     /// inactive/background transition. During this window, consumers should
     /// keep the last visible keyboard layout instead of treating the keyboard
@@ -227,6 +251,13 @@ class KeyboardTracker {
     /// is never delivered (e.g., app lifecycle transition mid-animation, focus loss).
     @MainActor
     private var keyboardAnimationSafetyTimer: Timer?
+
+    @MainActor @ObservationIgnored
+    private var keyboardResizeHoldTask: Task<Void, Never>?
+
+    /// Long enough for the paired willChangeFrame/willShow posts and the
+    /// SwiftUI padding pass they drive to coalesce into one resize.
+    private static let keyboardResizeHoldDuration: Duration = .milliseconds(50)
 
     @MainActor
     private var appTransitionKeyboardPreservationTask: Task<Void, Never>?
@@ -1202,9 +1233,34 @@ class KeyboardTracker {
             }
         }
 
+        // The animation-end consumers flush on their own.
+        if !animating { endKeyboardResizeHold(notify: false) }
+
         for continuation in keyboardAnimationContinuations.values {
             continuation.yield(animating)
         }
+    }
+
+    @MainActor
+    private func beginKeyboardResizeHold() {
+        isHoldingResizesForKeyboard = true
+        keyboardResizeHoldTask?.cancel()
+        keyboardResizeHoldTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.keyboardResizeHoldDuration)
+            guard !Task.isCancelled else { return }
+            self?.endKeyboardResizeHold(notify: true)
+        }
+    }
+
+    @MainActor
+    private func endKeyboardResizeHold(notify: Bool) {
+        keyboardResizeHoldTask?.cancel()
+        keyboardResizeHoldTask = nil
+        guard isHoldingResizesForKeyboard else { return }
+        isHoldingResizesForKeyboard = false
+        guard notify else { return }
+        keyboardGeometryChangedAt = .now
+        NotificationCenter.default.post(name: .keyboardLayoutDidSettle, object: nil)
     }
 
     // MARK: - UIKeyboard Notification Handlers (Frame Tracking)
@@ -1213,6 +1269,8 @@ class KeyboardTracker {
     @objc private func keyboardWillShow(_ notification: Notification) {
         updateKeyboardFrame(from: notification)
         setKeyboardAnimating(true)
+        // Every accepted will-notification restarts the hold, even mid-animation.
+        beginKeyboardResizeHold()
     }
 
     @MainActor
@@ -1227,6 +1285,7 @@ class KeyboardTracker {
         }
         updateKeyboardFrame(from: notification)
         setKeyboardAnimating(true)
+        beginKeyboardResizeHold()
     }
 
     @MainActor
@@ -1318,6 +1377,7 @@ class KeyboardTracker {
             clearAppTransitionKeyboardPreservation()
         }
 
+        if keyboardFrame != keyboardFrameEnd { keyboardGeometryChangedAt = .now }
         keyboardFrame = keyboardFrameEnd
         let visibleHeight = visibleKeyboardHeight(for: keyboardFrameEnd)
         updateSoftwareKeyboardVisibility(visibleHeight > Self.softwareKeyboardHeightThreshold)
@@ -1437,6 +1497,8 @@ class KeyboardTracker {
 }
 
 extension Notification.Name {
+    /// Posted once per keyboard show/hide when held terminal resizes may flush.
+    static let keyboardLayoutDidSettle = Notification.Name("com.rootshell.keyboardLayoutDidSettle")
     /// Posted when the overlay keyboard-preservation latch releases.
     /// Terminals that dropped size pushes while it was armed flush their
     /// current bounds (self-deduping) on receipt.

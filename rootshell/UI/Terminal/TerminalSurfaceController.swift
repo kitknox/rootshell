@@ -520,7 +520,7 @@ final class TerminalSurfaceController: NSObject {
         // same transition gates as the framebuffer size, otherwise a skipped
         // size update can still reflow the grid at the old dimensions.
         guard !sizeUpdatesSuppressed else { return }
-        if lastFramebufferSize != nil, KeyboardTracker.shared.isKeyboardAnimating { return }
+        if lastFramebufferSize != nil, KeyboardTracker.shared.isHoldingResizesForKeyboard { return }
         // The overlay round trip's safe-area shuffle moves this inset in
         // lockstep with the (dropped) size change — applying it against the
         // unchanged surface size would reflow the grid on its own. Dropped
@@ -591,11 +591,11 @@ final class TerminalSurfaceController: NSObject {
         // Never drop a never-sized surface's first size (same rule as the
         // overlay-preservation guard below): its grid is at default dims and
         // wrong no matter what. A tab opened or first displayed while a
-        // keyboard transition is in flight — including the minimized-keyboard
+        // keyboard transition is settling — including the minimized-keyboard
         // pill a pencil tap summons — otherwise renders a default-sized grid
         // with the theme background filling the rest of the drawable.
-        if lastFramebufferSize != nil, KeyboardTracker.shared.isKeyboardAnimating {
-            Ghostty.logger.debug("sizeDidChange: SKIPPED during keyboard animation (size=\(size.width)x\(size.height))")
+        if lastFramebufferSize != nil, KeyboardTracker.shared.isHoldingResizesForKeyboard {
+            Ghostty.logger.debug("sizeDidChange: HELD for keyboard settle (size=\(size.width)x\(size.height))")
             return
         }
 
