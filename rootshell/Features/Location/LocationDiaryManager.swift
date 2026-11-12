@@ -212,7 +212,7 @@ class LocationDiaryManager: NSObject, ObservableObject {
     }
 
     /// Called by SessionTracker when the non-resilient session count changes
-    /// Non-resilient sessions (SSH, K8s, Console) and local shells with active long-running tasks
+    /// Non-resilient sessions (SSH, K8s, Console, VNC, KVM) and local shells with active long-running tasks
     /// need location services to stay alive. Roam/Mosh doesn't need this - it uses UDP state-sync
     func updateNonResilientSessionCount(_ count: Int) {
         logger.debug("Non-resilient session count updated: \(count), current mode: \(self.mode.rawValue), auto saved: \(self.hasAutoModeEnabled)")

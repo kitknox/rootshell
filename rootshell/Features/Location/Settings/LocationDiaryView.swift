@@ -12,7 +12,7 @@ struct LocationDiaryView: View {
                     Text("Location Diary Mode")
                         .font(.headline)
 
-                    Text("Continuously tracks location to keep SSH connections and long-running local tasks alive in the background. Shows locations from the last 5 minutes.")
+                    Text("Continuously tracks location to keep SSH and Screen Sharing connections and long-running local tasks alive in the background. Shows locations from the last 5 minutes.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

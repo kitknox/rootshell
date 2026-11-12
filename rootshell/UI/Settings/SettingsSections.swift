@@ -1335,7 +1335,7 @@ struct SettingsPrivacyContent: View {
                             .foregroundColor(.secondary)
                             .themedRow()
                     } else {
-                        Text("Waiting for SSH, Kubernetes, Cloud Console, or long-running local tasks (Roam doesn't need this)")
+                        Text("Waiting for SSH, Kubernetes, Cloud Console, Screen Sharing, KVM, or long-running local tasks (Roam doesn't need this)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .themedRow()

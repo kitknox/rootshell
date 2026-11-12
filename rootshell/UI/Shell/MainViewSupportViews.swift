@@ -123,7 +123,7 @@ struct SessionCensusObserver: View {
         Color.clear
             .allowsHitTesting(false)
             .accessibilityHidden(true)
-            .onChange(of: WindowSessionCensus.profileCounts(in: tabsModel.tabs)) { _, _ in
+            .onChange(of: WindowSessionCensus.observedCounts(in: tabsModel.tabs)) { _, _ in
                 onChange()
             }
     }

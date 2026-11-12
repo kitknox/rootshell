@@ -26,10 +26,42 @@ enum WindowSessionCensus {
         var profileCounts: [UUID: Int]
     }
 
-    /// Count remote sessions (SSH, Mosh, Trzsz, Kubernetes, Console, EC2 Console) in this window
+    /// One counted session: a terminal, or a VNC/KVM pane.
+    private struct SessionPane {
+        var connectionConfig: ConnectionConfig
+        var hasActiveLocalTask: Bool
+    }
+
+    /// Every session pane in layout order. Remote-screen panes are not
+    /// terminal leaves, so a terminal-only walk drops them.
+    private static func sessionPanes(in tabs: [TabModel]) -> [SessionPane] {
+        tabs.flatMap { Array($0.splitTree) }.compactMap { pane in
+            if let terminal = pane.asTerminal {
+                return SessionPane(connectionConfig: terminal.connectionConfig,
+                                   hasActiveLocalTask: terminal.hasActiveLocalTask)
+            }
+            if let remotePane = pane as? any RemoteScreenPane {
+                return SessionPane(connectionConfig: remotePane.connectionConfig, hasActiveLocalTask: false)
+            }
+            return nil
+        }
+    }
+
+    /// What the census observer watches for topology changes that leave the
+    /// tab count alone, such as splitting or closing a pane.
+    struct ObservedCounts: Equatable {
+        var profileCounts: [UUID: Int]
+        var remoteSessionCount: Int
+    }
+
+    static func observedCounts(in tabs: [TabModel]) -> ObservedCounts {
+        ObservedCounts(profileCounts: profileCounts(in: tabs), remoteSessionCount: remoteSessionCount(in: tabs))
+    }
+
+    /// Count remote sessions (SSH, Mosh, Trzsz, Kubernetes, Console, EC2 Console, VNC, KVM) in this window
     static func remoteSessionCount(in tabs: [TabModel]) -> Int {
-        tabs.flatMap { $0.splitTree.terminalLeaves }.filter { terminal in
-            switch terminal.connectionConfig {
+        sessionPanes(in: tabs).filter { pane in
+            switch pane.connectionConfig {
             case .ssh, .mosh, .trzsz, .trzszTransfer, .kubernetes, .console, .ec2Console, .shellLaunchedSSH, .shellLaunchedMosh, .shellLaunchedTrzsz, .vnc, .kvm:
                 return true
             case .local:
@@ -39,16 +71,16 @@ enum WindowSessionCensus {
     }
 
     /// Count non-resilient sessions that require background execution
-    /// Includes remote sessions (SSH, K8s, Console) and local shells with active long-running tasks
+    /// Includes remote sessions (SSH, K8s, Console, VNC, KVM) and local shells with active long-running tasks
     /// Roam (Mosh, Trzsz) excluded - their UDP state-sync survives network changes and app suspension
     static func nonResilientSessionCount(in tabs: [TabModel]) -> Int {
-        tabs.flatMap { $0.splitTree.terminalLeaves }.filter { terminal in
-            switch terminal.connectionConfig {
+        sessionPanes(in: tabs).filter { pane in
+            switch pane.connectionConfig {
             case .ssh, .kubernetes, .console, .ec2Console, .shellLaunchedSSH, .vnc, .kvm:
                 // VNC rides TCP with no roam-style resilience
                 return true
             case .local:
-                return terminal.hasActiveLocalTask
+                return pane.hasActiveLocalTask
             case .mosh, .trzsz, .trzszTransfer, .shellLaunchedMosh, .shellLaunchedTrzsz:
                 return false
             }
@@ -88,8 +120,8 @@ enum WindowSessionCensus {
         var roamHostNames: [String] = []
         let profileCounts = Self.profileCounts(in: tabs)
 
-        for terminal in tabs.flatMap({ $0.splitTree.terminalLeaves }) {
-            switch terminal.connectionConfig {
+        for pane in sessionPanes(in: tabs) {
+            switch pane.connectionConfig {
             case .ssh(let config):
                 sshCount += 1
                 if !hostNames.contains(config.host) {
@@ -116,7 +148,7 @@ enum WindowSessionCensus {
                     hostNames.append(config.instanceLabel)
                 }
             case .local:
-                if terminal.hasActiveLocalTask {
+                if pane.hasActiveLocalTask {
                     localTaskCount += 1
                 }
             case .mosh(let config):
