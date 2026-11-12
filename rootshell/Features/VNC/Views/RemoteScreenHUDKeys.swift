@@ -43,16 +43,34 @@ final class RemoteScreenHUDKeysModel {
         }
     }
 
+    /// The hardware-keyboard toolbar setting hid the keys; the chevron still
+    /// shows them, for this attachment only and without saving.
+    var keysHiddenBySetting = false {
+        didSet { if !keysHiddenBySetting { shownDespiteSetting = false } }
+    }
+    private var shownDespiteSetting = false
+
+    /// What the chevron folds and shows.
+    var keysExpanded: Bool {
+        get { keysHiddenBySetting ? shownDespiteSetting : stripExpanded }
+        set {
+            if keysHiddenBySetting { shownDespiteSetting = newValue } else { stripExpanded = newValue }
+        }
+    }
+
+    /// A hardware keyboard has no on-screen keys to summon.
+    var showsKeysButton: Bool { !KeyboardTracker.shared.isHardwareKeyboard }
+
     /// Buttons over the toolbar's trailing end: fold, keys, and the HUD menu.
-    private static let trailingButtonCount: CGFloat = 3
+    private var trailingButtonCount: CGFloat { showsKeysButton ? 3 : 2 }
 
     /// Pinned along the bottom, with the screen fitted above it.
-    var docksToBottom: Bool { !isFloating && stripAvailable && stripExpanded }
+    var docksToBottom: Bool { !isFloating && stripAvailable && keysExpanded }
 
     /// Docked, the keys share the full width; floating, each keeps its natural size.
     func slotWidth(availableWidth: CGFloat) -> CGFloat {
         guard docksToBottom else { return metrics.slotWidth }
-        let slots = CGFloat(metrics.keyCount) + Self.trailingButtonCount
+        let slots = CGFloat(metrics.keyCount) + trailingButtonCount
         return max(metrics.minimumSlotWidth, (availableWidth - metrics.edgePadding * 2) / slots)
     }
 
@@ -63,7 +81,7 @@ final class RemoteScreenHUDKeysModel {
     }
 
     func trailingReserve(availableWidth: CGFloat) -> CGFloat {
-        slotWidth(availableWidth: availableWidth) * Self.trailingButtonCount
+        slotWidth(availableWidth: availableWidth) * trailingButtonCount
     }
 
     /// A narrow pane squeezes the keys, then moves the rest to a drawer.
@@ -84,7 +102,7 @@ struct RemoteScreenHUDToolbar: View {
 
     var body: some View {
         let model = coordinator.hudModel
-        if model.stripAvailable, model.stripExpanded {
+        if model.stripAvailable, model.keysExpanded {
             RemoteScreenHUDKeyStrip(
                 coordinator: coordinator,
                 trailingReserve: model.trailingReserve(availableWidth: availableWidth),
@@ -105,13 +123,15 @@ struct RemoteScreenHUDButtons: View {
             if model.stripAvailable {
                 foldButton(model)
             }
-            Button {
-                coordinator.toggleKeysFromHUD()
-            } label: {
-                glyph(model.keysRequested ? "keyboard.chevron.compact.down" : "keyboard")
+            if model.showsKeysButton {
+                Button {
+                    coordinator.toggleKeysFromHUD()
+                } label: {
+                    glyph(model.keysRequested ? "keyboard.chevron.compact.down" : "keyboard")
+                }
+                .accessibilityLabel(model.keysRequested
+                    ? String(localized: "Hide Keyboard") : String(localized: "Show Keyboard"))
             }
-            .accessibilityLabel(model.keysRequested
-                ? String(localized: "Hide Keyboard") : String(localized: "Show Keyboard"))
         }
         .buttonStyle(.plain)
         .foregroundStyle(.primary)
@@ -129,16 +149,16 @@ struct RemoteScreenHUDButtons: View {
     private func foldButton(_ model: RemoteScreenHUDKeysModel) -> some View {
         let modeLabel = model.isFloating
             ? String(localized: "Dock Toolbar") : String(localized: "Float Toolbar")
-        return glyph(model.stripExpanded ? "chevron.forward" : "chevron.backward")
+        return glyph(model.keysExpanded ? "chevron.forward" : "chevron.backward")
             .gesture(
                 LongPressGesture(minimumDuration: 0.5)
                     .onEnded { _ in coordinator.setToolbarFloating(!model.isFloating) }
-                    .exclusively(before: TapGesture().onEnded { model.stripExpanded.toggle() }))
+                    .exclusively(before: TapGesture().onEnded { model.keysExpanded.toggle() }))
             .accessibilityElement()
             .accessibilityAddTraits(.isButton)
-            .accessibilityLabel(model.stripExpanded
+            .accessibilityLabel(model.keysExpanded
                 ? String(localized: "Hide Toolbar Keys") : String(localized: "Show Toolbar Keys"))
-            .accessibilityAction { model.stripExpanded.toggle() }
+            .accessibilityAction { model.keysExpanded.toggle() }
             .accessibilityAction(named: Text(modeLabel)) { coordinator.setToolbarFloating(!model.isFloating) }
     }
 }

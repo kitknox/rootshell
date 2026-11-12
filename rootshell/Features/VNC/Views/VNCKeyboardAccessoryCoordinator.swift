@@ -385,7 +385,15 @@ extension VNCKeyboardAccessoryCoordinator {
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
         // Docked, the terminal keyboard brings its own toolbar row and the bar steps aside.
         let barEnabled = hudModel.isFloating || !controller.usesFullTouchKeyboard
-        let stripAvailable = barEnabled && presentation != .hidden && effectivePreference != .off
+        // The hardware-keyboard setting hides the presentation and, by default,
+        // the keys; the bar keeps its chevron to show them. Input views stay
+        // on the package default.
+        let hiddenBySetting = presentation == .hidden && effectivePreference == .followAppSetting
+            && !manuallyDismissed && !controller.keyboardToolbarCollapsed
+            && controller.keyboardAccessory != nil
+        let stripAvailable = barEnabled && effectivePreference != .off
+            && (presentation != .hidden || hiddenBySetting)
+        if hudModel.keysHiddenBySetting != hiddenBySetting { hudModel.keysHiddenBySetting = hiddenBySetting }
         let keysRequested = keyboardCapture.softwareKeyboardRequested
         if hudModel.keysRequested != keysRequested { hudModel.keysRequested = keysRequested }
         if hudModel.barEnabled != barEnabled { hudModel.barEnabled = barEnabled }
