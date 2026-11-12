@@ -3011,6 +3011,9 @@ extension Ghostty {
         }
 
         private func applyGhosttyFocus(_ focused: Bool) {
+            #if targetEnvironment(macCatalyst)
+            touchDebugNoteFocus(focused) // TEMPORARY (#740)
+            #endif
             HerdrController.controller(for: self)?.synchronizeEndpointTheme()
             guard let surface = surface else { return }
 

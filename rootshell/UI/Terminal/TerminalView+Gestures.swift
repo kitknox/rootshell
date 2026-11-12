@@ -3511,6 +3511,9 @@ extension Ghostty.TerminalView {
     /// Compute selection bounds plus the geometry needed to map handle drags
     /// back into viewport cell coordinates.
     private func selectionHandleMetrics() -> SelectionHandleMetrics? {
+        #if targetEnvironment(macCatalyst)
+        touchDebugCount(\.metrics) // TEMPORARY (#740)
+        #endif
         if let state = herdrEndpointPane {
             guard state.hasSelection, let selection = state.selection, let pane = state.pane,
                   let geometry = state.geometry else { return nil }
@@ -4156,6 +4159,9 @@ extension Ghostty.TerminalView {
     }
 
     func showSelectionHandles(triggerFeedback: Bool = false) {
+        #if targetEnvironment(macCatalyst)
+        touchDebugCount(\.shows) // TEMPORARY (#740)
+        #endif
         guard selectionHandlesCanBePresented() else {
             hideSelectionHandles(animated: false)
             return
@@ -4219,6 +4225,9 @@ extension Ghostty.TerminalView {
     }
 
     func hideSelectionHandles(animated: Bool = true) {
+        #if targetEnvironment(macCatalyst)
+        touchDebugCount(\.hides) // TEMPORARY (#740)
+        #endif
         let startHandle = selectionStartHandle
         let endHandle = selectionEndHandle
 
@@ -4259,6 +4268,9 @@ extension Ghostty.TerminalView {
     }
 
     func updateSelectionHandlePositions() {
+        #if targetEnvironment(macCatalyst)
+        touchDebugCount(\.positions) // TEMPORARY (#740)
+        #endif
         guard selectionHandlesVisible else { return }
 
         // While a handle is being dragged, the selection can extend past the
@@ -4342,6 +4354,9 @@ extension Ghostty.TerminalView {
     }
 
     func syncSelectionHandleVisibility(forActiveSurface isActiveSurface: Bool = true) {
+        #if targetEnvironment(macCatalyst)
+        touchDebugCount(\.syncs) // TEMPORARY (#740)
+        #endif
         guard isActiveSurface else {
             hideSelectionHandles(animated: false)
             return
@@ -4750,12 +4765,38 @@ private final class TouchLiftObserver: UIGestureRecognizer {
 // MARK: - TEMPORARY (#740) touch hold diagnostics. Delete once the hold is fixed.
 
 #if targetEnvironment(macCatalyst)
-private final class TouchDebugState {
+final class TouchDebugState {
     var start: TimeInterval = 0
     var startPoint: CGPoint = .zero
     var moves = 0
     var maxDistance: CGFloat = 0
     var reportedDrift = false
+
+    // Scroll measurements, reset every reporting window.
+    var scrollWindowStart: CFTimeInterval = 0
+    var lastScrollTick: CFTimeInterval = 0
+    var maxScrollGap: CFTimeInterval = 0
+    var scrollSpent: CFTimeInterval = 0
+    var scrollTicks = 0
+    var smoothSends = 0
+    var syncs = 0
+    var shows = 0
+    var hides = 0
+    var positions = 0
+    var metrics = 0
+
+    func resetScrollWindow(_ now: CFTimeInterval) {
+        scrollWindowStart = now
+        maxScrollGap = 0
+        scrollSpent = 0
+        scrollTicks = 0
+        smoothSends = 0
+        syncs = 0
+        shows = 0
+        hides = 0
+        positions = 0
+        metrics = 0
+    }
 }
 
 extension Ghostty.TerminalView {
@@ -4824,6 +4865,37 @@ extension Ghostty.TerminalView {
         for recognizer in touch.gestureRecognizers ?? [] {
             touchDebugLog("  \(label): \(Self.touchDebugDescribe(recognizer, in: self))")
         }
+    }
+
+    /// Counts one call of something that may run during a scroll.
+    func touchDebugCount(_ counter: ReferenceWritableKeyPath<TouchDebugState, Int>) {
+        touchDebugState[keyPath: counter] += 1
+    }
+
+    func touchDebugNoteFocus(_ focused: Bool) {
+        touchDebugLog("renderer focus=\(focused) firstResponder=\(isFirstResponder) logicallyFocused=\(isLogicallyFocused) keyWindow=\(window?.isKeyWindow ?? false)")
+    }
+
+    /// Called for every scroll view offset change; reports once a second
+    /// how the scroll is going and what else ran on the main thread.
+    func touchDebugScrollTick(spent: CFTimeInterval, liveScrolling: Bool) {
+        let state = touchDebugState
+        let now = CACurrentMediaTime()
+        if state.scrollWindowStart == 0 || now - state.lastScrollTick > 1 {
+            // A new burst of scrolling.
+            state.resetScrollWindow(now)
+        } else {
+            state.maxScrollGap = max(state.maxScrollGap, now - state.lastScrollTick)
+        }
+        state.lastScrollTick = now
+        state.scrollTicks += 1
+        state.scrollSpent += spent
+        guard now - state.scrollWindowStart >= 1 else { return }
+        let seconds = now - state.scrollWindowStart
+        Ghostty.logger.notice("TOUCHDBG scroll \(String(format: "%.2f", seconds), privacy: .public)s offsetChanges=\(state.scrollTicks) maxGapMs=\(Int(state.maxScrollGap * 1000)) spentMs=\(Int(state.scrollSpent * 1000)) smoothSends=\(state.smoothSends) live=\(liveScrolling)")
+        Ghostty.logger.notice("TOUCHDBG scroll handles: syncs=\(state.syncs) shows=\(state.shows) hides=\(state.hides) positions=\(state.positions) metrics=\(state.metrics)")
+        Ghostty.logger.notice("TOUCHDBG scroll state: selection=\(self.hasTerminalTextSelection) handlesVisible=\(self.selectionHandlesVisible) touchSelection=\(self.selectionWasTouchInitiated) smoothActive=\(self.smoothScrollActive) firstResponder=\(self.isFirstResponder) logicallyFocused=\(self.isLogicallyFocused) keyWindow=\(self.window?.isKeyWindow ?? false) fps=\(self.window?.windowScene?.screen.maximumFramesPerSecond ?? 0)")
+        state.resetScrollWindow(now)
     }
 
     func touchDebugBegan(_ touch: UITouch) {
