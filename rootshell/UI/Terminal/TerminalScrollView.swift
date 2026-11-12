@@ -375,7 +375,12 @@ extension Ghostty {
             }
         }
 
-        if isPointInCatalystScrollbarGutter(point) {
+        let inScrollbarGutter = isPointInCatalystScrollbarGutter(point)
+        if event?.type != .scroll {
+            // Decided here, before a press at this point reaches the pan.
+            setNativePanAcceptsPointer(inScrollbarGutter)
+        }
+        if inScrollbarGutter {
             return scrollView
         }
 
@@ -491,6 +496,20 @@ extension Ghostty {
     var isNativeScrollPanActive: Bool {
         let state = scrollView.panGestureRecognizer.state
         return state == .began || state == .changed
+    }
+
+    /// The pointer may drive the scroll view's pan only on the scrollbar,
+    /// where it drags the knob and pages the track. Anywhere else a pointer
+    /// drag belongs to the terminal; a finger scrolls everywhere.
+    private func setNativePanAcceptsPointer(_ acceptsPointer: Bool) {
+        let types: [UITouch.TouchType] = acceptsPointer
+            ? [.direct, .indirect, .pencil, .indirectPointer]
+            : [.direct]
+        let allowed = types.map { NSNumber(value: $0.rawValue) }
+        let pan = scrollView.panGestureRecognizer
+        if pan.allowedTouchTypes != allowed {
+            pan.allowedTouchTypes = allowed
+        }
     }
 
     private func isPointInCatalystScrollbarGutter(_ point: CGPoint) -> Bool {
@@ -680,9 +699,8 @@ extension Ghostty {
         // scroll view. Host the scroll view's own pan here, above both, so the
         // finger scrolls natively like on iPad. Wheel and trackpad scrolling
         // still reach it; pointer drags stay with the terminal for selection.
-        let nativePan = scrollView.panGestureRecognizer
-        nativePan.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
-        addGestureRecognizer(nativePan)
+        setNativePanAcceptsPointer(false)
+        addGestureRecognizer(scrollView.panGestureRecognizer)
         #else
         documentView.addSubview(terminalView)
 
