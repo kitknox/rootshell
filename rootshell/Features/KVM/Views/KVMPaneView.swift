@@ -176,12 +176,13 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
         } else {
             keyboardCapture.release()
         }
-        attachHostingControllerIfNeeded()
+        // Before the root view: its HUD draws from the coordinator.
         #if !os(visionOS)
         if keyboardCoordinator == nil {
             keyboardCoordinator = VNCKeyboardAccessoryCoordinator(pane: self)
         }
         #endif
+        attachHostingControllerIfNeeded()
         connectIfNeeded()
     }
 
@@ -622,6 +623,11 @@ extension KVMPaneView: RemoteScreenPane {
 
     func pasteFromKeyboardToolbar() {
         pasteClipboard()
+    }
+
+    func typePasswordFromKeyboardToolbar(pressingReturn: Bool) {
+        guard loginPassword.canSend else { return }
+        loginPassword.send(pressingReturn: pressingReturn)
     }
 
     var connectionInfo: ConnectionInfo? {

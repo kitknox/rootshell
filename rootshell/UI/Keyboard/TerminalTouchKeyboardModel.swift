@@ -233,6 +233,13 @@ nonisolated enum TerminalTouchKeyboardModel {
             }
         }
 
+        /// The modifier a held sweep presses twice on its own: one already locked, held alone.
+        func heldSweepDoublePress(_ modifiers: [Modifier], holding: Bool) -> Modifier? {
+            guard holding, modifiers.count == 1, let first = modifiers.first,
+                  used.isDisjoint(with: modifiers), locked.contains(first) else { return nil }
+            return first
+        }
+
         /// Whether a held sweep would lock, or nil once a key press made it a chord.
         func heldSweepLocks(_ modifiers: [Modifier]) -> Bool? {
             guard let first = modifiers.first, used.isDisjoint(with: modifiers) else { return nil }

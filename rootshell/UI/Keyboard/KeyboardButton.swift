@@ -174,6 +174,12 @@ class KeyboardButton: UIControl {
         return true
     }
 
+    /// A system edge gesture can hold back touch-up; a lifted finger is not a hold.
+    var touchHasLifted: Bool {
+        guard let phase = currentTouch?.phase else { return true }
+        return phase == .ended || phase == .cancelled
+    }
+
     func finishTouchTracking() {
         currentTouch = nil
     }

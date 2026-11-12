@@ -17,6 +17,7 @@ struct ScreenSharingSettingsView: View {
     @Setting(Settings.ScreenSharing.kvmLocalCursorDefault) private var kvmLocalCursorDefault
     @Setting(Settings.ScreenSharing.controlOptionAsCommandDefault) private var controlOptionAsCommandDefault
     @Setting(Settings.ScreenSharing.routeReservedShortcutsToVNCDefault) private var routeReservedShortcutsToVNCDefault
+    @Setting(Settings.ScreenSharing.floatingToolbarDefault) private var floatingToolbarDefault
     @Setting(Settings.ScreenSharing.touchHoldDelay) private var touchHoldDelay
     @Setting(Settings.ScreenSharing.showsHeldButton) private var showsHeldButton
     @Setting(Settings.ScreenSharing.swipeUpAction) private var swipeUpAction
@@ -59,6 +60,23 @@ struct ScreenSharingSettingsView: View {
             } footer: {
                 Text("Sends rootshell’s reserved keyboard shortcuts to the remote computer by default in new Screen Sharing sessions. Change it for the current session from the Screen Sharing menu or with Command+Shift+M. Command+Shift+M always stays local.")
             }
+
+            #if !os(visionOS) && !targetEnvironment(macCatalyst)
+            Section {
+                Toggle(isOn: $floatingToolbarDefault) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "rectangle.bottomthird.inset.filled")
+                        Text("Floating Toolbar")
+                    }
+                    .settingRow(Settings.ScreenSharing.floatingToolbarDefault)
+                }
+                .themedRow()
+            } header: {
+                SettingGroupHeader("Keyboard Toolbar", group: .screenSharing)
+            } footer: {
+                Text("Shows the keyboard toolbar in a glass bar over the remote screen that you can drag and fold away. Turn it off to dock the toolbar to the keyboard. Sets the default for new sessions; touch and hold the bar's chevron, or the docked toolbar's keyboard key, to switch the current one.")
+            }
+            #endif
 
             Section {
                 Picker(selection: $clipboardSyncDefault) {

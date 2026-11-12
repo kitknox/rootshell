@@ -45,6 +45,7 @@ protocol RemoteScreenPane: SplitPaneView {
     func captureKeyboard()
     func sendKeyboardToolbarKeysym(down: Bool, keysym: UInt32)
     func pasteFromKeyboardToolbar()
+    func typePasswordFromKeyboardToolbar(pressingReturn: Bool)
     @discardableResult
     func routeReservedKeyboardShortcutToVNC(_ shortcut: VNCReservedKeyboardShortcut) -> Bool
 

@@ -4,7 +4,8 @@
 //
 //  Modifier keys with three-state sticky behavior (Ctrl, Alt, Cmd, Shift, Esc)
 //  Single tap = one-shot (applies to next key then auto-clears)
-//  Double tap = locked (stays on until tapped off)
+//  Double tap or hold = locked (stays on until tapped off)
+//  Hold a locked modifier = unlock and press it twice on its own
 //
 
 import UIKit
@@ -57,6 +58,9 @@ class KeyboardModifierButton: KeyboardButton {
 
     /// Callback when modifier state changes
     var onStateChange: ((ModifierState) -> Void)?
+
+    /// Holding this modifier while locked asks for two bare presses of it.
+    var onDoublePress: (() -> Void)?
 
     // MARK: - Initialization
 
@@ -197,10 +201,10 @@ class KeyboardModifierButton: KeyboardButton {
         if canDispatchTouchAction {
             // Check the touch timestamp too: touch-up can arrive before a due timer fires.
             // Once committed, modifiers swept onto afterwards take the committed state.
-            if sweepCommitted
-                || (sweepHoveredButton != nil && touch.timestamp - sweepLastEntry >= Self.sweepHoldDuration) {
+            if sweepCommitted {
                 applySweep(state: sweepUnlocks ? .inactive : .locked)
-                if !sweepCommitted { playHaptic() }
+            } else if sweepHoveredButton != nil && touch.timestamp - sweepLastEntry >= Self.sweepHoldDuration {
+                commitHold()
             } else if sweepButtons.count > 1 {
                 applySweep(state: sweepClears ? .inactive : .oneShot)
                 playHaptic()
@@ -222,18 +226,27 @@ class KeyboardModifierButton: KeyboardButton {
         sweepTimer?.invalidate()
         let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
             guard let self else { return }
-            guard self.sweepTouch != nil, self.canDispatchTouchAction else {
+            guard let touch = self.sweepTouch, self.canDispatchTouchAction else {
                 self.endSweep()
                 return
             }
-            // A hold promotes one-shot selection to locked; only a sweep
-            // starting on an already locked modifier unlocks the selection.
-            self.applySweep(state: self.sweepUnlocks ? .inactive : .locked)
+            // A system edge gesture can hold back touch-up; a lifted finger is not a hold.
+            guard touch.phase != .ended, touch.phase != .cancelled else { return }
+            self.commitHold()
             self.sweepCommitted = true
-            self.playHaptic()
         }
         sweepTimer = timer
         RunLoop.main.add(timer, forMode: .common)
+    }
+
+    /// A hold promotes one-shot selection to locked; only a sweep starting on
+    /// an already locked modifier unlocks the selection.
+    private func commitHold() {
+        // Once per touch: leaving the key and returning restarts the hold timer.
+        let doublePress = !sweepCommitted && sweepUnlocks && sweepButtons.count == 1
+        applySweep(state: sweepUnlocks ? .inactive : .locked)
+        playHaptic()
+        if doublePress { onDoublePress?() }
     }
 
     private func applySweep(state: ModifierState) {

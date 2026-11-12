@@ -245,6 +245,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     var onModifiersChanged: ((KeyModifiers) -> Void)?
     var onDismiss: (() -> Void)?
     var onPinHidden: (() -> Void)?
+    /// A locked toolbar modifier was held.
+    var onModifierDoublePress: ((KeyModifiers) -> Void)?
     var onSwitchKeyboard: (() -> Void)?
     var onCompose: (() -> Void)?
     var onPaste: (() -> Void)?
@@ -1620,6 +1622,10 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                     contact.consumed = true
                     self.cancelInteraction()
                     self.onPinHidden?()
+                case .toolbar(let action) where action == KeyID.typePassword.keyValue:
+                    contact.consumed = true
+                    self.cancelInteraction()
+                    self.onToolbarAction?(KeyID.typePasswordReturnKeyValue)
                 default: break
                 }
             }
@@ -1862,14 +1868,18 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             }
             if case .modifier(let mod) = contact.initial.key.action {
                 let point = touch.location(in: self)
+                var doublePress: Model.Modifier?
                 if let sweep = contact.sweep {
                     // Checks the timestamp too: release can arrive before a due hold task runs.
-                    modifierState.endSweep(sweep.modifiers, at: touch.timestamp, holding: sweep.holding(at: touch.timestamp),
-                                           cancelled: cancelled || !sweep.keys.contains(where: { releases($0, at: point) }))
+                    let holding = sweep.holding(at: touch.timestamp)
+                    let sweepCancelled = cancelled || !sweep.keys.contains(where: { releases($0, at: point) })
+                    if !sweepCancelled { doublePress = modifierState.heldSweepDoublePress(sweep.modifiers, holding: holding) }
+                    modifierState.endSweep(sweep.modifiers, at: touch.timestamp, holding: holding, cancelled: sweepCancelled)
                 } else {
                     modifierState.end(mod, at: touch.timestamp, cancelled: cancelled || !releases(contact.initial, at: point))
                 }
                 publishModifiers()
+                if let doublePress { onModifierDoublePress?(KeyModifiers(rawValue: doublePress.rawValue)) }
             } else if !cancelled, canSend {
                 if contact.accent, accents.frame.insetBy(dx: -20, dy: -70).contains(touch.location(in: self)) {
                     perform(Model.Key(title: accentChoices[accentIndex], action: .text(accentChoices[accentIndex])),

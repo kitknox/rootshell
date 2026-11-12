@@ -15,7 +15,8 @@ protocol TerminalKeyboardAccessoryHost: AnyObject {
     var keyboardIsFirstResponder: Bool { get }
     var keyboardAIAgentOverlayActive: Bool { get }
     var keyboardToolbarOnlyMode: Bool { get }
-    var keyboardAccessoryHasBottomSafeAreaSpacer: Bool { get }
+    /// The host lays out its own accessory, so no home-indicator strip is added.
+    var keyboardAccessoryOmitsBottomSafeAreaStrip: Bool { get }
     /// Window whose `SoftwareKeyboardHideIntentStore` entry governs this host.
     /// nil opts out: the chevron falls back to resigning first responder.
     var keyboardHideIntentWindow: UIWindow? { get }
@@ -33,6 +34,12 @@ protocol TerminalKeyboardAccessoryHost: AnyObject {
     func keyboardToggleCompose()
     func keyboardToggleMouseCapture()
     func keyboardToggleBrightnessHUD()
+    /// Two bare presses of one modifier. Only a remote screen has a use for them.
+    func keyboardSendModifierDoublePress(_ modifier: KeyModifiers)
+    /// Type the connection's saved password into a remote screen.
+    func keyboardTypePassword(pressingReturn: Bool)
+    /// Move a remote screen's toolbar between its floating bar and the keyboard.
+    func keyboardToggleToolbarFloating()
 
     #if !os(visionOS) && !targetEnvironment(macCatalyst)
     /// Where the terminal keyboard's keys go. nil keeps Apple's keyboard.
@@ -44,16 +51,22 @@ protocol TerminalKeyboardAccessoryHost: AnyObject {
     var keyboardSoftwareKeyboardRequest: Bool? { get }
     /// Focus left the app with nothing here wanting it, as during a Duo fold.
     var keyboardLostFocusOutsideWindow: Bool { get }
+    /// False where the host supplies the toolbar itself and wants keys only.
+    var keyboardTouchKeyboardShowsToolbar: Bool { get }
     func keyboardPrepareTouchKeyboardSwitch()
     #endif
 }
 
 extension TerminalKeyboardAccessoryHost {
-    var keyboardAccessoryHasBottomSafeAreaSpacer: Bool { false }
+    var keyboardAccessoryOmitsBottomSafeAreaStrip: Bool { false }
     var keyboardHideIntentWindow: UIWindow? { nil }
+    func keyboardSendModifierDoublePress(_ modifier: KeyModifiers) {}
+    func keyboardTypePassword(pressingReturn: Bool) {}
+    func keyboardToggleToolbarFloating() {}
     #if !os(visionOS) && !targetEnvironment(macCatalyst)
     var keyboardSoftwareKeyboardRequest: Bool? { nil }
     var keyboardLostFocusOutsideWindow: Bool { false }
+    var keyboardTouchKeyboardShowsToolbar: Bool { true }
     func keyboardPrepareTouchKeyboardSwitch() {}
     #endif
 }
@@ -116,7 +129,10 @@ final class TerminalKeyboardAccessoryController: NSObject {
 
     private var temporarilyUseSystemKeyboard: Bool {
         get { currentTouchKeyboardState.temporarilyUseSystemKeyboard }
-        set { currentTouchKeyboardState.temporarilyUseSystemKeyboard = newValue }
+        set {
+            currentTouchKeyboardState.temporarilyUseSystemKeyboard = newValue
+            updateTouchKeyboardReturnButton()
+        }
     }
     private var touchKeyboardRequestedWithHardware: Bool {
         get { currentTouchKeyboardState.requestedWithHardware }
@@ -137,6 +153,8 @@ final class TerminalKeyboardAccessoryController: NSObject {
         }
         let scope = TerminalTouchKeyboardWindowState.forWindow(window)
         touchKeyboardWindowState = scope
+        // Another pane sharing this state may have switched keyboards since.
+        updateTouchKeyboardReturnButton()
         let ownerChanged = scope.owner !== self
         displacedTouchKeyboardOwner = ownerChanged ? scope.owner : nil
         scope.parkedOwner = nil
@@ -147,6 +165,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
             scope.keyboard.host = keyboardHost
             scope.keyboard.sequenceDelegate = delegate
         }
+        scope.keyboard.textFieldMode = host.keyboardTouchKeyboardShowsToolbar ? .off : .keysOnly
         let stateChanged = boundTouchKeyboardState !== scope.state(tabID: host.keyboardTabID, perTab: touchStatePerTab)
         if stateChanged {
             boundTouchKeyboardState = scope.activate(tabID: host.keyboardTabID, perTab: touchStatePerTab)
@@ -164,6 +183,12 @@ final class TerminalKeyboardAccessoryController: NSObject {
             dismissFloatingTouchKeyboard()
             scope.input.attachKeyboard()
         }
+    }
+
+    /// The host's answer to `keyboardTouchKeyboardShowsToolbar` changed.
+    func refreshTouchKeyboardToolbarRow() {
+        guard let host, let keyboard = touchKeyboard else { return }
+        keyboard.textFieldMode = host.keyboardTouchKeyboardShowsToolbar ? .off : .keysOnly
     }
 
     /// Give up the window's keyboard. The presentation stays mounted so an
@@ -252,6 +277,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
                 exitToolbarOnlyMode()
             } else { keyboardAccessory?.onDismissRequested?() }
         case .pinHidden: keyboardAccessory?.onPinHiddenRequested?()
+        case .modifierDoublePress(let modifier): host?.keyboardSendModifierDoublePress(modifier)
         case .switchToSystemKeyboard: setTemporarySystemKeyboard(true)
         case .compose: host?.keyboardToggleCompose()
         case .paste: host?.keyboardPaste()
@@ -612,12 +638,13 @@ final class TerminalKeyboardAccessoryController: NSObject {
                       width: frame.width, height: height)
     }
 
+    /// The way back from Apple's keyboard. Shown only while that switch is in effect.
     private func updateTouchKeyboardReturnButton() {
-        if touchKeyboardEnabled, touchKeyboardDelegate != nil {
-            keyboardAccessory?.toolbarView.onTouchKeyboardRequested = { [weak self] in self?.setTemporarySystemKeyboard(false) }
-        } else {
-            keyboardAccessory?.toolbarView.onTouchKeyboardRequested = nil
-        }
+        guard let toolbar = keyboardAccessory?.toolbarView else { return }
+        let shows = touchKeyboardEnabled && touchKeyboardDelegate != nil && temporarilyUseSystemKeyboard
+        // Assigning rebuilds the row.
+        guard shows != (toolbar.onTouchKeyboardRequested != nil) else { return }
+        toolbar.onTouchKeyboardRequested = shows ? { [weak self] in self?.setTemporarySystemKeyboard(false) } : nil
     }
 
     #else
@@ -633,6 +660,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
     var dockedTouchKeyboardFrameInScreen: CGRect? { nil }
     func activateTouchKeyboardState() {}
     func releaseTouchKeyboardState() {}
+    func refreshTouchKeyboardToolbarRow() {}
     func abandonTouchKeyboardActivation() {}
     func cancelTouchKeyboardInteraction() {}
     func dismissFloatingTouchKeyboard() {}
@@ -697,6 +725,13 @@ final class TerminalKeyboardAccessoryController: NSObject {
         }
     }
     var keyboardPinnedHidden: Bool { hideIntent.isPinned }
+    /// The toolbar row is on loan to a floating, draggable host.
+    var toolbarIsDetachedFromScreenEdge = false {
+        didSet {
+            guard oldValue != toolbarIsDetachedFromScreenEdge else { return }
+            updateBottomEdgeHomeGestureProtection()
+        }
+    }
     private(set) var bottomEdgeHomeGestureProtectionEnabled = false {
         didSet {
             guard oldValue != bottomEdgeHomeGestureProtectionEnabled else { return }
@@ -845,7 +880,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
         #if os(visionOS) || targetEnvironment(macCatalyst)
         return 0
         #else
-        guard let host, !host.keyboardAccessoryHasBottomSafeAreaSpacer else { return 0 }
+        guard let host, !host.keyboardAccessoryOmitsBottomSafeAreaStrip else { return 0 }
         guard !PaddingManager.shared.extendUnderHomeIndicator else { return 0 }
         let safeBottom = host.keyboardHostView.window?.safeAreaInsets.bottom ?? 0
         guard safeBottom > 0 else { return 0 }
@@ -1147,14 +1182,26 @@ final class TerminalKeyboardAccessoryController: NSObject {
 
         keyboardAccessory?.onDismissRequested = { [weak self] in
             guard let self else { return }
+            #if !os(visionOS) && !targetEnvironment(macCatalyst)
+            // On a remote screen the key only toggles the keys; its toolbar
+            // moves to the HUD without them.
+            if let requested = self.host?.keyboardSoftwareKeyboardRequest {
+                if self.toolbarOnlyMode {
+                    self.exitToolbarOnlyMode()
+                } else {
+                    self.host?.keyboardSetSoftwareKeyboardRequested(!requested)
+                }
+                return
+            }
+            #endif
             if self.toolbarOnlyMode {
                 self.exitToolbarOnlyMode()
             } else if self.usesHideIntent || SettingsStore.shared.value(Settings.KeyboardToolbar.persistent) {
                 self.setHideIntent(.hidden(pinned: false))
                 self.enterToolbarOnlyMode(pinned: false)
             } else {
-                // Hosts without a hide-intent window (VNC) keep the legacy
-                // resign path.
+                // Hosts without a hide-intent window (a remote screen on Mac)
+                // keep the legacy resign path.
                 _ = self.host?.keyboardResignFirstResponder()
             }
         }
@@ -1165,6 +1212,13 @@ final class TerminalKeyboardAccessoryController: NSObject {
 
         keyboardAccessory?.onPinHiddenRequested = { [weak self] in
             guard let self else { return }
+            #if !os(visionOS) && !targetEnvironment(macCatalyst)
+            // A remote screen has no pinned state; there a long press floats the toolbar.
+            if self.host?.keyboardSoftwareKeyboardRequest != nil {
+                self.host?.keyboardToggleToolbarFloating()
+                return
+            }
+            #endif
             if self.keyboardPinnedHidden {
                 self.exitToolbarOnlyMode()
             } else {
@@ -1175,12 +1229,12 @@ final class TerminalKeyboardAccessoryController: NSObject {
 
         keyboardAccessory?.onTabSwitcherRequested = { [weak host] in
             guard let host else { return }
-            NotificationCenter.default.post(name: .showTabSwitcher, object: host)
+            NotificationCenter.default.post(name: .showTabSwitcher, object: host.keyboardHostView)
         }
 
         keyboardAccessory?.onToolbarSettingsRequested = { [weak host] in
             guard let host else { return }
-            NotificationCenter.default.post(name: .showToolbarSettings, object: host)
+            NotificationCenter.default.post(name: .showToolbarSettings, object: host.keyboardHostView)
         }
 
         keyboardAccessory?.onPasteRequested = { [weak self] in
@@ -1189,22 +1243,22 @@ final class TerminalKeyboardAccessoryController: NSObject {
 
         keyboardAccessory?.onToggleFullScreenRequested = { [weak host] in
             guard let host else { return }
-            NotificationCenter.default.post(name: .toggleFullScreen, object: host)
+            NotificationCenter.default.post(name: .toggleFullScreen, object: host.keyboardHostView)
         }
 
         keyboardAccessory?.onToggleTabBarRequested = { [weak host] in
             guard let host else { return }
-            NotificationCenter.default.post(name: .toggleTabBar, object: host)
+            NotificationCenter.default.post(name: .toggleTabBar, object: host.keyboardHostView)
         }
 
         keyboardAccessory?.onNewConnectionRequested = { [weak host] in
             guard let host else { return }
-            NotificationCenter.default.post(name: .newTab, object: host)
+            NotificationCenter.default.post(name: .newTab, object: host.keyboardHostView)
         }
 
         keyboardAccessory?.onAppSettingsRequested = { [weak host] in
             guard let host else { return }
-            NotificationCenter.default.post(name: .openSettings, object: host)
+            NotificationCenter.default.post(name: .openSettings, object: host.keyboardHostView)
         }
 
         keyboardAccessory?.onComposeRequested = { [weak self] in
@@ -1219,24 +1273,32 @@ final class TerminalKeyboardAccessoryController: NSObject {
             self?.host?.keyboardToggleBrightnessHUD()
         }
 
+        keyboardAccessory?.onModifierDoublePressRequested = { [weak self] modifier in
+            self?.host?.keyboardSendModifierDoublePress(modifier)
+        }
+
+        keyboardAccessory?.onTypePasswordRequested = { [weak self] pressingReturn in
+            self?.host?.keyboardTypePassword(pressingReturn: pressingReturn)
+        }
+
         keyboardAccessory?.onAIAgentRequested = { [weak host] in
             guard let host else { return }
-            NotificationCenter.default.post(name: .toggleAIAgent, object: host)
+            NotificationCenter.default.post(name: .toggleAIAgent, object: host.keyboardHostView)
         }
 
         keyboardAccessory?.onClipboardManagerRequested = { [weak host] in
             guard let host else { return }
-            NotificationCenter.default.post(name: .toggleClipboardManager, object: host)
+            NotificationCenter.default.post(name: .toggleClipboardManager, object: host.keyboardHostView)
         }
 
         keyboardAccessory?.onFileManagerRequested = { [weak host] in
             guard let host else { return }
-            NotificationCenter.default.post(name: .toggleFileManager, object: host)
+            NotificationCenter.default.post(name: .toggleFileManager, object: host.keyboardHostView)
         }
 
         keyboardAccessory?.onHTTPCaptureRequested = { [weak host] in
             guard let host else { return }
-            NotificationCenter.default.post(name: .toggleHTTPCapture, object: host)
+            NotificationCenter.default.post(name: .toggleHTTPCapture, object: host.keyboardHostView)
         }
 
         keyboardAccessory?.onLayoutInvalidated = { [weak self] in
@@ -1730,7 +1792,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
         updateBottomEdgeHomeGestureProtection()
     }
 
-    private func updateBottomEdgeHomeGestureProtection(accessoryIsVisible: Bool? = nil) {
+    func updateBottomEdgeHomeGestureProtection(accessoryIsVisible: Bool? = nil) {
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
         let idiom = host?.keyboardHostView.traitCollection.userInterfaceIdiom
         let isVisible = accessoryIsVisible ?? (
@@ -1751,12 +1813,17 @@ final class TerminalKeyboardAccessoryController: NSObject {
             toolbarIsAtScreenEdge = usesTouchKeyboardToolbar || hardwareAccessoryOnly
                 || !EffectManager.shared.isKeyboardDocked
         }
+        if toolbarIsDetachedFromScreenEdge {
+            // A draggable host: keys wait for release, so a drag that starts on one sends nothing.
+            bottomEdgeHomeGestureProtectionEnabled = false
+            keyboardAccessory?.setInteractionMode(.spacedBottom)
+            return
+        }
         let needsTouchProtection = (idiom == .phone || idiom == .pad)
             && isVisible && !usesFullTouchKeyboard
             && (!usesCompactTouchKeyboard || usesTouchKeyboardToolbar)
             && toolbarIsAtScreenEdge
-        let hasSpacer = host?.keyboardAccessoryHasBottomSafeAreaSpacer == true
-            || reservesBottomSafeAreaStrip
+        let hasSpacer = reservesBottomSafeAreaStrip
         let mode: KeyboardToolbarInteractionMode = needsTouchProtection
             ? (hasSpacer ? .spacedBottom : .screenEdge) : .accessory
         // A spacer preserves ordinary Home gestures, but does not make touches

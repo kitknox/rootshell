@@ -122,6 +122,20 @@ class KeyboardAccessoryView: UIInputView {
         }
     }
 
+    /// Callback when a locked modifier is held
+    var onModifierDoublePressRequested: ((KeyModifiers) -> Void)? {
+        didSet {
+            toolbarView.onModifierDoublePressRequested = onModifierDoublePressRequested
+        }
+    }
+
+    /// Callback when the type-password button is tapped or held (true adds Return)
+    var onTypePasswordRequested: ((Bool) -> Void)? {
+        didSet {
+            toolbarView.onTypePasswordRequested = onTypePasswordRequested
+        }
+    }
+
     /// Callback when the clipboard manager button is tapped
     var onClipboardManagerRequested: (() -> Void)? {
         didSet {

@@ -76,6 +76,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
     case toggleMouseCapture
     case aiAgent
     case brightnessBoost
+    case typePassword
     case clipboardManager
     case fileManager
     case httpCapture
@@ -83,6 +84,9 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
 
     // Toggles (1)
     case drawerToggle
+
+    /// What the Type Password key sends when held: the password, then Return.
+    static let typePasswordReturnKeyValue = "__typePasswordReturn__"
 
     // MARK: - Display Properties
 
@@ -141,6 +145,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .toggleMouseCapture: return String(localized: "Toggle Mouse Capture")
         case .aiAgent: return String(localized: "AI Agent")
         case .brightnessBoost: return String(localized: "Brightness Boost")
+        case .typePassword: return String(localized: "Type Password")
         case .clipboardManager: return String(localized: "Clipboard Manager")
         case .fileManager: return String(localized: "File Manager")
         case .httpCapture: return String(localized: "HTTP Capture")
@@ -177,6 +182,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .toggleMouseCapture: return "computermouse"
         case .aiAgent: return "sparkles"
         case .brightnessBoost: return "sun.max"
+        case .typePassword: return "key.fill"
         case .clipboardManager: return "list.clipboard"
         case .fileManager: return "folder.badge.gearshape"
         case .httpCapture: return "network.badge.shield.half.filled"
@@ -242,6 +248,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .toggleMouseCapture: return "__toggleMouseCapture__"
         case .aiAgent: return "__aiAgent__"
         case .brightnessBoost: return "__brightnessBoost__"
+        case .typePassword: return "__typePassword__"
         case .clipboardManager: return "__clipboardManager__"
         case .fileManager: return "__fileManager__"
         case .httpCapture: return "__httpCapture__"
@@ -319,7 +326,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .arrowDrawerToggle, .arrowUp, .arrowDown, .arrowLeft, .arrowRight: return .navigation
         case .dismiss, .tabSwitcher, .compose, .writingAssistance, .toolbarSettings, .paste, .voiceAgent,
              .toggleFullScreen, .toggleTabBar, .newConnection, .appSettings,
-             .toggleMouseCapture, .aiAgent, .brightnessBoost, .clipboardManager, .fileManager, .httpCapture, .dictation: return .action
+             .toggleMouseCapture, .aiAgent, .brightnessBoost, .typePassword, .clipboardManager, .fileManager, .httpCapture, .dictation: return .action
         case .drawerToggle: return .toggle
         default: return .symbol
         }
@@ -378,7 +385,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
 
     // MARK: - Defaults
 
-    static let currentVersion = 17
+    static let currentVersion = 18
 
     static func defaultConfig(for idiom: UIUserInterfaceIdiom) -> ToolbarLayoutConfig {
         switch idiom {
@@ -449,7 +456,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
             .builtIn(.httpCapture),
             .builtIn(.appSettings),
         ]],
-        hiddenKeys: []
+        hiddenKeys: [.typePassword]
     )
 
     static let iPadDefault = ToolbarLayoutConfig(
@@ -504,7 +511,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
             .builtIn(.httpCapture),
             .builtIn(.appSettings),
         ]],
-        hiddenKeys: []
+        hiddenKeys: [.typePassword]
     )
 
     // MARK: - Migration
@@ -523,6 +530,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
         // placement. Compare the complete layout so custom placements stay intact.
         var previousDefaults = defaults
         previousDefaults.version = saved.version
+        if saved.version < 18 { previousDefaults.hiddenKeys.remove(.typePassword) }
         if idiom == .pad {
             // Reconstruct the iPad order shipped through v13 before comparing
             // saved defaults. Do not reorder user-customized layouts.
@@ -562,6 +570,9 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
                 migrated.mainRow.append(.builtIn(.toolbarSettings))
             }
         }
+
+        // v17 → v18: Type Password is opt-in and starts hidden.
+        if saved.version < 18 { migrated.hiddenKeys.insert(.typePassword) }
 
         // Collect all KeyIDs currently in the saved config
         let savedKeyIDs = Set(

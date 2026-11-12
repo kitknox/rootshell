@@ -148,10 +148,14 @@ nonisolated extension Settings {
             "arrowJoystickMode", default: KeyboardArrowJoystickButton.Mode.joystick, group: .keyboardToolbar, policy: .localByDefault,
             configKey: "arrow-joystick-mode",
             title: String(localized: "Arrow Key Mode", comment: "Setting title"))
+        static let remoteScreenStripExpanded = SettingKey(
+            "remoteScreenToolbarStripExpanded", default: true, group: .keyboardToolbar, policy: .localByDefault,
+            title: String(localized: "Show Toolbar Keys in Remote Screen Controls", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
             config.erased, customKeys.erased, deviceIdiom.erased, drawerOpenByDefault.erased, drawerToggleMode.erased,
             persistent.erased, showWithHardwareKeyboard.erased, arrowJoystickMode.erased,
+            remoteScreenStripExpanded.erased,
         ]
     }
 

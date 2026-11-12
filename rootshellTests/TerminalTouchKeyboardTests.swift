@@ -919,6 +919,23 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         XCTAssertEqual(state.locked, [.shift])
     }
 
+    func testHoldingOneLockedModifierAsksForDoublePress() {
+        var state = Model.Modifiers()
+        state.begin(.command)
+        XCTAssertNil(state.heldSweepDoublePress([.command], holding: true))
+        state.endSweep([.command], at: 1, holding: true)
+        XCTAssertEqual(state.locked, [.command])
+        state.begin(.command)
+        XCTAssertNil(state.heldSweepDoublePress([.command], holding: false))
+        XCTAssertEqual(state.heldSweepDoublePress([.command], holding: true), .command)
+        state.endSweep([.command], at: 2, holding: true)
+        XCTAssertEqual(state.rawValue, 0)
+        state.begin(.command); state.begin(.shift)
+        state.endSweep([.command, .shift], at: 3, holding: true)
+        state.begin(.command); state.begin(.shift)
+        XCTAssertNil(state.heldSweepDoublePress([.command, .shift], holding: true))
+    }
+
     func testModifierSweepFromActiveModifierClearsSelection() {
         var state = Model.Modifiers()
         state.begin(.control); state.end(.control, at: 1)

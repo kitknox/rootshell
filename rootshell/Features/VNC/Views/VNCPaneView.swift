@@ -374,12 +374,13 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
         }
         clipboardSynchronizer.setHostFocused(isLogicallyFocused)
         clipboardSynchronizer.setHostWindowActive(windowIsActive)
-        attachHostingControllerIfNeeded()
+        // Before the root view: its HUD draws from the coordinator.
         #if !os(visionOS)
         if keyboardCoordinator == nil {
             keyboardCoordinator = VNCKeyboardAccessoryCoordinator(pane: self)
         }
         #endif
+        attachHostingControllerIfNeeded()
         connectIfNeeded()
     }
 
@@ -1410,6 +1411,11 @@ extension VNCPaneView: RemoteScreenPane {
     func pasteFromKeyboardToolbar() {
         clipboardSynchronizer.sendClipboard()
     }
+
+    func typePasswordFromKeyboardToolbar(pressingReturn: Bool) {
+        // Outside the Login Window the password goes to the field the user chose.
+        session.sendLoginPassword(pressingReturn: pressingReturn, keepingFocus: true)
+    }
 }
 
 // MARK: - Root View
@@ -1456,6 +1462,9 @@ struct VNCPaneRootView: View {
                         Menu {
                             #if !os(visionOS) && !targetEnvironment(macCatalyst)
                             VNCKeyboardToolbarMenuToggle(pane: pane)
+                            if let coordinator = pane.keyboardCoordinator {
+                                RemoteScreenFloatingToolbarMenuToggle(coordinator: coordinator)
+                            }
                             #endif
                             VNCQuickModeMenu(pane: pane)
                             VNCConnectionInfoMenuItem(pane: pane)
@@ -1464,6 +1473,24 @@ struct VNCPaneRootView: View {
                         }
                     }
                 )
+                #if !os(visionOS) && !targetEnvironment(macCatalyst)
+                .hudAccessory(
+                    isEnabled: pane.keyboardCoordinator?.hudModel.barEnabled ?? false,
+                    docksToBottom: pane.keyboardCoordinator?.hudModel.docksToBottom ?? false,
+                    buttonStyle: { width in
+                        pane.keyboardCoordinator?.hudModel.buttonStyle(availableWidth: width) ?? .standard
+                    },
+                    behind: { width in
+                        if let coordinator = pane.keyboardCoordinator {
+                            RemoteScreenHUDToolbar(coordinator: coordinator, availableWidth: width)
+                        }
+                    },
+                    beside: { style in
+                        if let coordinator = pane.keyboardCoordinator {
+                            RemoteScreenHUDButtons(coordinator: coordinator, style: style)
+                        }
+                    })
+                #endif
 
                 VNCSessionOverlay(pane: pane)
             }

@@ -15,7 +15,9 @@ import rootshellVNC
 /// `TerminalKeyboardAccessoryController` (full toolbar UI, hardware-keyboard
 /// rules, bottom reservation) and delivers one atomic input-view snapshot to
 /// `VNCKeyboardCapture` so the package responder reloads its primary and
-/// accessory views together.
+/// accessory views together. On iPhone and iPad the toolbar row is never an
+/// accessory: it lives in the pane's HUD bar (`RemoteScreenHUDToolbar`), which
+/// floats or docks along the bottom.
 ///
 /// The per-connection tri-state gates everything: `.off` never shows the
 /// toolbar, `.on` forces it, `.followAppSetting` defers to the controller's
@@ -55,6 +57,10 @@ final class VNCKeyboardAccessoryCoordinator {
     /// keyboard is summoned again.
     private var manuallyDismissed = false
 
+    #if !os(visionOS) && !targetEnvironment(macCatalyst)
+    let hudModel = RemoteScreenHUDKeysModel()
+    #endif
+
     /// Bumped by every key this coordinator sends for the user. Hardware keys
     /// bypass it; see `dictationInputGeneration`.
     private var inputGeneration: UInt64 = 0
@@ -67,13 +73,27 @@ final class VNCKeyboardAccessoryCoordinator {
         self.keyboardCapture = pane.keyboardCapture
         self.controller = TerminalKeyboardAccessoryController(host: self)
         controller.setupKeyboard(delegate: self)
-        controller.setupCollapsedKeyboardToolbarButton()
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        // No collapsed toolbar button here; a double tap just hides the keys.
+        controller.keyboardAccessory?.onCollapseRequested = { [weak self] in
+            self?.keyboardSetSoftwareKeyboardRequested(false)
+        }
+        // The row is never an input accessory here, so a drawer opening only
+        // resizes the HUD. Reloading input views would disturb the keyboard.
+        controller.keyboardAccessory?.onLayoutInvalidated = { [weak self] in
+            self?.refreshHUDMetrics()
+        }
+        refreshHUDMetrics()
+        #endif
 
         controller.onActiveKeyboardModifiersChanged = { [weak self] modifiers in
-            self?.keyboardCapture.supplementalModifiers = Self.vncModifiers(modifiers)
+            guard let self else { return }
+            // The terminal keyboard publishes its own set; the HUD row keeps one too.
+            self.keyboardCapture.supplementalModifiers = Self.vncModifiers(modifiers.union(self.toolbarModifiers))
         }
         keyboardCapture.onSupplementalModifiersConsumed = { [weak self] in
             self?.controller.clearOneShotModifiers()
+            self?.clearOneShotToolbarModifiers()
         }
         if keyboardIsFirstResponder { controller.activateTouchKeyboardState() }
         reconcilePresentation(forceReload: true)
@@ -123,6 +143,7 @@ final class VNCKeyboardAccessoryCoordinator {
             controller.activeToolbarView?.clearModifiers()
         }
         manuallyDismissed = false
+        controller.refreshTouchKeyboardToolbarRow()
         // The reset above also took down a detached card.
         controller.scheduleFloatingTouchKeyboardUpdate()
         reconcilePresentation(forceReload: true)
@@ -215,6 +236,7 @@ final class VNCKeyboardAccessoryCoordinator {
     @discardableResult
     private func reconcilePresentation(forceReload: Bool = false) -> Bool {
         let presentation = presentation
+        syncHUD(presentation)
         let touchInput = presentation == .touchKeyboardParked ? nil : controller.touchKeyboardInputOnRequest
         let touchObject: AnyObject? = touchInput.flatMap { $0.controller ?? $0.view }
         let next = AppliedInputViews(
@@ -227,6 +249,11 @@ final class VNCKeyboardAccessoryCoordinator {
         switch presentation {
         case .hidden:
             inputViews = .packageDefault
+        case .systemKeyboardWithAccessory where hostsToolbarInHUD,
+             .accessoryOnly where hostsToolbarInHUD:
+            // The toolbar is the HUD's; nothing rides on the keyboard.
+            inputViews = VNCKeyboardInputViews(
+                primary: .systemKeyboardWhenRequested(otherwise: controller.accessoryOnlyInputView))
         case .systemKeyboardWithAccessory, .accessoryOnly:
             inputViews = VNCKeyboardInputViews(
                 primary: .systemKeyboardWhenRequested(otherwise: controller.accessoryOnlyInputView),
@@ -234,11 +261,11 @@ final class VNCKeyboardAccessoryCoordinator {
         case .touchKeyboardParked:
             inputViews = VNCKeyboardInputViews(primary: .custom(controller.accessoryOnlyInputView))
         }
-        // It carries its own toolbar row, whatever this connection's toolbar preference.
         inputViews.hostKeyboard = touchInput.map {
             VNCHostKeyboard(inputView: $0.view, inputViewController: $0.controller)
         }
         keyboardCapture.inputViews = inputViews
+        controller.updateBottomEdgeHomeGestureProtection()
         return true
     }
 
@@ -272,9 +299,10 @@ final class VNCKeyboardAccessoryCoordinator {
         EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
     }
 
-    /// False under the terminal keyboard, which replaces the accessory.
+    /// False under the terminal keyboard, which replaces the accessory, and
+    /// wherever the HUD carries the toolbar.
     private var showsAccessory: Bool {
-        guard !controller.usesFullTouchKeyboard else { return false }
+        guard !hostsToolbarInHUD, !controller.usesFullTouchKeyboard else { return false }
         switch presentation {
         case .systemKeyboardWithAccessory, .accessoryOnly: return true
         case .hidden, .touchKeyboardParked: return false
@@ -322,6 +350,129 @@ final class VNCKeyboardAccessoryCoordinator {
     }
 }
 
+// MARK: - HUD toolbar strip
+
+extension VNCKeyboardAccessoryCoordinator {
+    /// On iPhone and iPad the toolbar row rides in the pane's HUD bar, floating
+    /// or docked along the bottom, and never as an input accessory.
+    private var hostsToolbarInHUD: Bool {
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// Modifiers latched on the floating row, which the keys-only terminal
+    /// keyboard beneath it knows nothing of.
+    private var toolbarModifiers: KeyModifiers {
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        guard hudModel.isFloating, hudModel.stripAvailable else { return [] }
+        return controller.keyboardAccessory?.toolbarView.activeModifiers ?? []
+        #else
+        return []
+        #endif
+    }
+
+    private func clearOneShotToolbarModifiers() {
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        guard hudModel.isFloating, hudModel.stripAvailable else { return }
+        controller.keyboardAccessory?.toolbarView.clearOneShotModifiers()
+        #endif
+    }
+
+    private func syncHUD(_ presentation: Presentation) {
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        // Docked, the terminal keyboard brings its own toolbar row and the bar steps aside.
+        let barEnabled = hudModel.isFloating || !controller.usesFullTouchKeyboard
+        let stripAvailable = barEnabled && presentation != .hidden && effectivePreference != .off
+        let keysRequested = keyboardCapture.softwareKeyboardRequested
+        if hudModel.keysRequested != keysRequested { hudModel.keysRequested = keysRequested }
+        if hudModel.barEnabled != barEnabled { hudModel.barEnabled = barEnabled }
+        if hudModel.stripAvailable != stripAvailable {
+            // A modifier latched on a row that is going away must not linger unseen.
+            if !stripAvailable { controller.keyboardAccessory?.toolbarView.clearModifiers() }
+            hudModel.stripAvailable = stripAvailable
+        }
+        controller.toolbarIsDetachedFromScreenEdge = true
+        refreshHUDMetrics()
+        if !stripAvailable { reclaimToolbarFromHUD() }
+        #endif
+    }
+
+    #if !os(visionOS) && !targetEnvironment(macCatalyst)
+    /// Moves the toolbar between the floating bar and its docked place.
+    func setToolbarFloating(_ floating: Bool) {
+        guard hudModel.isFloating != floating else { return }
+        controller.keyboardAccessory?.toolbarView.clearModifiers()
+        hudModel.isFloating = floating
+        controller.refreshTouchKeyboardToolbarRow()
+        reconcilePresentation(forceReload: true)
+        EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
+    }
+
+    /// The HUD's keys button. Captures first, as the HUD menu item does.
+    func toggleKeysFromHUD() {
+        manuallyDismissed = false
+        keyboardCapture.capture()
+        keyboardSetSoftwareKeyboardRequested(!keyboardCapture.softwareKeyboardRequested)
+    }
+
+    /// Returns the row once it is in `container`. `trailingReserve` is the
+    /// width of the HUD's buttons, which cover the main row's trailing end.
+    @discardableResult
+    func mountToolbarInHUD(_ container: UIView, trailingReserve: CGFloat) -> KeyboardToolbarView? {
+        guard hudModel.stripAvailable, let accessory = controller.keyboardAccessory else { return nil }
+        let toolbar = accessory.toolbarView
+        if toolbar.superview !== container {
+            _ = accessory.lendToolbar()
+            // The HUD supplies the glass and the insets.
+            toolbar.usesHostChrome = true
+            container.addSubview(toolbar)
+            // Height stays the row's own; open drawers grow it upward.
+            NSLayoutConstraint.activate([
+                toolbar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                toolbar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                toolbar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ])
+        }
+        if abs(toolbar.hostTrailingReserve - trailingReserve) > 0.5 {
+            toolbar.hostTrailingReserve = trailingReserve
+        }
+        return toolbar
+    }
+
+    func unmountToolbarFromHUD(_ container: UIView) {
+        guard controller.keyboardAccessory?.toolbarView.superview === container else { return }
+        reclaimToolbarFromHUD()
+    }
+
+    private func reclaimToolbarFromHUD() {
+        guard let accessory = controller.keyboardAccessory,
+              accessory.toolbarView.superview !== accessory else { return }
+        accessory.toolbarView.usesHostChrome = false
+        accessory.toolbarView.hostTrailingReserve = 0
+        accessory.reclaimToolbar()
+    }
+
+    /// The bar is sized from the toolbar's own key metrics, so every button matches.
+    private func refreshHUDMetrics() {
+        guard let pane, let toolbar = controller.keyboardAccessory?.toolbarView else { return }
+        let sizes = KeyboardSizes.current(traitCollection: pane.traitCollection)
+        let metrics = RemoteScreenHUDKeysModel.Metrics(
+            keyCount: toolbar.mainRowKeyCount(forHostChrome: true),
+            edgePadding: toolbar.mainRowEdgePadding,
+            slotWidth: sizes.button.iconWidth,
+            minimumSlotWidth: sizes.button.normalWidth,
+            rowHeight: sizes.toolbar.height,
+            symbolPointSize: sizes.button.symbolSize)
+        let height = toolbar.intrinsicContentSize.height
+        if hudModel.metrics != metrics { hudModel.metrics = metrics }
+        if height > 0, hudModel.stripHeight != height { hudModel.stripHeight = height }
+    }
+    #endif
+}
+
 // MARK: - TerminalKeyboardAccessoryHost
 
 extension VNCKeyboardAccessoryCoordinator: TerminalKeyboardAccessoryHost {
@@ -335,7 +486,7 @@ extension VNCKeyboardAccessoryCoordinator: TerminalKeyboardAccessoryHost {
 
     var keyboardAIAgentOverlayActive: Bool { false }
     var keyboardToolbarOnlyMode: Bool { controller.toolbarOnlyMode }
-    var keyboardAccessoryHasBottomSafeAreaSpacer: Bool { true }
+    var keyboardAccessoryOmitsBottomSafeAreaStrip: Bool { true }
 
     @discardableResult
     func keyboardBecomeFirstResponder() -> Bool {
@@ -376,6 +527,9 @@ extension VNCKeyboardAccessoryCoordinator: TerminalKeyboardAccessoryHost {
     func keyboardUpdateAccessoryForTraitCollection() {
         guard let pane else { return }
         controller.keyboardAccessory?.updateForTraitCollection(pane.traitCollection)
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        refreshHUDMetrics()
+        #endif
     }
 
     func keyboardPaste() {
@@ -390,6 +544,26 @@ extension VNCKeyboardAccessoryCoordinator: TerminalKeyboardAccessoryHost {
 
     func keyboardToggleBrightnessHUD() {
         pane?.toggleBrightnessHUD()
+    }
+
+    func keyboardTypePassword(pressingReturn: Bool) {
+        inputGeneration &+= 1
+        pane?.typePasswordFromKeyboardToolbar(pressingReturn: pressingReturn)
+    }
+
+    /// Two taps of the key, for shortcuts bound to a double modifier press. The
+    /// modifier is never left down across a suspension, where it would join other input.
+    func keyboardSendModifierDoublePress(_ modifier: KeyModifiers) {
+        let keysyms = Self.modifierKeysyms(modifier, appleModifierConvention: appleModifierConvention)
+        guard !keysyms.isEmpty, let pane, keyboardIsFirstResponder else { return }
+        inputGeneration &+= 1
+        Task { @MainActor in
+            for press in 0..<2 {
+                if press > 0 { try? await Task.sleep(for: .milliseconds(80)) }
+                for keysym in keysyms { pane.sendKeyboardToolbarKeysym(down: true, keysym: keysym) }
+                for keysym in keysyms.reversed() { pane.sendKeyboardToolbarKeysym(down: false, keysym: keysym) }
+            }
+        }
     }
 }
 
@@ -412,15 +586,31 @@ extension VNCKeyboardAccessoryCoordinator: TerminalTouchKeyboardHost {
     var touchKeyboardCanSend: Bool { keyboardIsFirstResponder }
     var touchKeyboardSuggestionContext: TerminalTouchKeyboardModel.SuggestionContext? { nil }
 
+    /// Floating, the keyboard shows keys only and the HUD row is its toolbar.
+    /// Docked, it keeps its own row and the HUD bar steps aside.
+    var keyboardTouchKeyboardShowsToolbar: Bool { !hudModel.isFloating || effectivePreference == .off }
+
+    func keyboardToggleToolbarFloating() {
+        setToolbarFloating(!hudModel.isFloating)
+    }
+
     func touchKeyboardInsert(_ text: String) {
         guard touchKeyboardCanSend else { return }
+        // A modifier latched on the HUD row applies to the next typed key.
+        let held = toolbarModifiers
+        if !held.isEmpty, text.count == 1 {
+            keyPressed(text, modifiers: held, shifted: nil)
+            clearOneShotToolbarModifiers()
+            return
+        }
         inputGeneration &+= 1
         sendTranslated(text)
     }
 
     func touchKeyboardSend(_ key: String, modifiers: KeyModifiers, shifted: Character?) {
         guard touchKeyboardCanSend else { return }
-        keyPressed(key, modifiers: modifiers, shifted: shifted)
+        keyPressed(key, modifiers: modifiers.union(toolbarModifiers), shifted: shifted)
+        clearOneShotToolbarModifiers()
     }
 
     func touchKeyboardAccept(_ text: String, context: TerminalTouchKeyboardModel.SuggestionContext) {}

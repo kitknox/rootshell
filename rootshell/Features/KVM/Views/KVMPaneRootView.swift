@@ -122,6 +122,24 @@ private struct KVMScreenContent: View {
             brightnessGain: brightnessGain,
             disconnect: { session.disconnect() },
             hudMenuExtras: { KVMHUDMenuExtras(pane: pane) })
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        .hudAccessory(
+            isEnabled: pane.keyboardCoordinator?.hudModel.barEnabled ?? false,
+            docksToBottom: pane.keyboardCoordinator?.hudModel.docksToBottom ?? false,
+            buttonStyle: { width in
+                pane.keyboardCoordinator?.hudModel.buttonStyle(availableWidth: width) ?? .standard
+            },
+            behind: { width in
+                if let coordinator = pane.keyboardCoordinator {
+                    RemoteScreenHUDToolbar(coordinator: coordinator, availableWidth: width)
+                }
+            },
+            beside: { style in
+                if let coordinator = pane.keyboardCoordinator {
+                    RemoteScreenHUDButtons(coordinator: coordinator, style: style)
+                }
+            })
+        #endif
     }
 }
 
@@ -164,6 +182,12 @@ private struct KVMHUDMenuExtras: View {
             }
             .disabled(!pane.loginPassword.canSend || session.isTypingText)
         }
+
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        if let coordinator = pane.keyboardCoordinator {
+            RemoteScreenFloatingToolbarMenuToggle(coordinator: coordinator)
+        }
+        #endif
 
         Menu {
             ForEach(KVMQualityPreset.allCases, id: \.self) { preset in

@@ -127,6 +127,57 @@ extension UIGestureRecognizer {
     }
 }
 
+// MARK: - Hold Action Button
+
+/// Tap sends `key` on release; holding sends `holdKey` instead.
+private final class KeyboardHoldActionButton: KeyboardSymbolButton {
+    private static let holdInterval: TimeInterval = 0.5
+
+    var holdKey: String?
+    private var pendingHold: DispatchWorkItem?
+    private var holdTriggered = false
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard beginTouchInteraction(touches) else { return }
+        SystemShiftReader.shared.noteTouchEvent(event)
+        isHighlighted = true
+        playHaptic()
+        holdTriggered = false
+
+        let holdItem = DispatchWorkItem { [weak self] in
+            guard let self, let holdKey = self.holdKey, self.validateTouchInteraction(),
+                  !self.touchHasLifted else { return }
+            self.pendingHold = nil
+            self.holdTriggered = true
+            self.isHighlighted = false
+            self.playHaptic()
+            self.delegate?.keyPressed(holdKey, modifiers: [])
+        }
+        pendingHold = holdItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.holdInterval, execute: holdItem)
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard validateTouchInteraction() else { return }
+        defer { finishTouchTracking() }
+        pendingHold?.cancel()
+        pendingHold = nil
+        isHighlighted = false
+        if holdTriggered {
+            holdTriggered = false
+            return
+        }
+        delegate?.keyPressed(key, modifiers: [])
+    }
+
+    override func cancelTouchInteraction() {
+        super.cancelTouchInteraction()
+        pendingHold?.cancel()
+        pendingHold = nil
+        holdTriggered = false
+    }
+}
+
 // MARK: - Dismiss Button
 
 private final class KeyboardDismissButton: KeyboardSymbolButton {
@@ -184,7 +235,7 @@ private final class KeyboardDismissButton: KeyboardSymbolButton {
         )
 
         let longPressItem = DispatchWorkItem { [weak self] in
-            guard let self, self.validateTouchInteraction() else { return }
+            guard let self, self.validateTouchInteraction(), !self.touchHasLifted else { return }
             self.pendingLongPress = nil
             self.pendingSingleTap?.cancel()
             self.pendingSingleTap = nil
@@ -393,6 +444,12 @@ class KeyboardToolbarView: UIView {
     /// Callback when the brightness-boost button is tapped
     var onBrightnessBoostRequested: (() -> Void)?
 
+    /// Callback when a locked modifier is held, asking for two bare presses of it
+    var onModifierDoublePressRequested: ((KeyModifiers) -> Void)?
+
+    /// Callback when the type-password button is tapped (false) or held (true, adds Return)
+    var onTypePasswordRequested: ((Bool) -> Void)?
+
     /// Callback when the clipboard manager button is tapped
     var onClipboardManagerRequested: (() -> Void)?
 
@@ -449,7 +506,7 @@ class KeyboardToolbarView: UIView {
     private var arrowToggleButton: KeyboardArrowJoystickButton?
     #endif
     private var extraKeysToggleButton: KeyboardSymbolButton?
-    private var activeModifiers: KeyModifiers = []
+    private(set) var activeModifiers: KeyModifiers = []
     private var modifierStates: [KeyModifiers: ModifierState] = [:]
     private var dismissButtonShowsRestore = false
     private var dismissButtonPinned = false
@@ -497,13 +554,62 @@ class KeyboardToolbarView: UIView {
         isPhoneLandscape ? 6 : 2
     }
 
+    /// The row sits inside a host's own glass (a remote screen's HUD): no plate,
+    /// no window insets, and drawers open in place, since the host grows with them.
+    var usesHostChrome = false {
+        didSet {
+            guard oldValue != usesHostChrome else { return }
+            updateInsetsForCurrentTraits()
+            updatePlateAppearance()
+            // The host has its own keyboard button; ours would duplicate it.
+            rebuildForCurrentWidth()
+        }
+    }
+
+    /// Width at the main row's trailing end that a host covers with its own
+    /// buttons. Drawer rows still span the full width.
+    var hostTrailingReserve: CGFloat = 0 {
+        didSet {
+            guard oldValue != hostTrailingReserve else { return }
+            updateInsetsForCurrentTraits()
+            rebuildForCurrentWidth()
+        }
+    }
+
+    /// Keys the main row shows given unlimited width, for a host that fits itself to them.
+    func mainRowKeyCount(forHostChrome: Bool) -> Int {
+        let reserved = onTouchKeyboardRequested == nil ? 0 : 1
+        let layout = KeyboardToolbarManager.shared.effectiveLayout(
+            availableWidth: 100_000, reservedMainRowSlots: reserved, sizes: sizes)
+        return layout.main.filter { !(forHostChrome && $0 == .builtIn(.dismiss)) }.count + reserved
+    }
+
+    /// Padding at each end of the main row.
+    var mainRowEdgePadding: CGFloat { currentEdgePadding() }
+
+    /// False where a touch on `view` drives a drag of its own: modifier
+    /// sweeps, the joystick, the drawer toggle, swipe keys, scrolling rows.
+    func allowsHostDrag(startingIn view: UIView) -> Bool {
+        var current: UIView? = view
+        while let candidate = current, candidate !== self {
+            if candidate is UIScrollView || candidate is DrawerToggleButton { return false }
+            #if !os(visionOS)
+            if candidate is KeyboardArrowJoystickButton { return false }
+            #endif
+            if let modifier = candidate as? KeyboardModifierButton, modifier.sweepPeers != nil { return false }
+            if let key = candidate as? KeyboardButton, key.allowsDownwardTouchSelection { return false }
+            current = candidate.superview
+        }
+        return true
+    }
+
     /// Embedded previews are already inset by their SwiftUI container.
     var isEmbeddedPreview = false {
         didSet { updateInsetsForCurrentTraits() }
     }
 
     private func currentChromeHorizontalInsets() -> (left: CGFloat, right: CGFloat) {
-        if isEmbeddedPreview { return (0, 0) }
+        if isEmbeddedPreview || usesHostChrome { return (0, 0) }
         guard isPhoneLandscape else { return (0, 0) }
 
         let localLeft = safeAreaInsets.left
@@ -698,7 +804,7 @@ class KeyboardToolbarView: UIView {
         mainToolbarLeadingConstraint?.constant = chromeInsets.left
         mainToolbarTrailingConstraint?.constant = -chromeInsets.right
         mainRowLeadingConstraint?.constant = edgePadding
-        mainRowTrailingConstraint?.constant = -edgePadding
+        mainRowTrailingConstraint?.constant = -(edgePadding + hostTrailingReserve)
         for row in drawerRowViews {
             row.updateEdgePadding(edgePadding)
         }
@@ -729,7 +835,7 @@ class KeyboardToolbarView: UIView {
         // Build main row from effective slots
         let edgePadding = currentEdgePadding()
         let chromeInsets = currentChromeHorizontalInsets()
-        let availableWidth = width - edgePadding * 2 - chromeInsets.left - chromeInsets.right
+        let availableWidth = width - edgePadding * 2 - chromeInsets.left - chromeInsets.right - hostTrailingReserve
         let layout = manager.effectiveLayout(availableWidth: availableWidth,
             reservedMainRowSlots: onTouchKeyboardRequested == nil ? 0 : 1, sizes: sizes)
         effectiveDrawerRows = layout.drawers
@@ -806,7 +912,7 @@ class KeyboardToolbarView: UIView {
         case .arrowRight:
             return createArrowButton(icon: "arrow.right", key: "\u{1B}[C")
         case .dismiss:
-            return createDismissButton()
+            return usesHostChrome ? nil : createDismissButton()
         case .tabSwitcher:
             return createTabSwitcherButton()
         case .compose:
@@ -833,6 +939,12 @@ class KeyboardToolbarView: UIView {
             return createAIAgentButton()
         case .brightnessBoost:
             return createBrightnessBoostButton()
+        case .typePassword:
+            let button = KeyboardHoldActionButton(key: keyID.keyValue, display: .icon(keyID.iconName ?? "key.fill"), sizes: sizes)
+            button.holdKey = KeyID.typePasswordReturnKeyValue
+            button.accessibilityLabel = keyID.displayName
+            button.delegate = self
+            return button
         case .clipboardManager:
             return createClipboardManagerButton()
         case .fileManager:
@@ -919,6 +1031,10 @@ class KeyboardToolbarView: UIView {
         button.delegate = self
         button.onStateChange = { [weak self] state in
             self?.updateModifierState(keyDef.modifier, state: state)
+        }
+        button.onDoublePress = { [weak self] in
+            guard let modifier = keyDef.modifier else { return }
+            self?.onModifierDoublePressRequested?(modifier)
         }
 
         // Initialize from current state if this modifier is already active
@@ -1238,6 +1354,8 @@ class KeyboardToolbarView: UIView {
         let tint = glassTintColor(for: traitCollection)
         backgroundBlurView.configure(radius: sizes.toolbar.cornerRadius, corners: mainCorners,
                                      showsTopEdge: !hasPreviewRows, tint: tint)
+        // configure() shows any plate that has a height.
+        if usesHostChrome { backgroundBlurView.isHidden = true }
         drawerPreview?.configure(radius: sizes.toolbar.cornerRadius,
                                  corners: [.layerMinXMinYCorner, .layerMaxXMinYCorner],
                                  showsTopEdge: true, tint: tint)
@@ -1247,7 +1365,7 @@ class KeyboardToolbarView: UIView {
     /// rows. Hosting the preview in the window lets it cover the terminal even
     /// when UIKit clips views extending outside the keyboard accessory.
     private func beginDrawerPreview() {
-        guard drawerPreview == nil, let window else { return }
+        guard !usesHostChrome, drawerPreview == nil, let window else { return }
         layoutIfNeeded()
         drawerPreviewHeight = intrinsicContentSize.height
         drawerPreviewOriginalCorners = layer.maskedCorners
@@ -1717,6 +1835,10 @@ extension KeyboardToolbarView: KeyboardButtonDelegate {
         }
         if key == "__brightnessBoost__" {
             onBrightnessBoostRequested?()
+            return
+        }
+        if key == KeyID.typePassword.keyValue || key == KeyID.typePasswordReturnKeyValue {
+            onTypePasswordRequested?(key == KeyID.typePasswordReturnKeyValue)
             return
         }
         if key == "__clipboardManager__" {

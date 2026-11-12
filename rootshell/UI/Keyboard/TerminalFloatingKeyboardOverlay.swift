@@ -13,6 +13,7 @@ enum TerminalTouchKeyboardEvent {
     case modifiersChanged(KeyModifiers)
     case dismiss, pinHidden, switchToSystemKeyboard, compose, paste, tabs, customize
     case toolbarAction(String)
+    case modifierDoublePress(KeyModifiers)
     case heightChanged
     case placementRequested(TerminalTouchKeyboardModel.Placement)
     case nativePlacementChanged(TerminalTouchKeyboardModel.Placement)
@@ -162,6 +163,7 @@ final class TerminalTouchKeyboardWindowState {
         keyboard.onModifiersChanged = { [weak self] in self?.owner?.handleTouchKeyboardEvent(.modifiersChanged($0)) }
         keyboard.onDismiss = { [weak self] in self?.owner?.handleTouchKeyboardEvent(.dismiss) }
         keyboard.onPinHidden = { [weak self] in self?.owner?.handleTouchKeyboardEvent(.pinHidden) }
+        keyboard.onModifierDoublePress = { [weak self] in self?.owner?.handleTouchKeyboardEvent(.modifierDoublePress($0)) }
         keyboard.onSwitchKeyboard = { [weak self] in self?.owner?.handleTouchKeyboardEvent(.switchToSystemKeyboard) }
         keyboard.onCompose = { [weak self] in self?.owner?.handleTouchKeyboardEvent(.compose) }
         keyboard.onPaste = { [weak self] in self?.owner?.handleTouchKeyboardEvent(.paste) }
