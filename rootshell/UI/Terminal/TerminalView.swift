@@ -2139,6 +2139,8 @@ extension Ghostty {
                 guard recognizer.allowedTouchTypes.contains(finger) else { continue }
                 recognizer.allowedTouchTypes = recognizer.allowedTouchTypes.filter { $0 != finger }
             }
+            // The same interaction above the terminal is handled per touch.
+            installTouchLiftObserver()
             #else
             addInteraction(contextInteraction)
             #endif

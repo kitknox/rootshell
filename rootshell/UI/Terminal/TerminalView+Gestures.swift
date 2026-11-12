@@ -4673,6 +4673,96 @@ extension Ghostty.TerminalView: UIScribbleInteractionDelegate {
     }
 }
 #endif
+// MARK: - Ancestor Context Menus
+
+#if targetEnvironment(macCatalyst)
+extension Ghostty.TerminalView {
+    /// Touch types taken from ancestor context menu recognizers, to put back.
+    private static let withheldContextMenuTouchTypes = NSMapTable<UIGestureRecognizer, NSArray>.weakToStrongObjects()
+
+    /// SwiftUI keeps a context menu interaction on the root hosting view. It
+    /// makes every long press beneath it wait until it has ruled out a menu,
+    /// which for a finger on Mac is when the finger lifts. Take the finger
+    /// away from it for a touch that lands on the terminal.
+    func withholdFingerFromAncestorContextMenus() {
+        let finger = NSNumber(value: UITouch.TouchType.direct.rawValue)
+        var withheld = 0
+        var ancestor = superview
+        while let view = ancestor {
+            for recognizer in view.gestureRecognizers ?? []
+            where recognizer.name?.hasPrefix("com.apple.UIKit.clickPresentation") == true
+                && recognizer.allowedTouchTypes.contains(finger) {
+                Self.withheldContextMenuTouchTypes.setObject(recognizer.allowedTouchTypes as NSArray, forKey: recognizer)
+                recognizer.allowedTouchTypes = recognizer.allowedTouchTypes.filter { $0 != finger }
+                withheld += 1
+            }
+            ancestor = view.superview
+        }
+        touchDebugLog("withheld finger from \(withheld) ancestor context menu recognizers") // TEMPORARY (#740)
+    }
+
+    /// Watches for the last touch to lift so the finger can be given back.
+    /// A recognizer, because another recognizer can keep a touch from ever
+    /// reaching the view's own touch methods.
+    func installTouchLiftObserver() {
+        let observer = TouchLiftObserver(target: nil, action: nil)
+        observer.cancelsTouchesInView = false
+        observer.delaysTouchesEnded = false
+        observer.onLift = { Ghostty.TerminalView.returnFingerToAncestorContextMenus() }
+        addGestureRecognizer(observer)
+    }
+
+    /// Once no touch is left on the terminal, so finger context menus
+    /// elsewhere in the window (tabs, sidebar) keep working.
+    static func returnFingerToAncestorContextMenus() {
+        let table = withheldContextMenuTouchTypes
+        for recognizer in table.keyEnumerator().allObjects as? [UIGestureRecognizer] ?? [] {
+            if let types = table.object(forKey: recognizer) as? [NSNumber] {
+                recognizer.allowedTouchTypes = types
+            }
+        }
+        table.removeAllObjects()
+    }
+}
+
+/// Never recognizes and never blocks or is blocked; it only reports when the
+/// last touch on its view has lifted or been cancelled.
+private final class TouchLiftObserver: UIGestureRecognizer {
+    var onLift: (() -> Void)?
+    private var down = Set<UITouch>()
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        down.formUnion(touches)
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        lifted(touches)
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        lifted(touches)
+    }
+
+    private func lifted(_ touches: Set<UITouch>) {
+        down.subtract(touches)
+        guard down.isEmpty else { return }
+        onLift?()
+        state = .failed
+    }
+
+    override func reset() {
+        super.reset()
+        // UIKit can reset a recognizer without a final touch callback.
+        if !down.isEmpty {
+            down.removeAll()
+            onLift?()
+        }
+    }
+
+    override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool { false }
+    override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool { false }
+}
+#endif
 
 // MARK: - TEMPORARY (#740) touch hold diagnostics. Delete once the hold is fixed.
 
