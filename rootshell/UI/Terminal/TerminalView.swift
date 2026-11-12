@@ -2076,6 +2076,11 @@ extension Ghostty {
             pinchZoom.delegate = self
             addGestureRecognizer(pinchZoom)
             self.pinchZoomGesture = pinchZoom
+            #if targetEnvironment(macCatalyst)
+            // A small pinch also fits a two-finger tap, and its menu would
+            // open as the fingers lift.
+            twoFingerTap.require(toFail: pinchZoom)
+            #endif
 
             // Two-finger long press to open new connection sheet.
             // Duration and enablement are reconciled in applyTouchMode() based on

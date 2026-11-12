@@ -3156,15 +3156,10 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
 
         // Long press selection and scroll view pan are mutually exclusive
         // Whichever recognizes first wins: quick movement → scroll; hold still 0.5s → selection
+        // (On Mac the scroll view's pan is hosted on the wrapper, not the scroll view.)
         if gestureRecognizer === selectionLongPressGesture,
-           otherGestureRecognizer.view is UIScrollView { return false }
-        #if targetEnvironment(macCatalyst)
-        // Same rule for the Mac's finger scrollback pan.
-        if (gestureRecognizer === selectionLongPressGesture && isCatalystTouchScrollPan(otherGestureRecognizer))
-            || (otherGestureRecognizer === selectionLongPressGesture && isCatalystTouchScrollPan(gestureRecognizer)) {
-            return false
-        }
-        #endif
+           otherGestureRecognizer.view is UIScrollView
+            || enclosingTerminalScrollView?.isNativeScrollPan(otherGestureRecognizer) == true { return false }
 
         // Capture long press and capture scroll pan are mutually exclusive
         // Quick movement → scroll; hold still 0.3s → mouse click
@@ -3314,11 +3309,7 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
             return false
         }
 
-        #if targetEnvironment(macCatalyst)
-        if let shouldBegin = shouldBeginCatalystTouchScrollPan(gestureRecognizer) {
-            return shouldBegin
-        }
-        #else
+        #if !targetEnvironment(macCatalyst)
         // Don't start scroll pan gesture if we're text selecting
         if gestureRecognizer === scrollPanGesture && isSelecting {
             return false

@@ -418,6 +418,11 @@ extension Ghostty {
         return super.hitTest(point, with: event)
     }
 
+    /// Whether `gesture` is the scroll view's own pan, wherever it is hosted.
+    func isNativeScrollPan(_ gesture: UIGestureRecognizer) -> Bool {
+        gesture === scrollView.panGestureRecognizer
+    }
+
     /// If the brightness HUD covers `point`, return the hit subview so it
     /// receives the click/touch. The HUD host is sized to its pill via
     /// intrinsic-content constraints, so this returns nil for points outside
@@ -481,19 +486,6 @@ extension Ghostty {
     /// horizontal-intent decision to the terminal so the pan stands aside.
     func yieldNativePanToTrackpadTabSwipe(_ shouldYield: @escaping (UIPanGestureRecognizer) -> Bool) {
         (scrollView as? TabSwipeYieldingScrollView)?.yieldsToTabSwipe = shouldYield
-    }
-
-    /// Moves native scrollback by a finger delta, the way a trackpad scroll
-    /// does. False once the content is at either end.
-    @discardableResult
-    func scrollByTouch(deltaY: CGFloat) -> Bool {
-        guard scrollView.isScrollEnabled else { return false }
-        let current = scrollView.contentOffset.y
-        let target = clampedScrollModelOffsetY(current - deltaY)
-        guard abs(target - current) > 0.01 else { return false }
-        terminalView.cancelHerdrReturnToLive()
-        scrollView.contentOffset = CGPoint(x: 0, y: target)
-        return true
     }
 
     var isNativeScrollPanActive: Bool {
@@ -683,6 +675,14 @@ extension Ghostty {
         // to scrollView). Attach to the shared parent so UIKit walks up to it
         // from either child.
         terminalView.attachTrackpadTabSwipeGesture(to: self)
+
+        // A finger on a touch display lands on the pinned terminal, not the
+        // scroll view. Host the scroll view's own pan here, above both, so the
+        // finger scrolls natively like on iPad. Wheel and trackpad scrolling
+        // still reach it; pointer drags stay with the terminal for selection.
+        let nativePan = scrollView.panGestureRecognizer
+        nativePan.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+        addGestureRecognizer(nativePan)
         #else
         documentView.addSubview(terminalView)
 
