@@ -365,11 +365,11 @@ extension Ghostty.TerminalView {
         cancelPendingDoubleTapAction()
 
         #if targetEnvironment(macCatalyst)
-        // presentEditMenu(with:) is not supported on Mac Catalyst.
-        presentTouchMenuFromAnchor(
-            at: fullContextMenu ? point : preferredSelectionEditMenuPoint(fallback: point),
-            fullContextMenu: fullContextMenu
-        )
+        // presentEditMenu(with:) is not supported on Mac Catalyst, and a Mac
+        // menu takes the next touch to dismiss, so the Copy/Paste menu does
+        // not open on its own after a selection. The full menu has both.
+        guard fullContextMenu else { return }
+        presentContextMenuFromAnchor(at: point)
         #else
         // Remove any existing transient edit menu
         if let existing = editMenuInteraction {
@@ -391,27 +391,10 @@ extension Ghostty.TerminalView {
     }
 
     #if targetEnvironment(macCatalyst)
-    /// Pops the selection or context menu from an invisible button at `point`,
-    /// the supported way to open a menu from code on Mac.
-    private func presentTouchMenuFromAnchor(at point: CGPoint, fullContextMenu: Bool) {
-        let linkURL = probeForLink(at: point)
-        let menu: UIMenu
-        if fullContextMenu {
-            menu = buildContextMenu(linkURL: linkURL)
-        } else {
-            var items = linkMenuItems(for: linkURL)
-            let hasSelection = herdrEndpointPane?.hasSelection
-                ?? surface.map { ghostty_surface_has_selection($0) } ?? false
-            if hasSelection {
-                items.append(UIAction(title: String(localized: "Copy"), image: UIImage(systemName: "doc.on.doc")) { [weak self] _ in
-                    self?.copy(nil)
-                })
-            }
-            items.append(UIAction(title: String(localized: "Paste"), image: UIImage(systemName: "doc.on.clipboard")) { [weak self] _ in
-                self?.paste(nil)
-            })
-            menu = UIMenu(children: items)
-        }
+    /// Pops the context menu from an invisible button at `point`, the
+    /// supported way to open a menu from code on Mac.
+    private func presentContextMenuFromAnchor(at point: CGPoint) {
+        let menu = buildContextMenu(linkURL: probeForLink(at: point))
 
         let anchor = touchMenuAnchorButton ?? {
             let button = UIButton(type: .custom)
