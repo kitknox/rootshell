@@ -2188,6 +2188,10 @@ extension Ghostty {
             // iOS/visionOS: finger pan gesture with UIDynamicAnimator for momentum
             setupScrollHandling()
 
+            #if targetEnvironment(macCatalyst)
+            touchDebugLogSetup() // TEMPORARY (#740)
+            #endif
+
             // Create scroll indicator
             setupScrollIndicator()
             setupCollapsedKeyboardToolbarButton()
