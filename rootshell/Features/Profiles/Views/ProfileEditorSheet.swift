@@ -114,6 +114,7 @@ struct ProfileEditorSheet: View {
     @State private var hasExistingVNCPassword: Bool = false
     @State private var kvmForm = KVMFormState()
     @State private var hasExistingKVMPassword: Bool = false
+    @State private var hasExistingKVMHostPassword: Bool = false
     @State private var trzszTransportMode: ProfileTransportMode = .default
     @State private var trzszMTU: String = ""
     @State private var trzszConnectTimeoutSec: String = ""
@@ -313,7 +314,9 @@ struct ProfileEditorSheet: View {
                 vncConnectionSection
                 KVMConnectionFormSections(
                     form: $kvmForm,
-                    hasSavedPassword: hasExistingKVMPassword
+                    hasSavedPassword: hasExistingKVMPassword,
+                    showsHostPassword: true,
+                    hasSavedHostPassword: hasExistingKVMHostPassword
                 )
             } else {
                 // Connection Section
@@ -1884,6 +1887,8 @@ struct ProfileEditorSheet: View {
                 if let kvmConfig = profile.kvmConfig {
                     kvmForm = KVMFormState(config: kvmConfig)
                     hasExistingKVMPassword = VNCPasswordManager.kvm.hasPassword(for: kvmConfig.passwordKey)
+                    hasExistingKVMHostPassword = VNCPasswordManager.kvmHost.hasPassword(
+                        for: KVMConnectionConfig.hostPasswordKey(profileID: profile.id))
                 }
                 return
             }
@@ -2423,6 +2428,24 @@ struct ProfileEditorSheet: View {
             try? passwords.deletePassword(for: config.passwordKey)
         }
 
+        // Saved before the profile, under the ID the profile will have, so a
+        // Keychain failure leaves nothing half-created.
+        let profileID = existingProfile?.id ?? UUID()
+        let hostPasswords = VNCPasswordManager.kvmHost
+        let hostPasswordKey = KVMConnectionConfig.hostPasswordKey(profileID: profileID)
+        var savedNewHostPassword = false
+        do {
+            if !kvmForm.hostPassword.isEmpty {
+                try hostPasswords.savePassword(kvmForm.hostPassword, for: hostPasswordKey)
+                savedNewHostPassword = existingProfile == nil
+            } else if kvmForm.removeSavedHostPassword {
+                try hostPasswords.deletePassword(for: hostPasswordKey)
+            }
+        } catch {
+            errorMessage = "Failed to save computer password: \(error.localizedDescription)"
+            return
+        }
+
         do {
             if let existing = existingProfile {
                 var updated = existing
@@ -2442,6 +2465,7 @@ struct ProfileEditorSheet: View {
                 persistDraftShortcut(for: updated.id)
             } else {
                 let created = try profileManager.createProfile(
+                    id: profileID,
                     name: trimmedName,
                     sshConfig: ConnectionProfile.kvmPlaceholderSSHConfig(for: config),
                     connectionProtocol: .kvm,
@@ -2458,6 +2482,9 @@ struct ProfileEditorSheet: View {
             }
             dismiss()
         } catch {
+            if savedNewHostPassword {
+                try? hostPasswords.deletePassword(for: hostPasswordKey)
+            }
             errorMessage = error.localizedDescription
         }
     }

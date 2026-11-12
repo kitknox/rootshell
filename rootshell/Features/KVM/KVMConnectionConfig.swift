@@ -11,8 +11,9 @@ import Foundation
 /// MainActor like `VNCConnectionConfig`: `Jump.sshConfig` embeds `SSHConfig`,
 /// whose Codable conformance is MainActor-isolated.
 ///
-/// No password field: the device password is a Keychain lookup via
-/// `VNCPasswordManager.kvm` keyed by `passwordKey`. Stream quality is a
+/// No password fields: the device password is a Keychain lookup via
+/// `VNCPasswordManager.kvm` keyed by `passwordKey`, and the computer password
+/// one via `VNCPasswordManager.kvmHost` keyed by the profile. Stream quality is a
 /// device-wide setting, so it lives in the session HUD, not here.
 struct KVMConnectionConfig: Codable, Hashable, Sendable {
     typealias Jump = VNCConnectionConfig.Jump
@@ -33,6 +34,9 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
     /// Usually wanted for a Mac, which reverses a USB wheel with its own
     /// natural scrolling setting.
     var reverseScrolling: Bool
+    /// Offer to type the profile's saved computer password when the video
+    /// shows a login or lock screen.
+    var promptForHostPasswordAtLoginScreen: Bool
 
     init(
         host: String,
@@ -42,7 +46,8 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         keyboardToolbar: KeyboardToolbarPreference = .followAppSetting,
         automaticallyEnterFullScreen: Bool = false,
         hostKeyboardLayout: String = KVMInputTranslator.usLayout,
-        reverseScrolling: Bool = false
+        reverseScrolling: Bool = false,
+        promptForHostPasswordAtLoginScreen: Bool = true
     ) {
         self.host = host
         self.port = port
@@ -52,6 +57,7 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         self.automaticallyEnterFullScreen = automaticallyEnterFullScreen
         self.hostKeyboardLayout = hostKeyboardLayout
         self.reverseScrolling = reverseScrolling
+        self.promptForHostPasswordAtLoginScreen = promptForHostPasswordAtLoginScreen
     }
 
     // MARK: - Codable (lossy per field)
@@ -59,6 +65,7 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case host, port, username, jump, keyboardToolbar
         case automaticallyEnterFullScreen, hostKeyboardLayout, reverseScrolling
+        case promptForHostPasswordAtLoginScreen
     }
 
     init(from decoder: Decoder) throws {
@@ -78,6 +85,8 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         let layout = ((try? container.decodeIfPresent(String.self, forKey: .hostKeyboardLayout)) ?? nil) ?? ""
         hostKeyboardLayout = layout.isEmpty ? KVMInputTranslator.usLayout : layout
         reverseScrolling = ((try? container.decodeIfPresent(Bool.self, forKey: .reverseScrolling)) ?? nil) ?? false
+        promptForHostPasswordAtLoginScreen = ((try? container.decodeIfPresent(
+            Bool.self, forKey: .promptForHostPasswordAtLoginScreen)) ?? nil) ?? true
     }
 
     func encode(to encoder: Encoder) throws {
@@ -90,6 +99,7 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         try container.encode(automaticallyEnterFullScreen, forKey: .automaticallyEnterFullScreen)
         try container.encode(hostKeyboardLayout, forKey: .hostKeyboardLayout)
         try container.encode(reverseScrolling, forKey: .reverseScrolling)
+        try container.encode(promptForHostPasswordAtLoginScreen, forKey: .promptForHostPasswordAtLoginScreen)
     }
 
     // MARK: - Computed
@@ -100,6 +110,12 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
 
     var passwordKey: String {
         "kvm:\(username)@\(host):\(port)"
+    }
+
+    /// The computer password belongs to a profile, not the device: one KVM
+    /// can switch between computers, each with its own profile.
+    static func hostPasswordKey(profileID: UUID) -> String {
+        "kvm-host:\(profileID.uuidString)"
     }
 
     /// `https://host:port`, bracketing IPv6 literals.

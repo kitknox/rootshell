@@ -15,6 +15,7 @@ nonisolated struct KVMInputQueue {
         /// Sent in order: one frame, or the run of motion frames at the head.
         case frames([Data])
         case text(String)
+        case loginPassword(String, pressingReturn: Bool)
         /// Pointer motion is due again after this many seconds.
         case wait(TimeInterval)
         /// Empty, or held until sends in flight complete.
@@ -45,6 +46,10 @@ nonisolated struct KVMInputQueue {
             guard framesInFlight == 0 else { return .none }
             items.removeFirst()
             return .text(text)
+        case .loginPassword(let password, let pressingReturn):
+            guard framesInFlight == 0 else { return .none }
+            items.removeFirst()
+            return .loginPassword(password, pressingReturn: pressingReturn)
         case .frame(let frame):
             let budget = Self.maximumFramesInFlight - framesInFlight
             // A full budget means a backed-up socket; motion keeps merging.
@@ -69,8 +74,19 @@ nonisolated struct KVMInputQueue {
         }
     }
 
+    /// Drops pending text and passwords; Stop Typing must not leave either.
     mutating func removeText() {
-        items.removeAll { if case .text = $0 { true } else { false } }
+        items.removeAll {
+            switch $0 {
+            case .text, .loginPassword: true
+            case .frame: false
+            }
+        }
+    }
+
+    /// Puts frames ahead of everything queued, unmerged.
+    mutating func prepend(_ outputs: [KVMInputOutput]) {
+        items.insert(contentsOf: outputs, at: 0)
     }
 
     mutating func removeAll() {
@@ -87,6 +103,8 @@ nonisolated struct KVMInputQueue {
                 items[items.count - 1] = .text(previous + text)
                 return
             }
+        case .loginPassword:
+            break
         case .frame(let frame):
             // Only the last item merges: anything else in between (a click, a
             // key, a scroll after a move) must keep the position it had.

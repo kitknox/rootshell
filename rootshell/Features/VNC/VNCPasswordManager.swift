@@ -12,8 +12,9 @@ import os.log
 /// Manages VNC / Screen Sharing passwords stored in the Keychain.
 ///
 /// Items are keyed by `VNCConnectionConfig.passwordKey` ("user@host:port"),
-/// stored synchronizable (iCloud Keychain) with after-first-unlock
-/// accessibility in the shared access group. No biometric gating in v1.
+/// stored synchronizable (iCloud Keychain) in the shared access group, with
+/// after-first-unlock accessibility unless the instance asks for stricter.
+/// No biometric gating: access control flags can't sync.
 /// Passwords never appear in profile JSON, CKRecords, or window state; this
 /// manager is the only place they live.
 @MainActor
@@ -24,12 +25,23 @@ class VNCPasswordManager {
     static let shared = VNCPasswordManager(service: "com.ghostty.vnc.password")
     /// KVM over IP device passwords, keyed by `KVMConnectionConfig.passwordKey`.
     static let kvm = VNCPasswordManager(service: "com.rootshell.kvm.password")
+    /// Passwords typed into the computer behind a KVM, keyed by
+    /// `KVMConnectionConfig.hostPasswordKey(profileID:)`. Only typed on a
+    /// user's confirmation, so readable only while the device is unlocked.
+    static let kvmHost = VNCPasswordManager(
+        service: "com.rootshell.kvm.host-password",
+        accessibility: kSecAttrAccessibleWhenUnlocked)
 
     private nonisolated let service: String
+    private let accessibility: CFString
     private nonisolated static let accessGroup = AppIdentifiers.keychainAccessGroup
 
-    private init(service: String) {
+    /// Bumped on every save or delete so views re-check `hasPassword`.
+    private(set) var revision = 0
+
+    private init(service: String, accessibility: CFString = kSecAttrAccessibleAfterFirstUnlock) {
         self.service = service
+        self.accessibility = accessibility
     }
 
     /// One-shot in-memory passwords for connections the user chose not to
@@ -69,7 +81,10 @@ class VNCPasswordManager {
             kSecValueData as String: passwordData
         ]
         let updateStatus = SecItemUpdate(matchQuery as CFDictionary, attributes as CFDictionary)
-        if updateStatus == errSecSuccess { return }
+        if updateStatus == errSecSuccess {
+            revision &+= 1
+            return
+        }
         guard updateStatus == errSecItemNotFound else {
             Self.logger.error("Failed to update VNC password - Status: \(updateStatus)")
             throw PasswordError.unexpectedStatus(updateStatus)
@@ -80,7 +95,7 @@ class VNCPasswordManager {
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecAttrAccessGroup as String: Self.accessGroup,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+            kSecAttrAccessible as String: accessibility,
             kSecAttrSynchronizable as String: true,
             kSecValueData as String: passwordData
         ]
@@ -89,6 +104,7 @@ class VNCPasswordManager {
             Self.logger.error("Failed to save VNC password - Status: \(addStatus)")
             throw PasswordError.unexpectedStatus(addStatus)
         }
+        revision &+= 1
     }
 
     /// Loads the VNC password for a connection key.
@@ -148,6 +164,7 @@ class VNCPasswordManager {
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw PasswordError.unexpectedStatus(status)
         }
+        if status == errSecSuccess { revision &+= 1 }
     }
 
     // MARK: - Config Conveniences

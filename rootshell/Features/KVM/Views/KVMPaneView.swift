@@ -23,6 +23,7 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
 
     let config: KVMConnectionConfig
     let session: KVMSession
+    let loginPassword: KVMLoginPasswordAssistant
     let keyboardCapture: VNCKeyboardCapture
     let initialViewportPanningMode: RemoteViewportPanningMode
     let initialPointerMode: RemotePointerMode
@@ -47,7 +48,9 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
     var userOverrideTitle: String? {
         didSet { refreshPanePresentationTitle() }
     }
-    var sourceProfileID: UUID?
+    var sourceProfileID: UUID? {
+        didSet { loginPassword.profileID = sourceProfileID }
+    }
     var restorationState: RestorationState = .none
     /// One-shot password from a profile prompt; consumed by the first connect.
     var pendingPassword: String?
@@ -99,9 +102,19 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
     private var activeAppTabSwipeAccepted = false
     private var activePaneCycle: (direction: SwipeDirection, preset: SwipeGesturePreset)?
 
+    /// Video state last seen by `observeSession`, to spot moments a login
+    /// screen is likely.
+    private var observedFirstFrame = false
+    private var observedVideoSize: CGSize?
+    private var observedSourceOnline: Bool?
+
     init(config: KVMConnectionConfig, windowId: String, uuid: UUID = UUID()) {
         self.config = config
-        self.session = KVMSession(config: config)
+        let session = KVMSession(config: config)
+        self.session = session
+        self.loginPassword = KVMLoginPasswordAssistant(
+            session: session,
+            detectsLoginScreen: config.promptForHostPasswordAtLoginScreen)
         switch ScreenSharingPanningDefault.current {
         case .edge: initialViewportPanningMode = .edge
         case .continuous: initialViewportPanningMode = .continuous
@@ -134,6 +147,10 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
 
         keyboardCapture.onReservedHostShortcut = { [weak self] shortcut in
             self?.handleReservedHostShortcut(shortcut)
+        }
+        let assistant = loginPassword
+        session.onFramePresented = { [weak assistant] pixelBuffer in
+            assistant?.noteFrame(pixelBuffer)
         }
         observeSession()
         installTabSwipeGestureIfNeeded()
@@ -345,8 +362,10 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
 
     private func observeSession() {
         guard !isClosed else { return }
-        let (state, model, error) = withObservationTracking {
-            (session.connectionState, session.deviceInfo.model, session.lastError)
+        let (state, model, error, firstFrame, videoSize, sourceOnline) = withObservationTracking {
+            (session.connectionState, session.deviceInfo.model, session.lastError,
+             session.hasFirstFrame, session.videoFormat.map { CGSize(width: $0.width, height: $0.height) },
+             session.streamer.sourceOnline)
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 self?.observeSession()
@@ -360,12 +379,34 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
         if state.isConnected {
             requestFullScreenIfNeeded()
         }
+        noteVideoTransition(
+            connected: state.isConnected, firstFrame: firstFrame,
+            videoSize: videoSize, sourceOnline: sourceOnline)
         if case .failed = state, error == .invalidCredentials {
             passwordRejected = true
             needsPassword = true
         }
         if case .disconnected = state, hasStartedConnect {
             requestPaneClose()
+        }
+    }
+
+    private func noteVideoTransition(connected: Bool, firstFrame: Bool, videoSize: CGSize?, sourceOnline: Bool?) {
+        defer {
+            observedFirstFrame = firstFrame
+            observedVideoSize = videoSize
+            observedSourceOnline = sourceOnline
+        }
+        guard connected else {
+            loginPassword.reset()
+            return
+        }
+        if firstFrame, !observedFirstFrame {
+            loginPassword.arm(reason: "first video")
+        } else if let videoSize, let observedVideoSize, videoSize != observedVideoSize {
+            loginPassword.arm(reason: "resolution change")
+        } else if sourceOnline == true, observedSourceOnline == false {
+            loginPassword.arm(reason: "video signal returned")
         }
     }
 
@@ -501,6 +542,10 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
     func resumePresentationAfterForeground() {
         session.renderer.setPresentationSuspended(false)
         session.resumeFromBackground()
+        #if !targetEnvironment(macCatalyst)
+        // The computer may have locked while the app was away.
+        loginPassword.arm(reason: "foreground")
+        #endif
     }
 
     override func setWindowActive(_ active: Bool) {}
@@ -523,6 +568,8 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
         fullScreenController?.paneDidClose(self)
         keyboardCapture.onReservedHostShortcut = nil
         session.disconnect()
+        session.onFramePresented = nil
+        loginPassword.reset()
         keyboardCoordinator?.tearDown()
         keyboardCoordinator = nil
         keyboardCapture.release()

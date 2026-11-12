@@ -30,6 +30,7 @@ struct KVMPaneRootView: View {
 
                 KVMSessionOverlay(pane: pane)
             }
+            .modifier(KVMLoginPasswordDialog(pane: pane))
         }
         .ignoresSafeArea(.container, edges: pane.isDetachedForFullScreen ? .all : [])
         .confirmationDialog(
@@ -153,6 +154,15 @@ private struct KVMHUDMenuExtras: View {
                 Label("Paste as Keystrokes", systemImage: "doc.on.clipboard")
             }
             .disabled(!connected)
+        }
+
+        if pane.loginPassword.profileID != nil {
+            Button {
+                pane.loginPassword.requestSend()
+            } label: {
+                Label("Type Computer Password", systemImage: "key.fill")
+            }
+            .disabled(!pane.loginPassword.canSend || session.isTypingText)
         }
 
         Menu {
@@ -281,6 +291,62 @@ private struct KVMLocalCursorToggle: View {
         Toggle(isOn: $pane.showsLocalCursor) {
             Label("Local Cursor", systemImage: "smallcircle.filled.circle")
         }
+    }
+}
+
+// MARK: - Computer password
+
+/// Confirms before the profile's computer password is typed, whether the
+/// HUD asked or a login screen was detected.
+private struct KVMLoginPasswordDialog: ViewModifier {
+    @Bindable private var assistant: KVMLoginPasswordAssistant
+    @Bindable private var session: KVMSession
+
+    init(pane: KVMPaneView) {
+        self._assistant = Bindable(wrappedValue: pane.loginPassword)
+        self._session = Bindable(wrappedValue: pane.session)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog(
+                String(localized: "Type the computer password?"),
+                isPresented: $assistant.isConfirming,
+                titleVisibility: .visible
+            ) {
+                Button("Type Password and Log In") {
+                    assistant.send(pressingReturn: true)
+                }
+                Button("Type Password Only") {
+                    assistant.send(pressingReturn: false)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(message)
+            }
+            .alert(
+                String(localized: "Couldn't Type Password"),
+                isPresented: Binding(
+                    get: { assistant.sendFailureMessage != nil },
+                    set: { if !$0 { assistant.sendFailureMessage = nil } })
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(assistant.sendFailureMessage ?? "")
+            }
+            .onAppear { assistant.presentPendingPrompt() }
+            .onChange(of: assistant.promptPending) { _, pending in
+                if pending { assistant.presentPendingPrompt() }
+            }
+            .onChange(of: session.connectionState.isConnected) { _, connected in
+                if !connected { assistant.isConfirming = false }
+            }
+    }
+
+    private var message: String {
+        let base = String(localized: "The computer password saved in this profile will be typed into the remote computer. Type Password Only skips Return so you can submit it yourself.")
+        guard session.hid.capsLock == true else { return base }
+        return base + " " + String(localized: "Caps Lock is on.")
     }
 }
 

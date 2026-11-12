@@ -18,6 +18,10 @@ struct KVMFormState: Hashable {
     var automaticallyEnterFullScreen = false
     var hostKeyboardLayout = KVMInputTranslator.usLayout
     var reverseScrolling = false
+    /// Profile editor only. Blank keeps the saved computer password.
+    var hostPassword = ""
+    var removeSavedHostPassword = false
+    var promptForHostPasswordAtLoginScreen = true
     /// Only the `jump*` fields are used; Screen Sharing's jump UI and builder edit them.
     var jump = VNCFormState()
 
@@ -33,6 +37,7 @@ struct KVMFormState: Hashable {
         automaticallyEnterFullScreen = config.automaticallyEnterFullScreen
         hostKeyboardLayout = config.hostKeyboardLayout
         reverseScrolling = config.reverseScrolling
+        promptForHostPasswordAtLoginScreen = config.promptForHostPasswordAtLoginScreen
         var jumpForm = VNCFormState(config: VNCConnectionConfig(host: config.host, quality: .standard, jump: config.jump))
         jumpForm.quality = .standard
         jump = jumpForm
@@ -57,7 +62,8 @@ struct KVMFormState: Hashable {
             keyboardToolbar: keyboardToolbar,
             automaticallyEnterFullScreen: automaticallyEnterFullScreen,
             hostKeyboardLayout: hostKeyboardLayout,
-            reverseScrolling: reverseScrolling)
+            reverseScrolling: reverseScrolling,
+            promptForHostPasswordAtLoginScreen: promptForHostPasswordAtLoginScreen)
     }
 
     /// Host and port validate and build through the Screen Sharing form.
@@ -73,6 +79,10 @@ struct KVMFormState: Hashable {
 struct KVMConnectionFormSections: View {
     @Binding var form: KVMFormState
     var hasSavedPassword = false
+    /// The computer password is keyed by profile, so only the profile
+    /// editor shows it.
+    var showsHostPassword = false
+    var hasSavedHostPassword = false
 
     var body: some View {
         Section {
@@ -121,6 +131,10 @@ struct KVMConnectionFormSections: View {
             }
         }
 
+        if showsHostPassword {
+            hostPasswordSection
+        }
+
         Section {
             Picker("Computer's Keyboard Layout", selection: $form.hostKeyboardLayout) {
                 ForEach(KVMKeyboardLayouts.all, id: \.self) { keymap in
@@ -161,6 +175,39 @@ struct KVMConnectionFormSections: View {
             .themedRow()
         } header: {
             Text("Session")
+        }
+    }
+
+    private var hostPasswordSection: some View {
+        Section {
+            Group {
+                SecureField("Computer Password", text: $form.hostPassword)
+                    .autocapitalization(.none)
+                    .autocorrectionDisabled()
+                if hasSavedHostPassword && form.hostPassword.isEmpty {
+                    if form.removeSavedHostPassword {
+                        Label("The saved computer password is removed when you save.", systemImage: "trash")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button("Keep Saved Password") {
+                            form.removeSavedHostPassword = false
+                        }
+                    } else {
+                        Label("Password saved in Keychain. Enter a new one to replace it.", systemImage: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                        Button("Remove Saved Password", role: .destructive) {
+                            form.removeSavedHostPassword = true
+                        }
+                    }
+                }
+                Toggle("Offer at Login Screen", isOn: $form.promptForHostPasswordAtLoginScreen)
+            }
+            .themedRow()
+        } header: {
+            Text("Computer Password")
+        } footer: {
+            Text("Optional. The password of the computer connected to the KVM, which is usually different from the KVM's own. Type it with Type Computer Password in the session menu, or when a login or lock screen is detected. It's saved in iCloud Keychain and only typed after you confirm.")
         }
     }
 }

@@ -100,4 +100,29 @@ final class KVMInputQueueTests: XCTestCase {
         XCTAssertEqual(queue.next(now: 10, framesInFlight: 1), .none)
         XCTAssertEqual(queue.next(now: 10, framesInFlight: 0), .text("ab"))
     }
+
+    func testLoginPasswordNeverMergesWithText() {
+        var queue = KVMInputQueue()
+        queue.append([.text("a"), .loginPassword("pw", pressingReturn: true), .text("b")])
+        XCTAssertEqual(queue.next(now: 10, framesInFlight: 0), .text("a"))
+        XCTAssertEqual(queue.next(now: 10, framesInFlight: 0), .loginPassword("pw", pressingReturn: true))
+        XCTAssertEqual(queue.next(now: 10, framesInFlight: 0), .text("b"))
+    }
+
+    func testStopTypingDropsAPendingPassword() {
+        var queue = KVMInputQueue()
+        queue.append([.frame(click), .loginPassword("pw", pressingReturn: true)])
+        queue.removeText()
+        XCTAssertEqual(queue.next(now: 10, framesInFlight: 0), .frames([click]))
+        XCTAssertTrue(queue.isEmpty)
+    }
+
+    func testPrependGoesAheadOfQueuedInput() {
+        var queue = KVMInputQueue()
+        let enter = KVMHIDFrame.key("Enter", down: true)
+        queue.append([.frame(click)])
+        queue.prepend([.frame(enter)])
+        XCTAssertEqual(queue.next(now: 10, framesInFlight: 0), .frames([enter]))
+        XCTAssertEqual(queue.next(now: 10, framesInFlight: 0), .frames([click]))
+    }
 }

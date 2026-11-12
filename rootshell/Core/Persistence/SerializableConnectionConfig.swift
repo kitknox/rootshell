@@ -496,6 +496,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
         let hostKeyboardLayout: String
         /// Optional so sessions saved before the field still decode.
         let reverseScrolling: Bool?
+        let promptForHostPasswordAtLoginScreen: Bool?
 
         init(from config: KVMConnectionConfig) {
             self.host = config.host
@@ -505,6 +506,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
             self.automaticallyEnterFullScreen = config.automaticallyEnterFullScreen
             self.hostKeyboardLayout = config.hostKeyboardLayout
             self.reverseScrolling = config.reverseScrolling
+            self.promptForHostPasswordAtLoginScreen = config.promptForHostPasswordAtLoginScreen
             switch config.jump {
             case .none:
                 self.jump = .none
@@ -538,7 +540,8 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
                 keyboardToolbar: keyboardToolbar,
                 automaticallyEnterFullScreen: automaticallyEnterFullScreen,
                 hostKeyboardLayout: hostKeyboardLayout,
-                reverseScrolling: reverseScrolling ?? false)
+                reverseScrolling: reverseScrolling ?? false,
+                promptForHostPasswordAtLoginScreen: promptForHostPasswordAtLoginScreen ?? true)
         }
 
         var needsPassword: Bool {

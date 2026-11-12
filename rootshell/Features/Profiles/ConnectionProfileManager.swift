@@ -125,9 +125,11 @@ final class ConnectionProfileManager {
 
     // MARK: - CRUD Operations
 
-    /// Create a new profile
+    /// Create a new profile. `id` lets a caller key Keychain items to the
+    /// profile before it exists.
     @discardableResult
     func createProfile(
+        id: UUID = UUID(),
         name: String,
         sshConfig: SSHConfig,
         connectionProtocol: ConnectionProtocol = .ssh,
@@ -148,6 +150,7 @@ final class ConnectionProfileManager {
         extensionPayload: ProfileExtensionPayload? = nil
     ) throws -> ConnectionProfile {
         let profile = ConnectionProfile(
+            id: id,
             name: name,
             sshConfig: sshConfig,
             connectionProtocol: connectionProtocol,
@@ -282,12 +285,15 @@ final class ConnectionProfileManager {
 
     /// Update an existing profile
     func updateProfile(_ profile: ConnectionProfile) throws {
-        guard store.record(for: profile.id) != nil else {
+        guard let previous = store.record(for: profile.id) else {
             Self.logger.warning("Attempted to update non-existent profile \(profile.id.uuidString)")
             return
         }
 
         try persistProfile(profile)
+        if previous.connectionProtocol == .kvm, profile.connectionProtocol != .kvm {
+            deleteKVMHostPassword(profileID: profile.id)
+        }
         updateProfilesFromStore()
 
         Self.logger.info("Updated profile '\(profile.name)'")
@@ -297,9 +303,27 @@ final class ConnectionProfileManager {
     func deleteProfile(id: UUID) throws {
         try store.softDelete(id: id)
         KeybindManager.shared.clearProfileShortcut(profileID: id)
+        // Deleting here reaches every device through iCloud Keychain.
+        deleteKVMHostPassword(profileID: id)
         updateProfilesFromStore()
 
         Self.logger.info("Deleted profile \(id.uuidString)")
+    }
+
+    private func deleteKVMHostPassword(profileID: UUID) {
+        do {
+            try VNCPasswordManager.kvmHost.deletePassword(for: KVMConnectionConfig.hostPasswordKey(profileID: profileID))
+        } catch {
+            Self.logger.error("Failed to delete KVM computer password: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func copyKVMHostPassword(from sourceID: UUID, to destinationID: UUID) {
+        let passwords = VNCPasswordManager.kvmHost
+        guard let password = try? passwords.loadPassword(for: KVMConnectionConfig.hostPasswordKey(profileID: sourceID)) else {
+            return
+        }
+        try? passwords.savePassword(password, for: KVMConnectionConfig.hostPasswordKey(profileID: destinationID))
     }
 
     /// Move a profile to a different folder
@@ -348,6 +372,9 @@ final class ConnectionProfileManager {
         )
 
         try persistProfile(duplicate)
+        if original.connectionProtocol == .kvm {
+            copyKVMHostPassword(from: original.id, to: duplicate.id)
+        }
         updateProfilesFromStore()
 
         Self.logger.info("Duplicated profile '\(original.name)' as '\(duplicateName)'")

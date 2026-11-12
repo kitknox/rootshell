@@ -57,6 +57,8 @@ final class KVMSession {
     /// Set by the pane before `connect`.
     @ObservationIgnored var onCertificateValidation: VNCConfiguration.CertificateValidationHandler?
     @ObservationIgnored var onHostKeyValidation: (@Sendable (HostKeyValidationRequest) async -> HostKeyValidationResult)?
+    /// Every frame handed to the renderer, for login-screen detection.
+    @ObservationIgnored var onFramePresented: ((CVPixelBuffer) -> Void)?
 
     // MARK: Connection internals
 
@@ -155,6 +157,8 @@ final class KVMSession {
     func disconnect() {
         guard !userDisconnected else { return }
         userDisconnected = true
+        // The pane closes after a disconnect, so nothing reconnects with it.
+        password = ""
         connectTask?.cancel()
         codeContinuation?.resume(throwing: CancellationError())
         codeContinuation = nil
@@ -537,6 +541,7 @@ final class KVMSession {
         mediaFailures = 0
         presentedFrames += 1
         renderer.setBands([0: frame.pixelBuffer])
+        onFramePresented?(frame.pixelBuffer)
     }
 
     private func requestKeyframe() {
@@ -691,6 +696,17 @@ final class KVMSession {
         enqueue([.text(text)])
     }
 
+    /// Types a confirmed login password with the host keymap, then Return
+    /// unless `pressingReturn` is false. Held keys are released first so a
+    /// modifier can't change what's typed. Never logged.
+    func typeLoginPassword(_ password: String, pressingReturn: Bool) {
+        guard connectionState.isConnected, !password.isEmpty else { return }
+        enqueue(translator.releaseAll())
+        enqueue([.loginPassword(password, pressingReturn: pressingReturn)])
+    }
+
+    private static let returnKeysym: UInt32 = 0xFF0D
+
     func cancelTyping() {
         outbound.removeText()
         typingTask?.cancel()
@@ -724,6 +740,9 @@ final class KVMSession {
             case .text(let text):
                 guard let client else { return }
                 startTyping(text, client: client)
+            case .loginPassword(let password, let pressingReturn):
+                guard let client else { return }
+                startTyping(password, client: client, pressingReturnAfter: pressingReturn)
             case .wait(let delay):
                 schedulePump(after: delay)
                 return
@@ -749,12 +768,17 @@ final class KVMSession {
         pump()
     }
 
-    private func startTyping(_ text: String, client: KVMDClient) {
+    /// Return after a password goes only when all of it was typed: a partial
+    /// or empty password must not be submitted.
+    private func startTyping(_ text: String, client: KVMDClient, pressingReturnAfter: Bool = false) {
         let keymap = config.hostKeyboardLayout
         isTypingText = text.count > 16
         typingTask = Task { [weak self] in
+            var typedAll = false
             do {
                 try await client.printText(text, keymap: keymap)
+                // A cancel can surface as URLError or not at all; ask the task.
+                typedAll = !Task.isCancelled
             } catch {
                 if !(error is CancellationError) {
                     Self.logger.error("KVM typing failed: \(error.localizedDescription, privacy: .public)")
@@ -763,6 +787,12 @@ final class KVMSession {
             guard let self else { return }
             self.typingTask = nil
             self.isTypingText = false
+            if typedAll, pressingReturnAfter {
+                // Ahead of keys pressed while the device was typing.
+                self.outbound.prepend(
+                    self.translator.keysym(down: true, keysym: Self.returnKeysym)
+                        + self.translator.keysym(down: false, keysym: Self.returnKeysym))
+            }
             self.pump()
         }
     }

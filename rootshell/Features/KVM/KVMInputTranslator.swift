@@ -13,6 +13,9 @@ nonisolated enum KVMInputOutput: Equatable, Sendable {
     case frame(Data)
     /// Typed by the device through `/api/hid/print` with the host keymap.
     case text(String)
+    /// A confirmed login password: typed like text but never merged with
+    /// other text, and Return follows only if the device typed all of it.
+    case loginPassword(String, pressingReturn: Bool)
 }
 
 nonisolated struct KVMInputTranslator {

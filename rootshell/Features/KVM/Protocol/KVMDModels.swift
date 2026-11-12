@@ -249,6 +249,8 @@ nonisolated struct KVMHIDState: Equatable, Sendable {
     var mouseAbsolute = true
     var keyboardOnline = true
     var mouseOnline = true
+    /// The computer's Caps Lock LED, when the device reports it.
+    var capsLock: Bool?
 
     init() {}
 
@@ -257,6 +259,7 @@ nonisolated struct KVMHIDState: Equatable, Sendable {
         let keyboard = KVMDJSON.dict(state["keyboard"])
         let mouse = KVMDJSON.dict(state["mouse"])
         keyboardOnline = KVMDJSON.bool(keyboard?["online"]) ?? online
+        capsLock = KVMDJSON.bool(KVMDJSON.dict(keyboard?["leds"])?["caps"])
         mouseOnline = KVMDJSON.bool(mouse?["online"]) ?? online
         mouseAbsolute = KVMDJSON.bool(mouse?["absolute"]) ?? true
     }
