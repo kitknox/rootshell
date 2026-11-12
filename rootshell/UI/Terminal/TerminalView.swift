@@ -2126,7 +2126,22 @@ extension Ghostty {
             // Note: Right-click in mouse capture mode (tmux, vim) is handled in the
             // contextMenuInteraction delegate by sending events to Ghostty and polling for release
             let contextInteraction = UIContextMenuInteraction(delegate: self)
+            #if targetEnvironment(macCatalyst)
+            // The interaction makes other long presses wait until it has
+            // decided on a menu, which for a finger on Mac is not until it
+            // lifts. Take the finger away from its recognizers; fingers use
+            // the gestures above, and the pointer still gets its menu.
+            let recognizersBefore = Set((gestureRecognizers ?? []).map(ObjectIdentifier.init))
             addInteraction(contextInteraction)
+            let finger = NSNumber(value: UITouch.TouchType.direct.rawValue)
+            for recognizer in gestureRecognizers ?? [] where !recognizersBefore.contains(ObjectIdentifier(recognizer)) {
+                // Leave ones that take no touches at all (the key press driver) alone.
+                guard recognizer.allowedTouchTypes.contains(finger) else { continue }
+                recognizer.allowedTouchTypes = recognizer.allowedTouchTypes.filter { $0 != finger }
+            }
+            #else
+            addInteraction(contextInteraction)
+            #endif
             self.contextMenuInteraction = contextInteraction
 
             // Add drop interaction for file/URL drag-and-drop
