@@ -24,6 +24,7 @@ struct ScreenSharingSettingsView: View {
     @Setting(Settings.ScreenSharing.swipeDownAction) private var swipeDownAction
     @Setting(Settings.ScreenSharing.swipeLeftAction) private var swipeLeftAction
     @Setting(Settings.ScreenSharing.swipeRightAction) private var swipeRightAction
+    @Setting(Settings.ScreenSharing.fourFingerNavigation) private var fourFingerNavigation
 
     private var resolvedClipboardSyncDefault: ScreenSharingClipboardSyncDefault {
         clipboardSyncDefault
@@ -200,6 +201,23 @@ struct ScreenSharingSettingsView: View {
             } footer: {
                 Text("Sends the Mac keyboard shortcut for each action, so the defaults match a Mac trackpad. Turn them off for computers that are not Macs. Applies to touch on iPhone and iPad.")
             }
+
+            #if !os(visionOS) && !targetEnvironment(macCatalyst)
+            Section {
+                Toggle(isOn: $fourFingerNavigation) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "hand.raised.fingers.spread")
+                        Text("Use Four Fingers")
+                    }
+                    .settingRow(Settings.ScreenSharing.fourFingerNavigation)
+                }
+                .themedRow()
+            } header: {
+                SettingGroupHeader("Tab and Pane Swipes", group: .screenSharing)
+            } footer: {
+                Text("Swipe Gestures that switch tabs or panes use three fingers over a remote screen, and only in a direction whose Three-Finger Swipe above is Off. Turn this on to use four fingers instead, leaving every three-finger swipe to the remote computer. On iPad, a four-finger swipe switches apps unless Four & Five Finger Gestures is turned off in the Settings app under Multitasking & Gestures.")
+            }
+            #endif
 
             Section {
                 Picker(selection: $cursorRenderingDefault) {

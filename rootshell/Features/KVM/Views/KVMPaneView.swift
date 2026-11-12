@@ -97,7 +97,7 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
     private var hasHandledAutomaticFullScreen = false
     private var shouldRestoreFullScreenAfterTabSwitch = false
 
-    private var tabSwipePanGesture: UIPanGestureRecognizer?
+    private var tabSwipePanGesture: RemoteScreenNavigationPan?
     private var activeAppTabSwipeDirection: SwipeDirection?
     private var activeAppTabSwipeAccepted = false
     private var activePaneCycle: (direction: SwipeDirection, preset: SwipeGesturePreset)?
@@ -665,16 +665,14 @@ extension KVMPaneView: RemoteScreenPane {
 
 extension KVMPaneView: UIGestureRecognizerDelegate {
 
-    /// The remote-screen view consumes one- and two-finger touches, so a
-    /// three-finger pan is the iPhone path to other tabs (as on VNC panes).
+    /// The remote-screen view consumes every touch, so a three-finger pan
+    /// the remote gestures do not claim is the iPhone path to other tabs (as
+    /// on VNC panes).
     /// iPad installs it for pane presets only: zoom has no on-screen exit.
     private func installTabSwipeGestureIfNeeded() {
         let idiom = UIDevice.current.userInterfaceIdiom
         guard tabSwipePanGesture == nil, idiom == .phone || idiom == .pad else { return }
-        let pan = UIPanGestureRecognizer(target: self, action: #selector(handleAppTabSwipePan))
-        pan.minimumNumberOfTouches = 3
-        pan.maximumNumberOfTouches = 3
-        pan.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+        let pan = RemoteScreenNavigationPan(target: self, action: #selector(handleAppTabSwipePan))
         pan.delegate = self
         addGestureRecognizer(pan)
         tabSwipePanGesture = pan
@@ -682,7 +680,7 @@ extension KVMPaneView: UIGestureRecognizerDelegate {
 
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard gestureRecognizer === tabSwipePanGesture,
-              let pan = gestureRecognizer as? UIPanGestureRecognizer else {
+              let pan = gestureRecognizer as? RemoteScreenNavigationPan else {
             return super.gestureRecognizerShouldBegin(gestureRecognizer)
         }
         let velocity = pan.velocity(in: self)
@@ -690,6 +688,7 @@ extension KVMPaneView: UIGestureRecognizerDelegate {
         guard abs(velocity.x) > abs(velocity.y) || abs(translation.x) > abs(translation.y) else { return false }
         let x = abs(velocity.x) >= abs(translation.x) ? velocity.x : translation.x
         let direction: SwipeDirection = x < 0 ? .left : .right
+        guard !pan.yieldsToRemoteSwipe(direction) else { return false }
         let binding = SwipeGestureManager.shared.binding(for: direction, area: swipeStartArea(of: pan))
         activePaneCycle = nil
         guard let preset = appTabPreset(for: binding) else {
@@ -713,7 +712,8 @@ extension KVMPaneView: UIGestureRecognizerDelegate {
         _ gestureRecognizer: UIGestureRecognizer,
         shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
     ) -> Bool {
-        gestureRecognizer === tabSwipePanGesture
+        guard let pan = tabSwipePanGesture, gestureRecognizer === pan else { return false }
+        return pan.recognizesSimultaneously(with: otherGestureRecognizer)
     }
 
     @objc private func handleAppTabSwipePan(_ gesture: UIPanGestureRecognizer) {

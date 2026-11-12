@@ -365,6 +365,10 @@ nonisolated extension Settings {
             "screenSharingSwipeRightAction", default: ScreenSharingSwipeAction.moveLeftASpace, group: .screenSharing,
             configKey: "screen-sharing-swipe-right-action",
             title: String(localized: "Three-Finger Swipe Right", comment: "Setting title"))
+        static let fourFingerNavigation = SettingKey(
+            "screenSharingFourFingerNavigation", default: false, group: .screenSharing,
+            configKey: "screen-sharing-four-finger-navigation",
+            title: String(localized: "Four-Finger Tab and Pane Swipes", comment: "Setting title"))
         static let floatingToolbarDefault = SettingKey(
             "screenSharingFloatingToolbarDefault", default: true, group: .screenSharing,
             configKey: "screen-sharing-floating-toolbar-default",
@@ -377,7 +381,7 @@ nonisolated extension Settings {
             controlOptionAsCommandDefault.erased, routeReservedShortcutsToVNCDefault.erased,
             touchHoldDelay.erased, showsHeldButton.erased,
             swipeUpAction.erased, swipeDownAction.erased, swipeLeftAction.erased, swipeRightAction.erased,
-            floatingToolbarDefault.erased,
+            fourFingerNavigation.erased, floatingToolbarDefault.erased,
         ]
     }
 
