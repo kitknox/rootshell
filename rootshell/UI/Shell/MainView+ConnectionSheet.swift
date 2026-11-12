@@ -206,6 +206,35 @@ extension MainView {
         sourceProfileID: UUID? = nil,
         password: String? = nil
     ) {
+        if config.quality == .adaptive, config.usesUnreliableHighPerformancePath {
+            alerts.handleVNCHighPerformanceTransportWarning(
+                MainAlertController.PendingVNCHighPerformanceConnection(
+                    config: config,
+                    splitOption: splitOption,
+                    sourceProfileID: sourceProfileID,
+                    password: password
+                )
+            )
+            return
+        }
+
+        performVNCConnection(
+            config: config,
+            splitOption: splitOption,
+            sourceProfileID: sourceProfileID,
+            password: password
+        )
+    }
+
+    /// Create a Screen Sharing pane after any user-initiated transport
+    /// warning has been resolved. Window restoration deliberately calls the
+    /// lower-level pane factory directly and therefore remains non-blocking.
+    func performVNCConnection(
+        config: VNCConnectionConfig,
+        splitOption: SSHConnectionView.SplitOption,
+        sourceProfileID: UUID? = nil,
+        password: String? = nil
+    ) {
         switch splitOption {
         case .newTab:
             createVNCTab(with: config, sourceProfileID: sourceProfileID, password: password)
