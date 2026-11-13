@@ -2073,28 +2073,38 @@ extension Ghostty {
     }
 
     #if targetEnvironment(macCatalyst)
-    /// After a finger bounce on Mac the scroll view can go on reporting that
-    /// it is decelerating for seconds after the content has stopped. Until
-    /// it finishes, a touch only catches the scroll and the selection handles
-    /// stay hidden. Once the content has sat still inside its range, end the
-    /// deceleration ourselves.
+    /// After a finger fling into an edge on Mac, the scroll view reports
+    /// decelerating for seconds after the content has stopped. Until then a
+    /// touch only catches the scroll and the selection handles stay hidden.
+    /// Once the content has sat still, end the deceleration ourselves.
     private func watchForRestWhileDecelerating() {
-        restWatchTask?.cancel()
-        let watchedOffsetY = scrollView.contentOffset.y
+        guard restWatchTask == nil else { return }
+        var lastOffsetY = scrollView.contentOffset.y
         restWatchTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(150))
-            guard !Task.isCancelled, let self else { return }
-            self.restWatchTask = nil
-            let scrollView = self.scrollView
-            let offsetY = scrollView.contentOffset.y
-            guard scrollView.isDecelerating, !scrollView.isTracking, !scrollView.isDragging,
-                  abs(offsetY - watchedOffsetY) < 0.25,
-                  abs(self.clampedScrollModelOffsetY(offsetY) - offsetY) < 0.5 else { return }
-            // Setting the offset it already has is how a deceleration is stopped.
-            scrollView.setContentOffset(scrollView.contentOffset, animated: false)
-            self.finishDecelerating()
+            while true {
+                try? await Task.sleep(for: .milliseconds(150))
+                guard !Task.isCancelled, let self else { return }
+                let scrollView = self.scrollView
+                // isDragging stays true for the whole deceleration; isTracking
+                // is what says a finger is down.
+                guard scrollView.isDecelerating, !scrollView.isTracking else { break }
+                let offsetY = scrollView.contentOffset.y
+                let restOffsetY = self.clampedScrollModelOffsetY(offsetY)
+                if abs(offsetY - lastOffsetY) < 0.25, abs(restOffsetY - offsetY) <= Self.restSnapDistance {
+                    self.restWatchTask = nil
+                    // A non-animated offset change is how a deceleration is stopped.
+                    scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: restOffsetY), animated: false)
+                    self.finishDecelerating()
+                    return
+                }
+                lastOffsetY = offsetY
+            }
+            self?.restWatchTask = nil
         }
     }
+
+    /// How far past the edge a stalled bounce may sit and still count as at rest.
+    private static let restSnapDistance: CGFloat = 2
     #endif
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
