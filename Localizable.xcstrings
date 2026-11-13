@@ -130213,6 +130213,160 @@
         }
       }
     },
+    "Caps Lock is on." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "مفتاح Caps Lock قيد التشغيل."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El Bloq Maj està activat."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Je zapnutý Caps Lock."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock er slået til."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Feststelltaste ist aktiviert."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bloq Mayús está activado."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock on päällä."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verr. Maj. est activé."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock פועל."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Caps Lock be van kapcsolva."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bloc Maiusc è attivo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lockがオンです。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock이 켜져 있습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock er på."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock staat aan."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock jest włączony."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock está ativado."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Caps Lock está ativado."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock este activat."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock je vklopljen."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock är på."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock увімкнено."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock đang bật."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock 已打开。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caps Lock 已開啟。"
+          }
+        }
+      }
+    },
     "Caps Lock LED" : {
       "localizations" : {
         "ar" : {
@@ -173913,6 +174067,160 @@
         }
       }
     },
+    "Computer Password" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "كلمة مرور الكمبيوتر"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contrasenya de l'ordinador"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heslo počítače"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Computeradgangskode"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Computerpasswort"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contraseña del ordenador"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tietokoneen salasana"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe de l'ordinateur"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "סיסמת המחשב"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Számítógép jelszava"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Password del computer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コンピュータのパスワード"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "컴퓨터 비밀번호"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Datamaskinpassord"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Computerwachtwoord"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hasło komputera"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Senha do Computador"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Palavra-passe do computador"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parola computerului"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geslo računalnika"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Datorlösenord"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пароль комп’ютера"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mật khẩu máy tính"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电脑密码"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "電腦密碼"
+          }
+        }
+      }
+    },
     "Computer's Keyboard Layout" : {
       "localizations" : {
         "ar" : {
@@ -189682,7 +189990,6 @@
       }
     },
     "Continue High Performance" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -189990,7 +190297,162 @@
         }
       }
     },
+    "Continuously tracks location to keep SSH and Screen Sharing connections and long-running local tasks alive in the background. Shows locations from the last 5 minutes." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يتتبع الموقع باستمرار للحفاظ على اتصالات SSH ومشاركة الشاشة والمهام المحلية طويلة التشغيل نشطة في الخلفية. يعرض المواقع من آخر ٥ دقائق."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fa un seguiment continu de la ubicació per mantenir les connexions SSH i de Compartir pantalla i les tasques locals de llarga durada actives en segon pla. Mostra les ubicacions dels darrers 5 minuts."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nepřetržitě sleduje polohu, aby udrželo SSH připojení, připojení sdílení obrazovky a dlouhodobé lokální úlohy aktivní na pozadí. Zobrazuje polohy za posledních 5 minut."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sporer løbende placering for at holde SSH- og skærmdelingsforbindelser og langvarige lokale opgaver i live i baggrunden. Viser placeringer fra de sidste 5 minutter."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verfolgt kontinuierlich den Standort, um SSH- und Bildschirmfreigabe-Verbindungen sowie lang laufende lokale Aufgaben im Hintergrund aufrechtzuerhalten. Zeigt Standorte der letzten 5 Minuten."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rastrea la ubicación continuamente para mantener activas las conexiones SSH y de Compartir pantalla y las tareas locales de larga duración en segundo plano. Muestra ubicaciones de los últimos 5 minutos."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seuraa sijaintia jatkuvasti pitääkseen SSH- ja näytön jakamisen yhteydet sekä pitkäkestoiset paikalliset tehtävät aktiivisina taustalla. Näyttää sijainnit viimeiseltä 5 minuutilta."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suit la localisation en continu pour maintenir les connexions SSH et de partage d'écran ainsi que les tâches locales longues actives en arrière-plan. Affiche les positions des 5 dernières minutes."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "עוקב אחר המיקום באופן רציף כדי לשמור על חיבורי SSH ושיתוף מסך ועל משימות מקומיות ארוכות טווח ברקע. מציג מיקומים מ-5 הדקות האחרונות."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folyamatosan követi a helyzetet az SSH- és képernyőmegosztási kapcsolatok, valamint a hosszan futó helyi feladatok háttérben tartásához. Az utolsó 5 perc helyadatait jeleníti meg."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Traccia continuamente la posizione per mantenere attive le connessioni SSH e di condivisione schermo e le attività locali di lunga durata in background. Mostra le posizioni degli ultimi 5 minuti."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH接続や画面共有接続、バックグラウンドで実行中のローカルタスクを維持するために位置情報を継続的に追跡します。過去5分間の位置情報を表示します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH 및 화면 공유 연결과 장시간 실행 중인 로컬 작업을 백그라운드에서 유지하기 위해 위치를 지속적으로 추적합니다. 최근 5분간의 위치를 표시합니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sporer plassering kontinuerlig for å holde SSH- og skjermdelingstilkoblinger og langvarige lokale oppgaver i live i bakgrunnen. Viser plasseringer fra de siste 5 minuttene."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Houdt continu de locatie bij om SSH- en Schermdelen-verbindingen en langlopende lokale taken op de achtergrond actief te houden. Toont locaties van de laatste 5 minuten."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ciągle śledzi lokalizację, aby utrzymać połączenia SSH i udostępniania ekranu oraz długotrwałe zadania lokalne aktywne w tle. Pokazuje lokalizacje z ostatnich 5 minut."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rastreia a localização continuamente para manter conexões SSH e de Compartilhamento de Tela e tarefas locais de longa duração ativas em segundo plano. Mostra localizações dos últimos 5 minutos."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rastreia a localização continuamente para manter ligações SSH e de Partilha de Ecrã e tarefas locais de longa duração ativas em segundo plano. Mostra localizações dos últimos 5 minutos."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Urmărește continuu locația pentru a menține conexiunile SSH și de partajare ecran și sarcinile locale de lungă durată active în fundal. Afișează locațiile din ultimele 5 minute."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neprekinjeno sledi lokaciji, da ohranja SSH povezave, povezave skupne rabe zaslona in dolgotrajne lokalne naloge aktivne v ozadju. Prikazuje lokacije zadnjih 5 minut."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spårar plats kontinuerligt för att hålla SSH- och skärmdelningsanslutningar och långvariga lokala uppgifter aktiva i bakgrunden. Visar platser från de senaste 5 minuterna."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Безперервно відстежує місцезнаходження, щоб підтримувати SSH-з’єднання, з’єднання спільного доступу до екрана та тривалі локальні завдання у фоновому режимі. Показує місця за останні 5 хвилин."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Liên tục theo dõi vị trí để duy trì kết nối SSH và Chia sẻ màn hình cùng các tác vụ cục bộ chạy dài trong nền. Hiển thị vị trí từ 5 phút gần nhất."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "持续跟踪位置，以在后台保持 SSH 和屏幕共享连接以及长时间运行的本地任务。显示最近 5 分钟的位置记录。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "持續追蹤位置，以在背景中保持 SSH 和螢幕共享連線以及長時間執行的本機作業。顯示最近 5 分鐘的位置記錄。"
+          }
+        }
+      }
+    },
     "Continuously tracks location to keep SSH connections and long-running local tasks alive in the background. Shows locations from the last 5 minutes." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -206238,6 +206700,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法啟動登入監聽器。請再試一次。"
+          }
+        }
+      }
+    },
+    "Couldn't Type Password" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تعذّرت كتابة كلمة المرور"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No s'ha pogut escriure la contrasenya"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heslo se nepodařilo napsat"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kunne ikke skrive adgangskode"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passwort konnte nicht eingegeben werden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo escribir la contraseña"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salasanan kirjoittaminen ei onnistunut"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de saisir le mot de passe"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "לא ניתן היה להקליד את הסיסמה"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A jelszó beírása nem sikerült"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile digitare la password"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パスワードを入力できませんでした"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호를 입력할 수 없음"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kunne ikke skrive passordet"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kan wachtwoord niet typen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nie udało się wpisać hasła"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível digitar a senha"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível escrever a palavra-passe"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parola nu a putut fi tastată"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesla ni bilo mogoče vtipkati"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Det gick inte att skriva in lösenordet"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не вдалося ввести пароль"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể gõ mật khẩu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法输入密码"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法輸入密碼"
           }
         }
       }
@@ -257883,6 +258499,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "停駐鍵盤"
+          }
+        }
+      }
+    },
+    "Dock Toolbar" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "إرساء شريط الأدوات"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acoblar la barra d'eines"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ukotvit panel nástrojů"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fastgør værktøjslinje"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Symbolleiste andocken"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acoplar barra de herramientas"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kiinnitä työkalupalkki"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ancrer la barre d'outils"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "עגן את סרגל הכלים"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eszköztár dokkolása"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ancora la barra strumenti"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ツールバーをドッキング"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "도구 모음 고정"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fest verktøylinje"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Werkbalk vastkoppelen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zadokuj pasek narzędzi"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encaixar Barra de Ferramentas"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encaixar Barra de Ferramentas"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Andochează bara de instrumente"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zasidraj orodno vrstico"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Docka verktygsfältet"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Закріпити панель інструментів"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cố định thanh công cụ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停靠工具栏"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停駐工具列"
           }
         }
       }
@@ -322456,6 +323226,469 @@
         }
       }
     },
+    "Float Toolbar" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تعويم شريط الأدوات"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fer flotar la barra d'eines"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Odpojit panel nástrojů"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frigør værktøjslinje"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Symbolleiste ablösen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desacoplar barra de herramientas"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kelluta työkalupalkkia"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Faire flotter la barre d'outils"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הצף את סרגל הכלים"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eszköztár leválasztása"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stacca la barra strumenti"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ツールバーをフローティング"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "도구 모음 띄우기"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Løsne verktøylinje"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Werkbalk laten zweven"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Odłącz pasek narzędzi"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desencaixar Barra de Ferramentas"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desencaixar Barra de Ferramentas"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detașează bara de instrumente"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Odsidraj orodno vrstico"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lösgör verktygsfältet"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Відкріпити панель інструментів"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thả nổi thanh công cụ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使工具栏浮动"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "讓工具列浮動"
+          }
+        }
+      }
+    },
+    "Floating Keyboard Toolbar" : {
+      "comment" : "Setting title",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "شريط أدوات لوحة المفاتيح العائم"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barra d'eines del teclat flotant"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plovoucí panel nástrojů klávesnice"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flydende tastaturværktøjslinje"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schwebende Tastatur-Symbolleiste"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barra flotante de herramientas del teclado"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kelluva näppäimistön työkalupalkki"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barre d'outils du clavier flottante"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "סרגל כלים צף של המקלדת"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lebegő billentyűzet eszköztár"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barra strumenti tastiera mobile"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フローティングキーボードツールバー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "플로팅 키보드 도구 모음"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flytende tastaturverktøylinje"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zwevende toetsenbordwerkbalk"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pływający pasek narzędzi klawiatury"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barra de Ferramentas Flutuante do Teclado"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barra de Ferramentas Flutuante do Teclado"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bară de instrumente flotantă a tastaturii"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plavajoča orodna vrstica tipkovnice"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tangentbordets flytande verktygsfält"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Плаваюча панель інструментів клавіатури"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thanh công cụ bàn phím nổi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浮动键盘工具栏"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浮動鍵盤工具列"
+          }
+        }
+      }
+    },
+    "Floating Toolbar" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "شريط الأدوات العائم"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barra d'eines flotant"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plovoucí panel nástrojů"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flydende værktøjslinje"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schwebende Symbolleiste"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barra de herramientas flotante"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kelluva työkalupalkki"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barre d'outils flottante"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "סרגל כלים צף"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lebegő eszköztár"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barra strumenti mobile"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フローティングツールバー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "플로팅 도구 모음"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flytende verktøylinje"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zwevende werkbalk"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pływający pasek narzędzi"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barra de Ferramentas Flutuante"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barra de Ferramentas Flutuante"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bară de instrumente flotantă"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plavajoča orodna vrstica"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flytande verktygsfält"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Плаваюча панель інструментів"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thanh công cụ nổi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浮动工具栏"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浮動工具列"
+          }
+        }
+      }
+    },
     "Focus Queue" : {
       "comment" : "File manager shortcut",
       "localizations" : {
@@ -333283,6 +334516,161 @@
         }
       }
     },
+    "Four-Finger Tab and Pane Swipes" : {
+      "comment" : "Setting title",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "التمرير بين علامات التبويب والأجزاء بأربعة أصابع"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lliscaments de pestanya i plafó amb quatre dits"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přejetí mezi kartami a panely čtyřmi prsty"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fane- og rudestryg med fire fingre"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tab- und Bereichswischen mit vier Fingern"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deslizamientos con cuatro dedos para pestañas y paneles"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neljän sormen välilehti- ja ruutupyyhkäisyt"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Balayages à quatre doigts entre onglets et panneaux"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "החלקות בארבע אצבעות בין לשוניות וחלוניות"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Négyujjas lap- és panelhúzások"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scorrimenti a quattro dita tra schede e riquadri"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "4本指でのタブとペインのスワイプ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "네 손가락 탭 및 분할 영역 스와이프"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fane- og rutesveip med fire fingre"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vegen tussen tabs en deelvensters met vier vingers"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Przesunięcia kart i paneli czterema palcami"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deslizar com Quatro Dedos entre Abas e Painéis"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deslizes com quatro dedos entre separadores e painéis"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glisări cu patru degete pentru file și panouri"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Potegi s štirimi prsti za zavihke in podokna"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flik- och rutsvep med fyra fingrar"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Свайпи вкладок і панелей чотирма пальцями"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vuốt bốn ngón để chuyển tab và ngăn"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "四指滑动切换标签页和窗格"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "四指滑動切換分頁與窗格"
+          }
+        }
+      }
+    },
     "Frame Rate" : {
       "localizations" : {
         "ar" : {
@@ -336832,6 +338220,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "全螢幕"
+          }
+        }
+      }
+    },
+    "Full Screen expands this Screen Sharing pane after the connection succeeds." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يوسّع «ملء الشاشة» جزء مشاركة الشاشة هذا بعد نجاح الاتصال."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pantalla completa amplia aquesta subfinestra de Compartir pantalla quan la connexió s'estableix correctament."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Celá obrazovka roztáhne tento panel sdílení obrazovky po úspěšném připojení."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fuld skærm udvider denne skærmdelingsrude, når forbindelsen er oprettet."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vollbild vergrößert diesen Bildschirmfreigabe-Bereich, nachdem die Verbindung hergestellt wurde."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Pantalla completa» amplía este panel de Compartir pantalla una vez establecida la conexión."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koko näyttö laajentaa tämän näytön jakamisen ruudun, kun yhteys on muodostettu."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plein écran agrandit ce volet Partage d'écran une fois la connexion établie."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "מסך מלא מרחיב את חלונית שיתוף המסך הזו לאחר שהחיבור מצליח."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Teljes képernyő a kapcsolat létrejötte után kiterjeszti ezt a képernyőmegosztási panelt."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schermo intero espande questo riquadro di condivisione schermo dopo che la connessione è riuscita."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「フルスクリーン」は接続成功後にこの画面共有ペインを拡大します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전체 화면은 연결에 성공한 후 이 화면 공유 창을 확대합니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fullskjerm utvider dette skjermdelingspanelet etter at tilkoblingen er opprettet."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volledig scherm vergroot dit Schermdelen-deelvenster nadat de verbinding tot stand is gekomen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pełny ekran rozszerza ten panel udostępniania ekranu po udanym połączeniu."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Tela Cheia expande este painel de Compartilhamento de Tela após a conexão ser estabelecida."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ecrã Inteiro expande este painel de Partilha de Ecrã após a ligação ser estabelecida."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Ecran complet” extinde acest panou de partajare ecran după reușita conexiunii."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Celoten zaslon razširi to podokno skupne rabe zaslona po uspešni povezavi."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Helskärm expanderar den här skärmdelningsrutan när anslutningen har lyckats."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Повноекранний режим» розгортає цю область спільного доступу до екрана після успішного з’єднання."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toàn màn hình sẽ mở rộng khung Chia sẻ màn hình này sau khi kết nối thành công."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“全屏”会在连接成功后展开此屏幕共享窗格。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「全螢幕」會在連線成功後展開此螢幕共享窗格。"
           }
         }
       }
@@ -363707,6 +365249,160 @@
         }
       }
     },
+    "Hide Toolbar Keys" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "إخفاء مفاتيح شريط الأدوات"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amagar les tecles de la barra d'eines"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skrýt klávesy panelu nástrojů"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skjul værktøjslinjetaster"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Symbolleistentasten ausblenden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ocultar teclas de la barra de herramientas"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Piilota työkalupalkin näppäimet"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Masquer les touches de la barre d'outils"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הסתר את מקשי סרגל הכלים"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eszköztár billentyűk elrejtése"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nascondi tasti della barra strumenti"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ツールバーキーを非表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "도구 막대 키 숨기기"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skjul verktøylinjetaster"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Werkbalktoetsen verbergen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ukryj klawisze paska narzędzi"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ocultar Teclas da Barra de Ferramentas"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ocultar Teclas da Barra de Ferramentas"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ascunde tastele barei de instrumente"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skrij tipke orodne vrstice"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dölj verktygsfältstangenter"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сховати клавіші панелі інструментів"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ẩn phím thanh công cụ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏工具栏按键"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隱藏工具列按鍵"
+          }
+        }
+      }
+    },
     "Hide Top Tab Bar" : {
       "localizations" : {
         "ar" : {
@@ -364637,7 +366333,6 @@
     },
     "High Performance May Be Unreliable" : {
       "comment" : "Alert title for High Performance Screen Sharing on an unreliable transport or mesh VPN hostname",
-      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -364792,7 +366487,6 @@
       }
     },
     "High Performance Screen Sharing can be unreliable over cellular or mesh VPN connections such as Tailscale and NetBird. Continue with High Performance or use Standard for this connection." : {
-      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -409434,6 +411128,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "維持連接埠轉送"
+          }
+        }
+      }
+    },
+    "Keep Saved Password" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الاحتفاظ بكلمة المرور المحفوظة"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantenir la contrasenya desada"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ponechat uložené heslo"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Behold gemt adgangskode"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gespeichertes Passwort behalten"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conservar la contraseña guardada"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Säilytä tallennettu salasana"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conserver le mot de passe enregistré"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "השארת הסיסמה השמורה"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mentett jelszó megtartása"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantieni password salvata"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済みパスワードを保持"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 비밀번호 유지"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Behold lagret passord"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opgeslagen wachtwoord behouden"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zachowaj zapisane hasło"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manter Senha Salva"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manter palavra-passe guardada"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Păstrează parola salvată"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ohrani shranjeno geslo"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Behåll sparat lösenord"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Залишити збережений пароль"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Giữ mật khẩu đã lưu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留已保存的密码"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留已儲存的密碼"
           }
         }
       }
@@ -527750,6 +529598,160 @@
         }
       }
     },
+    "Offer at Login Screen" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "العرض على شاشة تسجيل الدخول"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oferir a la pantalla d'inici de sessió"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nabídnout na přihlašovací obrazovce"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tilbyd ved loginskærm"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Am Anmeldebildschirm anbieten"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ofrecer en la pantalla de inicio de sesión"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tarjoa kirjautumisnäytössä"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proposer à l'écran de connexion"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הצעה במסך הכניסה"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Felajánlás a bejelentkezési képernyőn"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proponi nella schermata di login"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ログイン画面で提案"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그인 화면에서 제안"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tilby på påloggingsskjermen"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aanbieden bij inlogscherm"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proponuj na ekranie logowania"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oferecer na Tela de Login"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oferecer no ecrã de início de sessão"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oferă pe ecranul de autentificare"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ponudi na zaslonu za prijavo"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erbjud vid inloggningsskärmen"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пропонувати на екрані входу"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đề nghị tại màn hình đăng nhập"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在登录屏幕时提示"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在登入畫面時提示"
+          }
+        }
+      }
+    },
     "Offline" : {
       "comment" : "Kubernetes cluster health status",
       "localizations" : {
@@ -543817,6 +545819,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "選填。以逗號分隔被誤聽成的片語，例如 cube control, cube cuddle。"
+          }
+        }
+      }
+    },
+    "Optional. The password of the computer connected to the KVM, which is usually different from the KVM's own. Type it with Type Computer Password in the session menu, or when a login or lock screen is detected. It's saved in iCloud Keychain and only typed after you confirm." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "اختياري. كلمة مرور الكمبيوتر المتصل بجهاز KVM، وهي عادةً تختلف عن كلمة مرور KVM نفسه. اكتبها باستخدام «كتابة كلمة مرور الكمبيوتر» في قائمة الجلسة، أو عند اكتشاف شاشة تسجيل الدخول أو شاشة القفل. تُحفظ في سلسلة مفاتيح iCloud ولا تُكتب إلا بعد تأكيدك."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opcional. La contrasenya de l'ordinador connectat al KVM, que normalment és diferent de la del mateix KVM. Escriu-la amb «Escriure la contrasenya de l'ordinador» al menú de la sessió, o quan es detecti una pantalla d'inici de sessió o de bloqueig. Es desa al clauer d'iCloud i només s'escriu després que ho confirmis."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volitelné. Heslo počítače připojeného ke KVM, které se obvykle liší od hesla samotného KVM. Napíšete ho volbou „Napsat heslo počítače“ v nabídce relace, nebo když je zjištěna přihlašovací či zamknutá obrazovka. Ukládá se do Klíčenky na iCloudu a napíše se až po vašem potvrzení."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valgfri. Adgangskoden til den computer, der er tilsluttet KVM'en, og som normalt er en anden end KVM'ens egen. Skriv den med »Skriv computeradgangskode« i sessionsmenuen, eller når en login- eller låseskærm registreres. Den gemmes i iCloud-nøglering og skrives kun, når du har bekræftet."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional. Das Passwort des mit dem KVM verbundenen Computers, das sich meist vom Passwort des KVM selbst unterscheidet. Geben Sie es mit „Computerpasswort eingeben“ im Sitzungsmenü ein oder wenn ein Anmelde- oder Sperrbildschirm erkannt wird. Es wird im iCloud-Schlüsselbund gespeichert und erst nach Ihrer Bestätigung eingegeben."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opcional. La contraseña del ordenador conectado al KVM, que suele ser distinta de la del propio KVM. Escríbela con «Escribir la contraseña del ordenador» en el menú de la sesión, o cuando se detecte una pantalla de inicio de sesión o de bloqueo. Se guarda en el Llavero de iCloud y solo se escribe después de que lo confirmes."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valinnainen. KVM:ään liitetyn tietokoneen salasana, joka on yleensä eri kuin KVM:n oma. Kirjoita se istuntovalikon ”Kirjoita tietokoneen salasana” -toiminnolla tai kun kirjautumis- tai lukitusnäyttö havaitaan. Se tallennetaan iCloud-avainnippuun ja kirjoitetaan vasta vahvistuksesi jälkeen."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Facultatif. Le mot de passe de l'ordinateur connecté au KVM, généralement différent de celui du KVM lui-même. Saisissez-le avec « Saisir le mot de passe de l'ordinateur » dans le menu de la session, ou lorsqu'un écran de connexion ou un écran verrouillé est détecté. Il est enregistré dans le trousseau iCloud et n'est saisi qu'après votre confirmation."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "אופציונלי. הסיסמה של המחשב המחובר ל-KVM, שבדרך כלל שונה מהסיסמה של ה-KVM עצמו. הקלד אותה באמצעות ״הקלדת סיסמת המחשב״ בתפריט ההפעלה, או כאשר מזוהה מסך כניסה או מסך נעילה. היא נשמרת במחזיק המפתחות של iCloud ומוקלדת רק לאחר שתאשר."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nem kötelező. A KVM-hez csatlakoztatott számítógép jelszava, amely általában eltér a KVM saját jelszavától. A munkamenet menüjében a „Számítógép jelszavának beírása” paranccsal írhatja be, vagy amikor a rendszer bejelentkezési vagy zárolási képernyőt észlel. Az iCloud Keychainben tárolódik, és csak az Ön megerősítése után kerül beírásra."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Facoltativa. La password del computer collegato al KVM, che di solito è diversa da quella del KVM stesso. Digitala con «Digita password del computer» nel menu della sessione, oppure quando viene rilevata una schermata di login o di blocco. Viene salvata nel Portachiavi iCloud e digitata solo dopo la tua conferma."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オプション。KVMに接続されたコンピュータのパスワードで、通常はKVM自体のパスワードとは異なります。セッションメニューの「コンピュータのパスワードを入力」を使うか、ログイン画面やロック画面が検出されたときに入力できます。iCloud キーチェーンに保存され、確認後にのみ入力されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택 사항. KVM에 연결된 컴퓨터의 비밀번호로, 보통 KVM 자체의 비밀번호와 다릅니다. 세션 메뉴의 ‘컴퓨터 암호 입력’으로 입력하거나, 로그인 화면 또는 잠금 화면이 감지되면 입력할 수 있습니다. iCloud 키체인에 저장되며 확인한 후에만 입력됩니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valgfritt. Passordet til datamaskinen som er koblet til KVM-en, og som vanligvis er et annet enn KVM-ens eget. Skriv det inn med «Skriv datamaskinpassord» i øktmenyen, eller når en påloggingsskjerm eller låst skjerm oppdages. Det lagres i iCloud-nøkkelring og skrives bare inn etter at du har bekreftet."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optioneel. Het wachtwoord van de computer die op de KVM is aangesloten, meestal anders dan dat van de KVM zelf. Typ het met 'Typ computerwachtwoord' in het sessiemenu, of wanneer een inlogscherm of vergrendeld scherm wordt gedetecteerd. Het wordt bewaard in iCloud-sleutelhanger en pas getypt nadat je hebt bevestigd."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opcjonalne. Hasło komputera podłączonego do KVM, zwykle inne niż hasło samego KVM. Wpisz je poleceniem „Wpisz hasło komputera” w menu sesji albo gdy zostanie wykryty ekran logowania lub ekran blokady. Jest zapisywane w iCloud Keychain i wpisywane dopiero po Twoim potwierdzeniu."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opcional. A senha do computador conectado ao KVM, que geralmente é diferente da senha do próprio KVM. Digite-a com Digitar Senha do Computador no menu da sessão ou quando uma tela de login ou uma tela bloqueada for detectada. Ela é salva nas Chaves do iCloud e só é digitada depois que você confirmar."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opcional. A palavra-passe do computador ligado ao KVM, que normalmente é diferente da do próprio KVM. Escreva-a com “Escrever palavra-passe do computador” no menu da sessão, ou quando for detetado um ecrã de início de sessão ou um ecrã bloqueado. É guardada no Porta-chaves do iCloud e só é escrita depois de confirmar."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opțional. Parola computerului conectat la KVM, care de obicei diferă de cea a KVM-ului. Tasteaz-o cu „Tastare parolă computer” din meniul sesiunii sau când este detectat un ecran de autentificare ori un ecran blocat. Este salvată în portchei iCloud și tastată doar după ce confirmi."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Izbirno. Geslo računalnika, povezanega s KVM, ki se običajno razlikuje od gesla samega KVM. Vtipkate ga z ukazom Vtipkaj geslo računalnika v meniju seje ali ko je zaznan zaslon za prijavo ali zaklenjen zaslon. Shrani se v obesek ključev iCloud in se vtipka šele, ko potrdite."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valfritt. Lösenordet till datorn som är ansluten till KVM:en, vilket oftast skiljer sig från KVM:ens eget. Skriv in det med ”Skriv datorlösenord” i sessionsmenyn, eller när en inloggnings- eller låsskärm upptäcks. Det sparas i iCloud-nyckelringen och skrivs bara in efter att du har bekräftat."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Необов’язково. Пароль комп’ютера, підключеного до KVM, який зазвичай відрізняється від пароля самого KVM. Введіть його командою «Ввести пароль комп’ютера» в меню сеансу або коли виявлено екран входу чи екран блокування. Він зберігається у Звʼязці ключів iCloud і вводиться лише після вашого підтвердження."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tùy chọn. Mật khẩu của máy tính được kết nối với KVM, thường khác với mật khẩu của chính KVM. Gõ mật khẩu này bằng “Gõ mật khẩu máy tính” trong menu phiên, hoặc khi phát hiện màn hình đăng nhập hay màn hình khóa. Mật khẩu được lưu trong Chuỗi khóa iCloud và chỉ được gõ sau khi bạn xác nhận."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选。连接到 KVM 的电脑的密码，通常与 KVM 自身的密码不同。可通过会话菜单中的“输入电脑密码”输入，也可在检测到登录屏幕或锁定屏幕时输入。密码保存在 iCloud 钥匙串中，并且仅在您确认后才会输入。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選用。連接到 KVM 的電腦的密碼，通常與 KVM 本身的密碼不同。可透過工作階段選單中的「輸入電腦密碼」輸入，也可在偵測到登入畫面或鎖定畫面時輸入。密碼會儲存在 iCloud 鑰匙圈中，且只會在您確認後輸入。"
           }
         }
       }
@@ -628136,7 +630292,162 @@
         }
       }
     },
+    "Requires the swipe direction to be assigned to app-tab navigation in Swipe Gestures and, with three fingers, its Three-Finger Swipe in Screen Sharing settings to be Off." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يتطلب تعيين اتجاه التمرير للتنقل بين علامات تبويب التطبيق في «إيماءات التمرير»، ومع ثلاثة أصابع، أن يكون «التمرير بثلاثة أصابع» الخاص به في إعدادات مشاركة الشاشة على «إيقاف»."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Requereix que la direcció del lliscament estigui assignada a la navegació per pestanyes de l'app a «Gestos de lliscament» i, amb tres dits, que el seu «Lliscament amb tres dits» de la configuració de Compartir pantalla estigui desactivat."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vyžaduje, aby byl daný směr přejetí přiřazen k přepínání karet aplikace v Gestech přejetí a aby při třech prstech byla odpovídající volba Přejetí třemi prsty v nastavení Sdílení obrazovky nastavena na Vypnuto."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kræver, at strygeretningen er tildelt navigation mellem appens faner under Strygebevægelser og, ved tre fingre, at den tilsvarende strygning med tre fingre i indstillingerne for Skærmdeling er sat til Fra."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erfordert, dass die Wischrichtung in den Wischgesten der App-Tab-Navigation zugewiesen ist und bei drei Fingern die zugehörige Einstellung „Wischen mit drei Fingern“ in den Bildschirmfreigabe-Einstellungen auf „Aus“ steht."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Requiere que la dirección de deslizamiento esté asignada a la navegación por pestañas de la app en «Gestos de deslizamiento» y, con tres dedos, que su opción «Deslizar con tres dedos» de los ajustes de Compartir pantalla esté en «Desactivado»."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vaatii, että pyyhkäisysuunta on määritetty sovelluksen välilehtien selaamiseen Pyyhkäisyeleissä, ja kolmella sormella lisäksi, että suunnan Kolmen sormen pyyhkäisy -asetus on näytön jakamisen asetuksissa Pois."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nécessite que la direction de balayage soit affectée à la navigation entre les onglets de l'app dans les Gestes de balayage et, à trois doigts, que son « Balayage à trois doigts » soit sur Désactivé dans les réglages de Partage d'écran."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "דורש שכיוון ההחלקה יוקצה לניווט בין לשוניות האפליקציה במחוות החלקה, ובשלוש אצבעות גם שהאפשרות ״החלקה בשלוש אצבעות״ שלו בהגדרות שיתוף מסך תוגדר ל״כבוי״."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Azt igényli, hogy a húzás iránya az alkalmazáslapok közötti navigációhoz legyen rendelve a Húzási mozdulatok között, három ujj esetén pedig azt is, hogy az irány „Háromujjas húzás” beállítása Ki legyen a Képernyőmegosztás beállításaiban."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Richiede che la direzione di scorrimento sia assegnata alla navigazione tra le schede dell'app nei Gesti di scorrimento e, con tre dita, che il relativo «Scorrimento a tre dita» nelle impostazioni di Condivisione schermo sia Disattivato."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「スワイプジェスチャ」で、そのスワイプ方向がアプリのタブ移動に割り当てられている必要があります。3本指の場合は、さらに「画面共有」設定でその方向の「3本指スワイプ」が「オフ」になっている必要があります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스와이프 제스처에서 해당 스와이프 방향이 앱 탭 이동에 지정되어 있어야 하며, 세 손가락의 경우 화면 공유 설정에서 해당 방향의 ‘세 손가락 스와이프’가 ‘끔’으로 설정되어 있어야 합니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Krever at sveiperetningen er tilordnet navigering mellom appfaner under Sveipbevegelser og, med tre fingre, at det tilhørende sveipet med tre fingre i Skjermdeling-innstillingene er satt til Av."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vereist dat de veegrichting bij Veegbewegingen is toegewezen aan navigatie tussen app-tabs en, bij drie vingers, dat de bijbehorende veegbeweging met drie vingers in de Schermdelen-instellingen op Uit staat."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wymaga przypisania kierunku przesunięcia do nawigacji po kartach aplikacji w Gestach przesunięcia, a przy trzech palcach także wyłączenia dla tego kierunku opcji „Gest trzema palcami” w ustawieniach udostępniania ekranu."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Requer que a direção do gesto esteja atribuída à navegação entre abas do app em Gestos de deslizar e, com três dedos, que o respectivo Deslizar com Três Dedos nas configurações de Compartilhamento de Tela esteja Desligado."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Requer que a direção do deslize esteja atribuída à navegação entre separadores da app em Gestos de deslize e, com três dedos, que o respetivo “Deslize com três dedos” nas definições de Partilha de Ecrã esteja Desligado."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Necesită ca direcția de glisare să fie asociată navigării între filele aplicației în Gesturi de glisare și, pentru trei degete, ca „Glisare cu trei degete” pentru acea direcție din setările de partajare ecran să fie dezactivată."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zahteva, da je smer potega dodeljena navigaciji po zavihkih aplikacije v Potezah potega, pri treh prstih pa tudi, da je njen Poteg s tremi prsti v nastavitvah skupne rabe zaslona nastavljen na Izključeno."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kräver att svepriktningen är tilldelad navigering mellan appflikar i Svepgester och, med tre fingrar, att dess ”Svep med tre fingrar” i inställningarna för skärmdelning är Av."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Потребує, щоб напрямок свайпу було призначено навігації по вкладках застосунку в розділі «Жести свайпу», а для трьох пальців також потрібно, щоб відповідний параметр «Свайп трьома пальцями» в налаштуваннях спільного доступу до екрана мав значення «Вимк.»."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yêu cầu hướng vuốt được gán cho việc điều hướng tab ứng dụng trong Cử chỉ vuốt và, với ba ngón tay, mục Vuốt ba ngón tương ứng trong cài đặt Chia sẻ màn hình phải được đặt thành Tắt."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要在“滑动手势”中将该滑动方向指定为应用标签页导航；使用三指时，还需要在屏幕共享设置中将对应的“三指滑动”设为“关闭”。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要在「滑動手勢」中將該滑動方向指定為 App 分頁導覽；使用三指時，還需要在螢幕共享設定中將對應的「三指滑動」設為「關閉」。"
+          }
+        }
+      }
+    },
     "Requires the swipe direction to be assigned to app-tab navigation in Swipe Gestures." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -678193,6 +680504,160 @@
         }
       }
     },
+    "Sends rootshell’s keyboard shortcuts, such as Command+T and Command+1, to the remote computer by default in new Screen Sharing sessions. Change it for the current session from the Screen Sharing menu or with Command+Shift+M. Command+Shift+M always stays local." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يرسل اختصارات لوحة المفاتيح في rootshell، مثل Command+T وCommand+1، إلى الكمبيوتر البعيد افتراضيًا في جلسات مشاركة الشاشة الجديدة. ولتغيير ذلك في الجلسة الحالية، استخدم قائمة مشاركة الشاشة أو Command+Shift+M. ويظل Command+Shift+M محليًا دائمًا."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envia les dreceres de teclat del rootshell, com ara Command+T i Command+1, a l'ordinador remot per omissió a les sessions noves de Compartir pantalla. Canvia-ho per a la sessió actual des del menú Compartir pantalla o amb Command+Shift+M. Command+Shift+M sempre es manté local."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "V nových relacích sdílení obrazovky ve výchozím nastavení odesílá klávesové zkratky aplikace rootshell, například Command+T a Command+1, do vzdáleného počítače. Pro aktuální relaci to změníte v nabídce Sdílení obrazovky nebo pomocí Command+Shift+M. Command+Shift+M zůstává vždy lokální."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sender som standard rootshells tastaturgenveje, f.eks. Command+T og Command+1, til fjerncomputeren i nye skærmdelingssessioner. Du kan ændre det for den aktuelle session i menuen Skærmdeling eller med Command+Shift+M. Command+Shift+M forbliver altid lokal."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sendet die Tastaturkurzbefehle von rootshell, etwa Command+T und Command+1, in neuen Bildschirmfreigabe-Sitzungen standardmäßig an den entfernten Computer. Für die aktuelle Sitzung im Menü „Bildschirmfreigabe“ oder mit Command+Shift+M änderbar. Command+Shift+M bleibt immer lokal."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envía por omisión los atajos de teclado de rootshell, como Command+T y Command+1, al ordenador remoto en las nuevas sesiones de Compartir pantalla. Puedes cambiarlo para la sesión actual desde el menú Compartir pantalla o con Command+Shift+M. Command+Shift+M siempre permanece local."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lähettää rootshellin pikanäppäimet, kuten Command+T ja Command+1, etäkoneelle oletuksena uusissa näytön jakamisen istunnoissa. Voit muuttaa sen nykyiselle istunnolle Näytön jakaminen -valikosta tai näppäinyhdistelmällä Command+Shift+M. Command+Shift+M pysyy aina paikallisena."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envoie par défaut les raccourcis clavier de rootshell, comme Command+T et Command+1, à l'ordinateur distant dans les nouvelles sessions de partage d'écran. Modifiez ce réglage pour la session en cours depuis le menu Partage d'écran ou avec Command+Shift+M. Command+Shift+M reste toujours local."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "שולח את קיצורי המקלדת של rootshell, כמו Command+T ו-Command+1, למחשב המרוחק כברירת מחדל בהפעלות שיתוף מסך חדשות. לשינוי בהפעלה הנוכחית, השתמש בתפריט שיתוף מסך או ב-Command+Shift+M. הצירוף Command+Shift+M תמיד נשאר מקומי."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Az új Képernyőmegosztás-munkamenetekben alapértelmezés szerint elküldi a rootshell billentyűparancsait, például a Command+T és a Command+1 billentyűket, a távoli számítógépnek. Az aktuális munkamenetnél a Képernyőmegosztás menüben vagy a Command+Shift+M billentyűkkel módosíthatja. A Command+Shift+M mindig helyben marad."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invia per impostazione predefinita le scorciatoie da tastiera di rootshell, come Command+T e Command+1, al computer remoto nelle nuove sessioni di Condivisione schermo. Puoi modificarlo per la sessione corrente dal menu Condivisione schermo o con Command+Shift+M. Command+Shift+M rimane sempre locale."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新規の画面共有セッションで、Command+T や Command+1 などの rootshell のキーボードショートカットをデフォルトでリモートコンピュータに送信します。現在のセッションで変更するには、「画面共有」メニューまたは Command+Shift+M を使用します。Command+Shift+M は常にローカルで処理されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 화면 공유 세션에서 Command+T, Command+1 등 rootshell의 키보드 단축키를 기본적으로 원격 컴퓨터에 전송합니다. 현재 세션은 화면 공유 메뉴 또는 Command+Shift+M으로 변경할 수 있습니다. Command+Shift+M은 항상 로컬에 유지됩니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sender rootshells tastatursnarveier, for eksempel Command+T og Command+1, til den eksterne maskinen som standard i nye skjermdelingsøkter. Endre det for den gjeldende økten fra Skjermdeling-menyen eller med Command+Shift+M. Command+Shift+M forblir alltid lokal."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stuurt de sneltoetsen van rootshell, zoals Command+T en Command+1, standaard naar de externe computer in nieuwe sessies van Schermdelen. Wijzig dit voor de huidige sessie via het menu Schermdelen of met Command+Shift+M. Command+Shift+M blijft altijd lokaal."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Domyślnie wysyła skróty klawiszowe rootshella, takie jak Command+T i Command+1, do zdalnego komputera w nowych sesjach udostępniania ekranu. Dla bieżącej sesji zmienisz to w menu Udostępnianie ekranu lub skrótem Command+Shift+M. Command+Shift+M zawsze pozostaje lokalny."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envia os atalhos de teclado do rootshell, como Command+T e Command+1, para o computador remoto por padrão em novas sessões de Compartilhamento de Tela. Altere isso para a sessão atual no menu Compartilhamento de Tela ou com Command+Shift+M. O Command+Shift+M permanece sempre local."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envia os atalhos de teclado do rootshell, como Command+T e Command+1, para o computador remoto por predefinição em novas sessões de Partilha de Ecrã. Altere isto para a sessão atual no menu Partilha de Ecrã ou com Command+Shift+M. O Command+Shift+M permanece sempre local."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trimite implicit scurtăturile de tastatură ale rootshell, precum Command+T și Command+1, către computerul la distanță în sesiunile noi de Partajare ecran. Modifică acest lucru pentru sesiunea curentă din meniul Partajare ecran sau cu Command+Shift+M. Command+Shift+M rămâne întotdeauna local."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "V novih sejah Skupne rabe zaslona privzeto pošlje bližnjice na tipkovnici aplikacije rootshell, kot sta Command+T in Command+1, oddaljenemu računalniku. Za trenutno sejo to spremenite v meniju Skupna raba zaslona ali s tipkami Command+Shift+M. Command+Shift+M vedno ostane lokalna."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skickar rootshells tangentbordsgenvägar, till exempel Command+T och Command+1, till fjärrdatorn som standard i nya skärmdelningssessioner. Ändra det för den aktuella sessionen i menyn Skärmdelning eller med Command+Shift+M. Command+Shift+M stannar alltid lokalt."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Типово надсилає клавіатурні скорочення rootshell, як-от Command+T і Command+1, на віддалений комп’ютер у нових сеансах спільного доступу до екрана. Змінити це для поточного сеансу можна в меню спільного доступу до екрана або за допомогою Command+Shift+M. Command+Shift+M завжди залишається локальним."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Theo mặc định, gửi các phím tắt của rootshell, chẳng hạn Command+T và Command+1, đến máy tính từ xa trong các phiên Chia sẻ màn hình mới. Thay đổi cho phiên hiện tại từ menu Chia sẻ màn hình hoặc bằng Command+Shift+M. Command+Shift+M luôn được xử lý cục bộ."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认在新的屏幕共享会话中将 rootshell 的键盘快捷键（如 Command+T 和 Command+1）发送到远程电脑。可从“屏幕共享”菜单或使用 Command+Shift+M 更改当前会话的设置。Command+Shift+M 始终在本地生效。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "預設會在新的螢幕共享工作階段中將 rootshell 的鍵盤快速鍵（例如 Command+T 和 Command+1）傳送到遠端電腦。可從「螢幕共享」選單或使用 Command+Shift+M 變更目前工作階段的設定。Command+Shift+M 一律在本機生效。"
+          }
+        }
+      }
+    },
     "Sends rootshell’s reserved keyboard shortcuts to the remote computer by default in new Screen Sharing sessions. Change it for the current session from the Screen Sharing menu or with Command+Shift+M. Command+Shift+M always stays local." : {
       "localizations" : {
         "ar" : {
@@ -702931,6 +705396,315 @@
         }
       }
     },
+    "Show Toolbar Keys" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "إظهار مفاتيح شريط الأدوات"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar les tecles de la barra d'eines"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zobrazit klávesy panelu nástrojů"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vis værktøjslinjetaster"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Symbolleistentasten anzeigen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar teclas de la barra de herramientas"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Näytä työkalupalkin näppäimet"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afficher les touches de la barre d'outils"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הצג את מקשי סרגל הכלים"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eszköztár billentyűk megjelenítése"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostra tasti della barra strumenti"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ツールバーキーを表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "도구 막대 키 표시"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vis verktøylinjetaster"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Werkbalktoetsen tonen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pokaż klawisze paska narzędzi"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar Teclas da Barra de Ferramentas"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar Teclas da Barra de Ferramentas"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afișează tastele barei de instrumente"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pokaži tipke orodne vrstice"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visa verktygsfältstangenter"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Показати клавіші панелі інструментів"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hiện phím thanh công cụ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示工具栏按键"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示工具列按鍵"
+          }
+        }
+      }
+    },
+    "Show Toolbar Keys in Remote Screen Controls" : {
+      "comment" : "Setting title",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "إظهار مفاتيح شريط الأدوات في عناصر التحكم بالشاشة البعيدة"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar les tecles de la barra d'eines als controls de la pantalla remota"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zobrazit klávesy panelu nástrojů v ovládacích prvcích vzdálené obrazovky"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vis værktøjslinjetaster i fjernskærmens betjeningselementer"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Symbolleistentasten in den Steuerelementen des entfernten Bildschirms anzeigen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar teclas de la barra de herramientas en los controles de pantalla remota"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Näytä työkalupalkin näppäimet etänäytön säätimissä"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afficher les touches de la barre d'outils dans les commandes de l'écran distant"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הצג את מקשי סרגל הכלים בפקדי המסך המרוחק"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eszköztár billentyűk megjelenítése a távoli képernyő vezérlőiben"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostra tasti della barra strumenti nei controlli dello schermo remoto"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リモート画面コントロールにツールバーキーを表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원격 화면 컨트롤에 도구 막대 키 표시"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vis verktøylinjetaster i kontrollene for ekstern skjerm"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Werkbalktoetsen tonen in bediening extern scherm"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pokaż klawisze paska narzędzi w sterowaniu zdalnym ekranem"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar Teclas da Barra de Ferramentas nos Controles da Tela Remota"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar Teclas da Barra de Ferramentas nos Controlos do Ecrã Remoto"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afișează tastele barei de instrumente în comenzile ecranului la distanță"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pokaži tipke orodne vrstice v kontrolnikih oddaljenega zaslona"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visa verktygsfältstangenter i fjärrskärmskontrollerna"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Показувати клавіші панелі інструментів в елементах керування віддаленим екраном"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hiện phím thanh công cụ trong điều khiển màn hình từ xa"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在远程屏幕控制中显示工具栏按键"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在遠端螢幕控制項中顯示工具列按鍵"
+          }
+        }
+      }
+    },
     "Show Toolbar with Hardware Keyboard" : {
       "comment" : "Setting title",
       "localizations" : {
@@ -706652,6 +709426,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "關閉設定時再次顯示鍵盤選擇器。已儲存的鍵盤選擇不會更改。"
+          }
+        }
+      }
+    },
+    "Shows the keyboard toolbar in a glass bar over the remote screen that you can drag and fold away. Turn it off to dock the toolbar to the keyboard. Sets the default for new sessions; touch and hold the bar's chevron, or the docked toolbar's keyboard key, to switch the current one." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يعرض شريط أدوات لوحة المفاتيح في شريط زجاجي فوق الشاشة البعيدة يمكنك سحبه وطيّه. أوقفه لإرساء شريط الأدوات على لوحة المفاتيح. يحدد الإعداد الافتراضي للجلسات الجديدة؛ المس سهم الشريط مع الاستمرار، أو مفتاح لوحة المفاتيح في شريط الأدوات المرسى، لتبديل الجلسة الحالية."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostra la barra d'eines del teclat en una barra de vidre sobre la pantalla remota que pots arrossegar i replegar. Desactiva-ho per acoblar la barra d'eines al teclat. Defineix el valor per defecte de les sessions noves; mantén premuda la fletxa de la barra, o la tecla del teclat de la barra d'eines acoblada, per canviar la sessió actual."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zobrazí panel nástrojů klávesnice ve skleněné liště nad vzdálenou obrazovkou, kterou můžete přetáhnout a sbalit. Vypnutím panel nástrojů ukotvíte ke klávesnici. Nastavuje výchozí hodnotu pro nové relace; aktuální relaci přepnete podržením šipky na liště nebo klávesy klávesnice na ukotveném panelu nástrojů."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Viser tastaturværktøjslinjen i en glasbjælke over fjernskærmen, som du kan trække og folde væk. Slå den fra for at fastgøre værktøjslinjen til tastaturet. Angiver standarden for nye sessioner; tryk og hold på bjælkens pil eller på tastaturtasten på den fastgjorte værktøjslinje for at skifte den aktuelle."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt die Tastatur-Symbolleiste in einer Glasleiste über dem entfernten Bildschirm, die Sie verschieben und einklappen können. Deaktivieren Sie die Option, um die Symbolleiste an der Tastatur anzudocken. Legt die Vorgabe für neue Sitzungen fest; halten Sie den Pfeil der Leiste oder die Tastaturtaste der angedockten Symbolleiste gedrückt, um die aktuelle Sitzung umzuschalten."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muestra la barra de herramientas del teclado en una barra de cristal sobre la pantalla remota que puedes arrastrar y plegar. Desactívalo para acoplar la barra de herramientas al teclado. Define el valor predeterminado para las nuevas sesiones; mantén pulsada la flecha de la barra, o la tecla de teclado de la barra de herramientas acoplada, para cambiar la sesión actual."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Näyttää näppäimistön työkalupalkin lasipalkissa etänäytön päällä; voit vetää palkkia ja taittaa sen piiloon. Laita tämä pois päältä, niin työkalupalkki kiinnitetään näppäimistöön. Määrittää oletuksen uusille istunnoille; vaihda nykyistä istuntoa koskettamalla ja pitämällä palkin nuolipainiketta tai kiinnitetyn työkalupalkin näppäimistönäppäintä."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Affiche la barre d'outils du clavier dans une barre en verre au-dessus de l'écran distant, que vous pouvez déplacer et replier. Désactivez cette option pour ancrer la barre d'outils au clavier. Définit la valeur par défaut des nouvelles sessions ; pour changer celle de la session en cours, maintenez le doigt sur le chevron de la barre ou sur la touche clavier de la barre d'outils ancrée."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "מציג את סרגל הכלים של המקלדת בסרגל זכוכית מעל המסך המרוחק, שאפשר לגרור ולקפל הצידה. כבה כדי לעגן את סרגל הכלים למקלדת. קובע את ברירת המחדל להפעלות חדשות; כדי להחליף בהפעלה הנוכחית, גע והחזק את החץ של הסרגל, או את מקש המקלדת של סרגל הכלים המעוגן."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A billentyűzet eszköztárat egy üvegsávban jeleníti meg a távoli képernyő fölött, amelyet elhúzhat és összecsukhat. Kapcsolja ki, ha az eszköztárat a billentyűzethez szeretné dokkolni. Ez az új munkamenetek alapértelmezése; az aktuális munkamenetben való váltáshoz érintse meg és tartsa nyomva a sáv nyílgombját vagy a dokkolt eszköztár billentyűzetgombját."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostra la barra strumenti della tastiera in una barra di vetro sopra lo schermo remoto, che puoi trascinare e ripiegare. Disattiva l'opzione per ancorare la barra strumenti alla tastiera. Imposta il valore predefinito per le nuove sessioni; tocca e tieni premuta la freccia della barra, o il tasto tastiera della barra strumenti ancorata, per cambiare la sessione corrente."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リモート画面の上のガラスバーにキーボードツールバーを表示します。バーはドラッグしたり折りたたんだりできます。オフにすると、ツールバーはキーボードにドッキングされます。この設定は新規セッションのデフォルトになります。現在のセッションで切り替えるには、バーのシェブロン、またはドッキングされたツールバーのキーボードキーを長押しします。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원격 화면 위의 글래스 막대에 키보드 도구 모음을 표시하며, 막대를 드래그하거나 접어 둘 수 있습니다. 끄면 도구 모음이 키보드에 고정됩니다. 새로운 세션의 기본값을 설정하며, 현재 세션에서 전환하려면 막대의 화살표 버튼이나 고정된 도구 모음의 키보드 키를 길게 누르십시오."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Viser tastaturverktøylinjen i en glasslinje over den eksterne skjermen, som du kan dra og felle sammen. Slå av for å feste verktøylinjen til tastaturet. Angir standarden for nye økter; trykk og hold på linjens vinkelpil, eller tastaturtasten på den festede verktøylinjen, for å bytte i den gjeldende økten."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toont de toetsenbordwerkbalk in een glazen balk boven het externe scherm, die je kunt slepen en wegvouwen. Schakel dit uit om de werkbalk aan het toetsenbord vast te koppelen. Stelt de standaardwaarde in voor nieuwe sessies; houd de chevron van de balk of de toetsenbordtoets van de vastgekoppelde werkbalk ingedrukt om de huidige sessie om te schakelen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wyświetla pasek narzędzi klawiatury na szklanym pasku nad zdalnym ekranem, który możesz przeciągać i zwijać. Wyłącz, aby zadokować pasek narzędzi przy klawiaturze. Ustawia wartość domyślną dla nowych sesji; aby przełączyć bieżącą, dotknij i przytrzymaj strzałkę paska lub klawisz klawiatury na zadokowanym pasku narzędzi."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostra a barra de ferramentas do teclado em uma barra de vidro sobre a tela remota, que você pode arrastar e recolher. Desative para encaixar a barra de ferramentas no teclado. Define o padrão para novas sessões; toque e segure a seta da barra, ou a tecla de teclado da barra de ferramentas encaixada, para alternar a sessão atual."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostra a barra de ferramentas do teclado numa barra de vidro sobre o ecrã remoto, que pode arrastar e recolher. Desative para encaixar a barra de ferramentas no teclado. Define a predefinição para novas sessões; toque e mantenha premida a seta da barra, ou a tecla de teclado da barra de ferramentas encaixada, para alternar a sessão atual."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afișează bara de instrumente a tastaturii într-o bară de sticlă deasupra ecranului la distanță, pe care o poți trage și restrânge. Dezactiveaz-o pentru a andoca bara de instrumente la tastatură. Setează valoarea implicită pentru sesiunile noi; atinge și ține apăsată săgeata barei sau tasta de tastatură a barei de instrumente andocate pentru a o comuta pe cea curentă."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prikaže orodno vrstico tipkovnice v stekleni vrstici nad oddaljenim zaslonom, ki jo lahko povlečete in strnete. Izklopite, da orodno vrstico zasidrate na tipkovnico. Nastavi privzeto vrednost za nove seje; za preklop trenutne se dotaknite puščice vrstice ali tipke tipkovnice na zasidrani orodni vrstici in jo zadržite."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visar tangentbordets verktygsfält i ett glasfält över fjärrskärmen som du kan dra och fälla undan. Stäng av för att docka verktygsfältet vid tangentbordet. Anger standardvärdet för nya sessioner. Håll ned fältets pilknapp, eller det dockade verktygsfältets tangentbordstangent, för att växla den aktuella."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Показує панель інструментів клавіатури на скляній панелі над віддаленим екраном, яку можна перетягувати й згортати. Вимкніть, щоб закріпити панель інструментів на клавіатурі. Задає типове значення для нових сеансів; щоб перемкнути поточний, торкніться й утримуйте шеврон панелі або клавішу клавіатури на закріпленій панелі інструментів."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hiển thị thanh công cụ bàn phím trong một thanh kính phía trên màn hình từ xa mà bạn có thể kéo và thu gọn. Tắt để cố định thanh công cụ vào bàn phím. Đặt mặc định cho các phiên mới; chạm và giữ nút mũi tên của thanh, hoặc phím bàn phím trên thanh công cụ đã cố định, để chuyển đổi phiên hiện tại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在远程屏幕上方的玻璃栏中显示键盘工具栏，可拖动或收起。关闭后会将工具栏停靠到键盘上。此项设定新会话的默认值；触摸并按住该栏的箭头按钮，或已停靠工具栏上的键盘键，即可切换当前会话。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在遠端螢幕上方的玻璃列中顯示鍵盤工具列，可拖曳或收起。關閉後會將工具列停駐在鍵盤上。此項設定新工作階段的預設值；長按該列的 V 形箭頭，或已停駐工具列上的鍵盤鍵，即可切換目前的工作階段。"
           }
         }
       }
@@ -753183,7 +756111,162 @@
         }
       }
     },
+    "Swipe Gestures that switch tabs or panes use three fingers over a remote screen, and only in a direction whose Three-Finger Swipe above is Off. Turn this on to use four fingers instead, leaving every three-finger swipe to the remote computer. On iPad, a four-finger swipe switches apps unless Four & Five Finger Gestures is turned off in the Settings app under Multitasking & Gestures." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تستخدم «إيماءات التمرير» التي تبدّل علامات التبويب أو الأجزاء ثلاثة أصابع فوق الشاشة البعيدة، وذلك فقط في اتجاه يكون فيه «التمرير بثلاثة أصابع» أعلاه على «إيقاف». فعّل هذا الخيار لاستخدام أربعة أصابع بدلًا من ذلك، وترك كل تمرير بثلاثة أصابع للكمبيوتر البعيد. على iPad، يؤدي التمرير بأربعة أصابع إلى التبديل بين التطبيقات ما لم يتم إيقاف «إيماءات الأصابع الأربعة والخمسة» في تطبيق الإعدادات ضمن «تعدد المهام والإيماءات»."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Els gestos de lliscament que canvien de pestanya o de plafó fan servir tres dits sobre una pantalla remota, i només en una direcció on el «Lliscament amb tres dits» de més amunt estigui desactivat. Activa-ho per fer servir quatre dits, de manera que tots els lliscaments amb tres dits quedin per a l'ordinador remot. A l'iPad, un lliscament amb quatre dits canvia d'app tret que «Gestos amb quatre i cinc dits» estigui desactivat a l'app Configuració, a «Multitasca i gestos»."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesta přejetí, která přepínají karty nebo panely, používají nad vzdálenou obrazovkou tři prsty, a to jen ve směru, jehož Přejetí třemi prsty výše je nastaveno na Vypnuto. Zapnutím použijete místo toho čtyři prsty a všechna přejetí třemi prsty ponecháte vzdálenému počítači. Na iPadu přejetí čtyřmi prsty přepíná aplikace, pokud v aplikaci Nastavení v části Multitasking a gesta nevypnete volbu Gesta čtyřmi a pěti prsty."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Strygebevægelser, der skifter faner eller ruder, bruger tre fingre over en fjernskærm og kun i en retning, hvis strygning med tre fingre ovenfor er sat til Fra. Slå dette til for at bruge fire fingre i stedet, så alle strygninger med tre fingre overlades til fjerncomputeren. På iPad skifter et stryg med fire fingre mellem apps, medmindre Bevægelser med fire og fem fingre er slået fra i appen Indstillinger under Multitasking og bevægelser."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wischgesten, die Tabs oder Bereiche wechseln, verwenden über einem entfernten Bildschirm drei Finger, und zwar nur in einer Richtung, deren „Wischen mit drei Fingern“ oben auf „Aus“ steht. Aktivieren Sie diese Option, um stattdessen vier Finger zu verwenden und alle Wischbewegungen mit drei Fingern dem entfernten Computer zu überlassen. Auf dem iPad wechselt Wischen mit vier Fingern zwischen Apps, sofern „Gesten mit vier und fünf Fingern“ nicht in der App „Einstellungen“ unter „Multitasking & Gesten“ deaktiviert ist."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los «Gestos de deslizamiento» que cambian de pestaña o de panel usan tres dedos sobre una pantalla remota, y solo en una dirección cuyo «Deslizar con tres dedos» de arriba esté en «Desactivado». Activa esta opción para usar cuatro dedos y dejar todos los deslizamientos con tres dedos al ordenador remoto. En el iPad, un deslizamiento con cuatro dedos cambia de app a menos que «Gestos con cuatro y cinco dedos» esté desactivado en la app Ajustes, en «Multitarea y gestos»."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Välilehtiä tai ruutuja vaihtavat pyyhkäisyeleet käyttävät etänäytön päällä kolmea sormea, ja vain suuntaan, jonka yllä oleva Kolmen sormen pyyhkäisy -asetus on Pois. Ota tämä käyttöön, jos haluat käyttää sen sijaan neljää sormea ja jättää kaikki kolmen sormen pyyhkäisyt etätietokoneelle. iPadissa neljän sormen pyyhkäisy vaihtaa sovellusta, ellei Neljän ja viiden sormen eleet -asetusta ole laitettu pois päältä Asetukset-sovelluksen kohdassa Moniajo ja eleet."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les Gestes de balayage qui changent d'onglet ou de panneau utilisent trois doigts sur un écran distant, et uniquement dans une direction dont le « Balayage à trois doigts » ci-dessus est sur Désactivé. Activez cette option pour utiliser quatre doigts à la place et laisser tous les balayages à trois doigts à l'ordinateur distant. Sur iPad, un balayage à quatre doigts change d'app, sauf si « Gestes à quatre et cinq doigts » est désactivé dans l'app Réglages, sous « Multitâche et gestes »."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "מחוות החלקה שמחליפות לשוניות או חלוניות משתמשות בשלוש אצבעות מעל מסך מרוחק, ורק בכיוון שבו ״החלקה בשלוש אצבעות״ שלמעלה מוגדרת ל״כבוי״. הפעל אפשרות זו כדי להשתמש בארבע אצבעות במקום זאת, וכך להשאיר את כל ההחלקות בשלוש אצבעות למחשב המרוחק. ב-iPad, החלקה בארבע אצבעות מחליפה בין אפליקציות, אלא אם ״מחוות עם ארבע וחמש אצבעות״ כבוי באפליקציית ״הגדרות״ תחת ״ריבוי משימות ומחוות״."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A lapokat vagy paneleket váltó Húzási mozdulatok a távoli képernyő fölött három ujjal működnek, és csak olyan irányban, amelynek fenti „Háromujjas húzás” beállítása Ki. Kapcsolja be, ha inkább négy ujjat használna, így minden háromujjas húzás a távoli számítógéphez kerül. iPaden a négyujjas húzás alkalmazást vált, kivéve ha a Beállítások app „Multitasking és kézmozdulatok” részében ki van kapcsolva a „Négy- és ötujjas kézmozdulatok” lehetőség."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I Gesti di scorrimento che cambiano schede o riquadri usano tre dita sopra uno schermo remoto, e solo in una direzione il cui «Scorrimento a tre dita» qui sopra è Disattivato. Attiva questa opzione per usare invece quattro dita, lasciando ogni scorrimento a tre dita al computer remoto. Su iPad, uno scorrimento a quattro dita cambia app, a meno che «Gesti con quattro e cinque dita» non sia disattivato nell'app Impostazioni in «Multitasking e gesti»."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タブやペインを切り替える「スワイプジェスチャ」は、リモート画面の上では3本指で行い、上の「3本指スワイプ」が「オフ」になっている方向でのみ機能します。オンにすると代わりに4本指を使用し、3本指のスワイプはすべてリモートコンピュータに送られます。iPadでは、「設定」アプリの「マルチタスクとジェスチャ」で「4本指と5本指のジェスチャ」をオフにしていない限り、4本指のスワイプでアプリが切り替わります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭이나 분할 영역을 전환하는 스와이프 제스처는 원격 화면 위에서 세 손가락을 사용하며, 위의 ‘세 손가락 스와이프’가 ‘끔’으로 설정된 방향에서만 작동합니다. 이 옵션을 켜면 대신 네 손가락을 사용하며, 모든 세 손가락 스와이프는 원격 컴퓨터로 전달됩니다. iPad에서는 설정 앱의 ‘멀티태스킹 및 제스처’에서 ‘네 손가락 및 다섯 손가락 제스처’를 끄지 않으면 네 손가락 스와이프로 앱이 전환됩니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sveipbevegelser som bytter faner eller ruter, bruker tre fingre over en ekstern skjerm, og bare i en retning der sveipet med tre fingre ovenfor er satt til Av. Slå på for å bruke fire fingre i stedet, slik at alle sveip med tre fingre går til den eksterne datamaskinen. På iPad bytter et sveip med fire fingre apper med mindre «Bevegelser med fire og fem fingre» er slått av i Innstillinger-appen under «Multitasking og bevegelser»."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Veegbewegingen die tussen tabs of deelvensters wisselen, gebruiken drie vingers boven een extern scherm, en alleen in een richting waarvan de veegbeweging met drie vingers hierboven op Uit staat. Schakel dit in om in plaats daarvan vier vingers te gebruiken, zodat elke veegbeweging met drie vingers naar de externe computer gaat. Op iPad wisselt een veegbeweging met vier vingers van app, tenzij 'Gebaren met vier en vijf vingers' is uitgeschakeld in de Instellingen-app onder 'Multitasking en gebaren'."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesty przesunięcia przełączające karty lub panele działają trzema palcami nad zdalnym ekranem i tylko w kierunku, dla którego powyższy „Gest trzema palcami” jest wyłączony. Włącz tę opcję, aby zamiast tego używać czterech palców i zostawić wszystkie gesty trzema palcami zdalnemu komputerowi. Na iPadzie przesunięcie czterema palcami przełącza aplikacje, chyba że w aplikacji Ustawienia w sekcji Wielozadaniowość i gesty wyłączono opcję Gesty czterema i pięcioma palcami."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Os Gestos de deslizar que alternam abas ou painéis usam três dedos sobre uma tela remota, e somente em uma direção cujo Deslizar com Três Dedos acima esteja Desligado. Ative para usar quatro dedos, deixando todos os gestos com três dedos para o computador remoto. No iPad, deslizar com quatro dedos alterna entre apps, a menos que Gestos com quatro e cinco dedos esteja desativado no app Ajustes, em Multitarefa e Gestos."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Os Gestos de deslize que mudam de separador ou de painel usam três dedos sobre um ecrã remoto, e apenas numa direção cujo “Deslize com três dedos” acima esteja Desligado. Ative para usar quatro dedos, deixando todos os deslizes com três dedos para o computador remoto. No iPad, um deslize com quatro dedos muda de app, a menos que Gestos com quatro e cinco dedos esteja desativado na app Definições, em Multitarefa e gestos."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesturile de glisare care comută filele sau panourile folosesc trei degete deasupra unui ecran la distanță și doar într-o direcție pentru care „Glisare cu trei degete” de mai sus este dezactivată. Activează această opțiune pentru a folosi patru degete, lăsând toate glisările cu trei degete computerului la distanță. Pe iPad, o glisare cu patru degete comută aplicațiile, cu excepția cazului în care „Gesturi cu patru și cinci degete” este dezactivat în aplicația Configurări, la Multitasking și gesturi."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Poteze potega, ki preklapljajo zavihke ali podokna, nad oddaljenim zaslonom uporabljajo tri prste, in to samo v smeri, za katero je zgornji Poteg s tremi prsti izključen. Vklopite to možnost, da namesto tega uporabite štiri prste in vse poteze s tremi prsti prepustite oddaljenemu računalniku. Na iPadu poteg s štirimi prsti preklaplja med aplikacijami, razen če je v aplikaciji Nastavitve v razdelku Večopravilnost in kretnje izklopljena možnost Kretnje s štirimi in petimi prsti."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Svepgester som byter flikar eller rutor använder tre fingrar över en fjärrskärm, och bara i en riktning vars ”Svep med tre fingrar” ovan är Av. Aktivera detta för att använda fyra fingrar i stället, så att alla svep med tre fingrar går till fjärrdatorn. På iPad byter ett svep med fyra fingrar app om inte ”Gester med fyra och fem fingrar” är avstängt i appen Inställningar under ”Multitasking och gester”."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жести свайпу, що перемикають вкладки чи панелі, використовують три пальці над віддаленим екраном і лише в напрямку, для якого «Свайп трьома пальцями» вище має значення «Вимк.». Увімкніть цей параметр, щоб натомість використовувати чотири пальці й залишити всі свайпи трьома пальцями віддаленому комп’ютеру. На iPad свайп чотирма пальцями перемикає застосунки, якщо в Параметрах у розділі «Багатозадачність і жести» не вимкнено «Жести чотирма і пʼятьма пальцями»."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cử chỉ vuốt dùng để chuyển tab hoặc ngăn sử dụng ba ngón tay trên màn hình từ xa, và chỉ theo hướng có mục Vuốt ba ngón ở trên được đặt thành Tắt. Bật mục này để dùng bốn ngón tay thay thế, dành mọi thao tác vuốt ba ngón cho máy tính từ xa. Trên iPad, vuốt bốn ngón sẽ chuyển ứng dụng trừ khi Cử chỉ bốn và năm ngón tay được tắt trong ứng dụng Cài đặt ở mục Đa nhiệm & cử chỉ."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换标签页或窗格的滑动手势在远程屏幕上使用三指，并且仅适用于上方“三指滑动”设为“关闭”的方向。打开此项可改用四指，将所有三指滑动留给远程电脑。在 iPad 上，四指滑动会切换 App，除非在“设置”App 的“多任务与手势”中关闭了“四指和五指手势”。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切換分頁或窗格的滑動手勢在遠端螢幕上使用三指，且僅適用於上方「三指滑動」設為「關閉」的方向。開啟此項可改用四指，將所有三指滑動留給遠端電腦。在 iPad 上，四指滑動會切換 App，除非在「設定」App 的「多工處理與手勢」中關閉了「四指與五指手勢」。"
+          }
+        }
+      }
+    },
     "Swipe horizontally with three fingers over a Screen Sharing session to switch app tabs, even in fullscreen. One- and two-finger gestures remain available for the remote desktop." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -753333,6 +756416,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在螢幕共享工作階段上以三指水平滑動即可切換 App 分頁，即使在全螢幕下也一樣。單指與雙指手勢仍可用於遠端桌面。"
+          }
+        }
+      }
+    },
+    "Swipe horizontally with three fingers over a Screen Sharing session to switch app tabs, even in fullscreen. Screen Sharing settings can move this to four fingers." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "مرّر أفقيًا بثلاثة أصابع فوق جلسة مشاركة الشاشة للتبديل بين علامات تبويب التطبيق، حتى في وضع ملء الشاشة. ويمكن نقل ذلك إلى أربعة أصابع من إعدادات مشاركة الشاشة."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Llisca horitzontalment amb tres dits sobre una sessió de Compartir pantalla per canviar de pestanya de l'app, fins i tot a pantalla completa. A la configuració de Compartir pantalla pots passar-ho a quatre dits."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vodorovným přejetím třemi prsty přes relaci sdílení obrazovky přepnete karty aplikace, a to i na celé obrazovce. V nastavení Sdílení obrazovky to lze přepnout na čtyři prsty."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stryg vandret med tre fingre over en skærmdelingssession for at skifte mellem appens faner, også i fuld skærm. I indstillingerne for Skærmdeling kan dette flyttes til fire fingre."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wischen Sie mit drei Fingern horizontal über eine Bildschirmfreigabe-Sitzung, um App-Tabs zu wechseln, auch im Vollbild. In den Bildschirmfreigabe-Einstellungen lässt sich dies auf vier Finger umstellen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desliza horizontalmente con tres dedos sobre una sesión de Compartir pantalla para cambiar de pestaña de la app, incluso en pantalla completa. Los ajustes de Compartir pantalla permiten pasar esto a cuatro dedos."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pyyhkäise vaakasuunnassa kolmella sormella näytön jakamisen istunnon päällä vaihtaaksesi sovelluksen välilehtiä, myös koko näytössä. Näytön jakamisen asetuksissa tämän voi vaihtaa neljälle sormelle."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Balayez horizontalement avec trois doigts sur une session de partage d'écran pour changer d'onglet de l'app, même en plein écran. Les réglages de Partage d'écran permettent de passer à quatre doigts."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "החלק אופקית בשלוש אצבעות מעל הפעלת שיתוף מסך כדי להחליף לשוניות באפליקציה, גם במסך מלא. בהגדרות שיתוף מסך אפשר להעביר זאת לארבע אצבעות."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Húzza vízszintesen három ujját egy képernyőmegosztási munkamenet fölött az alkalmazáslapok váltásához, akár teljes képernyőn is. A Képernyőmegosztás beállításaiban ez négy ujjra módosítható."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scorri orizzontalmente con tre dita su una sessione di condivisione schermo per cambiare scheda dell'app, anche a schermo intero. Le impostazioni di Condivisione schermo possono spostare questo gesto a quattro dita."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面共有セッションの上で3本指で左右にスワイプすると、フルスクリーン中でもアプリのタブを切り替えられます。「画面共有」設定で4本指に変更できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "화면 공유 세션 위에서 세 손가락으로 가로로 스와이프하면 전체 화면에서도 앱 탭을 전환할 수 있습니다. 화면 공유 설정에서 이 동작을 네 손가락으로 변경할 수 있습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sveip vannrett med tre fingre over en skjermdelingsøkt for å bytte appfaner, også i fullskjerm. I Skjermdeling-innstillingene kan du flytte dette til fire fingre."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Veeg met drie vingers horizontaal over een Schermdelen-sessie om tussen app-tabs te wisselen, zelfs in volledig scherm. In de Schermdelen-instellingen kun je dit naar vier vingers verplaatsen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Przesuń trzema palcami w poziomie nad sesją udostępniania ekranu, aby przełączać karty aplikacji, nawet na pełnym ekranie. W ustawieniach udostępniania ekranu możesz zmienić to na cztery palce."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deslize horizontalmente com três dedos sobre uma sessão de Compartilhamento de Tela para alternar as abas do app, mesmo em tela cheia. As configurações de Compartilhamento de Tela podem mudar isso para quatro dedos."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deslize horizontalmente com três dedos sobre uma sessão de Partilha de Ecrã para mudar de separador da app, mesmo em ecrã inteiro. As definições de Partilha de Ecrã podem passar isto para quatro dedos."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glisează orizontal cu trei degete peste o sesiune de partajare ecran pentru a comuta filele aplicației, chiar și în ecran complet. Setările de partajare ecran pot muta acest gest pe patru degete."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Podrsajte vodoravno s tremi prsti čez sejo skupne rabe zaslona za preklop med zavihki aplikacije, tudi v celozaslonskem načinu. V nastavitvah skupne rabe zaslona lahko to prestavite na štiri prste."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Svep i sidled med tre fingrar över en skärmdelningssession för att byta appflik, även i helskärm. Inställningarna för skärmdelning kan flytta detta till fyra fingrar."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Проведіть трьома пальцями горизонтально над сеансом спільного доступу до екрана, щоб перемикати вкладки застосунку, навіть у повноекранному режимі. У налаштуваннях спільного доступу до екрана це можна перенести на чотири пальці."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vuốt ngang bằng ba ngón tay trên một phiên Chia sẻ màn hình để chuyển tab ứng dụng, kể cả khi đang toàn màn hình. Cài đặt Chia sẻ màn hình có thể chuyển thao tác này sang bốn ngón tay."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在屏幕共享会话上用三指水平滑动即可切换应用标签页，全屏时同样有效。可在屏幕共享设置中将其改为四指。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在螢幕共享工作階段上以三指水平滑動即可切換 App 分頁，即使在全螢幕下也一樣。可在螢幕共享設定中將其改為四指。"
           }
         }
       }
@@ -766600,6 +769837,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "分頁操作"
+          }
+        }
+      }
+    },
+    "Tab and Pane Swipes" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "التمرير بين علامات التبويب والأجزاء"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lliscaments de pestanya i plafó"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přejetí mezi kartami a panely"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fane- og rudestryg"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tab- und Bereichswischen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deslizamientos para pestañas y paneles"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Välilehti- ja ruutupyyhkäisyt"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Balayages entre onglets et panneaux"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "החלקות בין לשוניות וחלוניות"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lap- és panelhúzások"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scorrimenti tra schede e riquadri"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タブとペインのスワイプ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭 및 분할 영역 스와이프"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fane- og rutesveip"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vegen tussen tabs en deelvensters"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Przesunięcia kart i paneli"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deslizar entre Abas e Painéis"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deslizes entre separadores e painéis"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glisări pentru file și panouri"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Potegi za zavihke in podokna"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flik- och rutsvep"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Свайпи вкладок і панелей"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vuốt tab và ngăn"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标签页与窗格滑动"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分頁與窗格滑動"
           }
         }
       }
@@ -789627,6 +793018,160 @@
         }
       }
     },
+    "The computer password saved in this profile will be typed into the remote computer. Type Password Only skips Return so you can submit it yourself." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ستُكتب كلمة مرور الكمبيوتر المحفوظة في هذا الملف الشخصي في الكمبيوتر البعيد. يتخطى «كتابة كلمة المرور فقط» مفتاح Return لتتمكن من إرسالها بنفسك."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La contrasenya de l'ordinador desada en aquest perfil s'escriurà a l'ordinador remot. «Escriure només la contrasenya» omet la tecla Retorn perquè la puguis enviar tu mateix."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heslo počítače uložené v tomto profilu bude napsáno do vzdáleného počítače. „Napsat pouze heslo“ vynechá Return, takže ho můžete odeslat sami."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Den computeradgangskode, der er gemt i denne profil, bliver skrevet på fjerncomputeren. »Skriv kun adgangskode« springer Retur over, så du selv kan sende den."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das in diesem Profil gespeicherte Computerpasswort wird auf dem entfernten Computer eingegeben. „Nur Passwort eingeben“ lässt die Return-Taste weg, sodass Sie selbst bestätigen können."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La contraseña del ordenador guardada en este perfil se escribirá en el ordenador remoto. «Escribir solo la contraseña» omite Retorno para que puedas enviarla tú."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tähän profiiliin tallennettu tietokoneen salasana kirjoitetaan etätietokoneelle. ”Kirjoita vain salasana” jättää Return-näppäimen painamatta, joten voit lähettää salasanan itse."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le mot de passe de l'ordinateur enregistré dans ce profil sera saisi sur l'ordinateur distant. « Saisir uniquement le mot de passe » n'envoie pas Retour, pour que vous puissiez le valider vous-même."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "סיסמת המחשב השמורה בפרופיל זה תוקלד במחשב המרוחק. ״הקלדת הסיסמה בלבד״ מדלגת על Return כדי שתוכל לשלוח אותה בעצמך."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A rendszer beírja a profilban mentett számítógépjelszót a távoli számítógépbe. A „Csak jelszó beírása” nem nyomja meg a Return billentyűt, így Ön küldheti el."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La password del computer salvata in questo profilo verrà digitata sul computer remoto. «Digita solo password» non invia Invio, così puoi inviarla tu."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このプロファイルに保存されたコンピュータのパスワードがリモートコンピュータに入力されます。「パスワードのみ入力」ではReturnキーが押されないため、自分で送信できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 프로필에 저장된 컴퓨터 비밀번호가 원격 컴퓨터에 입력됩니다. ‘암호만 입력’은 Return 키를 입력하지 않으므로 직접 제출할 수 있습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Datamaskinpassordet som er lagret i denne profilen, skrives inn på den eksterne maskinen. «Skriv bare passord» hopper over Retur, slik at du kan sende det selv."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Het computerwachtwoord dat in dit profiel is opgeslagen, wordt op de externe computer getypt. 'Typ alleen wachtwoord' slaat Return over, zodat je het zelf kunt versturen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hasło komputera zapisane w tym profilu zostanie wpisane na zdalnym komputerze. „Wpisz tylko hasło” pomija klawisz Return, aby można było samodzielnie je zatwierdzić."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A senha do computador salva neste perfil será digitada no computador remoto. Digitar Somente a Senha não pressiona Return, para que você mesmo possa enviá-la."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A palavra-passe do computador guardada neste perfil será escrita no computador remoto. “Escrever apenas a palavra-passe” não prime Return, para que possa ser você a submetê-la."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parola computerului salvată în acest profil va fi tastată pe computerul la distanță. „Tastare doar parolă” omite Return, ca s-o poți trimite chiar tu."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geslo računalnika, shranjeno v tem profilu, bo vtipkano v oddaljeni računalnik. Ukaz Vtipkaj samo geslo izpusti tipko Return, da ga lahko potrdite sami."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Datorlösenordet som sparats i den här profilen skrivs in på fjärrdatorn. ”Skriv endast lösenord” hoppar över returtangenten så att du kan skicka det själv."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пароль комп’ютера, збережений у цьому профілі, буде введено на віддаленому комп’ютері. «Ввести лише пароль» не натискає Return, тож ви можете підтвердити його самостійно."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mật khẩu máy tính được lưu trong hồ sơ này sẽ được gõ vào máy tính từ xa. “Chỉ gõ mật khẩu” bỏ qua phím Return để bạn có thể tự gửi."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此配置中保存的电脑密码将输入到远程电脑。“仅输入密码”不会按下 Return 键，以便您自行提交。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此設定檔中儲存的電腦密碼將輸入至遠端電腦。「僅輸入密碼」不會按下 Return 鍵，讓您可以自行送出。"
+          }
+        }
+      }
+    },
     "The connection is not ready." : {
       "comment" : "Remote ports: no live session",
       "localizations" : {
@@ -799349,6 +802894,314 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "rootshell VPN 將中斷連線，Tailscale 將在 rootshell 內重新連線。"
+          }
+        }
+      }
+    },
+    "The saved computer password couldn't be read from the Keychain." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تعذّرت قراءة كلمة مرور الكمبيوتر المحفوظة من سلسلة المفاتيح."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No s'ha pogut llegir del clauer la contrasenya desada de l'ordinador."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uložené heslo počítače se nepodařilo načíst z Klíčenky."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Den gemte computeradgangskode kunne ikke læses fra nøgleringen."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das gespeicherte Computerpasswort konnte nicht aus dem Schlüsselbund gelesen werden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo leer del llavero la contraseña del ordenador guardada."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tallennettua tietokoneen salasanaa ei voitu lukea avainnipusta."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de lire le mot de passe de l'ordinateur enregistré dans le trousseau."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "לא ניתן היה לקרוא את סיסמת המחשב השמורה ממחזיק המפתחות."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A mentett számítógépjelszót nem sikerült kiolvasni a Keychainből."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile leggere dal Portachiavi la password del computer salvata."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済みのコンピュータのパスワードをキーチェーンから読み込めませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 컴퓨터 비밀번호를 키체인에서 읽을 수 없습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Det lagrede datamaskinpassordet kunne ikke leses fra nøkkelringen."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Het opgeslagen computerwachtwoord kan niet uit de sleutelhanger worden gelezen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nie udało się odczytać zapisanego hasła komputera z pęku kluczy."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível ler a senha do computador salva no Chaveiro."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível ler a palavra-passe do computador guardada no Porta-chaves."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parola computerului salvată nu a putut fi citită din portchei."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shranjenega gesla računalnika ni bilo mogoče prebrati iz verige ključev."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Det sparade datorlösenordet kunde inte läsas från nyckelringen."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не вдалося прочитати збережений пароль комп’ютера зі зв’язки ключів."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể đọc mật khẩu máy tính đã lưu từ Chuỗi khóa."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法从钥匙串读取已保存的电脑密码。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法從鑰匙圈讀取已儲存的電腦密碼。"
+          }
+        }
+      }
+    },
+    "The saved computer password is removed when you save." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ستُزال كلمة مرور الكمبيوتر المحفوظة عند الحفظ."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La contrasenya desada de l'ordinador s'eliminarà quan desis."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uložené heslo počítače se při uložení odstraní."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Den gemte computeradgangskode fjernes, når du gemmer."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das gespeicherte Computerpasswort wird beim Speichern entfernt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La contraseña del ordenador guardada se eliminará al guardar."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tallennettu tietokoneen salasana poistetaan, kun tallennat."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le mot de passe de l'ordinateur enregistré sera supprimé lors de l'enregistrement."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "סיסמת המחשב השמורה תוסר בעת השמירה."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A mentett számítógépjelszó mentéskor törlődik."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La password del computer salvata viene rimossa al salvataggio."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存すると、保存済みのコンピュータのパスワードが削除されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장하면 저장된 컴퓨터 비밀번호가 제거됩니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Det lagrede datamaskinpassordet fjernes når du lagrer."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Het opgeslagen computerwachtwoord wordt verwijderd wanneer je opslaat."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zapisane hasło komputera zostanie usunięte, gdy zapiszesz zmiany."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A senha do computador salva será removida quando você salvar."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A palavra-passe do computador guardada é removida ao guardar."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parola computerului salvată este eliminată când salvezi."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shranjeno geslo računalnika bo ob shranjevanju odstranjeno."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Det sparade datorlösenordet tas bort när du sparar."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Збережений пароль комп’ютера буде видалено після збереження."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mật khẩu máy tính đã lưu sẽ bị xóa khi bạn lưu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存时将移除已保存的电脑密码。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "儲存時會移除已儲存的電腦密碼。"
           }
         }
       }
@@ -834570,6 +838423,160 @@
         }
       }
     },
+    "Toggle Pane Zoom" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تبديل تكبير الجزء"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alternar el zoom del plafó"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přepnout přiblížení panelu"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skift rudezoom"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereichszoom umschalten"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alternar zoom del panel"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vaihda ruudun zoomaus"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activer/désactiver le zoom du panneau"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "החלפת זום החלונית"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Panel nagyítás be/ki"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Attiva/disattiva zoom riquadro"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ペインのズーム切替"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "분할 영역 확대 전환"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Slå rutezoom av/på"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deelvensterzoom schakelen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Przełącz powiększenie panelu"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alternar Zoom do Painel"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alternar Zoom do Painel"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comutare zoom panou"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preklopi povečavo podokna"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Växla rutzoom"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Перемкнути збільшення панелі"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bật/Tắt Phóng to Ngăn"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换窗格缩放"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切換窗格縮放"
+          }
+        }
+      }
+    },
     "Toggle Split Zoom" : {
       "comment" : "Keybind action",
       "localizations" : {
@@ -855271,6 +859278,160 @@
         }
       }
     },
+    "Type Computer Password" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "كتابة كلمة مرور الكمبيوتر"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escriure la contrasenya de l'ordinador"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Napsat heslo počítače"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skriv computeradgangskode"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Computerpasswort eingeben"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribir la contraseña del ordenador"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kirjoita tietokoneen salasana"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saisir le mot de passe de l'ordinateur"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הקלדת סיסמת המחשב"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Számítógép jelszavának beírása"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Digita password del computer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コンピュータのパスワードを入力"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "컴퓨터 암호 입력"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skriv datamaskinpassord"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Typ computerwachtwoord"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wpisz hasło komputera"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Digitar Senha do Computador"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escrever palavra-passe do computador"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastare parolă computer"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vtipkaj geslo računalnika"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skriv datorlösenord"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ввести пароль комп’ютера"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gõ mật khẩu máy tính"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入电脑密码"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "輸入電腦密碼"
+          }
+        }
+      }
+    },
     "Type ecdsa-sha2-nistp256 — a standard key your SSH server already understands." : {
       "localizations" : {
         "ar" : {
@@ -855883,6 +860044,622 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "類型不符 (%lld)"
+          }
+        }
+      }
+    },
+    "Type Password" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "كتابة كلمة المرور"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escriure la contrasenya"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Napsat heslo"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skriv adgangskode"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passwort eingeben"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribir la contraseña"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kirjoita salasana"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saisir le mot de passe"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הקלדת הסיסמה"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jelszó beírása"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Digita password"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パスワードを入力"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호 입력"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skriv passord"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Typ wachtwoord"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wpisz hasło"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Digitar Senha"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escrever palavra-passe"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastare parolă"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vtipkaj geslo"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skriv lösenord"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ввести пароль"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gõ mật khẩu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入密码"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "輸入密碼"
+          }
+        }
+      }
+    },
+    "Type Password and Log In" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "كتابة كلمة المرور وتسجيل الدخول"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escriure la contrasenya i iniciar la sessió"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Napsat heslo a přihlásit"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skriv adgangskode, og log ind"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passwort eingeben und anmelden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribir la contraseña e iniciar sesión"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kirjoita salasana ja kirjaudu sisään"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saisir le mot de passe et se connecter"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הקלדת הסיסמה וכניסה"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jelszó beírása és bejelentkezés"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Digita password e accedi"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パスワードを入力してログイン"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호 입력 후 로그인"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skriv passord og logg på"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Typ wachtwoord en log in"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wpisz hasło i zaloguj"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Digitar Senha e Iniciar Sessão"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escrever palavra-passe e iniciar sessão"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastare parolă și autentificare"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vtipkaj geslo in se prijavi"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skriv lösenord och logga in"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ввести пароль і увійти"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gõ mật khẩu và đăng nhập"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入密码并登录"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "輸入密碼並登入"
+          }
+        }
+      }
+    },
+    "Type Password Only" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "كتابة كلمة المرور فقط"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escriure només la contrasenya"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Napsat pouze heslo"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skriv kun adgangskode"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur Passwort eingeben"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribir solo la contraseña"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kirjoita vain salasana"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saisir uniquement le mot de passe"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הקלדת הסיסמה בלבד"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Csak jelszó beírása"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Digita solo password"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パスワードのみ入力"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호만 입력"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skriv bare passord"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Typ alleen wachtwoord"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wpisz tylko hasło"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Digitar Somente a Senha"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escrever apenas a palavra-passe"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastare doar parolă"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vtipkaj samo geslo"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skriv endast lösenord"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ввести лише пароль"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chỉ gõ mật khẩu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅输入密码"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "僅輸入密碼"
+          }
+        }
+      }
+    },
+    "Type the computer password?" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "كتابة كلمة مرور الكمبيوتر؟"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vols escriure la contrasenya de l'ordinador?"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Napsat heslo počítače?"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vil du skrive computeradgangskoden?"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Computerpasswort eingeben?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Escribir la contraseña del ordenador?"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kirjoitetaanko tietokoneen salasana?"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saisir le mot de passe de l'ordinateur ?"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "להקליד את סיסמת המחשב?"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beírja a számítógép jelszavát?"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Digitare la password del computer?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コンピュータのパスワードを入力しますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "컴퓨터 암호를 입력하시겠습니까?"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skrive inn datamaskinpassordet?"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Computerwachtwoord typen?"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wpisać hasło komputera?"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Digitar a senha do computador?"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escrever a palavra-passe do computador?"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastați parola computerului?"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Želite vtipkati geslo računalnika?"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skriva in datorlösenordet?"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ввести пароль комп’ютера?"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gõ mật khẩu máy tính?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要输入电脑密码吗？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要輸入電腦密碼嗎？"
           }
         }
       }
@@ -875048,6 +879825,160 @@
         }
       }
     },
+    "Use Four Fingers" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "استخدام أربعة أصابع"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fer servir quatre dits"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Použít čtyři prsty"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brug fire fingre"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vier Finger verwenden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar cuatro dedos"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Käytä neljää sormea"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utiliser quatre doigts"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "שימוש בארבע אצבעות"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Négy ujj használata"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa quattro dita"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "4本指を使用"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "네 손가락 사용"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bruk fire fingre"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vier vingers gebruiken"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Używaj czterech palców"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar Quatro Dedos"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utilizar Quatro Dedos"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folosește patru degete"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uporabi štiri prste"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Använd fyra fingrar"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Використовувати чотири пальці"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dùng bốn ngón tay"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用四指"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用四指"
+          }
+        }
+      }
+    },
     "Use Global Default" : {
       "localizations" : {
         "ar" : {
@@ -877682,7 +882613,6 @@
       }
     },
     "Use Standard" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -900242,6 +905172,7 @@
       }
     },
     "Waiting for SSH, Kubernetes, Cloud Console, or long-running local tasks (Roam doesn't need this)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -900391,6 +905322,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "等待 SSH、Kubernetes、雲端主控台或長時間執行的本機工作（Roam 不需要此功能）"
+          }
+        }
+      }
+    },
+    "Waiting for SSH, Kubernetes, Cloud Console, Screen Sharing, KVM, or long-running local tasks (Roam doesn't need this)" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "في انتظار SSH أو Kubernetes أو Cloud Console أو مشاركة الشاشة أو KVM أو المهام المحلية طويلة التشغيل (Roam لا يحتاج هذا)"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esperant SSH, Kubernetes, Cloud Console, Compartir pantalla, KVM o tasques locals de llarga durada (Roam no necessita això)"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Čekání na SSH, Kubernetes, cloudovou konzoli, sdílení obrazovky, KVM nebo dlouhodobé lokální úlohy (Roam toto nepotřebuje)"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Venter på SSH, Kubernetes, Cloud Console, skærmdeling, KVM eller langvarige lokale opgaver (Roam har ikke brug for dette)"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warten auf SSH, Kubernetes, Cloud-Konsole, Bildschirmfreigabe, KVM oder lang laufende lokale Aufgaben (Roam benötigt dies nicht)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En espera de tareas SSH, Kubernetes, consola en la nube, Compartir pantalla, KVM o tareas locales de larga duración (Roam no necesita esto)"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Odottaa SSH-, Kubernetes-, Cloud Console-, näytön jakamisen, KVM- tai pitkäkestoisia paikallisia tehtäviä (Roam ei tarvitse tätä)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En attente de SSH, Kubernetes, console cloud, partage d'écran, KVM ou de tâches locales de longue durée (Roam n'a pas besoin de ceci)"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ממתין ל-SSH, Kubernetes, Cloud Console, שיתוף מסך, KVM, או משימות מקומיות ארוכות (Roam אינו צריך זאת)"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Várakozás SSH, Kubernetes, Cloud Console, képernyőmegosztás, KVM vagy hosszan futó helyi feladatokra (Roam-nak erre nincs szüksége)"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In attesa di SSH, Kubernetes, Cloud Console, Condivisione schermo, KVM o attività locali di lunga durata (Roam non ne ha bisogno)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH、Kubernetes、クラウドコンソール、画面共有、KVM、または長時間実行中のローカルタスクを待機中（Roamにはこの設定は不要です）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH, Kubernetes, 클라우드 콘솔, 화면 공유, KVM 또는 장시간 실행되는 로컬 작업 대기 중 (Roam에는 이 설정이 필요하지 않습니다)"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Venter på SSH, Kubernetes, skykonsoll, Skjermdeling, KVM eller langvarige lokale oppgaver (Roam trenger ikke dette)"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wachten op SSH, Kubernetes, Cloud Console, Schermdelen, KVM of langlopende lokale taken (Roam heeft dit niet nodig)"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oczekiwanie na SSH, Kubernetes, Cloud Console, udostępnianie ekranu, KVM lub długotrwałe zadania lokalne (Roam tego nie wymaga)"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aguardando SSH, Kubernetes, Cloud Console, Compartilhamento de Tela, KVM ou tarefas locais de longa duração (Roam não precisa disso)"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A aguardar SSH, Kubernetes, Cloud Console, Partilha de Ecrã, KVM ou tarefas locais de longa duração (Roam não necessita disto)"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "În așteptarea SSH, Kubernetes, consolă cloud, partajare ecran, KVM sau sarcini locale de lungă durată (Roam nu are nevoie de aceasta)"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Čakanje na SSH, Kubernetes, oblačno konzolo, skupno rabo zaslona, KVM ali dolgotrajne lokalne naloge (Roam tega ne potrebuje)"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Väntar på SSH, Kubernetes, Cloud Console, skärmdelning, KVM eller långvariga lokala uppgifter (Roam behöver inte detta)"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Очікування SSH, Kubernetes, хмарної консолі, спільного доступу до екрана, KVM або тривалих локальних завдань (Roam цього не потребує)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang chờ SSH, Kubernetes, Cloud Console, Chia sẻ màn hình, KVM hoặc các tác vụ cục bộ chạy dài (Roam không cần điều này)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待 SSH、Kubernetes、云控制台、屏幕共享、KVM 或长时间运行的本地任务（Roam 不需要此功能）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待 SSH、Kubernetes、雲端主控台、螢幕共享、KVM 或長時間執行的本機工作（Roam 不需要此功能）"
           }
         }
       }
