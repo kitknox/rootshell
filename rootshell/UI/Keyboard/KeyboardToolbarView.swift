@@ -429,6 +429,10 @@ class KeyboardToolbarView: UIView {
     /// Callback when toggle tab bar button is tapped
     var onToggleTabBarRequested: (() -> Void)?
 
+    /// Callbacks for the pane zoom buttons
+    var onChoosePaneToZoomRequested: (() -> Void)?
+    var onTogglePaneZoomRequested: (() -> Void)?
+
     /// Callback when new connection button is tapped
     var onNewConnectionRequested: (() -> Void)?
 
@@ -954,6 +958,11 @@ class KeyboardToolbarView: UIView {
         case .dictation:
             guard DictationSupport.isEnabled else { return nil }
             let button = KeyboardSymbolButton(key: keyID.keyValue, display: .icon("mic"), sizes: sizes)
+            button.delegate = self
+            return button
+        case .choosePaneToZoom, .togglePaneZoom:
+            let button = KeyboardSymbolButton(key: keyID.keyValue, display: .icon(keyID.iconName ?? ""), sizes: sizes)
+            button.accessibilityLabel = keyID.displayName
             button.delegate = self
             return button
         case .drawerToggle:
@@ -1851,6 +1860,14 @@ extension KeyboardToolbarView: KeyboardButtonDelegate {
         }
         if key == KeyID.httpCapture.keyValue {
             onHTTPCaptureRequested?()
+            return
+        }
+        if key == KeyID.choosePaneToZoom.keyValue {
+            onChoosePaneToZoomRequested?()
+            return
+        }
+        if key == KeyID.togglePaneZoom.keyValue {
+            onTogglePaneZoomRequested?()
             return
         }
         if key == KeyID.dictation.keyValue {

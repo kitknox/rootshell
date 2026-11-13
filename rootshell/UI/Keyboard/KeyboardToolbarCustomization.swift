@@ -81,6 +81,8 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
     case fileManager
     case httpCapture
     case dictation
+    case choosePaneToZoom
+    case togglePaneZoom
 
     // Toggles (1)
     case drawerToggle
@@ -150,6 +152,8 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .fileManager: return String(localized: "File Manager")
         case .httpCapture: return String(localized: "HTTP Capture")
         case .dictation: return String(localized: "Dictation")
+        case .choosePaneToZoom: return String(localized: "Choose Pane to Zoom")
+        case .togglePaneZoom: return String(localized: "Toggle Pane Zoom")
         case .drawerToggle: return String(localized: "Drawer Toggle")
         }
     }
@@ -187,6 +191,8 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .fileManager: return "folder.badge.gearshape"
         case .httpCapture: return "network.badge.shield.half.filled"
         case .dictation: return "mic"
+        case .choosePaneToZoom: return "number.square"
+        case .togglePaneZoom: return "arrow.up.left.and.down.right.magnifyingglass"
         case .drawerToggle: return "ellipsis"
         default: return nil
         }
@@ -253,6 +259,8 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .fileManager: return "__fileManager__"
         case .httpCapture: return "__httpCapture__"
         case .dictation: return "__dictation__"
+        case .choosePaneToZoom: return "__choosePaneToZoom__"
+        case .togglePaneZoom: return "__togglePaneZoom__"
         case .drawerToggle: return "__extraDrawer__"
         }
     }
@@ -326,7 +334,8 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .arrowDrawerToggle, .arrowUp, .arrowDown, .arrowLeft, .arrowRight: return .navigation
         case .dismiss, .tabSwitcher, .compose, .writingAssistance, .toolbarSettings, .paste, .voiceAgent,
              .toggleFullScreen, .toggleTabBar, .newConnection, .appSettings,
-             .toggleMouseCapture, .aiAgent, .brightnessBoost, .typePassword, .clipboardManager, .fileManager, .httpCapture, .dictation: return .action
+             .toggleMouseCapture, .aiAgent, .brightnessBoost, .typePassword, .clipboardManager, .fileManager, .httpCapture, .dictation,
+             .choosePaneToZoom, .togglePaneZoom: return .action
         case .drawerToggle: return .toggle
         default: return .symbol
         }
@@ -385,7 +394,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
 
     // MARK: - Defaults
 
-    static let currentVersion = 18
+    static let currentVersion = 19
 
     static func defaultConfig(for idiom: UIUserInterfaceIdiom) -> ToolbarLayoutConfig {
         switch idiom {
@@ -447,6 +456,8 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
             .builtIn(.dictation),
             .builtIn(.toggleFullScreen),
             .builtIn(.toggleTabBar),
+            .builtIn(.choosePaneToZoom),
+            .builtIn(.togglePaneZoom),
             .builtIn(.newConnection),
             .builtIn(.toggleMouseCapture),
             .builtIn(.aiAgent),
@@ -502,6 +513,8 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
             .builtIn(.dictation),
             .builtIn(.toggleFullScreen),
             .builtIn(.toggleTabBar),
+            .builtIn(.choosePaneToZoom),
+            .builtIn(.togglePaneZoom),
             .builtIn(.newConnection),
             .builtIn(.toggleMouseCapture),
             .builtIn(.aiAgent),

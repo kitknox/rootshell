@@ -87,6 +87,18 @@ class KeyboardAccessoryView: UIInputView {
         }
     }
 
+    var onChoosePaneToZoomRequested: (() -> Void)? {
+        didSet {
+            toolbarView.onChoosePaneToZoomRequested = onChoosePaneToZoomRequested
+        }
+    }
+
+    var onTogglePaneZoomRequested: (() -> Void)? {
+        didSet {
+            toolbarView.onTogglePaneZoomRequested = onTogglePaneZoomRequested
+        }
+    }
+
     /// Callback when new connection button is tapped
     var onNewConnectionRequested: (() -> Void)? {
         didSet {

@@ -317,6 +317,32 @@ extension MainView {
         terminals[selectedTabIndex].splitTree = terminals[selectedTabIndex].splitTree.toggleZoom(for: currentNode)
     }
 
+    /// Toolbar zoom toggle. tmux and herdr get one server toggle per tap rather
+    /// than a choice from `splitTree.zoomed`, so taps that beat the reconcile still alternate.
+    func togglePaneZoom() {
+        guard terminals.indices.contains(selectedTabIndex) else { return }
+        let tab = terminals[selectedTabIndex]
+        let tree = tab.splitTree
+        var zoomedView: SplitPaneView?
+        if case .leaf(let view) = tree.zoomed { zoomedView = view }
+        if let terminal = (zoomedView ?? tab.focusedPane)?.asTerminal {
+            if terminal.isTmuxPane {
+                terminal.requestTmuxToggleZoom()
+                return
+            }
+            if terminal.isHerdrPane {
+                terminal.requestHerdrToggleZoom()
+                return
+            }
+        }
+        if let zoomed = tree.zoomed {
+            tab.splitTree = tree.toggleZoom(for: zoomed)
+        } else if tree.count > 1, let focused = tab.focusedPane,
+                  let node = tree.root?.node(view: focused) {
+            tab.splitTree = tree.toggleZoom(for: node)
+        }
+    }
+
     /// Pane swipe presets: all panes, each pane zoomed in tree order, then all
     /// panes again. A tab with one pane switches tabs instead.
     func cyclePaneZoom(forward: Bool) {

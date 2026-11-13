@@ -1251,6 +1251,16 @@ final class TerminalKeyboardAccessoryController: NSObject {
             NotificationCenter.default.post(name: .toggleTabBar, object: host.keyboardHostView)
         }
 
+        keyboardAccessory?.onChoosePaneToZoomRequested = { [weak host] in
+            guard let host else { return }
+            NotificationCenter.default.post(name: .choosePaneToZoom, object: host.keyboardHostView)
+        }
+
+        keyboardAccessory?.onTogglePaneZoomRequested = { [weak host] in
+            guard let host else { return }
+            NotificationCenter.default.post(name: .togglePaneZoom, object: host.keyboardHostView)
+        }
+
         keyboardAccessory?.onNewConnectionRequested = { [weak host] in
             guard let host else { return }
             NotificationCenter.default.post(name: .newTab, object: host.keyboardHostView)

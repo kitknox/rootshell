@@ -259,6 +259,11 @@ extension MainView {
             host?.showPaneZoomPicker()
         }
 
+        observerBag.observeOnMainActor(.togglePaneZoom) { [self] notification in
+            guard self.shouldHandleNotification(notification) else { return }
+            self.togglePaneZoom()
+        }
+
         observerBag.observeOnMainActor(.choosePaneToSwap) { [self] notification in
             guard self.shouldHandleNotification(notification), !isAnySheetPresented,
                   terminals.indices.contains(selectedTabIndex) else { return }

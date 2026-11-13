@@ -2312,6 +2312,7 @@ extension Notification.Name {
     static let previousPaneZoom = Notification.Name("com.rootshell.previousPaneZoom")
     static let equalizeSplits = Notification.Name("com.rootshell.equalizeSplits")
     static let choosePaneToZoom = Notification.Name("com.rootshell.choosePaneToZoom")
+    static let togglePaneZoom = Notification.Name("com.rootshell.togglePaneZoom")
     static let choosePaneToSwap = Notification.Name("com.rootshell.choosePaneToSwap")
     static let focusSplit = Notification.Name("com.rootshell.focusSplit")
     static let resizeSplit = Notification.Name("com.rootshell.resizeSplit")
