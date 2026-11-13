@@ -10,6 +10,23 @@ import GhosttyKit
 
 @MainActor
 final class TerminalInputController {
+    /// Keyed by the press itself, which retains it until its release or a
+    /// reset. An ObjectIdentifier key would let a new press reuse a freed
+    /// press's address and inherit its owner, suppressing a modifier release.
+    private var hardwarePressRouting = HardwarePressRouting<UIPress>()
+
+    func forwardingHardwarePresses(_ presses: Set<UIPress>, proposed: Set<UIPress>) -> Set<UIPress> {
+        hardwarePressRouting.began(presses, forwarding: proposed)
+    }
+
+    func finishingHardwarePresses(_ presses: Set<UIPress>) -> Set<UIPress> {
+        hardwarePressRouting.finished(presses)
+    }
+
+    func resetHardwarePressRouting() {
+        hardwarePressRouting.reset()
+    }
+
     /// Key repeat manager for physical and command-routed keys.
     let keyRepeatManager = Ghostty.KeyRepeatManager()
 
