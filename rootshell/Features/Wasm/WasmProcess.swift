@@ -102,9 +102,15 @@ final class WasmProcess {
         /// already captured the original instance.
         var kind: Kind
         /// Type-erased to keep this header dependency-free. The broker casts
-        /// back to `NWConnection` / `NWListener`.
+        /// back to `NWConnection` / `NWListener` / `WasmUDPSocket`.
         var primitive: AnyObject?
         var pendingReads: Data = Data()
+        /// UDP only: whole datagrams with their real sender, oldest first.
+        var datagrams: [(data: Data, host: String, port: UInt16)] = []
+        /// UDP only: a receive error (WASI errno) held for the next recv.
+        var pendingError: Int32 = 0
+        /// `SO_RCVTIMEO` equivalent; nil waits forever.
+        var recvTimeout: Duration?
         var pendingAccepts: [(AnyObject, String, UInt16)] = []
         var lastError: Int32 = 0
         var localPort: UInt16 = 0

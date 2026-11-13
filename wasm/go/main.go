@@ -11,6 +11,7 @@
 //	tls-client <h> <p>          — TLS variant of tcp-client, hits HTTPS hosts
 //	dns-query <name> [resolver] — hand-rolled DNS/A query over UDP
 //	tcp-listen <port>           — bind/listen/accept, echo one line, exit
+//	bonjour <type> [ms]         — find a Bonjour service, e.g. _ssh._tcp
 //	all                         — runs every self-contained subcommand,
 //	                              plus dns-query / tcp-client / tls-client
 //	                              against real internet hosts. tcp-listen
@@ -57,6 +58,9 @@ func main() {
 		code = cmdDNSQuery(argOr(args, 2, "google.com"), argOr(args, 3, "1.1.1.1"))
 	case "tcp-listen":
 		code = cmdTCPListen(parsePort(argOr(args, 2, "0")))
+	case "bonjour":
+		ms, _ := strconv.ParseUint(argOr(args, 3, "3000"), 10, 32)
+		code = cmdBonjour(argOr(args, 2, "_ssh._tcp"), uint32(ms))
 	case "all":
 		code = cmdAll()
 	default:
@@ -269,6 +273,8 @@ func cmdDNSQuery(name string, resolver string) int {
 	fmt.Printf("dns-query: sent %d bytes to %s:53 for %s\n", sent, resolver, name)
 
 	// ---- Receive the reply ----
+	// Give up after 5 s rather than hang on a lost datagram.
+	socketSetRecvTimeout(fd, 5000)
 	buf := make([]byte, 1500)
 	addrBuf := make([]byte, 16)
 	alen := int32(len(addrBuf))
@@ -466,4 +472,24 @@ func cmdAll() int {
 		fmt.Printf("all: FAIL (composite=%d)\n", acc)
 	}
 	return acc
+}
+
+// Browse for a Bonjour service type and print each instance the host
+// resolved: name, host, port and addresses.
+func cmdBonjour(serviceType string, timeoutMs uint32) int {
+	buf := make([]byte, 8192)
+	var n uint32
+	if e := socketBonjourLookup(stringPtr(serviceType), int32(len(serviceType)), timeoutMs,
+		bytesPtr(buf), int32(len(buf)), unsafe.Pointer(&n)); e != 0 {
+		fmt.Fprintf(os.Stderr, "bonjour %s: %s\n", serviceType, errnoName(e))
+		return 1
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(string(buf[:n]), "\n"), "\n") {
+		f := strings.Split(line, "\t")
+		if len(f) < 4 {
+			continue
+		}
+		fmt.Printf("bonjour: %s at %s:%s [%s]\n", f[0], f[1], f[2], f[3])
+	}
+	return 0
 }

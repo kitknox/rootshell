@@ -69,14 +69,14 @@ extension LocalShellSession {
                         guard let self else { return }
                         let s = stdoutDecoder.decode(data)
                         if !s.isEmpty {
-                            self.onOutput?(self.normalizeLineEndings(s))
+                            self.onOutput?(self.normalizeNewlinesKeepingCR(s))
                         }
                     },
                     onStderr: { [weak self] data in
                         guard let self else { return }
                         let s = stderrDecoder.decode(data)
                         if !s.isEmpty {
-                            self.onOutput?(self.normalizeLineEndings(s))
+                            self.onOutput?(self.normalizeNewlinesKeepingCR(s))
                         }
                     }
                 )
@@ -84,7 +84,7 @@ extension LocalShellSession {
                 // Flush any dangling partial sequence (as U+FFFD)
                 let tail = stdoutDecoder.flush() + stderrDecoder.flush()
                 if !tail.isEmpty {
-                    self.onOutput?(self.normalizeLineEndings(tail))
+                    self.onOutput?(self.normalizeNewlinesKeepingCR(tail))
                 }
 
                 self.lastCommandSucceeded = (code == 0)

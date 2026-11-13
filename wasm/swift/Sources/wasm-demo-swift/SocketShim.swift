@@ -71,6 +71,15 @@ func rootshell_socket_resolve_v4(_ host: UnsafePointer<UInt8>, _ hostLen: Int32,
 @_extern(wasm, module: "rootshell_socket", name: "rootshell_socket_resolve_v6")
 func rootshell_socket_resolve_v6(_ host: UnsafePointer<UInt8>, _ hostLen: Int32, _ outBuf: UnsafeMutablePointer<UInt8>, _ outMax: Int32, _ countOut: UnsafeMutablePointer<UInt32>) -> Int32
 
+// SO_RCVTIMEO: recv/recvfrom return EAGAIN after timeoutMs; 0 waits forever.
+@_extern(wasm, module: "rootshell_socket", name: "rootshell_socket_set_recv_timeout")
+func rootshell_socket_set_recv_timeout(_ fd: Int32, _ timeoutMs: UInt32) -> Int32
+
+// Browses for a Bonjour service type for up to timeoutMs and writes one
+// "name\thost\tport\taddr,addr\n" line per instance into outBuf.
+@_extern(wasm, module: "rootshell_socket", name: "rootshell_socket_bonjour_lookup")
+func rootshell_socket_bonjour_lookup(_ type: UnsafePointer<UInt8>, _ typeLen: Int32, _ timeoutMs: UInt32, _ outBuf: UnsafeMutablePointer<UInt8>, _ outMax: Int32, _ outLen: UnsafeMutablePointer<UInt32>) -> Int32
+
 // -------- Terminal (raw / cooked input mode) --------
 
 @_extern(wasm, module: "rootshell_terminal", name: "rootshell_terminal_set_raw")
@@ -99,11 +108,13 @@ func errnoName(_ e: Int32) -> String {
     switch e {
     case 0:  return "OK"
     case 2:  return "EACCES"
+    case 6:  return "EAGAIN"
     case 8:  return "EBADF"
     case 14: return "ECONNREFUSED"
     case 27: return "EINTR"
     case 28: return "EINVAL"
     case 50: return "ENETUNREACH"
+    case 42: return "ENOBUFS"
     case 73: return "ETIMEDOUT"
     default: return "errno"
     }

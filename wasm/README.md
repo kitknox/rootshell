@@ -15,7 +15,8 @@ Three reference implementations, same surface area:
 | `wasm-demo-swift`   | Swift    | [`swift/`](swift/)   | Swift 6.3+ with the swift.org `wasm` SDK (`wasm32-unknown-wasip1`) |
 
 All three exercise the same subcommands (`hello`, `fs-write`, `fs-read`,
-`fs-escape`, `tcp-client`, `tls-client`, `dns-query`, `tcp-listen`, `all`)
+`fs-escape`, `tcp-client`, `tls-client`, `dns-query`, `tcp-listen`,
+`bonjour`, `all`)
 and link against the same host-provided `rootshell_socket_*` and
 `rootshell_terminal_*` ABIs. Use them as starting points for your own
 ports.
@@ -161,7 +162,8 @@ All calls follow the same shape:
 - Return `i32` errno (0 = success, non-zero from the WASI errno set:
   `EBADF=8`, `EACCES=2`, `EINVAL=28`, `ECONNREFUSED=14`, `ETIMEDOUT=73`,
   `ENETUNREACH=50`, `EINTR=27`, `EADDRINUSE=1`, `ENOSYS=52`, `EIO=29`,
-  `ENOENT=44`).
+  `ENOENT=44`, `EAGAIN=6`, `EISCONN=30`, `EMSGSIZE=35`, `ENOBUFS=42`,
+  `EPIPE=64`).
 - Take `i32` socket fds. Note: this is a separate fd space from WASI fs.
   Fds returned by `rootshell_socket_socket` must not be passed to
   `fd_close`, and vice versa.
@@ -212,11 +214,65 @@ SOCK_DGRAM`) plus:
 | `rootshell_socket_sendto(fd, buf, len, addr, addrlen, sent_out) -> errno`                                                | `sendto(2)`    |
 | `rootshell_socket_recvfrom(fd, buf, len, addr_out, addrlen_io, recv_out) -> errno`                                       | `recvfrom(2)`  |
 
-`addr_out` is filled with the peer's sockaddr; the `addrlen_io`
-in/out parameter tells the host how much space is available and gets
-overwritten with the actual length. This is what makes the
-`dns-query` demo work: it proves the host is wiring through the
-resolver's source address, not zeroing the buffer.
+UDP sockets are real BSD sockets on the host and behave like them:
+
+- A socket is **unconnected** until `connect`. `sendto` can reach any
+  destination, including a multicast group such as `224.0.0.251:5353`,
+  and replies from any sender come back to `recvfrom`.
+- `bind` binds. Pass port 0 for an ephemeral port, or a fixed one to
+  receive datagrams sent to it. Sockets set `SO_REUSEADDR` and
+  `SO_REUSEPORT`, so a port the system also uses (5353) can be shared.
+- Each `recv` / `recvfrom` returns **one whole datagram**. Bytes past
+  `len` are discarded, as with BSD sockets. Up to 256 datagrams queue
+  per socket; later ones drop until the program reads.
+- `addr_out` is filled with the address the datagram **came from**; the
+  `addrlen_io` in/out parameter tells the host how much space is
+  available and gets overwritten with the actual length. The
+  `dns-query` demo checks this against the resolver's address.
+- After `connect`, the socket only receives from that peer, and `send`
+  goes to it.
+- `shutdown` with `SHUT_WR` makes later sends fail with `EPIPE`;
+  `SHUT_RD` discards queued and later datagrams, and receives return 0.
+
+### Receive time limit
+
+| Symbol                                                         | Maps to |
+|----------------------------------------------------------------|---------|
+| `rootshell_socket_set_recv_timeout(fd, timeout_ms) -> errno`    | `setsockopt(SO_RCVTIMEO)` |
+
+After this, a `recv` or `recvfrom` on `fd` that has waited `timeout_ms`
+milliseconds without data returns `EAGAIN`. Pass 0 to wait forever again
+(the default). Works on TCP and UDP sockets. The `dns-query` demos use
+a 5-second limit so a lost reply doesn't hang them.
+
+### Bonjour
+
+| Symbol                                                                                                   | Behaviour |
+|----------------------------------------------------------------------------------------------------------|-----------|
+| `rootshell_socket_bonjour_lookup(type, type_len, timeout_ms, out_buf, out_max, out_len) -> errno`         | Browse `local.` for a service type and resolve each instance. |
+
+`type` is a UTF-8 service type such as `_ssh._tcp`. The host browses
+with the system's Bonjour stack, resolves every instance it finds to a
+host name, port and addresses, and never connects to the service. It
+returns once every instance has a port and at least one address and no
+new answer has arrived for half a second, or when `timeout_ms` (at most 60000) passes,
+whichever comes first.
+
+`out_buf` receives one line per instance, tab-separated:
+
+```text
+<instance name>\t<host>\t<port>\t<address>,<address>,...\n
+```
+
+For example `iPhone\tiPhone.local.\t49152\t192.168.1.20,fe80::1c2b:3a4d:5e6f:7081%en0`.
+Only whole lines are written and `out_len` gets the byte count; a buffer
+too small for even one line returns `ENOBUFS`. Nothing found in time
+returns `ETIMEDOUT`.
+
+iOS only lets an app browse service types it declares in
+`NSBonjourServices`. rootshell declares `_ssh._tcp`, `_rfb._tcp` and
+`_remotepairing._tcp`; any other type, or Local Network access turned
+off for rootshell, returns `EACCES`. Open a request issue to add a type.
 
 ### Hostname-friendly variants
 
@@ -231,7 +287,7 @@ than an IP. They Just Work behind the iOS VPN and Tailscale stacks.
 | `rootshell_socket_connect_host(fd, host, host_len, port) -> errno`                                                                                     | TCP connect. `host` is a UTF-8 hostname **or** IP literal. |
 | `rootshell_socket_tls_connect_host(fd, host, host_len, port) -> errno`                                                                                 | TLS-on-TCP. Sets up the TLS connection from scratch (no prior `connect_host`). After it returns 0, `send` / `recv` operate on the plaintext stream. SNI = `host`. Cert validation uses Apple's trust store. |
 | `rootshell_socket_bind_host(fd, host, host_len, port) -> errno`                                                                                        | `bind` by interface name / IP literal. |
-| `rootshell_socket_sendto_host(fd, buf, len, host, host_len, port, sent_out) -> errno`                                                                  | UDP `sendto` by hostname. |
+| `rootshell_socket_sendto_host(fd, buf, len, host, host_len, port, sent_out) -> errno`                                                                  | UDP `sendto` by hostname, looked up with the system resolver. |
 | `rootshell_socket_resolve_v4(host, host_len, out_buf, out_max, count_out) -> errno`                                                                    | Explicit A-record resolution. `out_buf` receives `count_out * 4` bytes packed back-to-back. |
 | `rootshell_socket_resolve_v6(host, host_len, out_buf, out_max, count_out) -> errno`                                                                    | Explicit AAAA-record resolution. 16 bytes per entry. |
 
@@ -244,14 +300,17 @@ diagnostics, multi-homed clients, custom happy-eyeballs).
 ### What's intentionally *not* exposed
 
 - Raw sockets / ICMP. Entitlement-gated on iOS.
-- `setsockopt` / `getsockopt`. Knobs like `SO_REUSEADDR`, `TCP_NODELAY`,
+- `setsockopt` / `getsockopt`. Knobs like `TCP_NODELAY` and
   `IP_MULTICAST_*` are mostly N/A under Network.framework. Reasonable
-  defaults are baked in. Open a request issue if you need a specific
-  knob.
+  defaults are baked in, and `SO_RCVTIMEO` has its own call
+  (`rootshell_socket_set_recv_timeout`). Open a request issue if you
+  need a specific knob.
 - `select` / `poll` / `epoll` / `kqueue`. The broker is synchronous and
-  one-fd-at-a-time inside a single call. If you need multiplexing,
-  build it from threads (Go goroutines work; TinyGo's scheduler also
-  works) or non-blocking loops over short `recv` calls.
+  one-fd-at-a-time inside a single call, and WASI `poll_oneoff` only
+  takes clock subscriptions. To wait for an answer and then give up,
+  set a receive time limit. For multiplexing, build it from threads (Go
+  goroutines work; TinyGo's scheduler also works) or loops over `recv`
+  calls with a short time limit.
 
 ---
 
@@ -332,6 +391,7 @@ Each subcommand exists to exercise one slice of the runtime:
 | `tls-client <host> <port>`                      | `tls_connect_host` + cert validation against an HTTPS server |
 | `dns-query <name> [resolver]`                   | hand-built DNS/A query over UDP via `sendto_host` + `recvfrom` (also proves peer address is delivered) |
 | `tcp-listen <port>`                             | `bind` / `listen` / `accept` + one-shot echo |
+| `bonjour <type> [timeout_ms]`                   | `bonjour_lookup`: prints each instance's name, host, port and addresses |
 | `all`                                           | runs every self-contained subcommand plus `dns-query`, `tcp-client`, `tls-client` against real internet hosts |
 
 `tcp-listen` needs a peer to be useful; it's driven by the in-app

@@ -766,7 +766,7 @@ final class WasmFilesystemBroker {
 
 // MARK: - WASI flags + errno
 
-enum Errno {
+nonisolated enum Errno {
     static let EPERM:  Int32 = 63
     static let ENOENT: Int32 = 44
     static let EIO:    Int32 = 29
@@ -784,6 +784,29 @@ enum Errno {
     static let EINTR:  Int32 = 27
     static let EFAULT: Int32 = 21
     static let ENOMEM: Int32 = 48
+    static let EISCONN: Int32 = 30
+    static let EMSGSIZE: Int32 = 35
+    static let ENOBUFS: Int32 = 42
+    static let EPIPE: Int32 = 64
+
+    /// Maps a Darwin errno from a socket call onto its WASI number.
+    static func fromPOSIX(_ code: Int32) -> Int32 {
+        switch code {
+        case Darwin.EACCES, Darwin.EPERM:            return EACCES
+        case Darwin.EADDRINUSE, Darwin.EADDRNOTAVAIL: return EADDRINUSE
+        case Darwin.ECONNREFUSED:                    return ECONNREFUSED
+        case Darwin.EHOSTUNREACH, Darwin.ENETUNREACH, Darwin.ENETDOWN, Darwin.EHOSTDOWN:
+            return ENETUNREACH
+        case Darwin.EMSGSIZE:                        return EMSGSIZE
+        case Darwin.ENOBUFS:                         return ENOBUFS
+        case Darwin.EAGAIN:                          return EAGAIN
+        case Darwin.EISCONN:                         return EISCONN
+        case Darwin.EPIPE:                           return EPIPE
+        case Darwin.EINVAL, Darwin.EAFNOSUPPORT:     return EINVAL
+        case Darwin.EMFILE, Darwin.ENFILE:           return ENOMEM
+        default:                                     return EIO
+        }
+    }
 }
 
 struct OFlags: OptionSet {

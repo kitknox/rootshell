@@ -107,7 +107,7 @@ final class LocalShellSession: TerminalSession, EmbeddedConnectionConfigProvidin
     /// Excludes SSH/Mosh/Trzsz which are tracked separately via onEmbeddedConnectionConfigChanged.
     var hasActiveLongRunningTask: Bool {
         switch sessionMode {
-        case .helixRunning, .rfBrowserRunning, .sftpSession, .scpTransfer, .sshCopyIDTransfer, .pingRunning, .mtrRunning, .gitRunning, .crocRunning:
+        case .helixRunning, .rfBrowserRunning, .sftpSession, .scpTransfer, .sshCopyIDTransfer, .pingRunning, .mtrRunning, .gitRunning, .crocRunning, .wasmRunning:
             return true
         case .localShell:
             // Only count full-screen commands (vim, less, nano) that use cursor control sequences.

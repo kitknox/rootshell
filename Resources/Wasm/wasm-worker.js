@@ -690,7 +690,7 @@ function rootshellSocketImports() {
             const bytes = b64ToBytes(r.data || "");
             new Uint8Array(memory.buffer).set(bytes, bufPtr);
             new DataView(memory.buffer).setUint32(recvOutPtr, bytes.length, true);
-            // Materialize the source sockaddr the BSD way. addrLenIO is
+            // Materialize the datagram's sender the BSD way. addrLenIO is
             // in/out: read capacity, write the actual sockaddr length back.
             // If the caller passed null buffers or the broker couldn't tell
             // us who sent the datagram, leave addrLenIO at 0 so apps see
@@ -707,6 +707,30 @@ function rootshellSocketImports() {
         },
         rootshell_socket_shutdown(fd, how) {
             return callSocket("shutdown", { fd, how }).errno || 0;
+        },
+        // SO_RCVTIMEO: recv/recvfrom give up with EAGAIN after timeoutMs; 0 waits forever.
+        rootshell_socket_set_recv_timeout(fd, timeoutMs) {
+            return callSocket("set_recv_timeout", { fd, timeoutMs: timeoutMs >>> 0 }).errno || 0;
+        },
+        // Browses for a Bonjour service type such as "_ssh._tcp" for up to
+        // timeoutMs. Writes one "name\thost\tport\taddr,addr\n" line per
+        // instance, whole lines only; ENOBUFS when not even one fits.
+        rootshell_socket_bonjour_lookup(typePtr, typeLen, timeoutMs, outBufPtr, outMax, outLenPtr) {
+            const type = readString(typePtr, typeLen);
+            const r = callSocket("bonjour_lookup", { type, timeoutMs: timeoutMs >>> 0 });
+            if (r.errno !== 0) return r.errno;
+            const enc = new TextEncoder();
+            const buf = new Uint8Array(memory.buffer);
+            let written = 0;
+            for (const line of (r.text || "").split("\n")) {
+                if (!line) continue;
+                const bytes = enc.encode(line + "\n");
+                if (written + bytes.length > outMax) break;
+                buf.set(bytes, outBufPtr + written);
+                written += bytes.length;
+            }
+            new DataView(memory.buffer).setUint32(outLenPtr, written, true);
+            return written === 0 ? 42 /* ENOBUFS */ : 0;
         },
         rootshell_socket_close(fd) {
             return callSocket("close", { fd }).errno || 0;
@@ -899,13 +923,21 @@ function writeSockaddr(ptr, cap, host, port) {
     return 16;
 }
 
-/* Parses a canonical IPv6 literal into an 8-element array of u16 words.
- * Accepts the standard "::" zero compression, zone suffixes ("fe80::1%en0"),
- * but not IPv4-in-IPv6 mixed forms (those don't show up from
- * Network.framework path endpoints — they get returned as IPv4).
+/* Parses an IPv6 literal into an 8-element array of u16 words. Accepts
+ * "::" zero compression, zone suffixes ("fe80::1%en0"), and a dotted IPv4
+ * tail ("::ffff:192.0.2.1"), which a v6 socket reports for IPv4 senders.
  */
 function parseIPv6Literal(s) {
     s = s.split("%")[0]; // strip zone suffix
+    const lastColon = s.lastIndexOf(":");
+    const v4 = s.slice(lastColon + 1);
+    if (lastColon >= 0 && v4.includes(".")) {
+        const o = v4.split(".").map(p => /^\d{1,3}$/.test(p) ? parseInt(p, 10) : NaN);
+        if (o.length !== 4 || o.some(v => isNaN(v) || v > 255)) return null;
+        const hi = ((o[0] << 8) | o[1]).toString(16);
+        const lo = ((o[2] << 8) | o[3]).toString(16);
+        s = s.slice(0, lastColon + 1) + hi + ":" + lo;
+    }
     const halves = s.split("::");
     if (halves.length > 2) return null;
     const head = halves[0] && halves[0].length ? halves[0].split(":") : [];
