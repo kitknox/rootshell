@@ -153,6 +153,7 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
             assistant?.noteFrame(pixelBuffer)
         }
         observeSession()
+        observeMenuShortcutForwarding()
         installTabSwipeGestureIfNeeded()
     }
 
@@ -170,6 +171,7 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        reportMenuShortcutForwarding()
         guard window != nil, !isClosed else { return }
         if isLogicallyFocused, !overlayOwnsKeyboard {
             captureKeyboard()

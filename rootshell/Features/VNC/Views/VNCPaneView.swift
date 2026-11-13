@@ -345,6 +345,7 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
         }
 
         observeSession()
+        observeMenuShortcutForwarding()
         installTabSwipeGestureIfNeeded()
     }
 
@@ -366,6 +367,7 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        reportMenuShortcutForwarding()
         guard window != nil, !isClosed else { return }
         if isLogicallyFocused, !overlayOwnsKeyboard {
             captureKeyboard()

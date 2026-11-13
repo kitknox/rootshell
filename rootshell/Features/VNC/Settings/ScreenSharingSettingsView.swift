@@ -59,7 +59,11 @@ struct ScreenSharingSettingsView: View {
             } header: {
                 SettingGroupHeader("Reserved Shortcuts", group: .screenSharing)
             } footer: {
+                #if targetEnvironment(macCatalyst)
+                Text("Sends rootshell’s keyboard shortcuts, such as Command+T and Command+1, to the remote computer by default in new Screen Sharing sessions. Change it for the current session from the Screen Sharing menu or with Command+Shift+M. Command+Shift+M always stays local.")
+                #else
                 Text("Sends rootshell’s reserved keyboard shortcuts to the remote computer by default in new Screen Sharing sessions. Change it for the current session from the Screen Sharing menu or with Command+Shift+M. Command+Shift+M always stays local.")
+                #endif
             }
 
             #if !os(visionOS) && !targetEnvironment(macCatalyst)

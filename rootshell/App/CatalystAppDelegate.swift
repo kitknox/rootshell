@@ -1052,9 +1052,11 @@ class CatalystAppDelegate: AppDelegate {
         // menu key equivalents before any responder UIKeyCommand, so a fixed
         // Cmd-W here would swallow bindings that remap it (e.g. an imported
         // `keybind = cmd+w=text:\x1Bw`). No key equivalent while a shortcut is
-        // being recorded, so the recorder sees the physical chord.
+        // being recorded or a remote screen takes the shortcuts, so the
+        // physical chord reaches that responder.
         let closeTitle = String(localized: "Close Tab")
         let closeCommand = MenuShortcutState.shared.isRecordingCapture
+            || MenuShortcutState.shared.forwardsShortcutsToRemoteScreen
             ? UICommand(title: closeTitle, action: closeSelector)
             : keybindMenuCommand(title: closeTitle, action: closeSelector, keybind: .close_tab)
         builder.replaceChildren(ofMenu: .close) { _ in
@@ -1179,20 +1181,49 @@ class CatalystAppDelegate: AppDelegate {
                 break
             }
             logger.info("Releasing \(trigger.description) from menu item \(command.title)")
-            return UICommand(
-                title: command.title,
-                image: command.image,
-                action: action,
-                propertyList: command.propertyList,
-                alternates: command.alternates,
-                discoverabilityTitle: command.discoverabilityTitle,
-                attributes: command.attributes,
-                state: command.state
-            )
+            return commandWithoutKeyEquivalent(command, action: action)
         })
     }
 
+    private func commandWithoutKeyEquivalent(_ command: UIKeyCommand, action: Selector) -> UICommand {
+        UICommand(
+            title: command.title,
+            image: command.image,
+            action: action,
+            propertyList: command.propertyList,
+            alternates: command.alternates,
+            discoverabilityTitle: command.discoverabilityTitle,
+            attributes: command.attributes,
+            state: command.state
+        )
+    }
+
     // MARK: - Legacy Menu Builders (pre-macOS 26)
+
+    /// Items that keep their fixed chord while a remote screen takes the
+    /// shortcuts: the capture toggle, and ⌘. which only the menu receives.
+    private static let remoteScreenKeptMenuActions: Set<Selector> = [
+        #selector(UIApplication.ghostty_toggleMouseCapture(_:)),
+        #selector(UIApplication.ghostty_systemCancel(_:)),
+    ]
+
+    /// Legacy menus carry fixed chords, so drop them like the SwiftUI rail
+    /// does while MenuShortcutState forwards shortcuts to a remote screen.
+    private func releasingRemoteScreenKeyEquivalents(_ menu: UIMenu) -> UIMenu {
+        menu.replacingChildren(releasingRemoteScreenKeyEquivalents(menu.children))
+    }
+
+    private func releasingRemoteScreenKeyEquivalents(_ elements: [UIMenuElement]) -> [UIMenuElement] {
+        guard MenuShortcutState.shared.forwardsShortcutsToRemoteScreen else { return elements }
+        return elements.map { element in
+            if let menu = element as? UIMenu {
+                return releasingRemoteScreenKeyEquivalents(menu)
+            }
+            guard let command = element as? UIKeyCommand, let action = command.action,
+                  !Self.remoteScreenKeptMenuActions.contains(action) else { return element }
+            return commandWithoutKeyEquivalent(command, action: action)
+        }
+    }
     // NOTE: Menu shortcuts shown here are defaults. Actual keyboard input is handled
     // by KeybindCommandGenerator which respects user customizations from KeybindManager.
     // The menu display shows default shortcuts even when customized, but the actual
@@ -1251,7 +1282,7 @@ class CatalystAppDelegate: AppDelegate {
             action: #selector(UIApplication.menuToggleAgentInbox(_:)),
             keybind: .toggle_agent_inbox
         ))
-        builder.replaceChildren(ofMenu: .newScene) { _ in sceneItems }
+        builder.replaceChildren(ofMenu: .newScene) { _ in releasingRemoteScreenKeyEquivalents(sceneItems) }
     }
 
     /// A menu item carrying the action's current single-chord binding, unless
@@ -1288,7 +1319,7 @@ class CatalystAppDelegate: AppDelegate {
         )
 
         let editMenu = UIMenu(title: "", options: .displayInline, children: [clearScreen, find, clipboardManager])
-        builder.insertChild(editMenu, atEndOfMenu: .edit)
+        builder.insertChild(releasingRemoteScreenKeyEquivalents(editMenu), atEndOfMenu: .edit)
     }
 
     private func buildViewMenuItems(_ builder: UIMenuBuilder) {
@@ -1375,8 +1406,8 @@ class CatalystAppDelegate: AppDelegate {
             toggleTabBar, toggleGroupMode, toggleBackgroundEffect, toggleThemePicker, toggleTransparency, toggleTitleBar, toggleAutoRedact
         ])
 
-        builder.insertChild(fontGroup, atEndOfMenu: .view)
-        builder.insertChild(toggleGroup, atEndOfMenu: .view)
+        builder.insertChild(releasingRemoteScreenKeyEquivalents(fontGroup), atEndOfMenu: .view)
+        builder.insertChild(releasingRemoteScreenKeyEquivalents(toggleGroup), atEndOfMenu: .view)
     }
 
     private func buildTerminalMenu(_ builder: UIMenuBuilder) {
@@ -1538,7 +1569,7 @@ class CatalystAppDelegate: AppDelegate {
             children: [splitCreateGroup, focusSplitGroup, splitManageGroup, scrollGroup, composeGroup, systemCancelGroup]
         )
 
-        builder.insertSibling(terminalMenu, afterMenu: .view)
+        builder.insertSibling(releasingRemoteScreenKeyEquivalents(terminalMenu), afterMenu: .view)
     }
 
     private func buildShellMenu(_ builder: UIMenuBuilder) {
@@ -1614,7 +1645,7 @@ class CatalystAppDelegate: AppDelegate {
         )
         #endif
 
-        builder.insertSibling(shellMenu, afterMenu: .view)
+        builder.insertSibling(releasingRemoteScreenKeyEquivalents(shellMenu), afterMenu: .view)
     }
 
     private func buildTabsMenu(_ builder: UIMenuBuilder) {
@@ -1720,7 +1751,7 @@ class CatalystAppDelegate: AppDelegate {
             children: [navGroup, tabSelectGroup]
         )
 
-        builder.insertSibling(tabsMenu, afterMenu: .view)
+        builder.insertSibling(releasingRemoteScreenKeyEquivalents(tabsMenu), afterMenu: .view)
         // insertSibling reports nothing, and UIKit drops a whole menu whose key
         // equivalent a system menu owns. Without this the loss is invisible.
         if builder.menu(for: UIMenu.Identifier("com.rootshell.tabs")) == nil {

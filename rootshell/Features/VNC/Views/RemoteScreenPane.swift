@@ -81,4 +81,27 @@ extension RemoteScreenPane {
         case .nextTab: ("]", [.command, .shift])
         }
     }
+
+    /// Mac: while captured with reserved shortcuts routed to the remote, the
+    /// menu bar gives up rootshell's key equivalents. Re-arms on every change.
+    func observeMenuShortcutForwarding() {
+        #if targetEnvironment(macCatalyst)
+        _ = withObservationTracking {
+            (keyboardCapture.isCaptured, keyboardCapture.routesReservedHostShortcutsToVNC)
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.observeMenuShortcutForwarding()
+            }
+        }
+        reportMenuShortcutForwarding()
+        #endif
+    }
+
+    /// Also called on window moves, which the observation cannot see.
+    func reportMenuShortcutForwarding() {
+        #if targetEnvironment(macCatalyst)
+        MenuShortcutState.shared.setRemoteScreenPane(self, forwardsShortcuts:
+            keyboardCapture.isCaptured && keyboardCapture.routesReservedHostShortcutsToVNC)
+        #endif
+    }
 }

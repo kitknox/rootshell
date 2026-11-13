@@ -50,6 +50,13 @@ final class MenuShortcutState: ObservableObject {
     /// CatalystAppDelegate.buildMenu(with:) drop their key equivalents too.
     var isRecordingCapture: Bool { recordingCaptureCount > 0 }
 
+    private struct WeakPane { weak var view: UIView? }
+    private var remoteShortcutPanes: [ObjectIdentifier: WeakPane] = [:]
+
+    /// Whether the key window's remote-screen pane takes rootshell's menu
+    /// shortcuts. Only the capture toggle keeps its key equivalent.
+    private(set) var forwardsShortcutsToRemoteScreen = false
+
     /// Whether a menu bar exists to carry app shortcuts. Both menu rails dispatch
     /// through UIApplication notifications rather than the responder chain, so a
     /// menu item still fires while an overlay owns first responder — and a second
@@ -81,6 +88,30 @@ final class MenuShortcutState: ObservableObject {
                 }
                 .store(in: &cancellables)
         }
+        #if targetEnvironment(macCatalyst)
+        // Block observers: the async notifications sequence over-released
+        // UIWindow key notifications here and crashed.
+        for name in [UIWindow.didBecomeKeyNotification, UIWindow.didResignKeyNotification] {
+            _ = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshRemoteScreenForwarding() }
+            }
+        }
+        #endif
+    }
+
+    /// Mac menu key equivalents win over the remote-screen responder, so a
+    /// pane forwarding shortcuts to the remote reports it here.
+    func setRemoteScreenPane(_ pane: UIView, forwardsShortcuts forwards: Bool) {
+        remoteShortcutPanes[ObjectIdentifier(pane)] = forwards ? WeakPane(view: pane) : nil
+        refreshRemoteScreenForwarding()
+    }
+
+    private func refreshRemoteScreenForwarding() {
+        remoteShortcutPanes = remoteShortcutPanes.filter { $0.value.view != nil }
+        let forwards = remoteShortcutPanes.values.contains { $0.view?.window?.isKeyWindow == true }
+        guard forwards != forwardsShortcutsToRemoteScreen else { return }
+        forwardsShortcutsToRemoteScreen = forwards
+        rebuildShortcuts()
     }
 
     /// Drop menu key equivalents while a shortcut is being recorded so the
@@ -120,6 +151,9 @@ final class MenuShortcutState: ObservableObject {
             guard !binding.sequence.isSequence,
                   let firstTrigger = binding.sequence.first,
                   let keyEquivalent = firstTrigger.swiftUIKeyEquivalent else {
+                continue
+            }
+            if forwardsShortcutsToRemoteScreen, binding.action != .toggle_mouse_capture {
                 continue
             }
 
