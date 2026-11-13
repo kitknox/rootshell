@@ -2190,10 +2190,6 @@ extension Ghostty {
             // iOS/visionOS: finger pan gesture with UIDynamicAnimator for momentum
             setupScrollHandling()
 
-            #if targetEnvironment(macCatalyst)
-            touchDebugLogSetup() // TEMPORARY (#740)
-            #endif
-
             // Create scroll indicator
             setupScrollIndicator()
             setupCollapsedKeyboardToolbarButton()
@@ -3011,9 +3007,6 @@ extension Ghostty {
         }
 
         private func applyGhosttyFocus(_ focused: Bool) {
-            #if targetEnvironment(macCatalyst)
-            touchDebugNoteFocus(focused) // TEMPORARY (#740)
-            #endif
             HerdrController.controller(for: self)?.synchronizeEndpointTheme()
             guard let surface = surface else { return }
 

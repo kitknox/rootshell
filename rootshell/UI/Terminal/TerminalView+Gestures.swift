@@ -39,9 +39,6 @@ class TouchOnlyGestureDelegate: NSObject, UIGestureRecognizerDelegate {
 extension Ghostty.TerminalView {
 
     @objc func handleTap(_ gesture: UITapGestureRecognizer) {
-        #if targetEnvironment(macCatalyst)
-        if touchDebugActive { touchDebugLog("tap action state=\(gesture.state.rawValue)") } // TEMPORARY (#740)
-        #endif
         // Dismiss the brightness HUD if it's visible — a tap anywhere on the
         // terminal outside the HUD pill dismisses it (touches inside the HUD are
         // routed to it by TerminalScrollView.hitTest and never reach handleTap).
@@ -443,9 +440,6 @@ extension Ghostty.TerminalView {
 
     /// Handle long press for text selection in scroll mode
     @objc func handleSelectionLongPress(_ gesture: UILongPressGestureRecognizer) {
-        #if targetEnvironment(macCatalyst)
-        touchDebugLog("selectionLongPress action state=\(gesture.state.rawValue)") // TEMPORARY (#740)
-        #endif
         if handleLoupeSecondaryClick(gesture) { return }
         if gesture.state == .began { loupeLongPressGesture = gesture }
         if herdrEndpointPane != nil { handleEndpointSelectionGesture(gesture); return }
@@ -2176,10 +2170,6 @@ extension Ghostty.TerminalView {
 
         let allTouches = event?.allTouches ?? touches
 
-        #if targetEnvironment(macCatalyst)
-        touchDebugBegan(touch) // TEMPORARY (#740)
-        #endif
-
         // Track touch type for context menu gating in scroll mode
         lastContextMenuTriggerWasFinger = touch.isScreenContact
         lastContextMenuTriggerWasPencil = (touch.type == .pencil)
@@ -2290,9 +2280,6 @@ extension Ghostty.TerminalView {
             super.touchesMoved(touches, with: event)
             return
         }
-        #if targetEnvironment(macCatalyst)
-        touchDebugMoved(touch) // TEMPORARY (#740)
-        #endif
 
         if touch.type == .direct {
             updateSelectionSuppressionForDirectTouches(touches, event: event)
@@ -2330,9 +2317,6 @@ extension Ghostty.TerminalView {
             super.touchesEnded(touches, with: event)
             return
         }
-        #if targetEnvironment(macCatalyst)
-        touchDebugFinished(touch, "ended") // TEMPORARY (#740)
-        #endif
 
         if touch.type == .direct {
             updateSelectionSuppressionForDirectTouches(touches, event: event)
@@ -2403,9 +2387,6 @@ extension Ghostty.TerminalView {
             super.touchesCancelled(touches, with: event)
             return
         }
-        #if targetEnvironment(macCatalyst)
-        touchDebugFinished(touch, "cancelled") // TEMPORARY (#740)
-        #endif
 
         if touch.type == .direct {
             updateSelectionSuppressionForDirectTouches(touches, event: event)
@@ -2626,12 +2607,6 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
         _ interaction: UIContextMenuInteraction,
         configurationForMenuAtLocation location: CGPoint
     ) -> UIContextMenuConfiguration? {
-        #if targetEnvironment(macCatalyst)
-        // TEMPORARY (#740)
-        if touchDebugActive {
-            touchDebugLog("context menu asked finger=\(lastContextMenuTriggerWasFinger) secondary=\(lastPointerEventWasSecondaryClick)")
-        }
-        #endif
         #if targetEnvironment(macCatalyst)
         // A right-click need not pass through touchesBegan, so the finger flag
         // can be left over from an earlier touch.
@@ -3150,30 +3125,7 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
         return true
     }
 
-    #if targetEnvironment(macCatalyst)
-    // TEMPORARY (#740): both answer false, UIKit's default; they only record who asks.
-    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        if touchDebugActive, gestureRecognizer === selectionLongPressGesture || otherGestureRecognizer === selectionLongPressGesture {
-            touchDebugLog("asked requireFailureOf: \(Self.touchDebugDescribe(gestureRecognizer, in: self)) -> waits for? \(Self.touchDebugDescribe(otherGestureRecognizer, in: self))")
-        }
-        return false
-    }
-
-    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        if touchDebugActive, gestureRecognizer === selectionLongPressGesture || otherGestureRecognizer === selectionLongPressGesture {
-            touchDebugLog("asked requiredToFailBy: \(Self.touchDebugDescribe(gestureRecognizer, in: self)) <- holds back? \(Self.touchDebugDescribe(otherGestureRecognizer, in: self))")
-        }
-        return false
-    }
-    #endif
-
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        #if targetEnvironment(macCatalyst)
-        // TEMPORARY (#740)
-        if touchDebugActive, gestureRecognizer === selectionLongPressGesture || otherGestureRecognizer === selectionLongPressGesture {
-            touchDebugLog("asked simultaneous: \(Self.touchDebugDescribe(gestureRecognizer, in: self)) with \(Self.touchDebugDescribe(otherGestureRecognizer, in: self))")
-        }
-        #endif
         if isTrackpadTabSwipeGesture(gestureRecognizer) || isTrackpadTabSwipeGesture(otherGestureRecognizer) {
             return false
         }
@@ -3204,13 +3156,6 @@ extension Ghostty.TerminalView: UIGestureRecognizerDelegate {
     }
 
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        #if targetEnvironment(macCatalyst)
-        // TEMPORARY (#740)
-        if gestureRecognizer.view === self, !(gestureRecognizer is UIHoverGestureRecognizer),
-           gestureRecognizer.numberOfTouches > 0, touchDebugActive {
-            touchDebugLog("shouldBegin asked: \(Self.touchDebugDescribe(gestureRecognizer, in: self))")
-        }
-        #endif
         // Covered herdr gateway: the overlay is a subview, so every recognizer
         // here still sees its touches. Keep the tab/app navigation gestures and
         // refuse the ones that would click, select, or scroll the hidden shell.
@@ -3511,9 +3456,6 @@ extension Ghostty.TerminalView {
     /// Compute selection bounds plus the geometry needed to map handle drags
     /// back into viewport cell coordinates.
     private func selectionHandleMetrics() -> SelectionHandleMetrics? {
-        #if targetEnvironment(macCatalyst)
-        touchDebugCount(\.metrics) // TEMPORARY (#740)
-        #endif
         if let state = herdrEndpointPane {
             guard state.hasSelection, let selection = state.selection, let pane = state.pane,
                   let geometry = state.geometry else { return nil }
@@ -4159,9 +4101,6 @@ extension Ghostty.TerminalView {
     }
 
     func showSelectionHandles(triggerFeedback: Bool = false) {
-        #if targetEnvironment(macCatalyst)
-        touchDebugCount(\.shows) // TEMPORARY (#740)
-        #endif
         guard selectionHandlesCanBePresented() else {
             hideSelectionHandles(animated: false)
             return
@@ -4225,9 +4164,6 @@ extension Ghostty.TerminalView {
     }
 
     func hideSelectionHandles(animated: Bool = true) {
-        #if targetEnvironment(macCatalyst)
-        touchDebugCount(\.hides) // TEMPORARY (#740)
-        #endif
         let startHandle = selectionStartHandle
         let endHandle = selectionEndHandle
 
@@ -4268,9 +4204,6 @@ extension Ghostty.TerminalView {
     }
 
     func updateSelectionHandlePositions() {
-        #if targetEnvironment(macCatalyst)
-        touchDebugCount(\.positions) // TEMPORARY (#740)
-        #endif
         guard selectionHandlesVisible else { return }
 
         // While a handle is being dragged, the selection can extend past the
@@ -4354,9 +4287,6 @@ extension Ghostty.TerminalView {
     }
 
     func syncSelectionHandleVisibility(forActiveSurface isActiveSurface: Bool = true) {
-        #if targetEnvironment(macCatalyst)
-        touchDebugCount(\.syncs) // TEMPORARY (#740)
-        #endif
         guard isActiveSurface else {
             hideSelectionHandles(animated: false)
             return
@@ -4684,7 +4614,6 @@ extension Ghostty.TerminalView {
     /// away from it for a touch that lands on the terminal.
     func withholdFingerFromAncestorContextMenus() {
         let finger = NSNumber(value: UITouch.TouchType.direct.rawValue)
-        var withheld = 0
         var ancestor = superview
         while let view = ancestor {
             for recognizer in view.gestureRecognizers ?? []
@@ -4692,11 +4621,9 @@ extension Ghostty.TerminalView {
                 && recognizer.allowedTouchTypes.contains(finger) {
                 Self.withheldContextMenuTouchTypes.setObject(recognizer.allowedTouchTypes as NSArray, forKey: recognizer)
                 recognizer.allowedTouchTypes = recognizer.allowedTouchTypes.filter { $0 != finger }
-                withheld += 1
             }
             ancestor = view.superview
         }
-        touchDebugLog("withheld finger from \(withheld) ancestor context menu recognizers") // TEMPORARY (#740)
     }
 
     /// Watches for the last touch to lift so the finger can be given back.
@@ -4759,189 +4686,5 @@ private final class TouchLiftObserver: UIGestureRecognizer {
 
     override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool { false }
     override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool { false }
-}
-#endif
-
-// MARK: - TEMPORARY (#740) touch hold diagnostics. Delete once the hold is fixed.
-
-#if targetEnvironment(macCatalyst)
-final class TouchDebugState {
-    var start: TimeInterval = 0
-    var startPoint: CGPoint = .zero
-    var moves = 0
-    var maxDistance: CGFloat = 0
-    var reportedDrift = false
-
-    // Scroll measurements, reset every reporting window.
-    var scrollWindowStart: CFTimeInterval = 0
-    var lastScrollTick: CFTimeInterval = 0
-    var maxScrollGap: CFTimeInterval = 0
-    var scrollSpent: CFTimeInterval = 0
-    var scrollTicks = 0
-    var smoothSends = 0
-    var syncs = 0
-    var shows = 0
-    var hides = 0
-    var positions = 0
-    var metrics = 0
-
-    func resetScrollWindow(_ now: CFTimeInterval) {
-        scrollWindowStart = now
-        maxScrollGap = 0
-        scrollSpent = 0
-        scrollTicks = 0
-        smoothSends = 0
-        syncs = 0
-        shows = 0
-        hides = 0
-        positions = 0
-        metrics = 0
-    }
-}
-
-extension Ghostty.TerminalView {
-    private static var touchDebugStateKey: UInt8 = 0
-
-    private var touchDebugState: TouchDebugState {
-        if let state = objc_getAssociatedObject(self, &Self.touchDebugStateKey) as? TouchDebugState { return state }
-        let state = TouchDebugState()
-        objc_setAssociatedObject(self, &Self.touchDebugStateKey, state, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        return state
-    }
-
-    /// A finger touch is being traced.
-    var touchDebugActive: Bool { touchDebugState.start > 0 }
-
-    func touchDebugLog(_ message: String) {
-        let start = touchDebugState.start
-        let elapsed = start > 0 ? ProcessInfo.processInfo.systemUptime - start : -1
-        Ghostty.logger.notice("TOUCHDBG +\(String(format: "%.3f", elapsed), privacy: .public)s \(message, privacy: .public)")
-    }
-
-    private static func touchDebugShort(_ recognizer: UIGestureRecognizer, in terminal: UIView) -> String {
-        let owner = recognizer.view === terminal
-            ? "terminal"
-            : (recognizer.view.map { String(describing: type(of: $0)) } ?? "nil")
-        return "\(type(of: recognizer))(\(recognizer.name ?? "-"))@\(owner)"
-    }
-
-    /// Recognizers UIKit has recorded as having to fail before `recognizer`
-    /// may begin (or that wait on it). Read only if the storage exists.
-    private static func touchDebugRelations(_ recognizer: UIGestureRecognizer, key: String, in terminal: UIView) -> String {
-        guard class_getInstanceVariable(UIGestureRecognizer.self, key) != nil else { return "unavailable" }
-        let value = recognizer.value(forKey: key)
-        let objects: [Any]
-        if let set = value as? NSSet {
-            objects = set.allObjects
-        } else if let array = value as? NSArray {
-            objects = array as [AnyObject]
-        } else if let table = value as? NSHashTable<AnyObject> {
-            objects = table.allObjects
-        } else if value == nil {
-            objects = []
-        } else {
-            return "unreadable(\(type(of: value!)))"
-        }
-        let names = objects.compactMap { $0 as? UIGestureRecognizer }.map { touchDebugShort($0, in: terminal) }
-        return names.isEmpty ? "none" : names.joined(separator: " | ")
-    }
-
-    static func touchDebugDescribe(_ recognizer: UIGestureRecognizer, in terminal: UIView) -> String {
-        let types = recognizer.allowedTouchTypes.map { $0.stringValue }.joined(separator: ",")
-        return "\(touchDebugShort(recognizer, in: terminal)) state=\(recognizer.state.rawValue) enabled=\(recognizer.isEnabled) types=[\(types)]"
-            + " waitsFor={\(touchDebugRelations(recognizer, key: "_failureRequirements", in: terminal))}"
-            + " heldBack={\(touchDebugRelations(recognizer, key: "_failureDependents", in: terminal))}"
-    }
-
-    /// Once per terminal, so the dump itself is exercised without a touch display.
-    func touchDebugLogSetup() {
-        touchDebugLog("setup idiom=\(traitCollection.userInterfaceIdiom.rawValue) os=\(ProcessInfo.processInfo.operatingSystemVersionString) recognizers=\(gestureRecognizers?.count ?? 0)")
-        for recognizer in gestureRecognizers ?? [] {
-            touchDebugLog("  setup: \(Self.touchDebugDescribe(recognizer, in: self))")
-        }
-    }
-
-    private func touchDebugDump(_ touch: UITouch, _ label: String) {
-        for recognizer in touch.gestureRecognizers ?? [] {
-            touchDebugLog("  \(label): \(Self.touchDebugDescribe(recognizer, in: self))")
-        }
-    }
-
-    /// Counts one call of something that may run during a scroll.
-    func touchDebugCount(_ counter: ReferenceWritableKeyPath<TouchDebugState, Int>) {
-        touchDebugState[keyPath: counter] += 1
-    }
-
-    func touchDebugNoteFocus(_ focused: Bool) {
-        touchDebugLog("renderer focus=\(focused) firstResponder=\(isFirstResponder) logicallyFocused=\(isLogicallyFocused) keyWindow=\(window?.isKeyWindow ?? false)")
-    }
-
-    /// Called for every scroll view offset change; reports once a second
-    /// how the scroll is going and what else ran on the main thread.
-    func touchDebugScrollTick(spent: CFTimeInterval, liveScrolling: Bool) {
-        let state = touchDebugState
-        let now = CACurrentMediaTime()
-        if state.scrollWindowStart == 0 || now - state.lastScrollTick > 1 {
-            // A new burst of scrolling.
-            state.resetScrollWindow(now)
-        } else {
-            state.maxScrollGap = max(state.maxScrollGap, now - state.lastScrollTick)
-        }
-        state.lastScrollTick = now
-        state.scrollTicks += 1
-        state.scrollSpent += spent
-        guard now - state.scrollWindowStart >= 1 else { return }
-        let seconds = now - state.scrollWindowStart
-        Ghostty.logger.notice("TOUCHDBG scroll \(String(format: "%.2f", seconds), privacy: .public)s offsetChanges=\(state.scrollTicks) maxGapMs=\(Int(state.maxScrollGap * 1000)) spentMs=\(Int(state.scrollSpent * 1000)) smoothSends=\(state.smoothSends) live=\(liveScrolling)")
-        Ghostty.logger.notice("TOUCHDBG scroll handles: syncs=\(state.syncs) shows=\(state.shows) hides=\(state.hides) positions=\(state.positions) metrics=\(state.metrics)")
-        Ghostty.logger.notice("TOUCHDBG scroll state: selection=\(self.hasTerminalTextSelection) handlesVisible=\(self.selectionHandlesVisible) touchSelection=\(self.selectionWasTouchInitiated) smoothActive=\(self.smoothScrollActive) firstResponder=\(self.isFirstResponder) logicallyFocused=\(self.isLogicallyFocused) keyWindow=\(self.window?.isKeyWindow ?? false) fps=\(self.window?.windowScene?.screen.maximumFramesPerSecond ?? 0)")
-        state.resetScrollWindow(now)
-    }
-
-    func touchDebugBegan(_ touch: UITouch) {
-        let state = touchDebugState
-        guard touch.type == .direct else {
-            state.start = 0
-            return
-        }
-        state.start = ProcessInfo.processInfo.systemUptime
-        state.startPoint = touch.location(in: self)
-        state.moves = 0
-        state.maxDistance = 0
-        state.reportedDrift = false
-        let captured = surface.map { ghostty_surface_mouse_captured($0) } ?? false
-        let hitView = touch.view.map { String(describing: type(of: $0)) } ?? "nil"
-        touchDebugLog("finger down captured=\(captured) longPressEnabled=\(selectionLongPressGesture?.isEnabled ?? false) hitView=\(hitView) radius=\(touch.majorRadius) tapCount=\(touch.tapCount) recognizers=\(touch.gestureRecognizers?.count ?? 0)")
-        touchDebugDump(touch, "at down")
-        // Past the long press duration: whatever has not resolved is a suspect.
-        for delay in [0.3, 0.7, 1.5] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak touch] in
-                guard let self, let touch, self.touchDebugActive,
-                      touch.phase != .ended, touch.phase != .cancelled else { return }
-                let state = self.touchDebugState
-                self.touchDebugLog("still down phase=\(touch.phase.rawValue) moves=\(state.moves) maxDistance=\(String(format: "%.1f", state.maxDistance)) selecting=\(self.isSelecting) loupe=\(self.selectionMagnifierView != nil)")
-                self.touchDebugDump(touch, "at \(delay)s")
-            }
-        }
-    }
-
-    func touchDebugMoved(_ touch: UITouch) {
-        guard touch.type == .direct, touchDebugActive else { return }
-        let state = touchDebugState
-        let point = touch.location(in: self)
-        state.moves += 1
-        state.maxDistance = max(state.maxDistance, hypot(point.x - state.startPoint.x, point.y - state.startPoint.y))
-        if !state.reportedDrift, state.maxDistance > 10 {
-            state.reportedDrift = true
-            touchDebugLog("finger moved past 10pt after \(state.moves) move events")
-        }
-    }
-
-    func touchDebugFinished(_ touch: UITouch, _ how: String) {
-        guard touch.type == .direct, touchDebugActive else { return }
-        let state = touchDebugState
-        touchDebugLog("finger \(how) moves=\(state.moves) maxDistance=\(String(format: "%.1f", state.maxDistance)) selecting=\(isSelecting)")
-        touchDebugDump(touch, "at \(how)")
-    }
 }
 #endif

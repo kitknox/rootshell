@@ -2057,13 +2057,6 @@ extension Ghostty {
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        #if targetEnvironment(macCatalyst)
-        // TEMPORARY (#740)
-        let touchDebugStart = CACurrentMediaTime()
-        defer {
-            terminalView.touchDebugScrollTick(spent: CACurrentMediaTime() - touchDebugStart, liveScrolling: isLiveScrolling)
-        }
-        #endif
         if isApplyingTerminalScrollSync || isApplyingTerminalScrollbarUpdate {
             clearStaleLiveScrollStateIfNeeded()
             updateTerminalPositionForCurrentOffset()
@@ -2228,9 +2221,6 @@ extension Ghostty {
             let bottomRow = max(0, Int(scrollbar.total > scrollbar.len ? scrollbar.total - scrollbar.len : 0))
             userParkedInSmoothScrollback = normalized > 0 || row < bottomRow
         }
-        #if targetEnvironment(macCatalyst)
-        terminalView.touchDebugCount(\.smoothSends) // TEMPORARY (#740)
-        #endif
         terminalView.scrollToRowSmooth(row: row, offset: normalized)
     }
 
