@@ -135,6 +135,9 @@ extension Ghostty {
     #if targetEnvironment(macCatalyst)
     /// Original offset for an in-flight Catalyst indicator nudge.
     private var catalystSelectionIndicatorNudgeOriginalOffset: CGPoint?
+
+    /// Pending check that a deceleration has come to rest.
+    private var restWatchTask: Task<Void, Never>?
     #endif
 
     /// Last row position sent to Ghostty core (prevents update loops)
@@ -2027,6 +2030,11 @@ extension Ghostty {
         if !decelerate {
             wasRubberBandingDuringScroll = false
         }
+        #if targetEnvironment(macCatalyst)
+        if decelerate {
+            watchForRestWhileDecelerating()
+        }
+        #endif
         #if !targetEnvironment(macCatalyst)
         if !decelerate {
             updateTerminalBottomInsetSuppression(rubberBanding: false)
@@ -2044,6 +2052,14 @@ extension Ghostty {
         // depend on the bottom inset). The true end — finger up, the spring
         // resumes and ends, or a new drag — runs this settle for real.
         guard !scrollView.isTracking else { return }
+        #if targetEnvironment(macCatalyst)
+        restWatchTask?.cancel()
+        restWatchTask = nil
+        #endif
+        finishDecelerating()
+    }
+
+    private func finishDecelerating() {
         settleSmoothScrollAtBounds()
         isLiveScrolling = false
         isTouchScrolling = false
@@ -2056,6 +2072,31 @@ extension Ghostty {
         applyVerticalScrollState(isCaptured: terminalView.isMouseCaptured)
     }
 
+    #if targetEnvironment(macCatalyst)
+    /// After a finger bounce on Mac the scroll view can go on reporting that
+    /// it is decelerating for seconds after the content has stopped. Until
+    /// it finishes, a touch only catches the scroll and the selection handles
+    /// stay hidden. Once the content has sat still inside its range, end the
+    /// deceleration ourselves.
+    private func watchForRestWhileDecelerating() {
+        restWatchTask?.cancel()
+        let watchedOffsetY = scrollView.contentOffset.y
+        restWatchTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled, let self else { return }
+            self.restWatchTask = nil
+            let scrollView = self.scrollView
+            let offsetY = scrollView.contentOffset.y
+            guard scrollView.isDecelerating, !scrollView.isTracking, !scrollView.isDragging,
+                  abs(offsetY - watchedOffsetY) < 0.25,
+                  abs(self.clampedScrollModelOffsetY(offsetY) - offsetY) < 0.5 else { return }
+            // Setting the offset it already has is how a deceleration is stopped.
+            scrollView.setContentOffset(scrollView.contentOffset, animated: false)
+            self.finishDecelerating()
+        }
+    }
+    #endif
+
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         if isApplyingTerminalScrollSync || isApplyingTerminalScrollbarUpdate {
             clearStaleLiveScrollStateIfNeeded()
@@ -2066,6 +2107,9 @@ extension Ghostty {
         clearStaleLiveScrollStateIfNeeded()
 
         #if targetEnvironment(macCatalyst)
+        if scrollView.isDecelerating, !scrollView.isTracking {
+            watchForRestWhileDecelerating()
+        }
         // While the window is being dragged, Catalyst routes pointer scroll
         // deltas into whatever slides under the pointer. Swallow them: keep
         // the terminal pinned and never begin live scrolling; the next
