@@ -71,8 +71,9 @@ final class WasmProcess {
         let isDirectory: Bool
         let isPreopen: Bool
         let preopenName: String?
-        /// For directories opened via fd_readdir, the cached entry listing.
-        var dirEntries: [URL]?
+        /// Snapshot taken at cookie 0 so fd_readdir pages stay stable while
+        /// the program deletes entries mid-listing.
+        var dirEntries: [(name: String, isDir: Bool)]?
 
         init(url: URL,
              handle: FileHandle?,

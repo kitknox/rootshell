@@ -477,16 +477,27 @@ final class WasmFilesystemBroker {
             runtime.replyToJS(callID: callID, payload: ["errno": Errno.ENOTDIR])
             return
         }
-        let contents = (try? FileManager.default.contentsOfDirectory(at: entry.url, includingPropertiesForKeys: [.isDirectoryKey], options: [])) ?? []
-        let names: [[String: Any]] = contents.map { url in
-            var isDir: ObjCBool = false
-            FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
-            return [
-                "name": url.lastPathComponent,
-                "isDir": isDir.boolValue
-            ]
+        let cookie = max(0, (dict["cookie"] as? NSNumber)?.intValue ?? 0)
+        let bufLen = max(0, (dict["bufLen"] as? NSNumber)?.intValue ?? 0)
+        if cookie == 0 || entry.dirEntries == nil {
+            let contents = (try? FileManager.default.contentsOfDirectory(at: entry.url, includingPropertiesForKeys: [.isDirectoryKey], options: [])) ?? []
+            entry.dirEntries = contents.map { url in
+                (url.lastPathComponent, (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false)
+            }
         }
-        runtime.replyToJS(callID: callID, payload: ["errno": 0, "entries": names])
+        let all = entry.dirEntries ?? []
+        // Pages of 24-byte dirent header + name keep the JSON reply inside
+        // the 64 KB reply buffer; the worker pages until its buffer is full.
+        let budget = min(bufLen, 8 * 1024)
+        var page: [[String: Any]] = []
+        var used = 0
+        var i = cookie
+        while i < all.count, used < budget || page.isEmpty {
+            page.append(["name": all[i].name, "isDir": all[i].isDir])
+            used += 24 + all[i].name.utf8.count
+            i += 1
+        }
+        runtime.replyToJS(callID: callID, payload: ["errno": 0, "entries": page])
     }
 
     private func fdPrestatGet(_ dict: [String: Any],

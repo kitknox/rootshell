@@ -462,26 +462,34 @@ function wasiPreview1Imports() {
             new Uint8Array(memory.buffer).set(enc, ptr);
             return 0;
         },
-        fd_readdir(fd, bufPtr, bufLen, _cookie, retPtr) {
-            const r = callFs("fd_readdir", { fd });
-            if (r.errno !== 0) return r.errno;
-            // Simplified WASI dirent encoding: just write a sequence of
-            // (8B d_next, 8B d_ino, 4B namlen, 1B type, name). Most demos
-            // re-call fd_readdir, we don't bother resuming via cookie here.
+        fd_readdir(fd, bufPtr, bufLen, cookie, retPtr) {
+            // WASI dirent: 8B d_next (the cookie), 8B d_ino, 4B namlen,
+            // 1B type, 3B pad, name. A full buffer with the last entry cut
+            // short tells wasi-libc to call again from that entry's cookie;
+            // a short buffer means the end, so keep paging until full.
             const enc = new TextEncoder();
-            const buf = new Uint8Array(memory.buffer);
+            const end = bufPtr + bufLen;
             let off = bufPtr;
-            for (let i = 0; i < r.entries.length; i++) {
-                const name = enc.encode(r.entries[i].name);
-                if (off + 24 + name.length > bufPtr + bufLen) break;
-                const dv = new DataView(memory.buffer);
-                dv.setBigUint64(off + 0, BigInt(i + 1), true);
-                dv.setBigUint64(off + 8, BigInt(i + 1), true);
-                dv.setUint32(off + 16, name.length, true);
-                dv.setUint8(off + 20, r.entries[i].isDir ? 3 : 4);
-                buf.set(name, off + 24);
-                off += 24 + name.length;
-            }
+            let index = Number(cookie);
+            do {
+                const r = callFs("fd_readdir", { fd, cookie: index, bufLen: end - off });
+                if (r.errno !== 0) return r.errno;
+                if (r.entries.length === 0) break;
+                const buf = new Uint8Array(memory.buffer);
+                for (let i = 0; i < r.entries.length && off < end; i++, index++) {
+                    const name = enc.encode(r.entries[i].name);
+                    const ent = new Uint8Array(24 + name.length);
+                    const dv = new DataView(ent.buffer);
+                    dv.setBigUint64(0, BigInt(index + 1), true);
+                    dv.setBigUint64(8, BigInt(index + 1), true);
+                    dv.setUint32(16, name.length, true);
+                    dv.setUint8(20, r.entries[i].isDir ? 3 : 4);
+                    ent.set(name, 24);
+                    const n = Math.min(ent.length, end - off);
+                    buf.set(ent.subarray(0, n), off);
+                    off += n;
+                }
+            } while (off < end);
             new DataView(memory.buffer).setUint32(retPtr, off - bufPtr, true);
             return 0;
         },
