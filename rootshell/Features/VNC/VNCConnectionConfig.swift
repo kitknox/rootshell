@@ -465,8 +465,8 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         }
     }
 
-    /// Off Wi-Fi and wired, or a mesh VPN path the in-app tailnet does not
-    /// carry itself.
+    /// Off Wi-Fi and wired, or a mesh VPN path. The in-app tailnet also
+    /// carries bare peer names the hostname check cannot see.
     var usesUnreliableHighPerformancePath: Bool {
         let network = NetworkReachabilityMonitor.shared
         let localBearer = network.isConnected
@@ -474,7 +474,7 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         #if !CHINA_BUILD
         let routing = TailnetRouting.shared
         let meshPath = usesMeshVPNHostname
-            && !(routing.state.enabled && routing.looksLikeTailnet(host))
+            || (routing.state.enabled && routing.looksLikeTailnet(host))
         #else
         let meshPath = usesMeshVPNHostname
         #endif
