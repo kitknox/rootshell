@@ -112,27 +112,43 @@ struct DuoWorkspaceGeometry<Content: View>: View {
     let headerHeight: CGFloat
     /// Window-space y the header may rise to above the safe area, if any.
     var headerTopLimit: CGFloat? = nil
+    let windowSafeAreaTop: CGFloat
+    var landscapeCameraOnLeft: Bool? = nil
     @ViewBuilder var content: (GeometryProxy, DuoWorkspaceLayout) -> Content
     @Environment(\.layoutDirection) private var layoutDirection
+
+    private enum CoordinateSpace { case safeArea }
 
     var body: some View {
         GeometryReader { safe in
             GeometryReader { expanded in
                 content(expanded, layout(safe: safe, expanded: expanded))
             }
-            .ignoresSafeArea(.container, edges: ignoredEdges)
+            .ignoresSafeArea(.container, edges: ignoredEdges(in: safe))
         }
+        .coordinateSpace(name: CoordinateSpace.safeArea)
     }
 
-    private var ignoredEdges: Edge.Set {
+    private func ignoredEdges(in geometry: GeometryProxy) -> Edge.Set {
         var edges = context.workspaceIgnoredEdges(headerHeight: headerHeight)
         if headerTopLimit != nil, headerHeight > 0 { edges.insert(.top) }
+        #if !targetEnvironment(macCatalyst) && !os(visionOS)
+        if UIDevice.current.userInterfaceIdiom == .phone,
+           !context.hasHinge, geometry.size.width > geometry.size.height,
+           let landscapeCameraOnLeft {
+            edges.formUnion(DuoLayoutContext.unoccludedLandscapeEdge(
+                cameraOnLeft: landscapeCameraOnLeft, rightToLeft: layoutDirection == .rightToLeft
+            ))
+        }
+        #endif
         return edges
     }
 
     private func layout(safe: GeometryProxy, expanded: GeometryProxy) -> DuoWorkspaceLayout {
-        let frame = expanded.frame(in: .global)
-        let safeFrame = safe.frame(in: .global).offsetBy(dx: -frame.minX, dy: -frame.minY)
+        // Window reveal effects must not feed back into workspace layout.
+        let frame = expanded.frame(in: .named(CoordinateSpace.safeArea))
+        let safeFrame = CGRect(origin: .zero, size: safe.size)
+            .offsetBy(dx: -frame.minX, dy: -frame.minY)
         var occlusions: [CGRect] = []
         var occlusionContentFrames: [CGRect] = []
         var divisions: [CGRect] = []
@@ -157,9 +173,25 @@ struct DuoWorkspaceGeometry<Content: View>: View {
             occlusions: occlusions, divisions: divisions, context: context,
             headerHeight: headerHeight, rightToLeft: layoutDirection == .rightToLeft,
             occlusionContentFrames: occlusionContentFrames,
-            headerTopLimit: headerTopLimit.map { $0 - frame.minY }
+            headerTopLimit: headerTopLimit.map { safeFrame.minY + $0 - windowSafeAreaTop }
         )
-        layout.safeAreaTop = safe.frame(in: .global).minY
+        layout.safeAreaTop = max(windowSafeAreaTop, safe.safeAreaInsets.top)
+        #if !targetEnvironment(macCatalyst) && !os(visionOS)
+        if UIDevice.current.userInterfaceIdiom == .phone, !context.hasHinge,
+           expanded.size.width > expanded.size.height {
+            let reclaimed = ignoredEdges(in: safe)
+            // Keep the canvas and its controls on one shared edge inside the corner.
+            let edgeInset: CGFloat = 24
+            if reclaimed.contains(.leading) {
+                layout.headerInsets.leading = edgeInset
+                layout.terminalInsets.leading = edgeInset
+            }
+            if reclaimed.contains(.trailing) {
+                layout.headerInsets.trailing = edgeInset
+                layout.terminalInsets.trailing = edgeInset
+            }
+        }
+        #endif
         return layout
     }
 }

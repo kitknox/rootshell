@@ -52,7 +52,10 @@ extension MainView {
         isDocked: Bool,
         dockedBottomClearance: CGFloat = 0
     ) -> VerticalTabSidebar {
-        VerticalTabSidebar(
+        let _ = muxPanelRevision
+        let servesSelectedTerminal = muxExposeFeed.terminal === focusedTerminalForFileManager
+            && [.tmux, .herdr, .zmx].contains(muxExposeFeed.type)
+        return VerticalTabSidebar(
             tabsModel: tabsModel,
             windowId: windowId,
             collapsedGateways: $tabSidebarCollapsedGateways,
@@ -140,6 +143,16 @@ extension MainView {
             sheetThemeColors: sheetTheme.themeColors,
             sheetAccentColor: sheetTheme.accentColor,
             sheetColorScheme: sheetTheme.colorScheme,
+            rawMultiplexerSnapshot: servesSelectedTerminal ? muxExposeFeed.snapshot : nil,
+            rawMultiplexerHostTabID: servesSelectedTerminal ? tabsModel.selectedTabID : nil,
+            rawMultiplexerTitle: muxExposeFeed.title,
+            canFocusMultiplexerTab: { muxExposeFeed.canFocus(tabID: $0) },
+            onSelectMultiplexerPane: { tabID, paneID in
+                muxExposeFeed.focus(tabID: tabID, paneID: paneID)
+                if !tabSidebarStaysOpenOnSelect && !tabSidebarIsDocked {
+                    dismissTabSidebar()
+                }
+            },
             onExposeRequested: {
                 if !tabSidebarIsDocked { dismissTabSidebar() }
                 toggleTabExpose()
