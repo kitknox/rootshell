@@ -325,9 +325,7 @@ extension Ghostty {
         /// Search state for scrollback search
         @Published var searchState: Ghostty.SearchState? = nil {
             didSet {
-                #if !targetEnvironment(macCatalyst)
                 syncSelectionHandlesForSurfaceActivity()
-                #endif
             }
         }
 
@@ -725,9 +723,7 @@ extension Ghostty {
         }
         var showComposeOverlay: Bool = false {
             didSet {
-                #if !targetEnvironment(macCatalyst)
                 syncSelectionHandlesForSurfaceActivity()
-                #endif
             }
         }
         var composeText: String = ""
@@ -771,11 +767,11 @@ extension Ghostty {
         /// Suppress the indicator until the user actively switches input methods.
         /// Prevents showing on first responder gain, tab creation, or app launch.
         private var inputModeChangeCount: Int = 0
+        #endif
 
         // MARK: Mouse Interaction Overlay
         private var mouseInteractionOverlayHost: UIHostingController<InputModeOverlayView>?
         private var mouseInteractionOverlayDismissTask: Task<Void, Never>?
-        #endif
 
         /// Timestamp of last space insertion for double-space-for-period detection
         private var lastSpaceInsertTime: Date?
@@ -967,9 +963,7 @@ extension Ghostty {
         /// Current restoration state (for restored sessions)
         @Published var restorationState: RestorationState = .none {
             didSet {
-                #if !targetEnvironment(macCatalyst)
                 syncSelectionHandlesForSurfaceActivity()
-                #endif
                 // MainView only refreshes the overlay for this signal; several writers never posted it.
                 if oldValue != restorationState {
                     NotificationCenter.default.post(name: .terminalRestorationStateChanged, object: self)
@@ -1147,7 +1141,6 @@ extension Ghostty {
         /// outside the Catalyst gate below — the wrapper exists on every platform.
         weak var enclosingTerminalScrollView: Ghostty.TerminalScrollView?
 
-        #if !targetEnvironment(macCatalyst)
         /// Pan gesture for text selection on iOS/iPadOS (movement-based, not long press)
         var selectionPanGesture: UIPanGestureRecognizer?
         /// Delayed double-tap action so a third tap can cancel it.
@@ -1164,6 +1157,10 @@ extension Ghostty {
         var editMenuInteraction: UIEditMenuInteraction?
         /// Whether the current edit menu presentation should show the full context menu
         var isFullContextMenuPresentation: Bool = false
+        #if targetEnvironment(macCatalyst)
+        /// Invisible anchor whose button menu stands in for the edit menu on Mac.
+        var touchMenuAnchorButton: UIButton?
+        #endif
         /// Long-press gesture for text selection in scroll mode
         var selectionLongPressGesture: UILongPressGestureRecognizer?
         /// Two-finger tap gesture for context menu in scroll mode
@@ -1195,12 +1192,6 @@ extension Ghostty {
         var pinchZoomGesture: UIPinchGestureRecognizer?
         /// Two-finger long press to open new connection sheet
         var twoFingerLongPressGesture: UILongPressGestureRecognizer?
-        /// Tracks accumulated scale for discrete font size stepping
-        var pinchScaleAnchor: CGFloat = 1.0
-        /// Hosting controller for the dimension overlay SwiftUI view
-        var dimensionOverlayHost: UIHostingController<DimensionOverlayView>?
-        /// Auto-hide timer for the dimension overlay
-        var dimensionOverlayHideTask: Task<Void, Never>?
         /// Weak reference to enclosing scroll view that owns native scrollback/scrollbar state.
         weak var enclosingScrollView: UIScrollView?
 
@@ -1235,14 +1226,23 @@ extension Ghostty {
         /// Haptic generator for cell boundary crossings during handle drag
         lazy var selectionFeedbackGenerator = UISelectionFeedbackGenerator()
         #endif
-        #endif
 
-        #if !targetEnvironment(macCatalyst)
+        /// Tracks accumulated scale for discrete font size stepping
+        var pinchScaleAnchor: CGFloat = 1.0
+        /// Hosting controller for the dimension overlay SwiftUI view
+        var dimensionOverlayHost: UIHostingController<DimensionOverlayView>?
+        /// Auto-hide timer for the dimension overlay
+        var dimensionOverlayHideTask: Task<Void, Never>?
+
         /// Whether touch scroll mode is enabled (single finger scrolls, long press selects)
         var isTouchScrollMode: Bool {
+            #if targetEnvironment(macCatalyst)
+            // A Mac drag-selects with the pointer, so fingers always scroll.
+            true
+            #else
             SettingsStore.shared.value(Settings.Gestures.scrollMode)
+            #endif
         }
-        #endif
 
         /// Tracks whether the last context menu trigger was from a finger (vs mouse/trackpad)
         var lastContextMenuTriggerWasFinger: Bool = false
@@ -1577,11 +1577,7 @@ extension Ghostty {
         
         /// Whether user is actively selecting text (exposed for TerminalScrollView)
         var isActivelySelecting: Bool {
-            #if targetEnvironment(macCatalyst)
-            return isSelecting || selectionMouseDragActive
-            #else
             return isSelecting || activeHandleDrag != nil || selectionMouseDragActive
-            #endif
         }
         
         // MARK: - Hit Testing
@@ -1814,11 +1810,9 @@ extension Ghostty {
             // teardown semantics (resumable Trzsz/Mosh keep the server session
             // alive for .sceneTeardown; .userClose / .muxDetach terminate)
             // live on the owning controller now. See TerminalSessionController.teardown.
-            #if !targetEnvironment(macCatalyst)
             hideSelectionMagnifier(animated: false)
             loupeSecondaryClick = nil
             loupeLongPressGesture = nil
-            #endif
             sessionController.teardown(reason: reason)
 
             // 3. Cancel async tasks and timers
@@ -1837,7 +1831,6 @@ extension Ghostty {
             scrollIndicatorHideWorkItem?.cancel()
             scrollIndicatorHideWorkItem = nil
             keyboardAccessoryController.tearDown()
-            #if !targetEnvironment(macCatalyst)
             pendingDoubleTapActionTask?.cancel()
             pendingDoubleTapActionTask = nil
             selectionStartHandle?.removeFromSuperview()
@@ -1851,13 +1844,14 @@ extension Ghostty {
             selectionLoupe?.invalidate()
             selectionLoupe = nil
             selectionMagnifierPoint = nil
-
-            inputModeDismissTask?.cancel()
-            inputModeDismissTask = nil
             mouseInteractionOverlayDismissTask?.cancel()
             mouseInteractionOverlayDismissTask = nil
             mouseInteractionOverlayHost?.view.removeFromSuperview()
             mouseInteractionOverlayHost = nil
+
+            #if !targetEnvironment(macCatalyst)
+            inputModeDismissTask?.cancel()
+            inputModeDismissTask = nil
             if let obs = inputModeObserver {
                 NotificationCenter.default.removeObserver(obs)
                 inputModeObserver = nil
@@ -1976,8 +1970,10 @@ extension Ghostty {
             #endif
 
             #if targetEnvironment(macCatalyst)
-            // Mac Catalyst: Keep long press for trackpad click-and-drag selection
+            // Mac Catalyst: Keep long press for trackpad click-and-drag selection.
+            // Pointer only: a finger on a touch display uses the gestures below.
             let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
+            longPress.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)]
             longPress.minimumPressDuration = 0.5
             longPress.cancelsTouchesInView = false
             longPress.delaysTouchesBegan = false
@@ -1997,6 +1993,7 @@ extension Ghostty {
             ]
             addGestureRecognizer(selectionPan)
             self.selectionPanGesture = selectionPan
+            #endif
 
             // Long-press gesture for text selection in scroll mode (initially disabled)
             let selectionLongPress = UILongPressGestureRecognizer(target: self, action: #selector(handleSelectionLongPress))
@@ -2079,6 +2076,11 @@ extension Ghostty {
             pinchZoom.delegate = self
             addGestureRecognizer(pinchZoom)
             self.pinchZoomGesture = pinchZoom
+            #if targetEnvironment(macCatalyst)
+            // A small pinch also fits a two-finger tap, and its menu would
+            // open as the fingers lift.
+            twoFingerTap.require(toFail: pinchZoom)
+            #endif
 
             // Two-finger long press to open new connection sheet.
             // Duration and enablement are reconciled in applyTouchMode() based on
@@ -2093,7 +2095,6 @@ extension Ghostty {
             // Apply initial touch mode and observe changes
             applyTouchMode()
             setupTouchModeObserver()
-            #endif
 
             // Apply initial ASCII keyboard setting and observe changes
             applyASCIIKeyboardSetting()
@@ -2125,7 +2126,24 @@ extension Ghostty {
             // Note: Right-click in mouse capture mode (tmux, vim) is handled in the
             // contextMenuInteraction delegate by sending events to Ghostty and polling for release
             let contextInteraction = UIContextMenuInteraction(delegate: self)
+            #if targetEnvironment(macCatalyst)
+            // The interaction makes other long presses wait until it has
+            // decided on a menu, which for a finger on Mac is not until it
+            // lifts. Take the finger away from its recognizers; fingers use
+            // the gestures above, and the pointer still gets its menu.
+            let recognizersBefore = Set((gestureRecognizers ?? []).map(ObjectIdentifier.init))
             addInteraction(contextInteraction)
+            let finger = NSNumber(value: UITouch.TouchType.direct.rawValue)
+            for recognizer in gestureRecognizers ?? [] where !recognizersBefore.contains(ObjectIdentifier(recognizer)) {
+                // Leave ones that take no touches at all (the key press driver) alone.
+                guard recognizer.allowedTouchTypes.contains(finger) else { continue }
+                recognizer.allowedTouchTypes = recognizer.allowedTouchTypes.filter { $0 != finger }
+            }
+            // The same interaction above the terminal is handled per touch.
+            installTouchLiftObserver()
+            #else
+            addInteraction(contextInteraction)
+            #endif
             self.contextMenuInteraction = contextInteraction
 
             // Add drop interaction for file/URL drag-and-drop
@@ -2178,7 +2196,6 @@ extension Ghostty {
 
         }
         
-        #if !targetEnvironment(macCatalyst)
         /// Apply current touch mode settings to gesture recognizers
         func applyTouchMode() {
             let scrollMode = isTouchScrollMode
@@ -2233,7 +2250,6 @@ extension Ghostty {
             }
             cancellables.insert(AnyCancellable { NotificationCenter.default.removeObserver(swipeObserver) })
         }
-        #endif
 
         private func applyASCIIKeyboardSetting() {
             let forceASCII = SettingsStore.shared.value(Settings.Keyboard.forceASCIIKeyboard)
@@ -2983,12 +2999,10 @@ extension Ghostty {
                     ghostty_surface_binding_action(surface, cString, UInt(len - 1))
                 }
 
-                #if !targetEnvironment(macCatalyst)
                 guard performed else { return }
                 DispatchQueue.main.async { [weak self] in
                     self?.scheduleSelectionHandleSync(afterGhosttyAppTick: true)
                 }
-                #endif
             }
         }
 
@@ -3009,7 +3023,6 @@ extension Ghostty {
 
         }
 
-        #if !targetEnvironment(macCatalyst)
         private func selectionUIIsOccluded() -> Bool {
             selectionUIExternallyOccluded
                 || selectionUISwipeSuppressed
@@ -3032,7 +3045,9 @@ extension Ghostty {
         func setSelectionUIExternallyOccluded(_ occluded: Bool) {
             guard selectionUIExternallyOccluded != occluded else { return }
             selectionUIExternallyOccluded = occluded
+            #if !targetEnvironment(macCatalyst)
             pointerInteraction?.invalidate()
+            #endif
             if occluded {
                 herdrEndpointPane?.cancelInteraction()
                 removeSelectionHandleViewsFromWindow()
@@ -3103,7 +3118,6 @@ extension Ghostty {
                 }
             }
         }
-        #endif
 
         /// Notify Ghostty of surface visibility (occlusion) state.
         /// When occluded (visible=false), the internal IOSDisplayLink stops
@@ -3121,9 +3135,8 @@ extension Ghostty {
             if !visible {
                 clearCursorRegistration()
             }
-            #else
-            syncSelectionHandlesForSurfaceActivity()
             #endif
+            syncSelectionHandlesForSurfaceActivity()
 
             // Notify session of visibility change for CPU throttling
             session?.setTabVisible(visible)
@@ -3327,7 +3340,6 @@ extension Ghostty {
             isSelecting = false
             selectionStartPoint = nil
             mousePressed = false
-            #if !targetEnvironment(macCatalyst)
             selectionStartedFromPan = false
             suppressSelectionUntilTouchEnd = false
             isSelectionDelayPending = false
@@ -3337,7 +3349,6 @@ extension Ghostty {
             if !preserveTouchSelection {
                 selectionWasTouchInitiated = false
             }
-            #endif
         }
 
         /// Check if a modal/sheet is presented over the root view controller
@@ -3387,13 +3398,11 @@ extension Ghostty {
             // alongside the flag, so real focus is unaffected.
             // ROOTSHELL-TMUX (id=tmux-focus-cursor-logical-only)
             applyGhosttyFocus(windowActive && isLogicallyFocused)
-            #if !targetEnvironment(macCatalyst)
             if windowActive {
                 scheduleSelectionHandleSync(afterGhosttyAppTick: true)
             } else {
                 syncSelectionHandlesForSurfaceActivity()
             }
-            #endif
 
             if shouldFocus {
                 shouldBecomeFirstResponderWhenReady = false
@@ -3671,6 +3680,7 @@ extension Ghostty {
                 : String(localized: "Mouse Capture On")
             showMouseInteractionOverlay(text: text)
         }
+        #endif
 
         /// Feedback belongs to the terminal, so releasing the original hold and
         /// dismissing its loupe cannot remove the confirmation prematurely.
@@ -3717,7 +3727,6 @@ extension Ghostty {
                 host.view.removeFromSuperview()
             })
         }
-        #endif
 
         /// Sets whether the AI Agent overlay is active for this terminal's tab.
         /// When active, the keyboard toolbar is suppressed.
@@ -3725,17 +3734,13 @@ extension Ghostty {
             guard aiAgentOverlayActive != active else { return }
             aiAgentOverlayActive = active
             reloadInputViews()
-            #if !targetEnvironment(macCatalyst)
             syncSelectionHandlesForSurfaceActivity()
-            #endif
         }
 
         func setThemePickerOverlayActive(_ active: Bool) {
             guard themePickerOverlayActive != active else { return }
             themePickerOverlayActive = active
-            #if !targetEnvironment(macCatalyst)
             syncSelectionHandlesForSurfaceActivity()
-            #endif
         }
 
         // MARK: - UIView Overrides
@@ -3754,9 +3759,7 @@ extension Ghostty {
                 unregisterWindowFocusObservers()
                 applyGhosttyFocus(false)
                 resetKeyboardInteractionState(sendSyntheticKeyReleases: true)
-                #if !targetEnvironment(macCatalyst)
                 syncSelectionHandlesForSurfaceActivity()
-                #endif
                 #if targetEnvironment(macCatalyst)
                 clearCursorRegistration()
                 #endif
@@ -3797,9 +3800,7 @@ extension Ghostty {
                 }
             }
 
-            #if !targetEnvironment(macCatalyst)
             syncSelectionHandlesForSurfaceActivity()
-            #endif
 
             sizeDidChange(frame.size)
         }
@@ -3893,7 +3894,6 @@ extension Ghostty {
             CATransaction.commit()
             #endif
 
-            #if !targetEnvironment(macCatalyst)
             if selectionHandlesVisible || selectionWasTouchInitiated || selectionMagnifierPoint != nil {
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
@@ -3912,7 +3912,6 @@ extension Ghostty {
                     }
                 }
             }
-            #endif
         }
         
         override var canBecomeFirstResponder: Bool {
@@ -4917,9 +4916,7 @@ extension Ghostty {
                 guard windowIsActiveForFocus() else {
                     Ghostty.logger.info("focusDidChange(true): Window inactive, deferring focus")
                     applyGhosttyFocus(false)
-                    #if !targetEnvironment(macCatalyst)
                     syncSelectionHandlesForSurfaceActivity()
-                    #endif
                     return false
                 }
 
@@ -4945,9 +4942,7 @@ extension Ghostty {
                     let result = becomeFirstResponder()
                     Ghostty.logger.info("focusDidChange(true): becomeFirstResponder() = \(result)")
                     if result {
-                        #if !targetEnvironment(macCatalyst)
                         syncSelectionHandlesForSurfaceActivity()
-                        #endif
                         // Acquiring first responder already installs the input
                         // views. Reloading here repeats the keyboard handoff.
                         return true
@@ -4971,9 +4966,7 @@ extension Ghostty {
                     if self.window != nil && !self.isFirstResponder {
                         let result = self.becomeFirstResponder()
                         Ghostty.logger.info("focusDidChange async: becomeFirstResponder() = \(result)")
-                        #if !targetEnvironment(macCatalyst)
                         self.syncSelectionHandlesForSurfaceActivity()
-                        #endif
                     }
                 }
                 return false
@@ -4983,9 +4976,7 @@ extension Ghostty {
                     keyboardToolbarCollapsed = false
                 }
                 applyGhosttyFocus(false)
-                #if !targetEnvironment(macCatalyst)
                 syncSelectionHandlesForSurfaceActivity()
-                #endif
                 #if targetEnvironment(macCatalyst)
                 clearCursorRegistration()
                 #endif
@@ -5476,7 +5467,6 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
         // This catches mode changes during terminal output (e.g., vim startup)
         updateMouseCaptureState()
 
-        #if !targetEnvironment(macCatalyst)
         if viewportChanged {
             // Keep the selection handles pinned to the (now-moved) selection
             // instead of tearing them down. This covers auto-scroll during a
@@ -5489,7 +5479,6 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
             // could arrive after the handles were restored and hide them again.
             updateSelectionHandlePositions()
         }
-        #endif
 
         updateScrollIndicatorLayout()
         let revealScrollIndicator = Date().timeIntervalSinceReferenceDate <= scrollIndicatorRevealDeadline
@@ -5725,11 +5714,9 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
             ghostty_surface_binding_action(surface, cString, UInt(len - 1))
         }
 
-        #if !targetEnvironment(macCatalyst)
         if performed {
             scheduleSelectionHandleSync(afterGhosttyAppTick: true)
         }
-        #endif
 
         return performed
     }

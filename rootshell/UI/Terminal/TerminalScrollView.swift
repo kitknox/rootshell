@@ -135,6 +135,9 @@ extension Ghostty {
     #if targetEnvironment(macCatalyst)
     /// Original offset for an in-flight Catalyst indicator nudge.
     private var catalystSelectionIndicatorNudgeOriginalOffset: CGPoint?
+
+    /// Pending check that a deceleration has come to rest.
+    private var restWatchTask: Task<Void, Never>?
     #endif
 
     /// Last row position sent to Ghostty core (prevents update loops)
@@ -300,9 +303,24 @@ extension Ghostty {
 
     // MARK: - Hit Testing
 
-    /// Override hit testing to bypass UIScrollView in capture mode
-    /// This ensures touches reach TerminalView for tmux divider dragging, etc.
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hitView = routedHitTest(point, with: event)
+        #if targetEnvironment(macCatalyst)
+        // Hit testing is the last moment before UIKit decides which
+        // recognizers get this touch. A right-click is left alone: it is
+        // never a finger, and its menu can take the click before the
+        // terminal sees it.
+        if let event, event.type == .touches, !event.buttonMask.contains(.secondary),
+           hitView === terminalView {
+            terminalView.withholdFingerFromAncestorContextMenus()
+        }
+        #endif
+        return hitView
+    }
+
+    /// Custom hit testing to bypass UIScrollView in capture mode
+    /// This ensures touches reach TerminalView for tmux divider dragging, etc.
+    private func routedHitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         // The gateway replaces the terminal's input surface. Route clicks and
         // scrolling to its hosted controls before capture, scrollbar, or
         // Catalyst's transparent-scroll-view routing can claim the event.
@@ -349,15 +367,9 @@ extension Ghostty {
                 return hitView
             }
 
-            #if !targetEnvironment(macCatalyst)
-            if let overlayView = terminalView.dimensionOverlayHost?.view,
-               overlayView.alpha > 0 {
-                let overlayPoint = convert(point, to: overlayView)
-                if let hitView = overlayView.hitTest(overlayPoint, with: event) {
-                    return hitView
-                }
+            if let hitView = dimensionOverlayHitTest(point, with: event) {
+                return hitView
             }
-            #endif
 
             let terminalPoint = convert(point, to: terminalView)
             if let overlayHit = terminalView.hitTestCollapsedKeyboardToolbarButton(terminalPoint, with: event) {
@@ -381,7 +393,12 @@ extension Ghostty {
             }
         }
 
-        if isPointInCatalystScrollbarGutter(point) {
+        let inScrollbarGutter = isPointInCatalystScrollbarGutter(point)
+        if event?.type != .scroll {
+            // Decided here, before a press at this point reaches the pan.
+            setNativePanAcceptsPointer(inScrollbarGutter)
+        }
+        if inScrollbarGutter {
             return scrollView
         }
 
@@ -403,6 +420,10 @@ extension Ghostty {
             return hitView
         }
 
+        if let hitView = dimensionOverlayHitTest(point, with: event) {
+            return hitView
+        }
+
         let terminalPoint = convert(point, to: terminalView)
         if terminalView.bounds.contains(terminalPoint) {
             if let event {
@@ -420,6 +441,11 @@ extension Ghostty {
         return super.hitTest(point, with: event)
     }
 
+    /// Whether `gesture` is the scroll view's own pan, wherever it is hosted.
+    func isNativeScrollPan(_ gesture: UIGestureRecognizer) -> Bool {
+        gesture === scrollView.panGestureRecognizer
+    }
+
     /// If the brightness HUD covers `point`, return the hit subview so it
     /// receives the click/touch. The HUD host is sized to its pill via
     /// intrinsic-content constraints, so this returns nil for points outside
@@ -430,6 +456,14 @@ extension Ghostty {
         }
         let hudPoint = convert(point, to: hudView)
         return hudView.hitTest(hudPoint, with: event)
+    }
+
+    /// The pinch-zoom size overlay's Reset button, when showing under `point`.
+    private func dimensionOverlayHitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard let overlayView = terminalView.dimensionOverlayHost?.view, overlayView.alpha > 0 else {
+            return nil
+        }
+        return overlayView.hitTest(convert(point, to: overlayView), with: event)
     }
 
     /// If the SSH auth-banner card covers `point`, return the hit subview so
@@ -480,6 +514,20 @@ extension Ghostty {
     var isNativeScrollPanActive: Bool {
         let state = scrollView.panGestureRecognizer.state
         return state == .began || state == .changed
+    }
+
+    /// The pointer may drive the scroll view's pan only on the scrollbar,
+    /// where it drags the knob and pages the track. Anywhere else a pointer
+    /// drag belongs to the terminal; a finger scrolls everywhere.
+    private func setNativePanAcceptsPointer(_ acceptsPointer: Bool) {
+        let types: [UITouch.TouchType] = acceptsPointer
+            ? [.direct, .indirect, .pencil, .indirectPointer]
+            : [.direct]
+        let allowed = types.map { NSNumber(value: $0.rawValue) }
+        let pan = scrollView.panGestureRecognizer
+        if pan.allowedTouchTypes != allowed {
+            pan.allowedTouchTypes = allowed
+        }
     }
 
     private func isPointInCatalystScrollbarGutter(_ point: CGPoint) -> Bool {
@@ -664,6 +712,13 @@ extension Ghostty {
         // to scrollView). Attach to the shared parent so UIKit walks up to it
         // from either child.
         terminalView.attachTrackpadTabSwipeGesture(to: self)
+
+        // A finger on a touch display lands on the pinned terminal, not the
+        // scroll view. Host the scroll view's own pan here, above both, so the
+        // finger scrolls natively like on iPad. Wheel and trackpad scrolling
+        // still reach it; pointer drags stay with the terminal for selection.
+        setNativePanAcceptsPointer(false)
+        addGestureRecognizer(scrollView.panGestureRecognizer)
         #else
         documentView.addSubview(terminalView)
 
@@ -1920,10 +1975,10 @@ extension Ghostty {
         scrollView.decelerationRate = .normal
         #if !targetEnvironment(macCatalyst)
         isTouchScrolling = scrollView.panGestureRecognizer.numberOfTouches > 0
+        #endif
         // Handles are window overlays; hide while the scroll view and Ghostty
         // viewport are moving, then restore once scrolling has settled.
         terminalView.hideSelectionHandles(animated: false)
-        #endif
         let currentOffsetY = scrollView.contentOffset.y
         lastTouchScrollOffsetY = shouldUseRubberBandScrollback ? clampedScrollModelOffsetY(currentOffsetY) : currentOffsetY
     }
@@ -1968,15 +2023,18 @@ extension Ghostty {
         if !decelerate {
             settleSmoothScrollAtBounds()
             isLiveScrolling = false
-            #if !targetEnvironment(macCatalyst)
             terminalView.scheduleSelectionHandleSync(afterGhosttyAppTick: true)
-            #endif
             applyVerticalScrollState(isCaptured: terminalView.isMouseCaptured)
         }
         isTouchScrolling = false
         if !decelerate {
             wasRubberBandingDuringScroll = false
         }
+        #if targetEnvironment(macCatalyst)
+        if decelerate {
+            watchForRestWhileDecelerating()
+        }
+        #endif
         #if !targetEnvironment(macCatalyst)
         if !decelerate {
             updateTerminalBottomInsetSuppression(rubberBanding: false)
@@ -1994,6 +2052,14 @@ extension Ghostty {
         // depend on the bottom inset). The true end — finger up, the spring
         // resumes and ends, or a new drag — runs this settle for real.
         guard !scrollView.isTracking else { return }
+        #if targetEnvironment(macCatalyst)
+        restWatchTask?.cancel()
+        restWatchTask = nil
+        #endif
+        finishDecelerating()
+    }
+
+    private func finishDecelerating() {
         settleSmoothScrollAtBounds()
         isLiveScrolling = false
         isTouchScrolling = false
@@ -2002,11 +2068,34 @@ extension Ghostty {
         updateTerminalBottomInsetSuppression(rubberBanding: false)
         isTouchScrollbarDrag = false
         #endif
-        #if !targetEnvironment(macCatalyst)
         terminalView.scheduleSelectionHandleSync(afterGhosttyAppTick: true)
-        #endif
         applyVerticalScrollState(isCaptured: terminalView.isMouseCaptured)
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// After a finger bounce on Mac the scroll view can go on reporting that
+    /// it is decelerating for seconds after the content has stopped. Until
+    /// it finishes, a touch only catches the scroll and the selection handles
+    /// stay hidden. Once the content has sat still inside its range, end the
+    /// deceleration ourselves.
+    private func watchForRestWhileDecelerating() {
+        restWatchTask?.cancel()
+        let watchedOffsetY = scrollView.contentOffset.y
+        restWatchTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled, let self else { return }
+            self.restWatchTask = nil
+            let scrollView = self.scrollView
+            let offsetY = scrollView.contentOffset.y
+            guard scrollView.isDecelerating, !scrollView.isTracking, !scrollView.isDragging,
+                  abs(offsetY - watchedOffsetY) < 0.25,
+                  abs(self.clampedScrollModelOffsetY(offsetY) - offsetY) < 0.5 else { return }
+            // Setting the offset it already has is how a deceleration is stopped.
+            scrollView.setContentOffset(scrollView.contentOffset, animated: false)
+            self.finishDecelerating()
+        }
+    }
+    #endif
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         if isApplyingTerminalScrollSync || isApplyingTerminalScrollbarUpdate {
@@ -2018,6 +2107,9 @@ extension Ghostty {
         clearStaleLiveScrollStateIfNeeded()
 
         #if targetEnvironment(macCatalyst)
+        if scrollView.isDecelerating, !scrollView.isTracking {
+            watchForRestWhileDecelerating()
+        }
         // While the window is being dragged, Catalyst routes pointer scroll
         // deltas into whatever slides under the pointer. Swallow them: keep
         // the terminal pinned and never begin live scrolling; the next

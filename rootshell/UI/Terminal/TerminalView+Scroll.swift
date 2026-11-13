@@ -250,6 +250,49 @@ extension Ghostty.TerminalView {
     }
 }
 
+// MARK: - Finger Scroll in Capture Mode (Shared)
+// iOS Scroll Mode, and every finger on a Mac touch display.
+
+extension Ghostty.TerminalView {
+
+    private static var fingerDragActiveKey: UInt8 = 0
+
+    /// Tracks when a finger touch is being treated as a mouse drag in capture mode
+    var fingerDragActive: Bool {
+        get { (objc_getAssociatedObject(self, &Self.fingerDragActiveKey) as? Bool) ?? false }
+        set { objc_setAssociatedObject(self, &Self.fingerDragActiveKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+    }
+
+    /// Handle single-finger scroll in capture mode when scroll mode is enabled
+    /// Same momentum physics as handleTwoFingerScroll but triggered by single-finger pan
+    @objc func handleCaptureScrollPan(_ gesture: UIPanGestureRecognizer) {
+        switch gesture.state {
+        case .began:
+            interruptMomentumAnimation()
+
+            let location = gesture.location(in: self)
+            lastMousePosition = location
+
+        case .changed:
+            let translation = gesture.translation(in: self)
+            gesture.setTranslation(.zero, in: self)
+
+            _ = trackScrollVelocity(translation: translation, gesture: gesture)
+
+            sendNativeScrollEvent(deltaX: translation.x * 2, deltaY: translation.y * 2)
+
+        case .ended:
+            finalizeVelocityAndStartMomentum(gesture: gesture)
+
+        case .cancelled, .failed:
+            stopMomentumScrolling()
+
+        default:
+            break
+        }
+    }
+}
+
 // MARK: - Trackpad Tab Swipe (Shared)
 // Horizontal trackpad swipe gesture for tab switching via SwipeGestureManager.
 // Used on both Mac Catalyst and iOS/iPadOS — each platform's setup calls
@@ -729,6 +772,8 @@ extension Ghostty.TerminalView {
         catalystCaptureCancellable = $isMouseCaptured
             .receive(on: DispatchQueue.main)
             .sink { [weak self] isCaptured in
+                // Finger gestures that depend on capture (hold to click, hold to select).
+                self?.applyTouchMode()
                 if !isCaptured {
                     self?.scrollEndTimer?.invalidate()
                     self?.scrollEndTimer = nil
@@ -802,7 +847,6 @@ extension Ghostty.TerminalView {
     private static var trackpadScrollGestureKey: UInt8 = 0
     private static var twoFingerScrollGestureKey: UInt8 = 0
     private static var captureScrollPanGestureKey: UInt8 = 0
-    private static var fingerDragActiveKey: UInt8 = 0
     private static var iosCaptureCancellableKey: UInt8 = 0
     private static var iosScrollEndTimerKey: UInt8 = 0
 
@@ -825,12 +869,6 @@ extension Ghostty.TerminalView {
     private var iosScrollEndTimer: Timer? {
         get { objc_getAssociatedObject(self, &Self.iosScrollEndTimerKey) as? Timer }
         set { objc_setAssociatedObject(self, &Self.iosScrollEndTimerKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
-    }
-
-    /// Tracks when a finger touch is being treated as a mouse drag in capture mode
-    var fingerDragActive: Bool {
-        get { (objc_getAssociatedObject(self, &Self.fingerDragActiveKey) as? Bool) ?? false }
-        set { objc_setAssociatedObject(self, &Self.fingerDragActiveKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
     }
 
     // scrollPanGesture is no longer used - UIScrollView handles finger scrolling
@@ -993,35 +1031,6 @@ extension Ghostty.TerminalView {
             _ = trackScrollVelocity(translation: translation, gesture: gesture)
 
             // Send scroll event with 2x multiplier
-            sendNativeScrollEvent(deltaX: translation.x * 2, deltaY: translation.y * 2)
-
-        case .ended:
-            finalizeVelocityAndStartMomentum(gesture: gesture)
-
-        case .cancelled, .failed:
-            stopMomentumScrolling()
-
-        default:
-            break
-        }
-    }
-
-    /// Handle single-finger scroll in capture mode when scroll mode is enabled
-    /// Same momentum physics as handleTwoFingerScroll but triggered by single-finger pan
-    @objc func handleCaptureScrollPan(_ gesture: UIPanGestureRecognizer) {
-        switch gesture.state {
-        case .began:
-            interruptMomentumAnimation()
-
-            let location = gesture.location(in: self)
-            lastMousePosition = location
-
-        case .changed:
-            let translation = gesture.translation(in: self)
-            gesture.setTranslation(.zero, in: self)
-
-            _ = trackScrollVelocity(translation: translation, gesture: gesture)
-
             sendNativeScrollEvent(deltaX: translation.x * 2, deltaY: translation.y * 2)
 
         case .ended:

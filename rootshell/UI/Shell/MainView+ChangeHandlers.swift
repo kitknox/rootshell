@@ -378,9 +378,7 @@ extension MainView {
                 }
             }
             .onChange(of: isAnySheetPresented) { _, sheetPresented in
-                #if !targetEnvironment(macCatalyst)
                 setSelectionUIOccludedByPresentation(sheetPresented)
-                #endif
                 if !sheetPresented {
                     resyncSelectionHandlesAfterTransientOcclusion()
                 }

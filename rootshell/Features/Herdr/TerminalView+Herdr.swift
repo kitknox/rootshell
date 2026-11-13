@@ -212,16 +212,12 @@ extension Ghostty.TerminalView {
     /// rest would click, select, or scroll a shell the user cannot see.
     func herdrGatewayAllowsGesture(_ gesture: UIGestureRecognizer) -> Bool {
         if isTrackpadTabSwipeGesture(gesture) { return true }
-        #if !targetEnvironment(macCatalyst)
         return gesture === appTabSwipePanGesture
             || gesture === tabSwipeLeftGesture
             || gesture === tabSwipeRightGesture
             || gesture === twoFingerTapGesture
             || gesture === twoFingerLongPressGesture
             || gesture === pinchZoomGesture
-        #else
-        return false
-        #endif
     }
 
     /// Fixed space outside the grid. TerminalScrollView pins the terminal to
