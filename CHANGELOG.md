@@ -3,6 +3,45 @@
 All notable changes to the rootshell app for iPhone, iPad, Vision Pro, and Mac, newest first.
 Versions are listed as `release-build`, matching the version shown in Settings, About.
 
+## 1.0.16-177 - November 13, 2026
+
+### macOS
+
+- **Terminal Touch Support:** Added finger scrolling, text selection with handles and magnifier, pinch font resizing, and touch-and-hold actions for the MacBook Pro with PROLED XDR Display, currently the only Mac with touch support.
+- **Screen Sharing Shortcuts:** Send Reserved Shortcuts now forwards rootshell shortcuts such as Command-T and Command-1 to the remote computer. Command-Shift-M stays local to toggle capture. Fixed remote modifier keys sticking after switching apps, including Control-Option-as-Command input.
+- **Standalone Input Capture:** Captured Screen Sharing and KVM sessions can receive physical Control-Space and Control-Option-Space instead of switching the local input source. Standalone macOS only.
+- **Finder File Transfers:** Fixed Finder file drags into Screen Sharing, including text files. Drag files from a compatible remote Mac out of the window directly into Finder to download them.
+
+### Screen Sharing and KVM: iPhone and iPad Controls
+
+- **Floating Toolbar:** The keyboard toolbar now lives in a draggable glass bar with the session menu. Fold the keys away with the chevron; hold it to switch between floating and docked. Set the default with Floating Toolbar in Screen Sharing settings. The keyboard button hides with a hardware keyboard.
+- **Type Password Key:** Add the optional Type Password key in keyboard toolbar customization. Tap to type the saved password; hold to add Return. Works with Screen Sharing credentials and a KVM profile's saved computer password.
+- **Double-Press Modifiers:** Hold an already locked modifier key to unlock it and send two presses of that modifier to the remote computer, for double-press shortcuts.
+- **Navigation Gestures:** Tab and pane navigation swipes now yield to configured remote three-finger swipes and held-button drags. Use Four Fingers in Screen Sharing settings gives local navigation its own gesture. On iPad, disable the system's Four & Five Finger Gestures to use it.
+
+### GL.iNet Comet KVM: Computer Password
+
+- **Saved Computer Password:** Saved KVM profiles can store the connected computer's password separately from the KVM password, in iCloud Keychain. Type Computer Password in the session menu asks before typing, with or without Return.
+- **Login Screen Recognition:** Offer at Login Screen uses on-device text recognition to offer that confirmation at recognized login, lock, or disk-unlock screens, including macOS, Windows, and Linux. It checks after video starts, the computer wakes, or resolution changes; typing still requires confirmation.
+
+### Screen Sharing: Reliability
+
+- **Input During Resizing:** Fixed lost keystrokes and partially typed passwords around Match Client display resizes on compatible remote Macs, in Standard and High Performance modes.
+- **Display Fit:** Near-matching remote display sizes now fill the pane, removing thin borders caused by display-size rounding.
+- **Clipboard Deliveries:** Shared Clipboard skips repeated deliveries of unchanged content, avoiding duplicate clipboard history entries.
+- **High Performance Warning:** Restored the warning before starting High Performance over cellular or external mesh VPN paths. Choose Continue High Performance or Use Standard for that connection.
+- **Remote Input Source:** Commands > Special Keys adds Control-Space for remote input-source switching.
+
+### Keyboard, Panes and Background Sessions
+
+- **Keyboard and Pane Zoom:** On iPhone and iPad, terminals resize sooner when the software keyboard appears or hides. The keyboard toolbar adds Choose Pane to Zoom and Toggle Pane Zoom, including tmux and herdr control mode.
+- **Background Keepalive:** Location Diary Auto mode now counts Screen Sharing and KVM panes for background keepalive. These sessions also appear in counts and summaries.
+
+### WASM Local Shell: iOS, iPadOS and visionOS
+
+- **Listings and Connections:** Fixed folder listings stopping after roughly 100 entries and TCP/TLS connections hanging on closed or unreachable ports.
+- **Network Discovery and UDP:** Added Bonjour service discovery for SSH, VNC, and remote pairing, UDP reception from multiple senders, multicast sending, and receive timeouts for TCP/UDP.
+
 ## 1.0.16-176 - November 11, 2026
 
 ### Pane Swipe Presets
