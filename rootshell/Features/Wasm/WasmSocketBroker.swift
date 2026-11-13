@@ -33,6 +33,11 @@ final class WasmSocketBroker {
     /// Connect callIDs in-flight per fd (so we resolve exactly once).
     private var pendingConnects: [Int32: String] = [:]
 
+    /// Connects held open while the Local Network prompt may be up.
+    private var localNetworkWaits: Set<ObjectIdentifier> = []
+    private static let localNetworkGrace: Duration = .seconds(30)
+    private static var localNetworkGraceExpired = false
+
     func handle(_ dict: [String: Any], process: WasmProcess?, runtime: WasmRuntime) {
         guard let callID = dict["callID"] as? String else { return }
         guard let op = dict["op"] as? String else {
@@ -270,16 +275,11 @@ final class WasmSocketBroker {
                         self.wireReceives(connection: conn, fd: fd, proc: proc, runtime: runtime,
                                            isUDP: handle.kind == .udp)
                     }
+                case .waiting(let err):
+                    self.endWaitingConnect(err, conn: conn, fd: fd, proc: proc, runtime: runtime)
                 case .failed(let err):
                     if let cid = self.pendingConnects.removeValue(forKey: fd) {
-                        let e: Int32
-                        switch err {
-                        case .posix(.ECONNREFUSED): e = Errno.ECONNREFUSED
-                        case .posix(.ETIMEDOUT):    e = Errno.ETIMEDOUT
-                        case .posix(.ENETUNREACH):  e = Errno.ENETUNREACH
-                        default: e = Errno.EIO
-                        }
-                        runtime.replyToJS(callID: cid, payload: ["errno": e])
+                        runtime.replyToJS(callID: cid, payload: ["errno": Self.connectErrno(err)])
                     }
                     self.failPendingRecvs(fd: fd, errno: Errno.EIO, runtime: runtime)
                 default:
@@ -349,20 +349,11 @@ final class WasmSocketBroker {
                         self.wireReceives(connection: conn, fd: fd, proc: proc,
                                            runtime: runtime, isUDP: false)
                     }
+                case .waiting(let err):
+                    self.endWaitingConnect(err, conn: conn, fd: fd, proc: proc, runtime: runtime)
                 case .failed(let err):
                     if let cid = self.pendingConnects.removeValue(forKey: fd) {
-                        let e: Int32
-                        switch err {
-                        // Handshake / cert failures surface as `.tls`. Report
-                        // them as ECONNREFUSED — guests treat that the same
-                        // as TCP refusal and bail out, which is the right UX.
-                        case .tls:                  e = Errno.ECONNREFUSED
-                        case .posix(.ECONNREFUSED): e = Errno.ECONNREFUSED
-                        case .posix(.ETIMEDOUT):    e = Errno.ETIMEDOUT
-                        case .posix(.ENETUNREACH):  e = Errno.ENETUNREACH
-                        default:                    e = Errno.EIO
-                        }
-                        runtime.replyToJS(callID: cid, payload: ["errno": e])
+                        runtime.replyToJS(callID: cid, payload: ["errno": Self.connectErrno(err)])
                     }
                     self.failPendingRecvs(fd: fd, errno: Errno.EIO, runtime: runtime)
                 default:
@@ -371,6 +362,69 @@ final class WasmSocketBroker {
             }
         }
         conn.start(queue: queue)
+    }
+
+    /// Network.framework retries a refused or unreachable connect indefinitely;
+    /// POSIX connect fails, so the guest can retry. The Local Network prompt
+    /// also parks a connect, and Allow resumes it, so that case gets a grace.
+    private func endWaitingConnect(_ err: NWError, conn: NWConnection, fd: Int32,
+                                   proc: WasmProcess, runtime: WasmRuntime) {
+        // fds and call IDs repeat across invocations; a connect left behind
+        // by an ended process must not answer the current one.
+        guard Self.owns(conn, fd: fd, proc: proc, runtime: runtime) else {
+            conn.cancel()
+            return
+        }
+        // A later state update (Allow resuming it) answers the connect instead.
+        guard case .waiting = conn.state, let cid = pendingConnects[fd] else { return }
+        if Self.localNetworkBlocked(conn), !Self.localNetworkGraceExpired {
+            guard localNetworkWaits.insert(ObjectIdentifier(conn)).inserted else { return }
+            Task { @MainActor [weak self, weak proc] in
+                try? await Task.sleep(for: Self.localNetworkGrace)
+                guard let self else { return }
+                self.localNetworkWaits.remove(ObjectIdentifier(conn))
+                guard let proc, Self.owns(conn, fd: fd, proc: proc, runtime: runtime) else {
+                    conn.cancel()
+                    return
+                }
+                // Allow resumed the connect; its own state updates answer it.
+                guard self.pendingConnects[fd] == cid, Self.localNetworkBlocked(conn) else { return }
+                // Unanswered or denied: later connects fail without the wait.
+                Self.localNetworkGraceExpired = true
+                self.pendingConnects.removeValue(forKey: fd)
+                conn.cancel()
+                runtime.replyToJS(callID: cid, payload: ["errno": Errno.EACCES])
+            }
+            return
+        }
+        let e = Self.localNetworkBlocked(conn) ? Errno.EACCES : Self.connectErrno(err)
+        pendingConnects.removeValue(forKey: fd)
+        conn.cancel()
+        runtime.replyToJS(callID: cid, payload: ["errno": e])
+    }
+
+    private static func owns(_ conn: NWConnection, fd: Int32, proc: WasmProcess,
+                             runtime: WasmRuntime) -> Bool {
+        runtime.current === proc
+            && (proc.socketHandles[fd]?.primitive as? ConnectionBox)?.connection === conn
+    }
+
+    private static func localNetworkBlocked(_ conn: NWConnection) -> Bool {
+        guard case .waiting = conn.state else { return false }
+        return conn.currentPath?.unsatisfiedReason == .localNetworkDenied
+    }
+
+    /// Handshake and cert failures (`.tls`) report as ECONNREFUSED so guests
+    /// bail out the same way they do on a TCP refusal.
+    private static func connectErrno(_ err: NWError) -> Int32 {
+        switch err {
+        case .tls:                  return Errno.ECONNREFUSED
+        case .posix(.ECONNREFUSED): return Errno.ECONNREFUSED
+        case .posix(.ETIMEDOUT):    return Errno.ETIMEDOUT
+        case .posix(.ENETUNREACH), .posix(.ENETDOWN), .posix(.EHOSTUNREACH):
+            return Errno.ENETUNREACH
+        default:                    return Errno.EIO
+        }
     }
 
     private func wireReceives(connection: NWConnection,
