@@ -55,6 +55,7 @@ enum SettingsSearchDestination: String, Hashable, CaseIterable {
     case backgroundTunnels
     case roam
     case screenSharing
+    case screenSharingDownloads
     case uploads
     case sshTransport
     case multiplexers
@@ -282,6 +283,10 @@ extension SettingsSearchDestination {
         case .screenSharing:
             Meta(section: .connections, title: String(localized: "Screen Sharing"), systemImage: "display.2",
                  keywords: ["vnc", "remote desktop", "clipboard", "panning", "pointer", "encryption", "tunnel"])
+        case .screenSharingDownloads:
+            Meta(section: .connections, title: String(localized: "Screen Sharing Downloads"), systemImage: "arrow.down.circle",
+                 keywords: ["downloads", "drag to download", "temporary files", "file transfer", "storage", "disk space",
+                            "clear all", "delete", "export", "share", "vnc"])
         case .uploads:
             Meta(section: .connections, title: String(localized: "Uploads"), systemImage: "arrow.up.doc",
                  keywords: ["upload", "image", "paste", "drop", "attachment", "markdown", "sftp", "pdf", "screenshot"])
@@ -1264,6 +1269,8 @@ func settingsSearchDestinationView(for destination: SettingsSearchDestination) -
         RoamSettingsView()
     case .screenSharing:
         ScreenSharingSettingsView()
+    case .screenSharingDownloads:
+        ScreenSharingDownloadsView()
     case .uploads:
         AttachmentUploadSettingsView()
     case .sshTransport:

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import rootshellVNC
 
 struct ScreenSharingSettingsView: View {
     @Setting(Settings.ScreenSharing.clipboardSyncDefault) private var clipboardSyncDefault
@@ -25,6 +26,7 @@ struct ScreenSharingSettingsView: View {
     @Setting(Settings.ScreenSharing.swipeLeftAction) private var swipeLeftAction
     @Setting(Settings.ScreenSharing.swipeRightAction) private var swipeRightAction
     @Setting(Settings.ScreenSharing.fourFingerNavigation) private var fourFingerNavigation
+    @State private var downloadStore = VNCDownloadStore.shared
 
     private var resolvedClipboardSyncDefault: ScreenSharingClipboardSyncDefault {
         clipboardSyncDefault
@@ -273,8 +275,28 @@ struct ScreenSharingSettingsView: View {
             } footer: {
                 Text("Draws a dot where your pointer is, ahead of the remote computer’s own pointer in the video. Sets the default for new KVM sessions; change it for the current session from the Screen Sharing menu.")
             }
+
+            Section {
+                NavigationLink(value: SettingsSearchDestination.screenSharingDownloads) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "arrow.down.circle")
+                        Text("Downloads")
+                        Spacer()
+                        if downloadStore.hasLoaded {
+                            Text(ScreenSharingDownloadsView.size(downloadStore.totalByteCount))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .themedRow()
+            } header: {
+                Text("File Transfer")
+            } footer: {
+                Text("Files downloaded with Drag to Download that are still on this device. Save, share, or delete them without reconnecting.")
+            }
         }
         .themedList()
+        .task { await downloadStore.refresh() }
         .navigationTitle("Screen Sharing")
         .navigationBarTitleDisplayMode(.inline)
     }
