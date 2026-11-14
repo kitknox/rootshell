@@ -1405,14 +1405,17 @@ extension VNCPaneView: RemoteScreenPane {
     }
 
     func sendKeyboardToolbarKeysym(down: Bool, keysym: UInt32) {
+        if down { keyboardCapture.noteExternalInput() }
         session.sendKeyEvent(downFlag: down, key: keysym)
     }
 
     func pasteFromKeyboardToolbar() {
+        keyboardCapture.noteExternalInput()
         clipboardSynchronizer.sendClipboard()
     }
 
     func typePasswordFromKeyboardToolbar(pressingReturn: Bool) {
+        keyboardCapture.noteExternalInput()
         // Outside the Login Window the password goes to the field the user chose.
         session.sendLoginPassword(pressingReturn: pressingReturn, keepingFocus: true)
     }

@@ -620,15 +620,18 @@ extension KVMPaneView: RemoteScreenPane {
     var remoteSessionIsConnected: Bool { session.connectionState.isConnected }
 
     func sendKeyboardToolbarKeysym(down: Bool, keysym: UInt32) {
+        if down { keyboardCapture.noteExternalInput() }
         session.sendKeysym(down: down, keysym: keysym)
     }
 
     func pasteFromKeyboardToolbar() {
+        keyboardCapture.noteExternalInput()
         pasteClipboard()
     }
 
     func typePasswordFromKeyboardToolbar(pressingReturn: Bool) {
         guard loginPassword.canSend else { return }
+        keyboardCapture.noteExternalInput()
         loginPassword.send(pressingReturn: pressingReturn)
     }
 
