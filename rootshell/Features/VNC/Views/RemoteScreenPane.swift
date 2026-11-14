@@ -57,6 +57,17 @@ protocol RemoteScreenPane: SplitPaneView {
 
     var brightnessHUDHost: UIHostingController<BrightnessBoostHUDView>? { get set }
     var brightnessHUDHideTask: Task<Void, Never>? { get set }
+
+    /// Run the saved pre-disconnect action, then `disconnect`. Only an
+    /// intentional close comes through here; never calls `disconnect` when
+    /// the user chooses to stay connected.
+    func runPreDisconnectAction(then disconnect: @escaping @MainActor () -> Void)
+}
+
+/// A pre-disconnect action in progress, or failed and waiting on the user.
+enum RemoteScreenPreDisconnectPhase: Equatable {
+    case running
+    case failed(String)
 }
 
 extension RemoteScreenPane {

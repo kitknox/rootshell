@@ -220,7 +220,7 @@ extension MainView {
         }
 
         observerBag.observeOnMainActor(.vncPreDisconnectFailed) { [self] notification in
-            guard let pane = notification.object as? VNCPaneView else { return }
+            guard let pane = notification.object as? any RemoteScreenPane else { return }
             guard self.shouldHandleNotification(notification) else { return }
             self.revealPaneForPreDisconnectFailure(pane)
         }

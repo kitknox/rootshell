@@ -567,14 +567,9 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
 
     // MARK: - Pre-disconnect action
 
-    enum PreDisconnectPhase: Equatable {
-        case running
-        case failed(String)
-    }
-
     /// Non-nil while the saved pre-disconnect action runs or waits for the
     /// user to decide after it failed.
-    @Published private(set) var preDisconnectPhase: PreDisconnectPhase?
+    @Published private(set) var preDisconnectPhase: RemoteScreenPreDisconnectPhase?
     private var preDisconnectTask: Task<Void, Never>?
     private var preDisconnectCompletion: (@MainActor () -> Void)?
 
@@ -1879,10 +1874,10 @@ private struct VNCPasswordPromptCard: View {
 
 /// Progress and failure prompt for a connection's pre-disconnect action.
 /// A failure never disconnects on its own: the user chooses.
-private struct VNCPreDisconnectCard: View {
+struct VNCPreDisconnectCard: View {
     let subtitle: String
     let actionName: String
-    let phase: VNCPaneView.PreDisconnectPhase
+    let phase: RemoteScreenPreDisconnectPhase
     let onDisconnect: () -> Void
     let onStay: () -> Void
 

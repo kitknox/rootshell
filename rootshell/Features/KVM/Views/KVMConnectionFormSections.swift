@@ -22,6 +22,7 @@ struct KVMFormState: Hashable {
     var hostPassword = ""
     var removeSavedHostPassword = false
     var promptForHostPasswordAtLoginScreen = true
+    var preDisconnect = KVMPreDisconnectAction()
     /// Only the `jump*` fields are used; Screen Sharing's jump UI and builder edit them.
     var jump = VNCFormState()
 
@@ -38,6 +39,7 @@ struct KVMFormState: Hashable {
         hostKeyboardLayout = config.hostKeyboardLayout
         reverseScrolling = config.reverseScrolling
         promptForHostPasswordAtLoginScreen = config.promptForHostPasswordAtLoginScreen
+        preDisconnect = config.preDisconnectAction
         var jumpForm = VNCFormState(config: VNCConnectionConfig(host: config.host, quality: .standard, jump: config.jump))
         jumpForm.quality = .standard
         jump = jumpForm
@@ -45,6 +47,7 @@ struct KVMFormState: Hashable {
 
     var isValid: Bool {
         jumpForm().isValid && !username.trimmingCharacters(in: .whitespaces).isEmpty
+            && (try? preDisconnect.keyCodes(layout: hostKeyboardLayout)) != nil
     }
 
     func buildConfig(sanitizeJumpPasswordForPersistence: Bool = false) throws -> KVMConnectionConfig {
@@ -53,6 +56,9 @@ struct KVMFormState: Hashable {
         let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard KVMConnectionConfig.baseURL(host: built.host, port: built.port) != nil else {
             throw VNCFormState.BuildError(message: String(localized: "Please enter a valid hostname."))
+        }
+        guard (try? preDisconnect.keyCodes(layout: hostKeyboardLayout)) != nil else {
+            throw VNCFormState.BuildError(message: String(localized: "Choose a letter or special key for the shortcut sent before disconnecting. Other characters can't be placed on the computer's keyboard layout."))
         }
         return KVMConnectionConfig(
             host: built.host,
@@ -63,7 +69,8 @@ struct KVMFormState: Hashable {
             automaticallyEnterFullScreen: automaticallyEnterFullScreen,
             hostKeyboardLayout: hostKeyboardLayout,
             reverseScrolling: reverseScrolling,
-            promptForHostPasswordAtLoginScreen: promptForHostPasswordAtLoginScreen)
+            promptForHostPasswordAtLoginScreen: promptForHostPasswordAtLoginScreen,
+            preDisconnectAction: preDisconnect.normalized)
     }
 
     /// Host and port validate and build through the Screen Sharing form.
@@ -175,6 +182,48 @@ struct KVMConnectionFormSections: View {
             .themedRow()
         } header: {
             Text("Session")
+        }
+
+        preDisconnectSection
+    }
+
+    private var preDisconnectSection: some View {
+        Section {
+            Group {
+                Picker("Action", selection: $form.preDisconnect.kind) {
+                    ForEach(KVMPreDisconnectAction.Kind.allCases, id: \.self) { kind in
+                        Text(kind.displayName).tag(kind)
+                    }
+                }
+
+                switch form.preDisconnect.kind {
+                case .none, .lockScreenMac, .lockScreenPC:
+                    EmptyView()
+
+                case .sleepDisplayMac:
+                    Text("Presses Control-Shift-Power. On Windows or Linux the Power key can sleep or shut down the computer.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                case .logOutMac:
+                    Text("Logs out of the Mac without asking. Apps with unsaved changes can still stop the logout.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                case .controlAltDelete:
+                    Text("For Windows and Linux computers. A Mac ignores it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                case .shortcut:
+                    PreDisconnectShortcutRows(shortcut: $form.preDisconnect.shortcut)
+                }
+            }
+            .themedRow()
+        } header: {
+            Text("Before Disconnecting")
+        } footer: {
+            Text("Keys sent when you close this connection or its tab. They're not sent when the connection drops, reconnects, or the app moves to the background.")
         }
     }
 

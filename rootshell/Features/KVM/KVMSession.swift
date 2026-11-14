@@ -97,6 +97,8 @@ final class KVMSession {
     @ObservationIgnored private var translator = KVMInputTranslator()
     @ObservationIgnored private var outbound = KVMInputQueue()
     @ObservationIgnored private var framesInFlight = 0
+    /// Failed control-socket sends on the current socket; `sendChord` compares counts.
+    @ObservationIgnored private var failedFrameSends = 0
     @ObservationIgnored private var typingTask: Task<Void, Never>?
     @ObservationIgnored private var pumpTask: Task<Void, Never>?
 
@@ -707,6 +709,41 @@ final class KVMSession {
 
     private static let returnKeysym: UInt32 = 0xFF0D
 
+    /// Presses kvmd key `codes` in order, releases them in reverse, and
+    /// returns once the device has the frames. Held keys are released first.
+    /// The presses queue only once earlier input is out, so a cancel can't
+    /// leave them waiting behind a paste; once queued, the chord completes.
+    func sendChord(_ codes: [String]) async throws {
+        guard !codes.isEmpty else { return }
+        guard try await waitForIdleInput() else { throw KVMPreDisconnectAction.Failure.inputBusy }
+        guard connectionState.isConnected, let socket = eventSocket else {
+            throw KVMPreDisconnectAction.Failure.notConnected
+        }
+        let failuresBefore = failedFrameSends
+        enqueue(translator.releaseAll())
+        enqueue(codes.map { .frame(KVMHIDFrame.key($0, down: true)) })
+        // A cancel cuts the hold short; the releases still go out.
+        try? await Task.sleep(for: .milliseconds(75))
+        enqueue(codes.reversed().map { .frame(KVMHIDFrame.key($0, down: false)) })
+
+        guard try await waitForIdleInput() else { throw KVMPreDisconnectAction.Failure.inputBusy }
+        // A failed send, or a socket replaced meanwhile, may have lost a key.
+        guard connectionState.isConnected, eventSocket === socket, failedFrameSends == failuresBefore else {
+            throw KVMPreDisconnectAction.Failure.notConnected
+        }
+        try await Task.sleep(for: .milliseconds(200))
+    }
+
+    /// False when input is still pending after two seconds. Throws on cancel.
+    private func waitForIdleInput() async throws -> Bool {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while eventSocket != nil, !outbound.isEmpty || framesInFlight > 0 || typingTask != nil {
+            guard ContinuousClock.now < deadline else { return false }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        return true
+    }
+
     func cancelTyping() {
         outbound.removeText()
         typingTask?.cancel()
@@ -733,8 +770,9 @@ final class KVMSession {
                 let owner = KVMWeakSession(self)
                 for data in frames {
                     framesInFlight += 1
-                    socket.send(.data(data)) { _ in
-                        Task { @MainActor in owner.session?.frameSent(on: socket) }
+                    socket.send(.data(data)) { error in
+                        let failed = error != nil
+                        Task { @MainActor in owner.session?.frameSent(on: socket, failed: failed) }
                     }
                 }
             case .text(let text):
@@ -762,8 +800,9 @@ final class KVMSession {
         }
     }
 
-    private func frameSent(on socket: URLSessionWebSocketTask) {
+    private func frameSent(on socket: URLSessionWebSocketTask, failed: Bool) {
         guard socket === eventSocket else { return }
+        if failed { failedFrameSends += 1 }
         framesInFlight = max(0, framesInFlight - 1)
         pump()
     }

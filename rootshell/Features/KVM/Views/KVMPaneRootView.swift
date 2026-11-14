@@ -120,7 +120,8 @@ private struct KVMScreenContent: View {
             showsLocalCursorDot: showsLocalCursor,
             touchGestures: touchGestures,
             brightnessGain: brightnessGain,
-            disconnect: { session.disconnect() },
+            // Close Connection runs the pre-disconnect action first.
+            disconnect: { pane.runPreDisconnectAction { session.disconnect() } },
             hudMenuExtras: { KVMHUDMenuExtras(pane: pane) })
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
         .hudAccessory(
@@ -398,7 +399,14 @@ private struct KVMSessionOverlay: View {
     @ViewBuilder
     private var card: some View {
         let subtitle = pane.config.displayName
-        if pane.needsPassword {
+        if let phase = pane.preDisconnectPhase {
+            VNCPreDisconnectCard(
+                subtitle: subtitle,
+                actionName: pane.config.preDisconnectAction.kind.displayName,
+                phase: phase,
+                onDisconnect: { pane.disconnectIgnoringPreDisconnectAction() },
+                onStay: { pane.cancelPreDisconnect() })
+        } else if pane.needsPassword {
             KVMPasswordCard(
                 subtitle: subtitle,
                 rejected: pane.passwordRejected,

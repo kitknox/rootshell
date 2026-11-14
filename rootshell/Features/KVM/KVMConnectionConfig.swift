@@ -37,6 +37,8 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
     /// Offer to type the profile's saved computer password when the video
     /// shows a login or lock screen.
     var promptForHostPasswordAtLoginScreen: Bool
+    /// Keys pressed on the remote computer before an intentional disconnect.
+    var preDisconnectAction: KVMPreDisconnectAction
 
     init(
         host: String,
@@ -47,7 +49,8 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         automaticallyEnterFullScreen: Bool = false,
         hostKeyboardLayout: String = KVMInputTranslator.usLayout,
         reverseScrolling: Bool = false,
-        promptForHostPasswordAtLoginScreen: Bool = true
+        promptForHostPasswordAtLoginScreen: Bool = true,
+        preDisconnectAction: KVMPreDisconnectAction = KVMPreDisconnectAction()
     ) {
         self.host = host
         self.port = port
@@ -58,6 +61,7 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         self.hostKeyboardLayout = hostKeyboardLayout
         self.reverseScrolling = reverseScrolling
         self.promptForHostPasswordAtLoginScreen = promptForHostPasswordAtLoginScreen
+        self.preDisconnectAction = preDisconnectAction
     }
 
     // MARK: - Codable (lossy per field)
@@ -65,7 +69,7 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case host, port, username, jump, keyboardToolbar
         case automaticallyEnterFullScreen, hostKeyboardLayout, reverseScrolling
-        case promptForHostPasswordAtLoginScreen
+        case promptForHostPasswordAtLoginScreen, preDisconnectAction
     }
 
     init(from decoder: Decoder) throws {
@@ -87,6 +91,8 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         reverseScrolling = ((try? container.decodeIfPresent(Bool.self, forKey: .reverseScrolling)) ?? nil) ?? false
         promptForHostPasswordAtLoginScreen = ((try? container.decodeIfPresent(
             Bool.self, forKey: .promptForHostPasswordAtLoginScreen)) ?? nil) ?? true
+        preDisconnectAction = ((try? container.decodeIfPresent(
+            KVMPreDisconnectAction.self, forKey: .preDisconnectAction)) ?? nil) ?? KVMPreDisconnectAction()
     }
 
     func encode(to encoder: Encoder) throws {
@@ -100,6 +106,9 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         try container.encode(hostKeyboardLayout, forKey: .hostKeyboardLayout)
         try container.encode(reverseScrolling, forKey: .reverseScrolling)
         try container.encode(promptForHostPasswordAtLoginScreen, forKey: .promptForHostPasswordAtLoginScreen)
+        if preDisconnectAction.isEnabled {
+            try container.encode(preDisconnectAction, forKey: .preDisconnectAction)
+        }
     }
 
     // MARK: - Computed
