@@ -2114,6 +2114,7 @@ extension Ghostty {
             return
         }
 
+        AgentAttentionCenter.shared.noteUserScrolling()
         clearStaleLiveScrollStateIfNeeded()
 
         #if targetEnvironment(macCatalyst)

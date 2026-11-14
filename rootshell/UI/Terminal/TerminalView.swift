@@ -2837,6 +2837,7 @@ extension Ghostty {
         func sendMouseScroll(deltaX: Double, deltaY: Double, mods: ghostty_input_scroll_mods_t = Ghostty.Input.ScrollMods.none.cMods) {
             cancelHerdrReturnToLive()
             invalidateWritingAssistance()
+            AgentAttentionCenter.shared.noteUserScrolling()
             if let state = herdrEndpointPane {
                 state.scroll(deltaX: CGFloat(deltaX), deltaY: CGFloat(deltaY), at: lastMousePosition)
                 return

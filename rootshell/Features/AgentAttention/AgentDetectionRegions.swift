@@ -100,6 +100,12 @@ nonisolated enum AgentDetectionRegions {
         let threshold = max(paneBorderMinimumRows, filled.count - paneBorderChromeAllowance)
 
         for border in paneBorders {
+            // Most screens draw none of these; skip the column census.
+            let borderBytes = ContiguousArray(String(border).utf8)
+            let candidates = filled.reduce(0) {
+                $0 + (containsBytes($1, borderBytes) ? 1 : 0)
+            }
+            guard candidates >= threshold else { continue }
             var columns: [Int: Int] = [:]
             for line in filled {
                 for column in borderColumns(line, border) {
@@ -442,6 +448,29 @@ nonisolated enum AgentDetectionRegions {
     }
 
     // MARK: - Helpers
+
+    /// Byte-wise substring search. A miss proves an ASCII needle absent
+    /// from the text; a hit is only a candidate (grapheme boundaries).
+    static func containsBytes(
+        _ haystack: ContiguousArray<UInt8>, _ needle: ContiguousArray<UInt8>
+    ) -> Bool {
+        guard !needle.isEmpty, haystack.count >= needle.count else { return needle.isEmpty }
+        return haystack.withUnsafeBytes { hay in
+            needle.withUnsafeBytes { pin in
+                memmem(hay.baseAddress, hay.count, pin.baseAddress, pin.count) != nil
+            }
+        }
+    }
+
+    /// `containsBytes` for a row that has not been converted yet.
+    static func containsBytes(_ line: String, _ needle: ContiguousArray<UInt8>) -> Bool {
+        var line = line
+        return line.withUTF8 { hay in
+            needle.withUnsafeBytes { pin in
+                memmem(hay.baseAddress, hay.count, pin.baseAddress, pin.count) != nil
+            }
+        }
+    }
 
     private static func isBlank(_ line: String) -> Bool {
         line.allSatisfy(\.isWhitespace)
