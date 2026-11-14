@@ -145654,6 +145654,160 @@
         }
       }
     },
+    "Choose a letter or special key for the shortcut sent before disconnecting. Other characters can't be placed on the computer's keyboard layout." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "اختر حرفاً أو مفتاحاً خاصاً لاختصار لوحة المفاتيح الذي يُرسل قبل قطع الاتصال. لا يمكن وضع الأحرف الأخرى على تخطيط لوحة مفاتيح الكمبيوتر."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trieu una lletra o una tecla especial per a la drecera de teclat que s'envia abans de desconnectar. Els altres caràcters no es poden col·locar a la disposició de teclat de l'ordinador."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vyberte písmeno nebo speciální klávesu pro klávesovou zkratku odesílanou před odpojením. Ostatní znaky nelze umístit na rozložení klávesnice počítače."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vælg et bogstav eller en specialtast til den tastaturgenvej, der sendes før afbrydelse. Andre tegn kan ikke placeres på computerens tastaturlayout."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wählen Sie einen Buchstaben oder eine Sondertaste für den Tastenkurzbefehl, der vor dem Trennen gesendet wird. Andere Zeichen können dem Tastaturlayout des Computers nicht zugeordnet werden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elige una letra o una tecla especial para el atajo que se envía antes de desconectar. Los demás caracteres no se pueden ubicar en la disposición de teclado del ordenador."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valitse kirjain tai erikoisnäppäin pikanäppäimelle, joka lähetetään ennen yhteyden katkaisua. Muita merkkejä ei voi sijoittaa tietokoneen näppäimistöasetteluun."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisissez une lettre ou une touche spéciale pour le raccourci envoyé avant la déconnexion. Les autres caractères ne peuvent pas être placés sur la disposition de clavier de l’ordinateur."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "בחר אות או מקש מיוחד לקיצור שנשלח לפני הניתוק. לא ניתן למקם תווים אחרים בפריסת המקלדת של המחשב."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Válasszon betűt vagy speciális billentyűt a leválasztás előtt küldött billentyűparancshoz. Más karakterek nem helyezhetők el a számítógép billentyűzetkiosztásán."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scegli una lettera o un tasto speciale per la scorciatoia inviata prima della disconnessione. Gli altri caratteri non sono disponibili nel layout di tastiera del computer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切断前に送信するショートカットの文字または特殊キーを選択してください。その他の文字はコンピュータのキーボードレイアウトに割り当てられません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결 해제 전에 보낼 단축키의 문자 또는 특수 키를 선택하세요. 다른 문자는 컴퓨터의 키보드 레이아웃에 배치할 수 없습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Velg en bokstav eller spesialtast for snarveien som sendes før frakobling. Andre tegn kan ikke plasseres på datamaskinens tastaturoppsett."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kies een letter of speciale toets voor de sneltoets die wordt verstuurd voordat de verbinding wordt verbroken. Andere tekens kunnen niet op de toetsenbordindeling van de computer worden geplaatst."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wybierz literę lub klawisz specjalny dla skrótu wysyłanego przed rozłączeniem. Innych znaków nie można umieścić w układzie klawiatury komputera."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escolha uma letra ou tecla especial para o atalho enviado antes de desconectar. Outros caracteres não podem ser posicionados no layout de teclado do computador."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escolha uma letra ou tecla especial para o atalho enviado antes de desligar. Os outros caracteres não podem ser colocados na disposição de teclado do computador."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alege o literă sau o tastă specială pentru scurtătura trimisă înainte de deconectare. Alte caractere nu pot fi plasate pe aspectul de tastatură al computerului."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Izberite črko ali posebno tipko za bližnjico, ki se pošlje pred prekinitvijo povezave. Drugih znakov ni mogoče umestiti v postavitev tipkovnice računalnika."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Välj en bokstav eller specialtangent för genvägen som skickas före frånkoppling. Andra tecken kan inte placeras på datorns tangentbordslayout."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Виберіть літеру або спеціальну клавішу для скорочення, яке надсилається перед від'єднанням. Інші символи неможливо розмістити на розкладці клавіатури компʼютера."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chọn một chữ cái hoặc phím đặc biệt cho phím tắt được gửi trước khi ngắt kết nối. Các ký tự khác không thể đặt trên bố cục bàn phím của máy tính."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为断开连接前发送的快捷键选择一个字母或特殊按键。其他字符无法对应到电脑的键盘布局。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "為中斷連線前傳送的快速鍵選擇字母或特殊按鍵。其他字元無法對應到電腦的鍵盤佈局。"
+          }
+        }
+      }
+    },
     "Choose a local shell, duplicate the focused session, or open Connections each time." : {
       "localizations" : {
         "ar" : {
@@ -152911,6 +153065,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "清除所有剪貼簿記錄？"
+          }
+        }
+      }
+    },
+    "Clear All Downloads?" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "مسح جميع التنزيلات؟"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esborrar totes les descàrregues?"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vymazat všechny stažené soubory?"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ryd alle downloads?"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Downloads löschen?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Borrar todas las descargas?"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tyhjennä kaikki lataukset?"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Effacer tous les téléchargements ?"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "לנקות את כל ההורדות?"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Összes letöltés törlése?"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancellare tutti i download?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてのダウンロードをクリアしますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 다운로드를 지우시겠습니까?"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tøm alle nedlastinger?"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle downloads wissen?"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wyczyścić wszystkie pobrane pliki?"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limpar Todos os Downloads?"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limpar todas as transferências?"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ștergi toate descărcările?"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Počisti vse prenose?"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rensa alla nedladdningar?"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Очистити всі завантаження?"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xóa tất cả bản tải xuống?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除所有下载项？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除所有下載項目？"
           }
         }
       }
@@ -171747,6 +172055,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "連線後執行的指令。"
+          }
+        }
+      }
+    },
+    "Command to run in the new shell." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الأمر المراد تشغيله في الصدفة الجديدة."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ordre que s'executarà a la shell nova."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Příkaz, který se spustí v novém shellu."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kommando, der skal køres i den nye shell."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Befehl, der in der neuen Shell ausgeführt wird."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comando que se ejecutará en el nuevo shell."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uudessa komentotulkissa suoritettava komento."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commande à exécuter dans le nouveau shell."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הפקודה להרצה במעטפת החדשה."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Az új parancsértelmezőben futtatandó parancs."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comando da eseguire nella nuova shell."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいシェルで実行するコマンド。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 셸에서 실행할 명령어입니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kommando som skal kjøres i det nye skallet."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opdracht om uit te voeren in de nieuwe shell."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Polecenie do uruchomienia w nowej powłoce."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comando a executar no novo shell."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comando a executar na nova shell."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comanda de executat în noul shell."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ukaz, ki se zažene v novi lupini."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kommando som ska köras i det nya skalet."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Команда, яку потрібно виконати в новій оболонці."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lệnh để chạy trong shell mới."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要在新 Shell 中运行的命令。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要在新 Shell 中執行的指令。"
           }
         }
       }
@@ -239298,6 +239760,160 @@
         }
       }
     },
+    "Deletes every Screen Sharing download stored on this device. Files you already saved elsewhere and the originals on the remote computer are not affected." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يحذف كل تنزيلات مشاركة الشاشة المخزنة على هذا الجهاز. لا تتأثر الملفات التي حفظتها بالفعل في مكان آخر ولا الملفات الأصلية على الكمبيوتر البعيد."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elimina totes les descàrregues de Compartir pantalla desades en aquest dispositiu. Els fitxers que ja hàgiu desat en un altre lloc i els originals de l'ordinador remot no es veuen afectats."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Smaže všechny stažené soubory ze sdílení obrazovky uložené v tomto zařízení. Soubory, které jste již uložili jinam, a originály ve vzdáleném počítači nejsou ovlivněny."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sletter alle skærmdelingsdownloads, der er gemt på denne enhed. Filer, du allerede har gemt et andet sted, og originalerne på fjerncomputeren påvirkes ikke."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Löscht alle auf diesem Gerät gespeicherten Bildschirmfreigabe-Downloads. Bereits anderswo gespeicherte Dateien und die Originale auf dem Remote-Computer sind nicht betroffen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elimina todas las descargas de Compartir pantalla guardadas en este dispositivo. No afecta a los archivos que ya hayas guardado en otro lugar ni a los originales del ordenador remoto."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Poistaa kaikki tälle laitteelle tallennetut näytön jakamisen lataukset. Tämä ei vaikuta tiedostoihin, jotka olet jo tallentanut muualle, eikä etätietokoneella oleviin alkuperäisiin."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Supprime tous les téléchargements du partage d’écran stockés sur cet appareil. Les fichiers que vous avez déjà enregistrés ailleurs et les originaux sur l’ordinateur distant ne sont pas affectés."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "מוחק את כל הורדות שיתוף המסך השמורות במכשיר זה. קבצים שכבר שמרת במקום אחר והמקוריים במחשב המרוחק אינם מושפעים."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Törli az ezen az eszközön tárolt összes képernyőmegosztási letöltést. A máshová már mentett fájlokat és a távoli számítógépen lévő eredetieket ez nem érinti."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elimina tutti i download della condivisione schermo archiviati su questo dispositivo. I file già salvati altrove e gli originali sul computer remoto non vengono modificati."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このデバイスに保存されているすべての画面共有のダウンロードを削除します。ほかの場所にすでに保存したファイルと、リモートコンピュータ上のオリジナルには影響しません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기기에 저장된 모든 화면 공유 다운로드를 삭제합니다. 이미 다른 곳에 저장한 파일과 원격 컴퓨터의 원본은 영향을 받지 않습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sletter alle skjermdelingsnedlastinger som er lagret på denne enheten. Filer du allerede har lagret andre steder, og originalene på den eksterne datamaskinen, påvirkes ikke."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verwijdert alle downloads van schermdelen die op dit apparaat zijn bewaard. Bestanden die je al elders hebt bewaard en de originelen op de externe computer worden niet beïnvloed."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usuwa wszystkie pliki pobrane przez udostępnianie ekranu przechowywane na tym urządzeniu. Nie ma to wpływu na pliki zapisane już w innym miejscu ani na oryginały na zdalnym komputerze."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exclui todos os downloads do Compartilhamento de Tela armazenados neste dispositivo. Os arquivos que você já salvou em outro lugar e os originais no computador remoto não são afetados."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elimina todas as transferências da Partilha de Ecrã guardadas neste dispositivo. Os ficheiros que já guardou noutro local e os originais no computador remoto não são afetados."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Șterge toate descărcările din Partajare ecran stocate pe acest dispozitiv. Fișierele pe care le-ai salvat deja în altă parte și originalele de pe computerul la distanță nu sunt afectate."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Izbriše vse prenose skupne rabe zaslona, shranjene v tej napravi. To ne vpliva na datoteke, ki ste jih že shranili drugam, in na izvirnike v oddaljenem računalniku."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Raderar alla nedladdningar från skärmdelning som lagras på den här enheten. Filer som du redan har sparat någon annanstans och originalen på fjärrdatorn påverkas inte."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Видаляє всі завантаження спільного доступу до екрана, що зберігаються на цьому пристрої. Файли, які ви вже зберегли в іншому місці, та оригінали на віддаленому компʼютері не зачіпаються."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xóa mọi bản tải xuống từ chia sẻ màn hình được lưu trên thiết bị này. Các tệp bạn đã lưu ở nơi khác và bản gốc trên máy tính từ xa không bị ảnh hưởng."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除本设备上存储的所有屏幕共享下载项。您已保存到其他位置的文件以及远程电脑上的原始文件不受影响。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刪除此裝置上儲存的所有螢幕共享下載項目。您已儲存到其他位置的檔案以及遠端電腦上的原始檔案不受影響。"
+          }
+        }
+      }
+    },
     "Deletes this linked checkout from disk and closes its workspace. The Git branch is kept." : {
       "localizations" : {
         "ar" : {
@@ -265596,6 +266212,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在下載變更…"
+          }
+        }
+      }
+    },
+    "Downloads" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "التنزيلات"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descàrregues"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stažené soubory"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloads"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloads"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descargas"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lataukset"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Téléchargements"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הורדות"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Letöltések"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ダウンロード"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다운로드"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nedlastinger"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloads"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pobrane pliki"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloads"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transferências"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descărcări"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prenosi"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nedladdningar"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Завантаження"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bản tải xuống"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下載項目"
           }
         }
       }
@@ -318283,6 +319053,314 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "檔案和資料夾須放在儲存貯體中，且儲存貯體無法重新命名。"
+          }
+        }
+      }
+    },
+    "Files downloaded with Drag to Download stay in temporary storage until you save or delete them, and the system may remove them when space runs low. Downloads still in progress are not listed and are never cleared." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تبقى الملفات التي نُزِّلت باستخدام «السحب للتنزيل» في التخزين المؤقت حتى تحفظها أو تحذفها، وقد يزيلها النظام عند انخفاض المساحة. لا تُدرَج التنزيلات التي لا تزال قيد التقدم ولا تُمسح أبداً."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Els fitxers descarregats amb «Arrossega per descarregar» es queden a l'emmagatzematge temporal fins que els deseu o els elimineu, i el sistema els pot suprimir quan quedi poc espai. Les descàrregues en curs no apareixen a la llista i no s'esborren mai."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Soubory stažené funkcí Stahování přetažením zůstávají v dočasném úložišti, dokud je neuložíte nebo nesmažete, a systém je může odstranit, když dochází místo. Probíhající stahování nejsou uvedena a nikdy se nevymažou."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filer, der er downloadet med Træk for at downloade, forbliver i midlertidig lagring, indtil du gemmer eller sletter dem, og systemet kan fjerne dem, når der er lidt plads. Downloads, der stadig er i gang, vises ikke og ryddes aldrig."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit „Ziehen zum Herunterladen“ heruntergeladene Dateien bleiben im temporären Speicher, bis Sie sie speichern oder löschen, und das System kann sie bei knappem Speicherplatz entfernen. Laufende Downloads werden nicht aufgeführt und nie gelöscht."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los archivos descargados con «Arrastrar para descargar» permanecen en el almacenamiento temporal hasta que los guardes o elimines, y el sistema puede eliminarlos cuando quede poco espacio. Las descargas que aún están en curso no aparecen en la lista y nunca se borran."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lataa vetämällä -toiminnolla ladatut tiedostot säilyvät väliaikaisessa tallennustilassa, kunnes tallennat tai poistat ne, ja järjestelmä voi poistaa ne, kun tila käy vähiin. Vielä käynnissä olevia latauksia ei näytetä luettelossa eikä niitä koskaan tyhjennetä."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les fichiers téléchargés avec « Glisser pour télécharger » restent dans un stockage temporaire jusqu’à ce que vous les enregistriez ou les supprimiez, et le système peut les supprimer lorsque l’espace vient à manquer. Les téléchargements encore en cours ne sont pas répertoriés et ne sont jamais effacés."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "קבצים שהורדו באמצעות ״גרירה להורדה״ נשארים באחסון זמני עד שתשמור או תמחק אותם, והמערכת עשויה להסיר אותם כשהמקום אוזל. הורדות שעדיין מתבצעות אינן מופיעות ברשימה ולעולם אינן נמחקות."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Letöltés húzással funkcióval letöltött fájlok ideiglenes tárhelyen maradnak, amíg nem menti vagy törli őket, és a rendszer eltávolíthatja őket, ha kevés a szabad hely. A még folyamatban lévő letöltések nem jelennek meg a listában, és soha nem törlődnek."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I file scaricati con Trascina per scaricare restano in un'archiviazione temporanea finché non li salvi o li elimini, e il sistema può rimuoverli quando lo spazio è insufficiente. I download ancora in corso non vengono elencati né cancellati."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「ドラッグしてダウンロード」でダウンロードしたファイルは、保存または削除するまで一時ストレージに保持され、空き容量が少なくなるとシステムによって削除されることがあります。進行中のダウンロードは一覧に表示されず、クリアされることもありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "‘드래그하여 다운로드’로 다운로드한 파일은 저장하거나 삭제할 때까지 임시 저장소에 보관되며, 공간이 부족하면 시스템이 제거할 수 있습니다. 진행 중인 다운로드는 목록에 표시되지 않으며 지워지지 않습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filer som er lastet ned med «Dra for å laste ned», ligger i midlertidig lagring til du lagrer eller sletter dem, og systemet kan fjerne dem når det blir lite plass. Nedlastinger som pågår, vises ikke og tømmes aldri."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bestanden die met ‘Sleep om te downloaden’ zijn gedownload, blijven in tijdelijke opslag totdat je ze bewaart of verwijdert, en het systeem kan ze verwijderen als er weinig ruimte is. Downloads die nog bezig zijn, worden niet weergegeven en nooit gewist."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pliki pobrane funkcją „Przeciągnij, aby pobrać” pozostają w tymczasowym miejscu przechowywania, dopóki ich nie zapiszesz lub nie usuniesz, a system może je usunąć, gdy zabraknie miejsca. Trwające pobierania nie są wyświetlane i nigdy nie są czyszczone."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Os arquivos baixados com Arrastar para Baixar ficam no armazenamento temporário até que você os salve ou exclua, e o sistema pode removê-los quando houver pouco espaço. Downloads ainda em andamento não são listados e nunca são apagados."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Os ficheiros transferidos com Arrastar para transferir ficam no armazenamento temporário até os guardar ou eliminar, e o sistema pode removê-los quando houver pouco espaço. As transferências ainda em curso não são listadas e nunca são limpas."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fișierele descărcate cu „Trage pentru descărcare” rămân în stocarea temporară până când le salvezi sau le ștergi, iar sistemul le poate elimina când spațiul este insuficient. Descărcările aflate încă în curs nu sunt afișate și nu sunt șterse niciodată."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Datoteke, prenesene s funkcijo Povleci za prenos, ostanejo v začasni shrambi, dokler jih ne shranite ali izbrišete, sistem pa jih lahko odstrani, ko zmanjka prostora. Prenosi, ki še potekajo, niso navedeni in se nikoli ne počistijo."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filer som laddats ner med ”Dra för att ladda ner” stannar i tillfällig lagring tills du sparar eller raderar dem, och systemet kan ta bort dem när det börjar bli ont om utrymme. Nedladdningar som pågår visas inte och rensas aldrig."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Файли, завантажені за допомогою «Завантаження перетягуванням», залишаються в тимчасовому сховищі, доки ви їх не збережете або не видалите, і система може вилучити їх, коли закінчується місце. Завантаження, що ще тривають, не показуються й ніколи не очищаються."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Các tệp được tải xuống bằng “Kéo để tải xuống” sẽ ở trong bộ nhớ tạm cho đến khi bạn lưu hoặc xóa chúng, và hệ thống có thể xóa chúng khi sắp hết dung lượng. Các bản tải xuống đang diễn ra không được liệt kê và không bao giờ bị xóa."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过“拖动下载”下载的文件会保留在临时存储中，直到您将其保存或删除；空间不足时，系统可能会移除这些文件。仍在下载中的项目不会列出，也永远不会被清除。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "透過「拖移下載」下載的檔案會保留在暫存空間中，直到您將其儲存或刪除；空間不足時，系統可能會移除這些檔案。仍在下載中的項目不會列出，也永遠不會被清除。"
+          }
+        }
+      }
+    },
+    "Files downloaded with Drag to Download that are still on this device. Save, share, or delete them without reconnecting." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الملفات التي نُزِّلت باستخدام «السحب للتنزيل» ولا تزال على هذا الجهاز. احفظها أو شاركها أو احذفها دون إعادة الاتصال."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fitxers descarregats amb «Arrossega per descarregar» que encara són en aquest dispositiu. Deseu-los, compartiu-los o elimineu-los sense tornar a connectar."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Soubory stažené funkcí Stahování přetažením, které jsou stále v tomto zařízení. Uložte je, sdílejte nebo smažte bez opětovného připojení."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filer, der er downloadet med Træk for at downloade, og som stadig er på denne enhed. Gem, del eller slet dem uden at oprette forbindelse igen."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit „Ziehen zum Herunterladen“ heruntergeladene Dateien, die sich noch auf diesem Gerät befinden. Speichern, teilen oder löschen Sie sie, ohne die Verbindung erneut herzustellen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archivos descargados con «Arrastrar para descargar» que siguen en este dispositivo. Guárdalos, compártelos o elimínalos sin volver a conectarte."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lataa vetämällä -toiminnolla ladatut tiedostot, jotka ovat yhä tällä laitteella. Tallenna, jaa tai poista ne muodostamatta yhteyttä uudelleen."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fichiers téléchargés avec « Glisser pour télécharger » qui se trouvent encore sur cet appareil. Enregistrez-les, partagez-les ou supprimez-les sans vous reconnecter."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "קבצים שהורדו באמצעות ״גרירה להורדה״ ועדיין נמצאים במכשיר זה. שמור, שתף או מחק אותם ללא התחברות מחדש."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Letöltés húzással funkcióval letöltött fájlok, amelyek még ezen az eszközön vannak. Mentse, ossza meg vagy törölje őket újracsatlakozás nélkül."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "File scaricati con Trascina per scaricare ancora presenti su questo dispositivo. Salvali, condividili o eliminali senza riconnetterti."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「ドラッグしてダウンロード」でダウンロードし、このデバイスに残っているファイルです。再接続せずに保存、共有、削除できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "‘드래그하여 다운로드’로 다운로드했으며 아직 이 기기에 있는 파일입니다. 다시 연결하지 않고도 저장, 공유 또는 삭제할 수 있습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filer lastet ned med «Dra for å laste ned» som fortsatt er på denne enheten. Lagre, del eller slett dem uten å koble til på nytt."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Met ‘Sleep om te downloaden’ gedownloade bestanden die nog op dit apparaat staan. Bewaar, deel of verwijder ze zonder opnieuw verbinding te maken."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pliki pobrane funkcją „Przeciągnij, aby pobrać”, które wciąż są na tym urządzeniu. Zapisz, udostępnij lub usuń je bez ponownego łączenia."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arquivos baixados com Arrastar para Baixar que ainda estão neste dispositivo. Salve, compartilhe ou exclua-os sem reconectar."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ficheiros transferidos com Arrastar para transferir que ainda estão neste dispositivo. Guarde-os, partilhe-os ou elimine-os sem voltar a ligar."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fișierele descărcate cu „Trage pentru descărcare” care sunt încă pe acest dispozitiv. Salvează-le, partajează-le sau șterge-le fără a te reconecta."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Datoteke, prenesene s funkcijo Povleci za prenos, ki so še v tej napravi. Shranite, delite ali izbrišite jih brez ponovne povezave."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filer som laddats ner med ”Dra för att ladda ner” och som fortfarande finns på den här enheten. Spara, dela eller radera dem utan att återansluta."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Файли, завантажені за допомогою «Завантаження перетягуванням», які досі є на цьому пристрої. Збережіть, поділіться ними або видаліть їх без повторного підключення."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Các tệp được tải xuống bằng “Kéo để tải xuống” vẫn còn trên thiết bị này. Lưu, chia sẻ hoặc xóa chúng mà không cần kết nối lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过“拖动下载”下载且仍在本设备上的文件。无需重新连接即可保存、共享或删除它们。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "透過「拖移下載」下載且仍在此裝置上的檔案。無需重新連線即可儲存、分享或刪除。"
           }
         }
       }
@@ -420556,7 +421634,7 @@
       }
     },
     "Keyboard Shortcut" : {
-      "comment" : "Screen Sharing pre-disconnect action",
+      "comment" : "KVM pre-disconnect action\nScreen Sharing pre-disconnect action",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -423948,6 +425026,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "YubiKey 上的金鑰"
+          }
+        }
+      }
+    },
+    "Keys sent when you close this connection or its tab. They're not sent when the connection drops, reconnects, or the app moves to the background." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "المفاتيح التي تُرسل عند إغلاق هذا الاتصال أو علامة تبويبه. لا تُرسل عند انقطاع الاتصال أو إعادة الاتصال أو انتقال التطبيق إلى الخلفية."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tecles que s'envien quan tanqueu aquesta connexió o la seva pestanya. No s'envien quan la connexió cau, es reconnecta o l'app passa a segon pla."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klávesy odesílané, když zavřete toto připojení nebo jeho kartu. Neodesílají se při výpadku připojení, opětovném připojení ani při přechodu aplikace na pozadí."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Taster, der sendes, når du lukker denne forbindelse eller dens fane. De sendes ikke, når forbindelsen falder ud, genoprettes, eller appen går i baggrunden."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tasten, die gesendet werden, wenn Sie diese Verbindung oder ihren Tab schließen. Nicht bei einem Verbindungsabbruch, einer erneuten Verbindung oder wenn die App in den Hintergrund wechselt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teclas que se envían al cerrar esta conexión o su pestaña. No se envían si la conexión se interrumpe, se vuelve a conectar o la app pasa a segundo plano."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Näppäimet, jotka lähetetään, kun suljet tämän yhteyden tai sen välilehden. Niitä ei lähetetä, kun yhteys katkeaa tai muodostetaan uudelleen tai kun sovellus siirtyy taustalle."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Touches envoyées lorsque vous fermez cette connexion ou son onglet. Elles ne sont pas envoyées si la connexion est interrompue ou se rétablit, ni si l’app passe en arrière-plan."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "מקשים שנשלחים כשאתה סוגר את החיבור הזה או את הלשונית שלו. הם אינם נשלחים כשהחיבור נקטע, מתחבר מחדש או כשהאפליקציה עוברת לרקע."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Billentyűk, amelyek akkor lesznek elküldve, amikor bezárja ezt a kapcsolatot vagy a lapját. Nem lesznek elküldve, ha a kapcsolat megszakad vagy újracsatlakozik, illetve ha az alkalmazás a háttérbe kerül."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tasti inviati quando chiudi questa connessione o la sua scheda. Non vengono inviati quando la connessione si interrompe, si riconnette o l'app passa in background."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この接続またはそのタブを閉じたときに送信されるキー。接続が切れたとき、再接続したとき、またはアプリがバックグラウンドに移動したときには送信されません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 연결 또는 해당 탭을 닫을 때 보내는 키입니다. 연결이 끊기거나 재연결되거나 앱이 백그라운드로 전환될 때는 보내지 않습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Taster som sendes når du lukker denne tilkoblingen eller fanen. De sendes ikke når tilkoblingen brytes, kobles til på nytt eller når appen går i bakgrunnen."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toetsen die worden verstuurd wanneer je deze verbinding of het bijbehorende tabblad sluit. Ze worden niet verstuurd wanneer de verbinding wegvalt of opnieuw wordt gemaakt, of wanneer de app naar de achtergrond gaat."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klawisze wysyłane po zamknięciu tego połączenia lub jego karty. Nie są wysyłane, gdy połączenie zostanie zerwane, nawiązane ponownie lub aplikacja przejdzie w tło."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teclas enviadas quando você fecha esta conexão ou a aba dela. Não são enviadas quando a conexão cai, é reconectada ou o app vai para o segundo plano."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teclas enviadas quando fecha esta ligação ou o respetivo separador. Não são enviadas quando a ligação cai, volta a ligar ou a app passa para segundo plano."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastele trimise când închizi această conexiune sau fila ei. Nu sunt trimise când conexiunea se întrerupe, se reconectează sau aplicația trece în fundal."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tipke, ki se pošljejo, ko zaprete to povezavo ali njen zavihek. Ne pošljejo se, ko se povezava prekine, znova vzpostavi ali ko se aplikacija premakne v ozadje."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tangenter som skickas när du stänger den här anslutningen eller dess flik. De skickas inte när anslutningen bryts, återansluter eller när appen flyttas till bakgrunden."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Клавіші, що надсилаються, коли ви закриваєте це з'єднання або його вкладку. Вони не надсилаються, коли з'єднання обривається, перепідключається або програма переходить у фоновий режим."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Các phím được gửi khi bạn đóng kết nối này hoặc tab của nó. Chúng không được gửi khi kết nối bị rớt, kết nối lại hoặc ứng dụng chuyển sang chạy nền."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在您关闭此连接或其标签页时发送的按键。连接中断、重新连接或 App 转入后台时不会发送。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在您關閉此連線或其分頁時傳送的按鍵。連線中斷、重新連線或 App 移至背景時不會傳送。"
           }
         }
       }
@@ -452524,6 +453756,316 @@
         }
       }
     },
+    "Lock Screen (Mac)" : {
+      "comment" : "KVM pre-disconnect action",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "قفل الشاشة (Mac)"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bloquejar la pantalla (Mac)"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zamknout obrazovku (Mac)"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lås skærm (Mac)"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildschirm sperren (Mac)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bloquear pantalla (Mac)"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lukitse näyttö (Mac)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verrouiller l’écran (Mac)"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "נעילת מסך (Mac)"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Képernyő zárolása (Mac)"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blocca schermo (Mac)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面をロック（Mac）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "화면 잠금(Mac)"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lås skjerm (Mac)"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vergrendel scherm (Mac)"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zablokuj ekran (Mac)"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bloquear Tela (Mac)"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bloquear ecrã (Mac)"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blocare ecran (Mac)"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zakleni zaslon (Mac)"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lås skärmen (Mac)"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Заблокувати екран (Mac)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khóa màn hình (Mac)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "锁定屏幕（Mac）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "鎖定螢幕（Mac）"
+          }
+        }
+      }
+    },
+    "Lock Screen (Windows, Linux)" : {
+      "comment" : "KVM pre-disconnect action",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "قفل الشاشة (Windows، Linux)"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bloquejar la pantalla (Windows, Linux)"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zamknout obrazovku (Windows, Linux)"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lås skærm (Windows, Linux)"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildschirm sperren (Windows, Linux)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bloquear pantalla (Windows, Linux)"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lukitse näyttö (Windows, Linux)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verrouiller l’écran (Windows, Linux)"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "נעילת מסך (Windows, Linux)"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Képernyő zárolása (Windows, Linux)"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blocca schermo (Windows, Linux)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面をロック（Windows、Linux）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "화면 잠금(Windows, Linux)"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lås skjerm (Windows, Linux)"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vergrendel scherm (Windows, Linux)"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zablokuj ekran (Windows, Linux)"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bloquear Tela (Windows, Linux)"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bloquear ecrã (Windows, Linux)"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blocare ecran (Windows, Linux)"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zakleni zaslon (Windows, Linux)"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lås skärmen (Windows, Linux)"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Заблокувати екран (Windows, Linux)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khóa màn hình (Windows, Linux)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "锁定屏幕（Windows、Linux）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "鎖定螢幕（Windows、Linux）"
+          }
+        }
+      }
+    },
     "Log File Size" : {
       "localizations" : {
         "ar" : {
@@ -453753,6 +455295,161 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "記錄檔儲存於 Documents/.ghostty/vnc_debug.log"
+          }
+        }
+      }
+    },
+    "Log Out (Mac)" : {
+      "comment" : "KVM pre-disconnect action",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تسجيل الخروج (Mac)"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tancar la sessió (Mac)"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Odhlásit (Mac)"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log ud (Mac)"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abmelden (Mac)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cerrar sesión (Mac)"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kirjaa ulos (Mac)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déconnecter l’utilisateur (Mac)"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הוצאת המשתמש (Mac)"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kijelentkeztetés (Mac)"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Termina sessione (Mac)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ログアウト（Mac）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그아웃(Mac)"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logg ut (Mac)"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log uit (Mac)"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wyloguj (Mac)"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Encerrar Sessão (Mac)"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terminar sessão (Mac)"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deconectare (Mac)"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Odjavi (Mac)"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logga ut (Mac)"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Завершити сеанс (Mac)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đăng xuất (Mac)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出登录（Mac）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登出（Mac）"
           }
         }
       }
@@ -503341,6 +505038,160 @@
         }
       }
     },
+    "No Downloads" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لا توجد تنزيلات"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cap descàrrega"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Žádné stažené soubory"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ingen downloads"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Downloads"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay descargas"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ei latauksia"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun téléchargement"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "אין הורדות"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nincsenek letöltések"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nessun download"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ダウンロードなし"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다운로드 없음"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ingen nedlastinger"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geen downloads"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brak pobranych plików"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nenhum Download"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sem Transferências"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicio descărcare"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ni prenosov"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inga nedladdningar"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Немає завантажень"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không có bản tải xuống"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有下载项"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有下載項目"
+          }
+        }
+      }
+    },
     "No ephemeral identities." : {
       "comment" : "Local SSH agent empty ephemeral identities text",
       "localizations" : {
@@ -518774,7 +520625,7 @@
       }
     },
     "None" : {
-      "comment" : "Auth method: no authentication\nBackground effect: no effect active\nBell sound: completely silent\nBookmarked locations: none saved\nCursor effect: no effect\nHTTP capture: no host decrypted\nKey auth requirement: none\nKubernetes auth method: no authentication\nNotification sound: silent\nProfile folder: no folder selected\nQuick setup pair: disable both swipes\nScreen Sharing pre-disconnect action\nSettings status: none configured\nSplit border style: no border\nTailscale SSH egress: none\nTailscale exit node: none\nVNC jump selection\nVNC security preference\nVPN excluded routes: none configured",
+      "comment" : "Auth method: no authentication\nBackground effect: no effect active\nBell sound: completely silent\nBookmarked locations: none saved\nCursor effect: no effect\nHTTP capture: no host decrypted\nKVM pre-disconnect action\nKey auth requirement: none\nKubernetes auth method: no authentication\nNotification sound: silent\nProfile folder: no folder selected\nQuick setup pair: disable both swipes\nScreen Sharing pre-disconnect action\nSettings status: none configured\nSplit border style: no border\nTailscale SSH egress: none\nTailscale exit node: none\nVNC jump selection\nVNC security preference\nVPN excluded routes: none configured",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -579175,6 +581026,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "輸入文字後按 Return"
+          }
+        }
+      }
+    },
+    "Presses Control-Shift-Power. On Windows or Linux the Power key can sleep or shut down the computer." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يضغط Control-Shift-Power. على Windows أو Linux، قد يؤدي مفتاح Power إلى وضع الكمبيوتر في وضع السكون أو إيقاف تشغيله."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prem Control-Shift-Power. Al Windows o al Linux, la tecla Power pot posar l'ordinador en repòs o apagar-lo."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stiskne Control-Shift-Power. Ve Windows nebo Linuxu může klávesa Power počítač uspat nebo vypnout."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trykker på Control-Shift-Power. På Windows eller Linux kan Power-tasten sætte computeren i dvale eller lukke den ned."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drückt Control-Shift-Power. Unter Windows oder Linux kann die Power-Taste den Computer in den Ruhezustand versetzen oder herunterfahren."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulsa Control-Mayús-Encendido. En Windows o Linux, la tecla de encendido puede poner en reposo o apagar el ordenador."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Painaa Control-Shift-Power. Windowsissa tai Linuxissa Power-näppäin voi siirtää tietokoneen lepotilaan tai sammuttaa sen."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Appuie sur Contrôle-Maj-Alimentation. Sous Windows ou Linux, la touche d’alimentation peut mettre l’ordinateur en veille ou l’éteindre."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "לוחץ על Control-Shift-Power. ב-Windows או ב-Linux מקש Power עשוי להעביר את המחשב למצב שינה או לכבות אותו."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lenyomja a Control-Shift-Power billentyűkombinációt. Windows vagy Linux rendszeren a Power billentyű alvó állapotba helyezheti vagy kikapcsolhatja a számítógépet."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preme Control-Maiusc-Accensione. Su Windows o Linux il tasto di accensione può mettere in stop o spegnere il computer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control-Shift-Powerを押します。WindowsまたはLinuxでは、Powerキーでコンピュータがスリープまたはシャットダウンすることがあります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control-Shift-Power를 누릅니다. Windows 또는 Linux에서는 Power 키가 컴퓨터를 잠자기 상태로 만들거나 종료할 수 있습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trykker Control-Shift-Power. På Windows eller Linux kan Power-tasten sette datamaskinen i dvale eller slå den av."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drukt op Control-Shift-Power. Op Windows of Linux kan de Power-toets de computer in de sluimerstand zetten of uitschakelen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Naciska Control-Shift-Power. W systemie Windows lub Linux klawisz Power może uśpić lub wyłączyć komputer."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pressiona Control-Shift-Power. No Windows ou Linux, a tecla Power pode colocar o computador em repouso ou desligá-lo."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prime Control-Shift-Power. No Windows ou Linux, a tecla Power pode suspender ou desligar o computador."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apasă Control-Shift-Power. Pe Windows sau Linux, tasta Power poate pune computerul în repaus sau îl poate opri."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pritisne Control-Shift-Power. V sistemih Windows ali Linux lahko tipka Power računalnik preklopi v stanje spanja ali ga izklopi."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trycker på Control-Shift-Power. På Windows eller Linux kan Power-tangenten försätta datorn i viloläge eller stänga av den."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Натискає Control-Shift-Power. У Windows або Linux клавіша Power може перевести компʼютер у режим сну або вимкнути його."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nhấn Control-Shift-Power. Trên Windows hoặc Linux, phím Power có thể khiến máy tính ngủ hoặc tắt máy."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下 Control-Shift-Power。在 Windows 或 Linux 上，Power 键可能会让电脑进入睡眠或关机。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下 Control-Shift-Power。在 Windows 或 Linux 上，Power 鍵可能會讓電腦進入睡眠或關機。"
           }
         }
       }
@@ -656733,6 +658738,160 @@
         }
       }
     },
+    "Save to Files" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "حفظ في الملفات"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desa a Fitxers"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uložit do Souborů"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gem i Filer"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Dateien sichern"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar en Archivos"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tallenna Tiedostoihin"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer dans Fichiers"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "שמירה ב״קבצים״"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mentés a Fájlokba"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salva in File"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“ファイル”に保存"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일에 저장"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arkiver i Filer"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bewaar in Bestanden"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zachowaj w Plikach"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvar em Arquivos"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar em Ficheiros"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvează în Fișiere"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shrani v Datoteke"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spara i Filer"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Зберегти у Файли"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lưu vào Tệp"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存储到“文件”"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "儲存到「檔案」"
+          }
+        }
+      }
+    },
     "Save your work before restarting the intended herdr server or named session. Stopping a server terminates its pane processes. Installing the new binary alone does not upgrade an already running server." : {
       "localizations" : {
         "ar" : {
@@ -661050,6 +663209,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "螢幕共享除錯記錄"
+          }
+        }
+      }
+    },
+    "Screen Sharing Downloads" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تنزيلات مشاركة الشاشة"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descàrregues de Compartir pantalla"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stažené soubory ze sdílení obrazovky"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skærmdelingsdownloads"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildschirmfreigabe-Downloads"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descargas de Compartir pantalla"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Näytön jakamisen lataukset"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Téléchargements du partage d’écran"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הורדות שיתוף מסך"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Képernyőmegosztási letöltések"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download della condivisione schermo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面共有のダウンロード"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "화면 공유 다운로드"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skjermdelingsnedlastinger"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloads van schermdelen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pobrane pliki udostępniania ekranu"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloads do Compartilhamento de Tela"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transferências da Partilha de Ecrã"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descărcări din partajarea ecranului"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prenosi skupne rabe zaslona"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nedladdningar från skärmdelning"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Завантаження спільного доступу до екрана"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bản tải xuống từ chia sẻ màn hình"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "屏幕共享下载项"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "螢幕共享下載項目"
           }
         }
       }
@@ -679114,7 +681427,7 @@
       }
     },
     "Send Ctrl-Alt-Del" : {
-      "comment" : "Screen Sharing pre-disconnect action",
+      "comment" : "KVM pre-disconnect action\nScreen Sharing pre-disconnect action",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -720088,6 +722401,161 @@
         }
       }
     },
+    "Sleep Display (Mac)" : {
+      "comment" : "KVM pre-disconnect action",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "وضع الشاشة في السكون (Mac)"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Posar la pantalla en repòs (Mac)"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uspat displej (Mac)"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sæt skærm i dvale (Mac)"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Display in Ruhezustand versetzen (Mac)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Poner pantalla en reposo (Mac)"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Siirrä näyttö lepotilaan (Mac)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mettre l’écran en veille (Mac)"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "העברת המסך למצב שינה (Mac)"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kijelző altatása (Mac)"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metti in stop lo schermo (Mac)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ディスプレイをスリープ（Mac）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "디스플레이 잠자기(Mac)"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sett skjermen i dvale (Mac)"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zet beeldscherm in sluimerstand (Mac)"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uśpij ekran (Mac)"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Colocar Tela em Repouso (Mac)"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suspender ecrã (Mac)"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Punere afișaj în repaus (Mac)"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uspavaj zaslon (Mac)"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Försätt skärmen i vila (Mac)"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Перевести дисплей у режим сну (Mac)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cho màn hình ngủ (Mac)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让显示器进入睡眠（Mac）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "讓顯示器進入睡眠（Mac）"
+          }
+        }
+      }
+    },
     "Sleet" : {
       "comment" : "Weather condition",
       "localizations" : {
@@ -727045,6 +729513,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "空白鍵行為"
+          }
+        }
+      }
+    },
+    "Space Used" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "المساحة المستخدمة"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Espai utilitzat"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Využité místo"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brugt plads"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belegter Speicherplatz"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Espacio usado"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Käytetty tila"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Espace utilisé"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "נפח בשימוש"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Felhasznált tárhely"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spazio utilizzato"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用済み容量"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용된 공간"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brukt plass"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gebruikte ruimte"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zajęte miejsce"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Espaço Usado"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Espaço utilizado"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spațiu utilizat"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Porabljen prostor"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Använt utrymme"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Використане місце"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dung lượng đã dùng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已用空间"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已使用空間"
           }
         }
       }
@@ -797807,6 +800429,160 @@
         }
       }
     },
+    "The KVM connection is not active, so the keys could not be sent." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "اتصال KVM غير نشط، لذا تعذّر إرسال المفاتيح."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La connexió KVM no està activa, per tant no s'han pogut enviar les tecles."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Připojení ke KVM není aktivní, takže klávesy nebylo možné odeslat."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM-forbindelsen er ikke aktiv, så tasterne kunne ikke sendes."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die KVM-Verbindung ist nicht aktiv, daher konnten die Tasten nicht gesendet werden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La conexión KVM no está activa, por lo que no se pudieron enviar las teclas."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM-yhteys ei ole aktiivinen, joten näppäimiä ei voitu lähettää."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La connexion KVM n’est pas active, les touches n’ont donc pas pu être envoyées."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "חיבור ה-KVM אינו פעיל, ולכן לא ניתן היה לשלוח את המקשים."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A KVM-kapcsolat nem aktív, ezért a billentyűket nem sikerült elküldeni."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La connessione KVM non è attiva, quindi i tasti non sono stati inviati."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM接続がアクティブでないため、キーを送信できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM 연결이 활성 상태가 아니어서 키를 보내지 못했습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM-tilkoblingen er ikke aktiv, så tastene kunne ikke sendes."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De KVM-verbinding is niet actief, dus de toetsen konden niet worden verstuurd."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Połączenie z KVM nie jest aktywne, więc nie można było wysłać klawiszy."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A conexão KVM não está ativa, então as teclas não puderam ser enviadas."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A ligação ao KVM não está ativa, por isso não foi possível enviar as teclas."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conexiunea KVM nu este activă, așa că tastele nu au putut fi trimise."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Povezava KVM ni aktivna, zato tipk ni bilo mogoče poslati."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM-anslutningen är inte aktiv, så tangenterna kunde inte skickas."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "З'єднання з KVM неактивне, тому клавіші не вдалося надіслати."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kết nối KVM không hoạt động nên không thể gửi các phím."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM 连接未处于活跃状态，因此无法发送按键。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM 連線未啟用，因此無法傳送按鍵。"
+          }
+        }
+      }
+    },
     "The KVM didn't respond in time." : {
       "localizations" : {
         "ar" : {
@@ -798887,6 +801663,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "KVM 工作階段已過期。"
+          }
+        }
+      }
+    },
+    "The KVM was still sending earlier input, so the keys were not sent." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "كان جهاز KVM لا يزال يرسل إدخالاً سابقاً، لذا لم تُرسل المفاتيح."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El KVM encara enviava entrades anteriors, per tant no s'han enviat les tecles."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM ještě odesílal dřívější vstup, takže klávesy nebyly odeslány."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM'en sendte stadig tidligere input, så tasterne blev ikke sendt."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das KVM hat noch frühere Eingaben gesendet, daher wurden die Tasten nicht gesendet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El KVM aún estaba enviando una entrada anterior, por lo que no se enviaron las teclas."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM lähetti vielä aiempaa syötettä, joten näppäimiä ei lähetetty."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le KVM envoyait encore une saisie précédente, les touches n’ont donc pas été envoyées."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ה-KVM עדיין שלח קלט קודם, ולכן המקשים לא נשלחו."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A KVM még korábbi bevitelt küldött, ezért a billentyűk nem lettek elküldve."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il KVM stava ancora inviando l'input precedente, quindi i tasti non sono stati inviati."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVMが以前の入力をまだ送信中だったため、キーは送信されませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM이 이전 입력을 아직 보내는 중이어서 키를 보내지 않았습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM-en sendte fortsatt tidligere inndata, så tastene ble ikke sendt."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De KVM was nog eerdere invoer aan het versturen, dus de toetsen zijn niet verstuurd."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM nadal wysyłał wcześniejsze dane wejściowe, więc klawisze nie zostały wysłane."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O KVM ainda estava enviando entradas anteriores, então as teclas não foram enviadas."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O KVM ainda estava a enviar a entrada anterior, por isso as teclas não foram enviadas."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM-ul încă trimitea intrări anterioare, așa că tastele nu au fost trimise."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM je še pošiljal prejšnji vnos, zato tipke niso bile poslane."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM:en skickade fortfarande tidigare inmatning, så tangenterna skickades inte."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM ще надсилав попереднє введення, тому клавіші не надіслано."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM vẫn đang gửi dữ liệu nhập trước đó nên các phím chưa được gửi."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM 仍在发送之前的输入，因此未发送按键。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KVM 仍在傳送先前的輸入，因此未傳送按鍵。"
           }
         }
       }
@@ -803202,6 +806132,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "儲存時會移除已儲存的電腦密碼。"
+          }
+        }
+      }
+    },
+    "The saved keyboard shortcut can't be typed with the computer's keyboard layout." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لا يمكن كتابة اختصار لوحة المفاتيح المحفوظ باستخدام تخطيط لوحة مفاتيح الكمبيوتر."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La drecera de teclat desada no es pot escriure amb la disposició de teclat de l'ordinador."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uloženou klávesovou zkratku nelze napsat v rozložení klávesnice počítače."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Den gemte tastaturgenvej kan ikke skrives med computerens tastaturlayout."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der gespeicherte Tastenkurzbefehl kann mit dem Tastaturlayout des Computers nicht eingegeben werden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El atajo de teclado guardado no se puede escribir con la disposición de teclado del ordenador."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tallennettua pikanäppäintä ei voi kirjoittaa tietokoneen näppäimistöasettelulla."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le raccourci clavier enregistré ne peut pas être saisi avec la disposition de clavier de l’ordinateur."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "לא ניתן להקליד את קיצור המקלדת השמור בפריסת המקלדת של המחשב."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A mentett billentyűparancs nem gépelhető be a számítógép billentyűzetkiosztásával."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La scorciatoia da tastiera salvata non può essere digitata con il layout di tastiera del computer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存されたキーボードショートカットは、コンピュータのキーボードレイアウトでは入力できません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 키보드 단축키는 컴퓨터의 키보드 레이아웃으로 입력할 수 없습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Den arkiverte tastatursnarveien kan ikke skrives med datamaskinens tastaturoppsett."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De bewaarde sneltoets kan niet worden getypt met de toetsenbordindeling van de computer."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zapisanego skrótu klawiszowego nie można wpisać w układzie klawiatury komputera."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O atalho de teclado salvo não pode ser digitado com o layout de teclado do computador."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O atalho de teclado guardado não pode ser escrito com a disposição de teclado do computador."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scurtătura de tastatură salvată nu poate fi tastată cu aspectul de tastatură al computerului."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shranjene bližnjice na tipkovnici ni mogoče vnesti s postavitvijo tipkovnice računalnika."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Den sparade tangentbordsgenvägen kan inte skrivas med datorns tangentbordslayout."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Збережене клавіатурне скорочення неможливо ввести з розкладкою клавіатури компʼютера."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể nhập phím tắt đã lưu bằng bố cục bàn phím của máy tính."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存的键盘快捷键无法使用电脑的键盘布局键入。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已儲存的鍵盤快速鍵無法使用電腦的鍵盤佈局鍵入。"
           }
         }
       }
