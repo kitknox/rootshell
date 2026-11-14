@@ -351,8 +351,11 @@ class KeyboardAccessoryView: UIInputView {
     // MARK: - Public Methods
 
     func updateForTraitCollection(_ traitCollection: UITraitCollection) {
-        let newSizes = KeyboardSizes.current(traitCollection: traitCollection)
-        toolbarView.updateSizes(newSizes)
+        updateSizes(KeyboardSizes.current(traitCollection: traitCollection))
+    }
+
+    func updateSizes(_ sizes: KeyboardSizes) {
+        toolbarView.updateSizes(sizes)
         invalidateLayoutAndNotify()
     }
 
