@@ -111,8 +111,74 @@ final class MenuShortcutState: ObservableObject {
         let forwards = remoteShortcutPanes.values.contains { $0.view?.window?.isKeyWindow == true }
         guard forwards != forwardsShortcutsToRemoteScreen else { return }
         forwardsShortcutsToRemoteScreen = forwards
+        #if targetEnvironment(macCatalyst)
+        setWindowTabShortcuts(released: forwards)
+        if forwards { installMinimizeKeyMonitor() }
+        #endif
         rebuildShortcuts()
     }
+
+    #if targetEnvironment(macCatalyst)
+    private var restoresWindowTabbing = false
+    private var minimizeKeyMonitor: AnyObject?
+
+    /// Command-M minimizes the window even with the menu shortcut removed,
+    /// but a window that cannot minimize lets the key through. AppKit's key
+    /// monitor runs before the shortcut is handled, so minimizing is off
+    /// only for that one key press.
+    private func installMinimizeKeyMonitor() {
+        guard minimizeKeyMonitor == nil,
+              let eventClass = NSClassFromString("NSEvent"),
+              let metaclass = object_getClass(eventClass) else { return }
+        let selector = NSSelectorFromString("addLocalMonitorForEventsMatchingMask:handler:")
+        guard let implementation = class_getMethodImplementation(metaclass, selector) else { return }
+        typealias Handler = @convention(block) (NSObject) -> NSObject?
+        typealias AddMonitor = @convention(c) (AnyClass, Selector, UInt64, Handler) -> AnyObject?
+        let handler: Handler = { event in
+            MainActor.assumeIsolated {
+                MenuShortcutState.shared.keyDownWillDispatch(
+                    characters: event.value(forKey: "charactersIgnoringModifiers") as? String,
+                    modifierFlags: event.value(forKey: "modifierFlags") as? UInt ?? 0)
+            }
+            return event
+        }
+        // Key-down events.
+        minimizeKeyMonitor = unsafeBitCast(implementation, to: AddMonitor.self)(
+            eventClass, selector, 1 << 10, handler)
+    }
+
+    private func keyDownWillDispatch(characters: String?, modifierFlags: UInt) {
+        // Shift, Control, Option, Command; only Command set.
+        let miniaturizable: UInt = 1 << 2
+        guard forwardsShortcutsToRemoteScreen, characters == "m",
+              modifierFlags & 0x1E0000 == 1 << 20,
+              let appClass = NSClassFromString("NSApplication") as? NSObject.Type,
+              let app = appClass.value(forKey: "sharedApplication") as? NSObject,
+              let window = app.value(forKey: "keyWindow") as? NSObject,
+              let mask = window.value(forKey: "styleMask") as? UInt,
+              mask & miniaturizable != 0 else { return }
+        window.setValue(mask & ~miniaturizable, forKey: "styleMask")
+        DispatchQueue.main.async {
+            guard let mask = window.value(forKey: "styleMask") as? UInt else { return }
+            window.setValue(mask | miniaturizable, forKey: "styleMask")
+        }
+    }
+
+    /// AppKit adds its tab items (Show Next Tab on Control-Tab, Show All
+    /// Tabs on Shift-Command-Backslash) outside the menu builder.
+    private func setWindowTabShortcuts(released: Bool) {
+        guard let windowClass = NSClassFromString("NSWindow") as? NSObject.Type else { return }
+        let key = "allowsAutomaticWindowTabbing"
+        if released {
+            guard windowClass.value(forKey: key) as? Bool == true else { return }
+            restoresWindowTabbing = true
+            windowClass.setValue(false, forKey: key)
+        } else if restoresWindowTabbing {
+            restoresWindowTabbing = false
+            windowClass.setValue(true, forKey: key)
+        }
+    }
+    #endif
 
     /// Drop menu key equivalents while a shortcut is being recorded so the
     /// capture view's `keyCommands` see the physical chord. Otherwise the menu

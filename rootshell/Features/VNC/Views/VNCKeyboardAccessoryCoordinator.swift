@@ -104,10 +104,16 @@ final class VNCKeyboardAccessoryCoordinator {
         observeCapture()
         #if targetEnvironment(macCatalyst) && STANDALONE
         // Capture stays on under the credential prompts, which take local text.
+        keyboardCapture.sendsSystemSpaceShortcuts = true
+        updateAppSwitcherShortcut()
         RemoteInputSourceHotKeys.shared.register(self) { [weak self] in
             guard let self, let pane = self.pane else { return false }
-            return self.keyboardIsFirstResponder && pane.remoteSessionIsConnected
+            // A local prompt can hold the keyboard with capture still on.
+            return self.keyboardIsFirstResponder && self.keyboardCapture.remoteInputIsFirstResponder
+                && pane.remoteSessionIsConnected
                 && pane.window?.isKeyWindow == true
+        } takesOtherAppHotKeys: { [weak self] in
+            self?.keyboardCapture.routesReservedHostShortcutsToVNC == true
         }
         observeRemoteConnection()
         #endif
@@ -191,13 +197,21 @@ final class VNCKeyboardAccessoryCoordinator {
     }
 
     #if targetEnvironment(macCatalyst) && STANDALONE
+    /// The local app switcher is off only while other apps' hot keys are.
+    private func updateAppSwitcherShortcut() {
+        keyboardCapture.sendsAppSwitcherShortcut = keyboardCapture.routesReservedHostShortcutsToVNC
+    }
+
     private func observeRemoteConnection() {
         withObservationTracking {
             _ = pane?.remoteSessionIsConnected
+            _ = keyboardCapture.routesReservedHostShortcutsToVNC
+            _ = keyboardCapture.remoteInputIsFirstResponder
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.observeRemoteConnection()
+                self.updateAppSwitcherShortcut()
                 RemoteInputSourceHotKeys.shared.update()
             }
         }

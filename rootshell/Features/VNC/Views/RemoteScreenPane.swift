@@ -87,7 +87,8 @@ extension RemoteScreenPane {
     func observeMenuShortcutForwarding() {
         #if targetEnvironment(macCatalyst)
         _ = withObservationTracking {
-            (keyboardCapture.isCaptured, keyboardCapture.routesReservedHostShortcutsToVNC)
+            (keyboardCapture.isCaptured, keyboardCapture.routesReservedHostShortcutsToVNC,
+             keyboardCapture.remoteInputIsFirstResponder)
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 self?.observeMenuShortcutForwarding()
@@ -97,11 +98,13 @@ extension RemoteScreenPane {
         #endif
     }
 
-    /// Also called on window moves, which the observation cannot see.
+    /// Also called on window moves, which the observation cannot see. A
+    /// local prompt can hold the keyboard with capture still on.
     func reportMenuShortcutForwarding() {
         #if targetEnvironment(macCatalyst)
         MenuShortcutState.shared.setRemoteScreenPane(self, forwardsShortcuts:
-            keyboardCapture.isCaptured && keyboardCapture.routesReservedHostShortcutsToVNC)
+            keyboardCapture.isCaptured && keyboardCapture.routesReservedHostShortcutsToVNC
+                && keyboardCapture.remoteInputIsFirstResponder)
         #endif
     }
 }

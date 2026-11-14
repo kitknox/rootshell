@@ -1082,6 +1082,7 @@ class CatalystAppDelegate: AppDelegate {
         #endif
 
         releaseClaimedSystemKeyEquivalents(builder)
+        releaseRemoteScreenSystemKeyEquivalents(builder)
 
         // On macOS 26+ (macCatalyst 26.0): SwiftUI Commands handle the rest
         if #available(macCatalyst 26.0, *) {
@@ -1209,6 +1210,19 @@ class CatalystAppDelegate: AppDelegate {
 
     /// Legacy menus carry fixed chords, so drop them like the SwiftUI rail
     /// does while MenuShortcutState forwards shortcuts to a remote screen.
+    /// Stock menus whose enabled items (Quit, Hide, Minimize, Settings, …)
+    /// would otherwise act here instead of reaching the remote screen.
+    private static let remoteScreenReleasedMenus: [UIMenu.Identifier] =
+        systemKeyEquivalentMenus + [.preferences, .toolbar, .sidebar, .print]
+
+    private func releaseRemoteScreenSystemKeyEquivalents(_ builder: UIMenuBuilder) {
+        guard MenuShortcutState.shared.forwardsShortcutsToRemoteScreen else { return }
+        for identifier in Self.remoteScreenReleasedMenus {
+            guard let menu = builder.menu(for: identifier) else { continue }
+            builder.replace(menu: identifier, with: releasingRemoteScreenKeyEquivalents(menu))
+        }
+    }
+
     private func releasingRemoteScreenKeyEquivalents(_ menu: UIMenu) -> UIMenu {
         menu.replacingChildren(releasingRemoteScreenKeyEquivalents(menu.children))
     }
