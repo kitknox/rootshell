@@ -3,6 +3,40 @@
 All notable changes to the rootshell app for iPhone, iPad, Vision Pro, and Mac, newest first.
 Versions are listed as `release-build`, matching the version shown in Settings, About.
 
+## 1.0.16-178 - November 14, 2026
+
+### Terminal, Tailscale and Shortcuts
+
+- **Terminal Scrolling:** Reduced scroll stutter from agent and task detection by sharing detection work, limiting scan time, and deferring scans during scrolling.
+- **macOS Touch:** Selection handles and normal touch response return sooner after a scroll bounce stops at an edge.
+- **Screen Sharing over Tailscale:** rootshell Only Tailscale connections, including bare peer names, now count as mesh VPN paths. Automatic High Performance bandwidth selects Low Bandwidth, and the connection warning applies to these paths too.
+- **Local Shell Shortcuts:** The Open Local Shell action in Shortcuts adds an optional Command to run in the new tab, alongside Directory.
+
+### Screen Sharing and KVM: iPhone and iPad Keyboard
+
+- **Composed Input:** Fixed CJK and other composed software-keyboard input. Composition stays local until committed, so selecting candidates or deleting unfinished text no longer sends partial input remotely. Improved accented-character and multi-code-point input.
+- **Returning to the App:** The on-screen keyboard returns after switching away and back. Screen Sharing avoids unnecessary Match Client display resizes during that switch, reducing stale frames and repeated remote resizes.
+- **Opening Screen Sharing:** Opening a Screen Sharing tab dismisses the previous terminal's keyboard while the connection starts.
+- **iPhone Duo Toolbar:** The Screen Sharing and KVM keyboard toolbar keeps compact phone sizing, including after display changes.
+
+### Screen Sharing and KVM: Mac Shortcuts
+
+- **Reserved Shortcuts:** Send Reserved Shortcuts forwards more menu and window shortcuts, including Command-Q, Command-H, Command-M, and Control-Tab. Remote shortcut forwarding pauses while a local credential prompt holds the keyboard.
+- **Standalone Input Capture:** Captured sessions can receive Spotlight shortcuts (Command-Space and Command-Option-Space) and Command-Grave for remote window switching. With Send Reserved Shortcuts enabled, Command-Tab and shortcuts registered by other local apps can also reach the remote computer. Command-Shift-M stays local to toggle capture.
+- **Remote Keyboard Focus:** Remote Tab and Space shortcuts no longer move focus to or activate local controls. Held modifiers keep remote switchers open until released.
+
+### Screen Sharing: Downloads and Clipboard
+
+- **Downloads Settings:** Added Settings > Screen Sharing > Downloads to find files and folders left by Drag to Download, including earlier sessions, without reconnecting. View storage used, Save to Files, share, delete individual items, or Clear All.
+- **Download Cleanup:** Downloads in progress are excluded from cleanup. Deleting removes the local temporary copy; remote originals and files saved elsewhere are unaffected. The system may remove temporary downloads when storage runs low.
+- **macOS Shared Clipboard:** Content copied in another app is sent when you return to rootshell. Switching between rootshell windows avoids forwarding another session's clipboard to the wrong remote computer.
+
+### GL.iNet Comet KVM: Before Disconnecting
+
+- **Connection Actions:** Added a per-connection Before Disconnecting action to sleep a Mac display, lock a Mac, Windows, or Linux screen, log out a Mac, send Ctrl-Alt-Del, or send a custom keyboard shortcut. Shortcuts use the configured computer keyboard layout.
+- **Closing and Failures:** Actions run when closing the connection, pane, or tab, excluding network drops, reconnects, and backgrounding. Failed actions offer Stay Connected or Disconnect Anyway.
+- **Logout and Sleep:** Mac logout skips confirmation; unsaved changes may still block it. Sleep Display sends Control-Shift-Power, which can sleep or shut down a Windows or Linux computer.
+
 ## 1.0.16-177 - November 13, 2026
 
 ### macOS
