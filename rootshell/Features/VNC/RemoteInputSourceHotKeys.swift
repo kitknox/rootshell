@@ -3,7 +3,8 @@
 //  rootshell
 //
 //  Turns off system shortcuts for this app while a remote screen in the key
-//  window holds keyboard capture, so they reach the remote.
+//  window holds keyboard capture, so they reach the remote. Modifier presses
+//  are kept from the local input method for the same reason.
 //
 
 #if targetEnvironment(macCatalyst) && STANDALONE
@@ -101,6 +102,8 @@ final class RemoteInputSourceHotKeys {
     func update() {
         claims = claims.filter { $0.value.owner != nil }
         let wanted = claims.values.contains { $0.isActive() }
+        LocalInputMethodModifierGate.hidesModifierChanges =
+            wanted && LocalInputMethodModifierGate.installed
         guard let skyLight else { return }
         let wantsGlobal = Self.applicationIsActive
             && claims.values.contains { $0.isActive() && $0.takesOtherAppHotKeys() }
@@ -128,6 +131,31 @@ final class RemoteInputSourceHotKeys {
               let app = appClass.value(forKey: "sharedApplication") as? NSObject else { return false }
         return app.value(forKey: "isActive") as? Bool ?? false
     }
+}
+
+/// The Mac input view offers each modifier change to the local input method
+/// before UIKit, where a lone Shift switches its typing mode. Excluding the
+/// event skips only that step; UIKit still gets the modifier press.
+private enum LocalInputMethodModifierGate {
+    nonisolated(unsafe) static var hidesModifierChanges = false
+
+    /// False when the input view has no such check; nothing is hidden then.
+    static let installed: Bool = {
+        let selector = NSSelectorFromString("_shouldExcludeEventFromInputContext:")
+        guard let inputView = NSClassFromString("UINSInputView"),
+              let method = class_getInstanceMethod(inputView, selector) else { return false }
+        typealias Original = @convention(c) (AnyObject, Selector, AnyObject) -> Bool
+        let original = unsafeBitCast(method_getImplementation(method), to: Original.self)
+        let replacement: @convention(block) (AnyObject, AnyObject) -> Bool = { view, event in
+            // 12 is a modifier flags change.
+            if hidesModifierChanges, (event as? NSObject)?.value(forKey: "type") as? UInt == 12 {
+                return true
+            }
+            return original(view, selector, event)
+        }
+        method_setImplementation(method, imp_implementationWithBlock(replacement))
+        return true
+    }()
 }
 
 #endif
