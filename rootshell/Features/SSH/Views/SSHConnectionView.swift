@@ -1436,12 +1436,24 @@ struct SSHConnectionView: View {
     private func connectionTypeTabButton(for type: ConnectionType) -> some View {
         let isSelected = connectionType == type
 
+#if targetEnvironment(macCatalyst)
+        // On macOS 27 a Button in this strip stops receiving clicks on the
+        // chips before the selected glass capsule (#763). A tap gesture does not.
+        return connectionTypeTabLabel(for: type, isSelected: isSelected)
+            .contentShape(Capsule())
+            .onTapGesture {
+                selectConnectionType(type)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+#else
         return Button {
             selectConnectionType(type)
         } label: {
             connectionTypeTabLabel(for: type, isSelected: isSelected)
         }
         .buttonStyle(.plain)
+#endif
     }
 
     private func connectionTypeTabLabel(
