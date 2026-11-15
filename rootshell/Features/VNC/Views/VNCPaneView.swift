@@ -1456,25 +1456,23 @@ struct VNCPaneRootView: View {
                     },
                     hostOwnsRecoveryChrome: true,
                     brightnessGain: brightnessManager.effectiveGain,
-                    hudMenuExtras: {
-                        Menu {
+                    hudMenuExtras: VNCHUDMenuExtras(
+                        display: { VNCQuickModeMenu(pane: pane) },
+                        keyboard: {
                             #if !os(visionOS) && !targetEnvironment(macCatalyst)
                             VNCKeyboardToolbarMenuToggle(pane: pane)
                             if let coordinator = pane.keyboardCoordinator {
                                 RemoteScreenFloatingToolbarMenuToggle(coordinator: coordinator)
                             }
                             #endif
-                            VNCQuickModeMenu(pane: pane)
-                            VNCConnectionInfoMenuItem(pane: pane)
-                        } label: {
-                            Label("Session", systemImage: "gearshape")
-                        }
-                    }
+                        },
+                        session: { VNCConnectionInfoMenuItem(pane: pane) })
                 )
                 #if !os(visionOS) && !targetEnvironment(macCatalyst)
                 .hudAccessory(
                     isEnabled: pane.keyboardCoordinator?.hudModel.barEnabled ?? false,
                     docksToBottom: pane.keyboardCoordinator?.hudModel.docksToBottom ?? false,
+                    providesKeyboardButton: pane.keyboardCoordinator?.hudModel.showsKeysButton ?? false,
                     buttonStyle: { width in
                         pane.keyboardCoordinator?.hudModel.buttonStyle(availableWidth: width) ?? .standard
                     },
@@ -2119,25 +2117,22 @@ private struct VNCQuickModeMenu: View {
     }
 
     var body: some View {
-        Menu {
+        Picker(selection: Binding(
+            get: { selectedMode },
+            set: { mode in
+                if let mode, mode != selectedMode { pane.switchQuickMode(mode) }
+            }
+        )) {
             ForEach(VNCQuickMode.allCases, id: \.self) { mode in
-                Button {
-                    pane.switchQuickMode(mode)
-                } label: {
-                    Label(
-                        mode.title,
-                        systemImage: selectedMode == mode ? "checkmark" : mode.systemImage
-                    )
-                }
-                .disabled(
-                    !session.connectionState.isConnected
-                        || selectedMode == mode
-                        || (mode.requiresHighPerformance && !highPerformanceAvailable)
-                )
+                Label(mode.title, systemImage: mode.systemImage)
+                    .tag(Optional(mode))
+                    .selectionDisabled(mode.requiresHighPerformance && !highPerformanceAvailable)
             }
         } label: {
             Label("Connection Mode", systemImage: "rectangle.connected.to.line.below")
         }
+        .pickerStyle(.menu)
+        .disabled(!session.connectionState.isConnected)
     }
 
     private var selectedMode: VNCQuickMode? {
@@ -2183,7 +2178,7 @@ private struct VNCKeyboardToolbarMenuToggle: View {
             get: { pane.effectiveKeyboardToolbarPreference != .off },
             set: { pane.setKeyboardToolbarEnabled($0) }
         )) {
-            Label("Keyboard Toolbar", systemImage: "keyboard")
+            Label("Keyboard Toolbar", systemImage: "ellipsis.rectangle")
         }
     }
 }

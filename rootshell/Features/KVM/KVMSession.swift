@@ -698,7 +698,8 @@ final class KVMSession {
                 guard let self else { return }
                 if down { self.noteUserInput() }
                 self.enqueue(self.translator.physicalKey(down: down, usage: usage))
-            })
+            },
+            commandPlatform: { [config] in config.computerType == .mac ? .mac : .other })
     }
 
     /// Toolbar keys arrive as keysyms, the same as the package's own keys.

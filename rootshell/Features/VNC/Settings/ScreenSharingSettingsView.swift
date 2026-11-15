@@ -53,7 +53,7 @@ struct ScreenSharingSettingsView: View {
                 Toggle(isOn: $routeReservedShortcutsToVNCDefault) {
                     HStack(spacing: 12) {
                         SettingsIcon(systemName: "keyboard.badge.ellipsis")
-                        Text("Route Reserved Shortcuts to VNC")
+                        Text("Route Reserved Shortcuts to Remote Computer")
                     }
                     .settingRow(Settings.ScreenSharing.routeReservedShortcutsToVNCDefault)
                 }

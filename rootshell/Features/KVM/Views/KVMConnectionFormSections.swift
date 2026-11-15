@@ -18,6 +18,7 @@ struct KVMFormState: Hashable {
     var automaticallyEnterFullScreen = false
     var hostKeyboardLayout = KVMInputTranslator.usLayout
     var reverseScrolling = false
+    var computerType = KVMComputerType.mac
     var automaticallyWakeDisplay = true
     /// Profile editor only. Blank keeps the saved computer password.
     var hostPassword = ""
@@ -39,6 +40,7 @@ struct KVMFormState: Hashable {
         automaticallyEnterFullScreen = config.automaticallyEnterFullScreen
         hostKeyboardLayout = config.hostKeyboardLayout
         reverseScrolling = config.reverseScrolling
+        computerType = config.computerType
         automaticallyWakeDisplay = config.automaticallyWakeDisplay
         promptForHostPasswordAtLoginScreen = config.promptForHostPasswordAtLoginScreen
         preDisconnect = config.preDisconnectAction
@@ -71,6 +73,7 @@ struct KVMFormState: Hashable {
             automaticallyEnterFullScreen: automaticallyEnterFullScreen,
             hostKeyboardLayout: hostKeyboardLayout,
             reverseScrolling: reverseScrolling,
+            computerType: computerType,
             automaticallyWakeDisplay: automaticallyWakeDisplay,
             promptForHostPasswordAtLoginScreen: promptForHostPasswordAtLoginScreen,
             preDisconnectAction: preDisconnect.normalized)
@@ -143,6 +146,18 @@ struct KVMConnectionFormSections: View {
 
         if showsHostPassword {
             hostPasswordSection
+        }
+
+        Section {
+            Picker("Computer Type", selection: $form.computerType) {
+                Text("Mac").tag(KVMComputerType.mac)
+                Text("Windows or Linux").tag(KVMComputerType.pc)
+            }
+            .themedRow()
+        } header: {
+            Text("Computer")
+        } footer: {
+            Text("Chooses the shortcuts the session's Commands menu sends, such as Command-C or Control-C for Copy.")
         }
 
         Section {
@@ -268,7 +283,7 @@ struct KVMConnectionFormSections: View {
         } header: {
             Text("Computer Password")
         } footer: {
-            Text("Optional. The password of the computer connected to the KVM, which is usually different from the KVM's own. Type it with Type Computer Password in the session menu, or when a login or lock screen is detected. It's saved in iCloud Keychain and only typed after you confirm.")
+            Text("Optional. The password of the computer connected to the KVM, which is usually different from the KVM's own. Type it with Type Password in the session menu, or when a login or lock screen is detected. It's saved in iCloud Keychain and only typed after you confirm.")
         }
     }
 }

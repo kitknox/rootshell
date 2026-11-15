@@ -953,7 +953,7 @@ struct SettingsSearchEntry: Identifiable, Hashable {
             // MARK: Screen Sharing
             row("screen-sharing-ctrl-opt", String(localized: "Control+Option as Command"), in: .screenSharing, icon: "keyboard",
                 keywords: ["hardware keyboard", "command key", "vnc", "mac"]),
-            row("screen-sharing-reserved", String(localized: "Route Reserved Shortcuts to VNC"), in: .screenSharing, icon: "keyboard.badge.ellipsis",
+            row("screen-sharing-reserved", String(localized: "Route Reserved Shortcuts to Remote Computer"), in: .screenSharing, icon: "keyboard.badge.ellipsis",
                 keywords: ["reserved shortcuts", "keyboard", "vnc"]),
             row("screen-sharing-floating-toolbar", String(localized: "Floating Keyboard Toolbar"), in: .screenSharing, icon: "rectangle.bottomthird.inset.filled",
                 keywords: ["toolbar", "floating", "docked", "glass", "keys", "drag", "keyboard", "remote screen"],

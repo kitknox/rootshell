@@ -308,7 +308,7 @@ nonisolated extension Settings {
         static let routeReservedShortcutsToVNCDefault = SettingKey(
             "screenSharingRouteReservedShortcutsToVNCDefault", default: true, group: .screenSharing,
             configKey: "screen-sharing-route-reserved-shortcuts-to-vnc-default",
-            title: String(localized: "Route Reserved Shortcuts to VNC", comment: "Setting title"))
+            title: String(localized: "Route Reserved Shortcuts to Remote Computer", comment: "Setting title"))
         static let controlOptionAsCommandDefault = SettingKey(
             "screenSharingControlOptionAsCommandDefault", default: true, group: .screenSharing,
             configKey: "screen-sharing-control-option-as-command-default",
