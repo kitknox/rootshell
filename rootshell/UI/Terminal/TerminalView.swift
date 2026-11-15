@@ -5048,7 +5048,7 @@ extension Ghostty.TerminalView: TerminalKeyboardAccessoryHost {
     }
 
     func keyboardUpdateAccessoryForTraitCollection() {
-        keyboardAccessory?.updateForTraitCollection(traitCollection)
+        keyboardAccessory?.updateSizes(keyboardSizes)
     }
 
     func keyboardPaste() {

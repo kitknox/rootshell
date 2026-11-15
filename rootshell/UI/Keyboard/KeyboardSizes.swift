@@ -91,8 +91,9 @@ struct KeyboardSizes {
         #endif
     }
 
-    /// Screen Sharing keeps the Duo's regular-width inner display on phone sizes.
-    static func screenSharing(traitCollection: UITraitCollection) -> KeyboardSizes {
+    /// The terminal and Screen Sharing toolbars keep the Duo's regular-width
+    /// inner display on phone sizes.
+    static func accessory(traitCollection: UITraitCollection) -> KeyboardSizes {
         guard DuoHingeEvents.hasHinge else { return current(traitCollection: traitCollection) }
         return traitCollection.verticalSizeClass == .compact ? .iPhoneLandscape : .iPhonePortrait
     }

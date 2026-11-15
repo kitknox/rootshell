@@ -57,9 +57,6 @@ final class VNCKeyboardAccessoryCoordinator {
     /// keyboard is summoned again.
     private var manuallyDismissed = false
 
-    /// Hinge detection can land after setup; the trait change alone would miss it.
-    private var duoDisplayTask: Task<Void, Never>?
-
     #if !os(visionOS) && !targetEnvironment(macCatalyst)
     let hudModel = RemoteScreenHUDKeysModel()
     #endif
@@ -126,15 +123,9 @@ final class VNCKeyboardAccessoryCoordinator {
                 self?.keyboardUpdateAccessoryForTraitCollection()
             }
         }
-        duoDisplayTask = Task { @MainActor [weak self] in
-            for await _ in NotificationCenter.default.notifications(named: .duoDisplayDidChange) {
-                self?.keyboardUpdateAccessoryForTraitCollection()
-            }
-        }
     }
 
     func tearDown() {
-        duoDisplayTask?.cancel()
         #if targetEnvironment(macCatalyst) && STANDALONE
         RemoteInputSourceHotKeys.shared.unregister(self)
         #endif
@@ -518,7 +509,6 @@ extension VNCKeyboardAccessoryCoordinator: TerminalKeyboardAccessoryHost {
     var keyboardAIAgentOverlayActive: Bool { false }
     var keyboardToolbarOnlyMode: Bool { controller.toolbarOnlyMode }
     var keyboardAccessoryOmitsBottomSafeAreaStrip: Bool { true }
-    var keyboardSizes: KeyboardSizes { KeyboardSizes.screenSharing(traitCollection: keyboardHostView.traitCollection) }
 
     @discardableResult
     func keyboardBecomeFirstResponder() -> Bool {

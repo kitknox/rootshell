@@ -61,7 +61,7 @@ protocol TerminalKeyboardAccessoryHost: AnyObject {
 extension TerminalKeyboardAccessoryHost {
     var keyboardAccessoryOmitsBottomSafeAreaStrip: Bool { false }
     var keyboardHideIntentWindow: UIWindow? { nil }
-    var keyboardSizes: KeyboardSizes { KeyboardSizes.current(traitCollection: keyboardHostView.traitCollection) }
+    var keyboardSizes: KeyboardSizes { KeyboardSizes.accessory(traitCollection: keyboardHostView.traitCollection) }
     func keyboardSendModifierDoublePress(_ modifier: KeyModifiers) {}
     func keyboardTypePassword(pressingReturn: Bool) {}
     func keyboardToggleToolbarFloating() {}
@@ -767,6 +767,8 @@ final class TerminalKeyboardAccessoryController: NSObject {
     private var keyboardStateTask: Task<Void, Never>?
     private var keyboardVisibilityTask: Task<Void, Never>?
     private var keyboardAnimationTask: Task<Void, Never>?
+    /// Hinge detection can land after setup; the trait change alone would miss it.
+    private var duoDisplayTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
     init(host: TerminalKeyboardAccessoryHost) {
@@ -1429,6 +1431,13 @@ final class TerminalKeyboardAccessoryController: NSObject {
             }
         }
 
+        duoDisplayTask = Task { @MainActor [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: .duoDisplayDidChange) {
+                guard let self else { break }
+                self.host?.keyboardUpdateAccessoryForTraitCollection()
+            }
+        }
+
         _ = host.keyboardBecomeFirstResponder()
         host.keyboardReloadInputViews()
 
@@ -1506,6 +1515,8 @@ final class TerminalKeyboardAccessoryController: NSObject {
         keyboardVisibilityTask = nil
         keyboardAnimationTask?.cancel()
         keyboardAnimationTask = nil
+        duoDisplayTask?.cancel()
+        duoDisplayTask = nil
         cancellables.removeAll()
     }
 
