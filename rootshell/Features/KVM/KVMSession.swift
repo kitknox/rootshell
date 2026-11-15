@@ -53,6 +53,8 @@ final class KVMSession {
     private(set) var certificateFingerprint: String?
     private(set) var lastError: KVMDError?
     private(set) var connectedAt: Date?
+    /// An automatic wake attempt has sent input and is waiting for video.
+    private(set) var isAttemptingWake = false
 
     /// Set by the pane before `connect`.
     @ObservationIgnored var onCertificateValidation: VNCConfiguration.CertificateValidationHandler?
@@ -101,6 +103,9 @@ final class KVMSession {
     @ObservationIgnored private var failedFrameSends = 0
     @ObservationIgnored private var typingTask: Task<Void, Never>?
     @ObservationIgnored private var pumpTask: Task<Void, Never>?
+    @ObservationIgnored private var wakeTask: Task<Void, Never>?
+    @ObservationIgnored private var wakeKeyIsDown = false
+    @ObservationIgnored private var framesSinceWakeStart = 0
 
     init(config: KVMConnectionConfig) {
         self.config = config
@@ -188,6 +193,7 @@ final class KVMSession {
     func pauseForBackground() {
         guard !isBackgrounded else { return }
         isBackgrounded = true
+        stopAutoWake()
         enqueue(translator.releaseAll())
         closeMediaChannel()
         decoder.reset()
@@ -195,7 +201,11 @@ final class KVMSession {
     }
 
     func resumeFromBackground() {
-        guard isBackgrounded else { return }
+        guard isBackgrounded else {
+            // Catalyst keeps the stream while away; the computer may have slept.
+            if connectionState.isConnected { startAutoWake() }
+            return
+        }
         isBackgrounded = false
         renderer.setPresentationSuspended(false)
         guard connectionState.isConnected else {
@@ -207,6 +217,7 @@ final class KVMSession {
             scheduleReconnect(after: .timedOut)
         } else {
             openMediaChannel()
+            startAutoWake()
         }
     }
 
@@ -242,6 +253,7 @@ final class KVMSession {
             if connectedAt == nil { connectedAt = Date() }
             connectionState = .connected
             startStatistics()
+            if !isBackgrounded { startAutoWake() }
         } catch is CancellationError {
             return
         } catch {
@@ -542,6 +554,7 @@ final class KVMSession {
         if !hasFirstFrame { hasFirstFrame = true }
         mediaFailures = 0
         presentedFrames += 1
+        framesSinceWakeStart += 1
         renderer.setBands([0: frame.pixelBuffer])
         onFramePresented?(frame.pixelBuffer)
     }
@@ -609,6 +622,7 @@ final class KVMSession {
     }
 
     private func teardown(keepTransport: Bool) {
+        stopAutoWake()
         statsTask?.cancel()
         statsTask = nil
         closeMediaChannel()
@@ -662,11 +676,13 @@ final class KVMSession {
         RemoteScreenInput(
             sendPointer: { [weak self] mask, x, y in
                 guard let self else { return }
+                if mask != 0 { self.noteUserInput() }
                 self.syncPointerFrame()
                 self.enqueue(self.translator.pointer(buttonMask: mask, x: Int(x), y: Int(y)))
             },
             sendScroll: { [weak self] event in
                 guard let self else { return }
+                self.noteUserInput()
                 self.syncPointerFrame()
                 // Apple scroll deltas are positive up and positive left.
                 self.enqueue(self.translator.scroll(
@@ -675,16 +691,19 @@ final class KVMSession {
             },
             sendKeysym: { [weak self] down, keysym in
                 guard let self else { return }
+                if down { self.noteUserInput() }
                 self.enqueue(self.translator.keysym(down: down, keysym: keysym))
             },
             sendPhysicalKey: { [weak self] down, usage, _ in
                 guard let self else { return }
+                if down { self.noteUserInput() }
                 self.enqueue(self.translator.physicalKey(down: down, usage: usage))
             })
     }
 
     /// Toolbar keys arrive as keysyms, the same as the package's own keys.
     func sendKeysym(down: Bool, keysym: UInt32) {
+        if down { noteUserInput() }
         enqueue(translator.keysym(down: down, keysym: keysym))
     }
 
@@ -695,6 +714,7 @@ final class KVMSession {
     /// Types `text` on the remote computer using the host layout.
     func paste(_ text: String) {
         guard !text.isEmpty else { return }
+        noteUserInput()
         enqueue([.text(text)])
     }
 
@@ -703,6 +723,7 @@ final class KVMSession {
     /// modifier can't change what's typed. Never logged.
     func typeLoginPassword(_ password: String, pressingReturn: Bool) {
         guard connectionState.isConnected, !password.isEmpty else { return }
+        noteUserInput()
         enqueue(translator.releaseAll())
         enqueue([.loginPassword(password, pressingReturn: pressingReturn)])
     }
@@ -715,6 +736,7 @@ final class KVMSession {
     /// leave them waiting behind a paste; once queued, the chord completes.
     func sendChord(_ codes: [String]) async throws {
         guard !codes.isEmpty else { return }
+        noteUserInput()
         guard try await waitForIdleInput() else { throw KVMPreDisconnectAction.Failure.inputBusy }
         guard connectionState.isConnected, let socket = eventSocket else {
             throw KVMPreDisconnectAction.Failure.notConnected
@@ -834,6 +856,126 @@ final class KVMSession {
             }
             self.pump()
         }
+    }
+
+    // MARK: - Automatic wake
+
+    /// Runs once per connect or foreground return. A signal lost while the
+    /// user is watching is left alone: they may have put the computer to sleep.
+    private func startAutoWake() {
+        stopAutoWake()
+        guard config.automaticallyWakeDisplay else { return }
+        // Frames from before this check say nothing about video now.
+        framesSinceWakeStart = 0
+        wakeTask = Task { [weak self] in
+            await self?.runAutoWake()
+        }
+    }
+
+    private func stopAutoWake() {
+        wakeTask?.cancel()
+        wakeTask = nil
+        releaseWakeKey()
+        if isAttemptingWake { isAttemptingWake = false }
+    }
+
+    /// A key, click, scroll or paste from the user ends the attempt, and the wake
+    /// key is released first so it can't combine with what they pressed.
+    private func noteUserInput() {
+        guard wakeTask != nil else { return }
+        stopAutoWake()
+    }
+
+    private func releaseWakeKey() {
+        guard wakeKeyIsDown else { return }
+        wakeKeyIsDown = false
+        enqueue([.frame(KVMHIDFrame.key(KVMAutoWake.keyCode, down: false))])
+    }
+
+    private func wakeVerdict(elapsed: TimeInterval) -> KVMAutoWake.Verdict {
+        KVMAutoWake.verdict(
+            sourceOnline: streamer.sourceOnline,
+            framesSinceOpen: framesSinceWakeStart,
+            elapsed: elapsed)
+    }
+
+    private func runAutoWake() async {
+        let started = Date()
+        var verdict = KVMAutoWake.Verdict.wait
+        var nudged = false
+        while verdict == .wait {
+            // The pointer goes at the first no-signal report, ahead of the
+            // key's settle time; a display that is only asleep wakes on it.
+            if !nudged, streamer.sourceOnline == false, wakeInputIsIdle {
+                nudged = true
+                await nudgePointer()
+            }
+            guard (try? await Task.sleep(for: .milliseconds(250))) != nil else { return }
+            let elapsed = Date().timeIntervalSince(started)
+            verdict = wakeVerdict(elapsed: elapsed)
+            if verdict == .wait, elapsed >= KVMAutoWake.judgeLimit { break }
+        }
+        if verdict == .wake {
+            verdict = await attemptWake()
+        }
+        guard !Task.isCancelled else { return }
+        Self.logger.info("KVM auto wake ended: \(String(describing: verdict), privacy: .public)")
+        wakeTask = nil
+        isAttemptingWake = false
+    }
+
+    /// `.wake` when every attempt went unanswered; `.wait` on a cancel.
+    private func attemptWake() async -> KVMAutoWake.Verdict {
+        for (index, watch) in KVMAutoWake.watches.enumerated() {
+            Self.logger.info("KVM auto wake attempt \(index + 1)")
+            isAttemptingWake = true
+            await holdWakeKey()
+            guard !Task.isCancelled else { return .wait }
+            let deadline = Date().addingTimeInterval(watch)
+            while Date() < deadline {
+                let verdict = wakeVerdict(elapsed: .infinity)
+                if verdict != .wake { return verdict }
+                guard (try? await Task.sleep(for: .milliseconds(250))) != nil else { return .wait }
+            }
+        }
+        return .wake
+    }
+
+    /// Never sent while the user's own input is held, queued or being typed.
+    private var wakeInputIsIdle: Bool {
+        connectionState.isConnected && eventSocket != nil && outbound.isEmpty
+            && framesInFlight == 0 && typingTask == nil && !translator.hasHeldInput
+    }
+
+    /// Control held with pointer nudges under it, ended early by video.
+    private func holdWakeKey() async {
+        guard wakeInputIsIdle else { return }
+        wakeKeyIsDown = true
+        enqueue([.frame(KVMHIDFrame.key(KVMAutoWake.keyCode, down: true))])
+        let gap = KVMAutoWake.keyHold / Double(KVMAutoWake.nudgesPerHold)
+        for _ in 0..<KVMAutoWake.nudgesPerHold {
+            await nudgePointer()
+            guard !Task.isCancelled, wakeVerdict(elapsed: .infinity) == .wake,
+                  (try? await Task.sleep(for: .seconds(gap))) != nil else { break }
+        }
+        releaseWakeKey()
+    }
+
+    private func nudgePointer() async {
+        syncPointerFrame()
+        let nudge = KVMAutoWake.pointerNudge(
+            absolute: translator.mouseAbsolute,
+            lastPoint: translator.lastPointerPosition,
+            frameWidth: translator.frameWidth,
+            frameHeight: translator.frameHeight)
+        let before = translator.lastPointerPosition
+        enqueue([.frame(nudge.away)])
+        // Apart, or the queue merges the pair into no motion at all.
+        try? await Task.sleep(for: .milliseconds(60))
+        // The user's own pointer moved meanwhile: its position stands.
+        let after = translator.lastPointerPosition
+        guard !Task.isCancelled, before?.x == after?.x, before?.y == after?.y else { return }
+        enqueue([.frame(nudge.back)])
     }
 
     // MARK: - Device controls

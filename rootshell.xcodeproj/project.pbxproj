@@ -121,6 +121,7 @@
 		47AC7E57000000000000C7A7 /* rootshell/Features/KVM/KVMInputQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000C7B7 /* rootshell/Features/KVM/KVMInputQueue.swift */; };
 		47AC7E57000000000000C7A8 /* rootshell/Features/KVM/KVMLoginScreenDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000C7B8 /* rootshell/Features/KVM/KVMLoginScreenDetector.swift */; };
 		47AC7E57000000000000C7A9 /* rootshell/Features/KVM/KVMPreDisconnectAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000C7B9 /* rootshell/Features/KVM/KVMPreDisconnectAction.swift */; };
+		47AC7E57000000000000C7AB /* rootshell/Features/KVM/KVMAutoWake.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000C7BB /* rootshell/Features/KVM/KVMAutoWake.swift */; };
 		47AC7E57000000000000C7AA /* rootshell/Features/VNC/VNCPreDisconnectAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000C7BA /* rootshell/Features/VNC/VNCPreDisconnectAction.swift */; };
 		47AC7E57000000000000CB01 /* rootshell/UI/Keyboard/TerminalTouchKeyboardModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000CB02 /* rootshell/UI/Keyboard/TerminalTouchKeyboardModel.swift */; };
 		47AC7E57000000000000CB03 /* rootshell/UI/Keyboard/TerminalKeyboardEffectSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000CB04 /* rootshell/UI/Keyboard/TerminalKeyboardEffectSurface.swift */; };
@@ -656,6 +657,7 @@
 		47AC7E57000000000000C7B7 /* rootshell/Features/KVM/KVMInputQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/KVM/KVMInputQueue.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E57000000000000C7B8 /* rootshell/Features/KVM/KVMLoginScreenDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/KVM/KVMLoginScreenDetector.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E57000000000000C7B9 /* rootshell/Features/KVM/KVMPreDisconnectAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/KVM/KVMPreDisconnectAction.swift; sourceTree = SOURCE_ROOT; };
+		47AC7E57000000000000C7BB /* rootshell/Features/KVM/KVMAutoWake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/KVM/KVMAutoWake.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E57000000000000C7BA /* rootshell/Features/VNC/VNCPreDisconnectAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/VNC/VNCPreDisconnectAction.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E57000000000000CB02 /* rootshell/UI/Keyboard/TerminalTouchKeyboardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/UI/Keyboard/TerminalTouchKeyboardModel.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E57000000000000CB04 /* rootshell/UI/Keyboard/TerminalKeyboardEffectSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/UI/Keyboard/TerminalKeyboardEffectSurface.swift; sourceTree = SOURCE_ROOT; };
@@ -1387,6 +1389,7 @@
 				47AC7E57000000000000C7B7 /* rootshell/Features/KVM/KVMInputQueue.swift */,
 				47AC7E57000000000000C7B8 /* rootshell/Features/KVM/KVMLoginScreenDetector.swift */,
 				47AC7E57000000000000C7B9 /* rootshell/Features/KVM/KVMPreDisconnectAction.swift */,
+				47AC7E57000000000000C7BB /* rootshell/Features/KVM/KVMAutoWake.swift */,
 				47AC7E57000000000000C7BA /* rootshell/Features/VNC/VNCPreDisconnectAction.swift */,
 				47AF05A00000000000000B03 /* rootshell/Features/ProgramIdentity/ProgramCatalog.swift */,
 				47AF05A00000000000000B04 /* rootshell/Features/ProgramIdentity/ShellProgramReports.swift */,
@@ -2448,6 +2451,7 @@
 				47AC7E57000000000000C7A7 /* rootshell/Features/KVM/KVMInputQueue.swift in Sources */,
 				47AC7E57000000000000C7A8 /* rootshell/Features/KVM/KVMLoginScreenDetector.swift in Sources */,
 				47AC7E57000000000000C7A9 /* rootshell/Features/KVM/KVMPreDisconnectAction.swift in Sources */,
+				47AC7E57000000000000C7AB /* rootshell/Features/KVM/KVMAutoWake.swift in Sources */,
 				47AC7E57000000000000C7AA /* rootshell/Features/VNC/VNCPreDisconnectAction.swift in Sources */,
 				47AF05A00000000000000A03 /* rootshell/Features/ProgramIdentity/ProgramCatalog.swift in Sources */,
 				47AF05A00000000000000A04 /* rootshell/Features/ProgramIdentity/ShellProgramReports.swift in Sources */,

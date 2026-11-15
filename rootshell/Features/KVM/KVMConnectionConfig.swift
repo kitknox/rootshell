@@ -34,6 +34,8 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
     /// Usually wanted for a Mac, which reverses a USB wheel with its own
     /// natural scrolling setting.
     var reverseScrolling: Bool
+    /// Nudge the pointer, then hold Control, when a connection gets no video.
+    var automaticallyWakeDisplay: Bool
     /// Offer to type the profile's saved computer password when the video
     /// shows a login or lock screen.
     var promptForHostPasswordAtLoginScreen: Bool
@@ -49,6 +51,7 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         automaticallyEnterFullScreen: Bool = false,
         hostKeyboardLayout: String = KVMInputTranslator.usLayout,
         reverseScrolling: Bool = false,
+        automaticallyWakeDisplay: Bool = true,
         promptForHostPasswordAtLoginScreen: Bool = true,
         preDisconnectAction: KVMPreDisconnectAction = KVMPreDisconnectAction()
     ) {
@@ -60,6 +63,7 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         self.automaticallyEnterFullScreen = automaticallyEnterFullScreen
         self.hostKeyboardLayout = hostKeyboardLayout
         self.reverseScrolling = reverseScrolling
+        self.automaticallyWakeDisplay = automaticallyWakeDisplay
         self.promptForHostPasswordAtLoginScreen = promptForHostPasswordAtLoginScreen
         self.preDisconnectAction = preDisconnectAction
     }
@@ -69,7 +73,7 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case host, port, username, jump, keyboardToolbar
         case automaticallyEnterFullScreen, hostKeyboardLayout, reverseScrolling
-        case promptForHostPasswordAtLoginScreen, preDisconnectAction
+        case promptForHostPasswordAtLoginScreen, preDisconnectAction, automaticallyWakeDisplay
     }
 
     init(from decoder: Decoder) throws {
@@ -89,6 +93,7 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         let layout = ((try? container.decodeIfPresent(String.self, forKey: .hostKeyboardLayout)) ?? nil) ?? ""
         hostKeyboardLayout = layout.isEmpty ? KVMInputTranslator.usLayout : layout
         reverseScrolling = ((try? container.decodeIfPresent(Bool.self, forKey: .reverseScrolling)) ?? nil) ?? false
+        automaticallyWakeDisplay = ((try? container.decodeIfPresent(Bool.self, forKey: .automaticallyWakeDisplay)) ?? nil) ?? true
         promptForHostPasswordAtLoginScreen = ((try? container.decodeIfPresent(
             Bool.self, forKey: .promptForHostPasswordAtLoginScreen)) ?? nil) ?? true
         preDisconnectAction = ((try? container.decodeIfPresent(
@@ -105,6 +110,7 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         try container.encode(automaticallyEnterFullScreen, forKey: .automaticallyEnterFullScreen)
         try container.encode(hostKeyboardLayout, forKey: .hostKeyboardLayout)
         try container.encode(reverseScrolling, forKey: .reverseScrolling)
+        try container.encode(automaticallyWakeDisplay, forKey: .automaticallyWakeDisplay)
         try container.encode(promptForHostPasswordAtLoginScreen, forKey: .promptForHostPasswordAtLoginScreen)
         if preDisconnectAction.isEnabled {
             try container.encode(preDisconnectAction, forKey: .preDisconnectAction)

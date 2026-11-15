@@ -18,6 +18,7 @@ struct KVMFormState: Hashable {
     var automaticallyEnterFullScreen = false
     var hostKeyboardLayout = KVMInputTranslator.usLayout
     var reverseScrolling = false
+    var automaticallyWakeDisplay = true
     /// Profile editor only. Blank keeps the saved computer password.
     var hostPassword = ""
     var removeSavedHostPassword = false
@@ -38,6 +39,7 @@ struct KVMFormState: Hashable {
         automaticallyEnterFullScreen = config.automaticallyEnterFullScreen
         hostKeyboardLayout = config.hostKeyboardLayout
         reverseScrolling = config.reverseScrolling
+        automaticallyWakeDisplay = config.automaticallyWakeDisplay
         promptForHostPasswordAtLoginScreen = config.promptForHostPasswordAtLoginScreen
         preDisconnect = config.preDisconnectAction
         var jumpForm = VNCFormState(config: VNCConnectionConfig(host: config.host, quality: .standard, jump: config.jump))
@@ -69,6 +71,7 @@ struct KVMFormState: Hashable {
             automaticallyEnterFullScreen: automaticallyEnterFullScreen,
             hostKeyboardLayout: hostKeyboardLayout,
             reverseScrolling: reverseScrolling,
+            automaticallyWakeDisplay: automaticallyWakeDisplay,
             promptForHostPasswordAtLoginScreen: promptForHostPasswordAtLoginScreen,
             preDisconnectAction: preDisconnect.normalized)
     }
@@ -162,6 +165,15 @@ struct KVMConnectionFormSections: View {
             Text("Mouse")
         } footer: {
             Text("Turn this on if scrolling moves the wrong way. A Mac usually needs it, because it applies its own natural scrolling to the KVM's mouse.")
+        }
+
+        Section {
+            Toggle("Wake Display Automatically", isOn: $form.automaticallyWakeDisplay)
+                .themedRow()
+        } header: {
+            Text("Wake")
+        } footer: {
+            Text("When a connection gets no video, nudge the pointer and then press the Control key to wake the computer. Nothing is clicked or typed.")
         }
 
         RemoteScreenJumpSection(

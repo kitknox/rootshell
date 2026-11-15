@@ -496,6 +496,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
         let hostKeyboardLayout: String
         /// Optional so sessions saved before the field still decode.
         let reverseScrolling: Bool?
+        let automaticallyWakeDisplay: Bool?
         let promptForHostPasswordAtLoginScreen: Bool?
         let preDisconnectAction: KVMPreDisconnectAction?
 
@@ -507,6 +508,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
             self.automaticallyEnterFullScreen = config.automaticallyEnterFullScreen
             self.hostKeyboardLayout = config.hostKeyboardLayout
             self.reverseScrolling = config.reverseScrolling
+            self.automaticallyWakeDisplay = config.automaticallyWakeDisplay
             self.promptForHostPasswordAtLoginScreen = config.promptForHostPasswordAtLoginScreen
             self.preDisconnectAction = config.preDisconnectAction.isEnabled
                 ? config.preDisconnectAction : nil
@@ -544,6 +546,7 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
                 automaticallyEnterFullScreen: automaticallyEnterFullScreen,
                 hostKeyboardLayout: hostKeyboardLayout,
                 reverseScrolling: reverseScrolling ?? false,
+                automaticallyWakeDisplay: automaticallyWakeDisplay ?? true,
                 promptForHostPasswordAtLoginScreen: promptForHostPasswordAtLoginScreen ?? true,
                 preDisconnectAction: preDisconnectAction ?? KVMPreDisconnectAction())
         }

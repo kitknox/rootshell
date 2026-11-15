@@ -450,9 +450,9 @@ private struct KVMSessionOverlay: View {
                 }
             case .connected:
                 if session.streamer.sourceOnline == false {
-                    KVMNoVideoCard(waiting: false, subtitle: subtitle)
+                    KVMNoVideoCard(waiting: false, waking: session.isAttemptingWake, subtitle: subtitle)
                 } else if !session.hasFirstFrame {
-                    KVMNoVideoCard(waiting: true, subtitle: subtitle)
+                    KVMNoVideoCard(waiting: true, waking: session.isAttemptingWake, subtitle: subtitle)
                 }
             default:
                 EmptyView()
@@ -598,14 +598,17 @@ private struct KVMOneTimeCodeCard: View {
 private struct KVMNoVideoCard: View {
     /// No frame yet, versus the device reporting no signal.
     let waiting: Bool
+    /// An automatic wake attempt is running.
+    let waking: Bool
     let subtitle: String
 
     var body: some View {
         VNCOverlayCard(
-            title: waiting ? String(localized: "Waiting for Video") : String(localized: "No Video Signal"),
+            title: waking ? String(localized: "Waking Computer")
+                : waiting ? String(localized: "Waiting for Video") : String(localized: "No Video Signal"),
             subtitle: subtitle,
             icon: {
-                if waiting {
+                if waiting || waking {
                     ProgressView().controlSize(.large)
                 } else {
                     Image(systemName: "display.trianglebadge.exclamationmark")
@@ -615,7 +618,9 @@ private struct KVMNoVideoCard: View {
                 }
             },
             content: {
-                Text(waiting
+                Text(waking
+                    ? String(localized: "The computer isn't sending video, so it's being woken automatically. You can also press a key or move the pointer.")
+                    : waiting
                     ? String(localized: "If the computer's display is asleep, press a key or move the pointer to wake it.")
                     : String(localized: "The computer connected to the KVM isn't sending video. It may be asleep or turned off. Press a key or move the pointer to wake it."))
                     .font(.callout)
