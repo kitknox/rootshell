@@ -87,6 +87,18 @@ class KeyboardAccessoryView: UIInputView {
         }
     }
 
+    var onChoosePaneToZoomRequested: (() -> Void)? {
+        didSet {
+            toolbarView.onChoosePaneToZoomRequested = onChoosePaneToZoomRequested
+        }
+    }
+
+    var onTogglePaneZoomRequested: (() -> Void)? {
+        didSet {
+            toolbarView.onTogglePaneZoomRequested = onTogglePaneZoomRequested
+        }
+    }
+
     /// Callback when new connection button is tapped
     var onNewConnectionRequested: (() -> Void)? {
         didSet {
@@ -345,8 +357,11 @@ class KeyboardAccessoryView: UIInputView {
     // MARK: - Public Methods
 
     func updateForTraitCollection(_ traitCollection: UITraitCollection) {
-        let newSizes = KeyboardSizes.current(traitCollection: traitCollection)
-        toolbarView.updateSizes(newSizes)
+        updateSizes(KeyboardSizes.current(traitCollection: traitCollection))
+    }
+
+    func updateSizes(_ sizes: KeyboardSizes) {
+        toolbarView.updateSizes(sizes)
         invalidateLayoutAndNotify()
     }
 

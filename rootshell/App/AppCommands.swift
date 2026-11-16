@@ -50,6 +50,13 @@ final class MenuShortcutState: ObservableObject {
     /// CatalystAppDelegate.buildMenu(with:) drop their key equivalents too.
     var isRecordingCapture: Bool { recordingCaptureCount > 0 }
 
+    private struct WeakPane { weak var view: UIView? }
+    private var remoteShortcutPanes: [ObjectIdentifier: WeakPane] = [:]
+
+    /// Whether the key window's remote-screen pane takes rootshell's menu
+    /// shortcuts. Only the capture toggle keeps its key equivalent.
+    private(set) var forwardsShortcutsToRemoteScreen = false
+
     /// Whether a menu bar exists to carry app shortcuts. Both menu rails dispatch
     /// through UIApplication notifications rather than the responder chain, so a
     /// menu item still fires while an overlay owns first responder — and a second
@@ -81,7 +88,97 @@ final class MenuShortcutState: ObservableObject {
                 }
                 .store(in: &cancellables)
         }
+        #if targetEnvironment(macCatalyst)
+        // Block observers: the async notifications sequence over-released
+        // UIWindow key notifications here and crashed.
+        for name in [UIWindow.didBecomeKeyNotification, UIWindow.didResignKeyNotification] {
+            _ = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshRemoteScreenForwarding() }
+            }
+        }
+        #endif
     }
+
+    /// Mac menu key equivalents win over the remote-screen responder, so a
+    /// pane forwarding shortcuts to the remote reports it here.
+    func setRemoteScreenPane(_ pane: UIView, forwardsShortcuts forwards: Bool) {
+        remoteShortcutPanes[ObjectIdentifier(pane)] = forwards ? WeakPane(view: pane) : nil
+        refreshRemoteScreenForwarding()
+    }
+
+    private func refreshRemoteScreenForwarding() {
+        remoteShortcutPanes = remoteShortcutPanes.filter { $0.value.view != nil }
+        let forwards = remoteShortcutPanes.values.contains { $0.view?.window?.isKeyWindow == true }
+        guard forwards != forwardsShortcutsToRemoteScreen else { return }
+        forwardsShortcutsToRemoteScreen = forwards
+        #if targetEnvironment(macCatalyst)
+        setWindowTabShortcuts(released: forwards)
+        if forwards { installMinimizeKeyMonitor() }
+        #endif
+        rebuildShortcuts()
+    }
+
+    #if targetEnvironment(macCatalyst)
+    private var restoresWindowTabbing = false
+    private var minimizeKeyMonitor: AnyObject?
+
+    /// Command-M minimizes the window even with the menu shortcut removed,
+    /// but a window that cannot minimize lets the key through. AppKit's key
+    /// monitor runs before the shortcut is handled, so minimizing is off
+    /// only for that one key press.
+    private func installMinimizeKeyMonitor() {
+        guard minimizeKeyMonitor == nil,
+              let eventClass = NSClassFromString("NSEvent"),
+              let metaclass = object_getClass(eventClass) else { return }
+        let selector = NSSelectorFromString("addLocalMonitorForEventsMatchingMask:handler:")
+        guard let implementation = class_getMethodImplementation(metaclass, selector) else { return }
+        typealias Handler = @convention(block) (NSObject) -> NSObject?
+        typealias AddMonitor = @convention(c) (AnyClass, Selector, UInt64, Handler) -> AnyObject?
+        let handler: Handler = { event in
+            MainActor.assumeIsolated {
+                MenuShortcutState.shared.keyDownWillDispatch(
+                    characters: event.value(forKey: "charactersIgnoringModifiers") as? String,
+                    modifierFlags: event.value(forKey: "modifierFlags") as? UInt ?? 0)
+            }
+            return event
+        }
+        // Key-down events.
+        minimizeKeyMonitor = unsafeBitCast(implementation, to: AddMonitor.self)(
+            eventClass, selector, 1 << 10, handler)
+    }
+
+    private func keyDownWillDispatch(characters: String?, modifierFlags: UInt) {
+        // Shift, Control, Option, Command; only Command set.
+        let miniaturizable: UInt = 1 << 2
+        guard forwardsShortcutsToRemoteScreen, characters == "m",
+              modifierFlags & 0x1E0000 == 1 << 20,
+              let appClass = NSClassFromString("NSApplication") as? NSObject.Type,
+              let app = appClass.value(forKey: "sharedApplication") as? NSObject,
+              let window = app.value(forKey: "keyWindow") as? NSObject,
+              let mask = window.value(forKey: "styleMask") as? UInt,
+              mask & miniaturizable != 0 else { return }
+        window.setValue(mask & ~miniaturizable, forKey: "styleMask")
+        DispatchQueue.main.async {
+            guard let mask = window.value(forKey: "styleMask") as? UInt else { return }
+            window.setValue(mask | miniaturizable, forKey: "styleMask")
+        }
+    }
+
+    /// AppKit adds its tab items (Show Next Tab on Control-Tab, Show All
+    /// Tabs on Shift-Command-Backslash) outside the menu builder.
+    private func setWindowTabShortcuts(released: Bool) {
+        guard let windowClass = NSClassFromString("NSWindow") as? NSObject.Type else { return }
+        let key = "allowsAutomaticWindowTabbing"
+        if released {
+            guard windowClass.value(forKey: key) as? Bool == true else { return }
+            restoresWindowTabbing = true
+            windowClass.setValue(false, forKey: key)
+        } else if restoresWindowTabbing {
+            restoresWindowTabbing = false
+            windowClass.setValue(true, forKey: key)
+        }
+    }
+    #endif
 
     /// Drop menu key equivalents while a shortcut is being recorded so the
     /// capture view's `keyCommands` see the physical chord. Otherwise the menu
@@ -120,6 +217,9 @@ final class MenuShortcutState: ObservableObject {
             guard !binding.sequence.isSequence,
                   let firstTrigger = binding.sequence.first,
                   let keyEquivalent = firstTrigger.swiftUIKeyEquivalent else {
+                continue
+            }
+            if forwardsShortcutsToRemoteScreen, binding.action != .toggle_mouse_capture {
                 continue
             }
 

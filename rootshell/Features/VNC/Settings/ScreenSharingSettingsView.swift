@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import rootshellVNC
 
 struct ScreenSharingSettingsView: View {
     @Setting(Settings.ScreenSharing.clipboardSyncDefault) private var clipboardSyncDefault
@@ -24,6 +25,8 @@ struct ScreenSharingSettingsView: View {
     @Setting(Settings.ScreenSharing.swipeDownAction) private var swipeDownAction
     @Setting(Settings.ScreenSharing.swipeLeftAction) private var swipeLeftAction
     @Setting(Settings.ScreenSharing.swipeRightAction) private var swipeRightAction
+    @Setting(Settings.ScreenSharing.fourFingerNavigation) private var fourFingerNavigation
+    @State private var downloadStore = VNCDownloadStore.shared
 
     private var resolvedClipboardSyncDefault: ScreenSharingClipboardSyncDefault {
         clipboardSyncDefault
@@ -50,7 +53,7 @@ struct ScreenSharingSettingsView: View {
                 Toggle(isOn: $routeReservedShortcutsToVNCDefault) {
                     HStack(spacing: 12) {
                         SettingsIcon(systemName: "keyboard.badge.ellipsis")
-                        Text("Route Reserved Shortcuts to VNC")
+                        Text("Route Reserved Shortcuts to Remote Computer")
                     }
                     .settingRow(Settings.ScreenSharing.routeReservedShortcutsToVNCDefault)
                 }
@@ -58,7 +61,11 @@ struct ScreenSharingSettingsView: View {
             } header: {
                 SettingGroupHeader("Reserved Shortcuts", group: .screenSharing)
             } footer: {
+                #if targetEnvironment(macCatalyst)
+                Text("Sends rootshell’s keyboard shortcuts, such as Command+T and Command+1, to the remote computer by default in new Screen Sharing sessions. Change it for the current session from the Screen Sharing menu or with Command+Shift+M. Command+Shift+M always stays local.")
+                #else
                 Text("Sends rootshell’s reserved keyboard shortcuts to the remote computer by default in new Screen Sharing sessions. Change it for the current session from the Screen Sharing menu or with Command+Shift+M. Command+Shift+M always stays local.")
+                #endif
             }
 
             #if !os(visionOS) && !targetEnvironment(macCatalyst)
@@ -201,6 +208,23 @@ struct ScreenSharingSettingsView: View {
                 Text("Sends the Mac keyboard shortcut for each action, so the defaults match a Mac trackpad. Turn them off for computers that are not Macs. Applies to touch on iPhone and iPad.")
             }
 
+            #if !os(visionOS) && !targetEnvironment(macCatalyst)
+            Section {
+                Toggle(isOn: $fourFingerNavigation) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "hand.raised.fingers.spread")
+                        Text("Use Four Fingers")
+                    }
+                    .settingRow(Settings.ScreenSharing.fourFingerNavigation)
+                }
+                .themedRow()
+            } header: {
+                SettingGroupHeader("Tab and Pane Swipes", group: .screenSharing)
+            } footer: {
+                Text("Swipe Gestures that switch tabs or panes use three fingers over a remote screen, and only in a direction whose Three-Finger Swipe above is Off. Turn this on to use four fingers instead, leaving every three-finger swipe to the remote computer. On iPad, a four-finger swipe switches apps unless Four & Five Finger Gestures is turned off in the Settings app under Multitasking & Gestures.")
+            }
+            #endif
+
             Section {
                 Picker(selection: $cursorRenderingDefault) {
                     ForEach(ScreenSharingCursorRenderingDefault.allCases, id: \.rawValue) { rendering in
@@ -251,8 +275,28 @@ struct ScreenSharingSettingsView: View {
             } footer: {
                 Text("Draws a dot where your pointer is, ahead of the remote computer’s own pointer in the video. Sets the default for new KVM sessions; change it for the current session from the Screen Sharing menu.")
             }
+
+            Section {
+                NavigationLink(value: SettingsSearchDestination.screenSharingDownloads) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "arrow.down.circle")
+                        Text("Downloads")
+                        Spacer()
+                        if downloadStore.hasLoaded {
+                            Text(ScreenSharingDownloadsView.size(downloadStore.totalByteCount))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .themedRow()
+            } header: {
+                Text("File Transfer")
+            } footer: {
+                Text("Files downloaded with Drag to Download that are still on this device. Save, share, or delete them without reconnecting.")
+            }
         }
         .themedList()
+        .task { await downloadStore.refresh() }
         .navigationTitle("Screen Sharing")
         .navigationBarTitleDisplayMode(.inline)
     }

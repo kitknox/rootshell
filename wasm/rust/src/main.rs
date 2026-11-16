@@ -10,6 +10,7 @@
 //   tls-client <h> <p>    — TLS variant of tcp-client, hits HTTPS hosts
 //   dns-query <name> [resolver] — hand-rolled DNS/A query over UDP
 //   tcp-listen <port>     — bind/listen/accept, echo one line, exit
+//   bonjour <type> [ms]   — find a Bonjour service, e.g. _ssh._tcp
 //   all                   — runs every self-contained subcommand, plus
 //                           dns-query and tls-client against real internet
 //                           hosts. tcp-client/tcp-listen need a peer to be
@@ -51,6 +52,10 @@ fn main() -> ExitCode {
             args.get(3).map(String::as_str).unwrap_or("1.1.1.1"),
         ),
         "tcp-listen" => cmd_tcp_listen(args.get(2).and_then(|s| s.parse().ok()).unwrap_or(0)),
+        "bonjour" => cmd_bonjour(
+            args.get(2).map(String::as_str).unwrap_or("_ssh._tcp"),
+            args.get(3).and_then(|s| s.parse().ok()).unwrap_or(3000),
+        ),
         "all" => cmd_all(),
         other => {
             println!("wasm-demo: unknown subcommand {}", other);
@@ -298,6 +303,8 @@ fn cmd_dns_query(name: &str, resolver: &str) -> i32 {
         println!("dns-query: sent {} bytes to {}:53 for {}", sent, resolver, name);
 
         // ---- Receive the reply ----
+        // Give up after 5 s rather than hang on a lost datagram.
+        rootshell_socket_set_recv_timeout(fd, 5000);
         let mut buf = [0u8; 1500];
         let mut got: u32 = 0;
         let mut addr_buf = [0u8; 16];
@@ -496,4 +503,30 @@ fn cmd_all() -> i32 {
         println!("all: FAIL (composite={})", acc);
     }
     acc
+}
+
+// Browse for a Bonjour service type and print each instance the host
+// resolved: name, host, port and addresses.
+fn cmd_bonjour(service_type: &str, timeout_ms: u32) -> i32 {
+    let mut buf = vec![0u8; 8192];
+    let mut n: u32 = 0;
+    let e = unsafe {
+        rootshell_socket_bonjour_lookup(
+            service_type.as_ptr(), service_type.len() as i32,
+            timeout_ms,
+            buf.as_mut_ptr(), buf.len() as i32,
+            &mut n,
+        )
+    };
+    if e != 0 {
+        eprintln!("bonjour {}: {}", service_type, errno_name(e));
+        return 1;
+    }
+    for line in String::from_utf8_lossy(&buf[..n as usize]).lines() {
+        let f: Vec<&str> = line.split('\t').collect();
+        if f.len() >= 4 {
+            println!("bonjour: {} at {}:{} [{}]", f[0], f[1], f[2], f[3]);
+        }
+    }
+    0
 }

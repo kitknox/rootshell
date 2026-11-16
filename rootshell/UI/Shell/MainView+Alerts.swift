@@ -44,6 +44,8 @@ extension MainView {
             return String(localized: "Profile Unavailable")
         case .vncProfileInvalid:
             return String(localized: "Screen Sharing Unavailable", comment: "Alert title for a VNC profile without a usable configuration")
+        case .vncHighPerformanceTransport:
+            return String(localized: "High Performance May Be Unreliable", comment: "Alert title for High Performance Screen Sharing on an unreliable transport or mesh VPN hostname")
         case .vncCertificate:
             return alerts.vncCertificateValidationData?.isChanged == true
                 ? String(localized: "Screen Sharing Certificate Changed", comment: "Changed VNC TLS certificate alert title")
@@ -189,6 +191,27 @@ extension MainView {
                     Button("OK", role: .cancel) {
                         alerts.dismissActive()
                     }
+                case .vncHighPerformanceTransport:
+                    Button("Continue High Performance") {
+                        guard let request = alerts.takeNextVNCHighPerformanceConnection() else { return }
+                        performVNCConnection(
+                            config: request.config,
+                            splitOption: request.splitOption,
+                            sourceProfileID: request.sourceProfileID,
+                            password: request.password
+                        )
+                    }
+                    Button("Use Standard") {
+                        guard var request = alerts.takeNextVNCHighPerformanceConnection() else { return }
+                        request.config.quality = .standard
+                        performVNCConnection(
+                            config: request.config,
+                            splitOption: request.splitOption,
+                            sourceProfileID: request.sourceProfileID,
+                            password: request.password
+                        )
+                    }
+                    .keyboardShortcut(.defaultAction)
                 case .vncCertificate:
                     Button("Cancel", role: .cancel) {
                         alerts.respondToVNCCertificateValidation(with: .reject)
@@ -268,6 +291,8 @@ extension MainView {
                     Text("This local profile is unavailable on this device. Enable Show All Platforms in Profiles to edit its platform or repair its settings.")
                 case .vncProfileInvalid:
                     Text("This profile has no usable Screen Sharing configuration. It may have been created by a newer version of the app - edit the profile or update the app.")
+                case .vncHighPerformanceTransport:
+                    Text("High Performance Screen Sharing can be unreliable over cellular or mesh VPN connections such as Tailscale and NetBird. Continue with High Performance or use Standard for this connection.")
                 case .vncCertificate:
                     if let data = alerts.vncCertificateValidationData {
                         let warning = data.isChanged

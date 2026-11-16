@@ -202,13 +202,24 @@ final class AgentAttentionCenter {
     @ObservationIgnored private var coreEventsEnabled = false
     @ObservationIgnored private var wasEnabled = false
     @ObservationIgnored private var burstScansRemaining = 0
+    /// Due work waits until here while the user scrolls a terminal.
+    @ObservationIgnored private var scrollHoldUntil: Date?
+    /// When the current run of scroll deferrals began; bounds the wait.
+    @ObservationIgnored private var scrollHoldStartedAt: Date?
 
     private enum Tuning {
         /// Heavy-read budget per deadline firing, app-wide.
         static let maxScansPerWake = 3
         static let burstScansPerWake = 8
         static let initialBurstScans = 40
-        static let overflowDelay: TimeInterval = 0.05
+        /// A wake stops scanning once it has held the main thread this long.
+        static let scanTimeBudget: TimeInterval = 0.002
+        static let overflowDelay: TimeInterval = 0.02
+        static let busyRetryDelay: TimeInterval = 0.05
+        /// Quiet time after the last scroll frame before work resumes.
+        static let scrollHold: TimeInterval = 0.25
+        /// Longest a continuous scroll may defer due work.
+        static let maxScrollHold: TimeInterval = 1.5
         static let contentQuiescence: TimeInterval = 0.075
         static let selectedInterval: TimeInterval = 0.9
         static let activeBackgroundInterval: TimeInterval = 2.0
@@ -502,6 +513,23 @@ final class AgentAttentionCenter {
         monitor.refreshRebuild()
         monitor.noteActivity()
         scheduleScan(monitor, reasonDelay: Tuning.contentQuiescence)
+    }
+
+    /// The user is scrolling a terminal (any pane). Scans and publishes
+    /// wait for a pause so they never land inside a scroll frame.
+    func noteUserScrolling() {
+        guard wasEnabled else { return }
+        scrollHoldUntil = Date().addingTimeInterval(Tuning.scrollHold)
+    }
+
+    /// Where a scroll in progress pushes due work to, or nil to run now.
+    private func scrollHoldEnd(now: Date) -> Date? {
+        guard let until = scrollHoldUntil, now < until else { return nil }
+        if let started = scrollHoldStartedAt,
+           now.timeIntervalSince(started) >= Tuning.maxScrollHold {
+            return nil
+        }
+        return until
     }
 
     /// The shell reported a new working directory (OSC 7). Free evidence: it
@@ -1278,7 +1306,7 @@ final class AgentAttentionCenter {
         guard ghostty_surface_try_is_alternate_active(surface, &altActive) else {
             scanDeadlines.schedule(
                 terminal.uuid,
-                at: Date().addingTimeInterval(Tuning.overflowDelay)
+                at: Date().addingTimeInterval(Tuning.busyRetryDelay)
             )
             rescheduleTimer()
             return
@@ -1774,11 +1802,19 @@ final class AgentAttentionCenter {
         let next = [scanDeadlines.nextDeadline, livenessDeadlines.nextDeadline]
             .compactMap { $0 }
             .min()
-        guard let next else {
+        guard var next else {
             schedulerTask?.cancel()
             schedulerTask = nil
             scheduledWakeDeadline = nil
             return
+        }
+        if let holdEnd = scrollHoldEnd(now: Date()), next < holdEnd {
+            // A wake already inside the hold re-checks it when it fires.
+            if schedulerTask != nil, let scheduled = scheduledWakeDeadline,
+               scheduled <= holdEnd {
+                return
+            }
+            next = holdEnd
         }
         if schedulerTask != nil, scheduledWakeDeadline == next {
             return
@@ -1801,46 +1837,67 @@ final class AgentAttentionCenter {
         guard canScheduleWork else { return }
         let now = Date()
 
+        if scrollHoldEnd(now: now) != nil {
+            if scrollHoldStartedAt == nil { scrollHoldStartedAt = now }
+            rescheduleTimer()
+            return
+        }
+        // Still scrolling past the cap: one scan, then defer again.
+        let scrolling = scrollHoldUntil.map { now < $0 } ?? false
+        scrollHoldStartedAt = nil
+
         var dueScans = scanDeadlines.takeDue(at: now)
         dueScans.sort { lhs, rhs in
             guard let left = monitors[lhs], let right = monitors[rhs] else {
                 return monitors[lhs] != nil
             }
-            if left.wantsStateConfirmationScan != right.wantsStateConfirmationScan {
-                return left.wantsStateConfirmationScan
+            // One scan per hold cycle: rotate by age alone, or a busy
+            // selected pane would take every slot until the scroll ends.
+            if !scrolling {
+                if left.wantsStateConfirmationScan != right.wantsStateConfirmationScan {
+                    return left.wantsStateConfirmationScan
+                }
+                let leftSelected = isSelectedTabPane(left)
+                if leftSelected != isSelectedTabPane(right) { return leftSelected }
             }
-            let leftSelected = isSelectedTabPane(left)
-            if leftSelected != isSelectedTabPane(right) { return leftSelected }
             return left.lastScanAt < right.lastScanAt
         }
 
-        let budget = burstScansRemaining > 0
-            ? Tuning.burstScansPerWake
+        let budget = scrolling ? 1
+            : burstScansRemaining > 0 ? Tuning.burstScansPerWake
             : Tuning.maxScansPerWake
-        let selected = dueScans.prefix(budget)
-        if burstScansRemaining > 0 {
-            burstScansRemaining = max(0, burstScansRemaining - selected.count)
-        }
-        for paneUUID in selected {
-            guard let monitor = monitors[paneUUID] else { continue }
-            guard scan(monitor, now: now) else {
-                // Terminal mutex contended (a heavy parse in flight): no
-                // state moved, so retry after the overflow delay instead of
-                // treating the pane as scanned.
+        let scanStart = ProcessInfo.processInfo.systemUptime
+        var taken = 0
+        for paneUUID in dueScans {
+            // Count and time both bound the wake; the rest follow shortly.
+            let overTime = taken > 0
+                && ProcessInfo.processInfo.systemUptime - scanStart >= Tuning.scanTimeBudget
+            guard taken < budget, !overTime else {
                 scanDeadlines.schedule(
                     paneUUID,
                     at: now.addingTimeInterval(Tuning.overflowDelay)
                 )
                 continue
             }
+            taken += 1
+            guard let monitor = monitors[paneUUID] else { continue }
+            guard scan(monitor, now: now) else {
+                // Terminal mutex contended (a heavy parse in flight): no
+                // state moved, so retry shortly instead of treating the
+                // pane as scanned.
+                scanDeadlines.schedule(
+                    paneUUID,
+                    at: now.addingTimeInterval(Tuning.busyRetryDelay)
+                )
+                // It stays the oldest; don't let it hold the scroll slot.
+                if scrolling { taken -= 1 }
+                continue
+            }
             monitor.updateLivenessEdges(now: now)
             scheduleFollowups(for: monitor, now: now)
         }
-        for paneUUID in dueScans.dropFirst(budget) {
-            scanDeadlines.schedule(
-                paneUUID,
-                at: now.addingTimeInterval(Tuning.overflowDelay)
-            )
+        if burstScansRemaining > 0 {
+            burstScansRemaining = max(0, burstScansRemaining - taken)
         }
 
         for paneUUID in livenessDeadlines.takeDue(at: now) {
@@ -2069,12 +2126,12 @@ final class AgentAttentionCenter {
         // of those beat a working title would turn stale transcript text
         // into "Needs input". transcript_viewer (1000, skipStateUpdate)
         // also still outranks the blockers inside this pass.
-        let screenOnly = manifest.classify(agent: agent, input: input, excludingOSCRegions: true)
+        let (screenOnly, full) = manifest.classifyScreenAndFull(agent: agent, input: input)
         let liveBlocker = screenOnly.visibleBlocker
             && AgentDetectionRegions.isLiveAnchored(screenOnly.matchedRuleRegion)
         let classification = liveBlocker || monitor.stableState == .blocked
             ? screenOnly
-            : manifest.classify(agent: agent, input: input)
+            : full
 
         // Which rule claims this screen, on rule-id change only. This is
         // the single most informative line when a pane reads the wrong
@@ -2284,7 +2341,8 @@ final class AgentAttentionCenter {
     private static let screenElapsedRegex = #/\((?:(\d+)h )?(?:(\d+)m )?(\d+)s(?: [·•]|\))/#
     private static func screenElapsed(in lines: [String]) -> TimeInterval? {
         for line in lines.reversed() {
-            guard let match = line.firstMatch(of: screenElapsedRegex) else { continue }
+            guard line.utf8.contains(UInt8(ascii: "(")),
+                  let match = line.firstMatch(of: screenElapsedRegex) else { continue }
             let hours = match.output.1.flatMap { Double($0) } ?? 0
             let minutes = match.output.2.flatMap { Double($0) } ?? 0
             let seconds = Double(match.output.3) ?? 0

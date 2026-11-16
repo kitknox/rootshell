@@ -97,7 +97,7 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
     private var hasHandledAutomaticFullScreen = false
     private var shouldRestoreFullScreenAfterTabSwitch = false
 
-    private var tabSwipePanGesture: UIPanGestureRecognizer?
+    private var tabSwipePanGesture: RemoteScreenNavigationPan?
     private var activeAppTabSwipeDirection: SwipeDirection?
     private var activeAppTabSwipeAccepted = false
     private var activePaneCycle: (direction: SwipeDirection, preset: SwipeGesturePreset)?
@@ -153,6 +153,7 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
             assistant?.noteFrame(pixelBuffer)
         }
         observeSession()
+        observeMenuShortcutForwarding()
         installTabSwipeGestureIfNeeded()
     }
 
@@ -170,6 +171,7 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        reportMenuShortcutForwarding()
         guard window != nil, !isClosed else { return }
         if isLogicallyFocused, !overlayOwnsKeyboard {
             captureKeyboard()
@@ -417,6 +419,70 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
         NotificationCenter.default.post(name: .closeSplit, object: self)
     }
 
+    // MARK: - Pre-disconnect action
+
+    /// Non-nil while the saved pre-disconnect action runs or waits for the
+    /// user to decide after it failed.
+    @Published private(set) var preDisconnectPhase: RemoteScreenPreDisconnectPhase?
+    private var preDisconnectTask: Task<Void, Never>?
+    private var preDisconnectCompletion: (@MainActor () -> Void)?
+
+    func runPreDisconnectAction(then disconnect: @escaping @MainActor () -> Void) {
+        // Closed meanwhile: nothing to run, but a tab close chain continues.
+        guard !isClosed else {
+            disconnect()
+            return
+        }
+        // Already in flight: its card owns the decision.
+        guard preDisconnectPhase == nil else { return }
+        let action = config.preDisconnectAction
+        let layout = config.hostKeyboardLayout
+        guard action.isEnabled, session.connectionState.isConnected else {
+            disconnect()
+            return
+        }
+
+        preDisconnectCompletion = disconnect
+        preDisconnectPhase = .running
+        preDisconnectTask = Task { [weak self] in
+            do {
+                guard let session = self?.session else { return }
+                try await session.sendChord(action.keyCodes(layout: layout))
+                guard let self, !Task.isCancelled, !self.isClosed else { return }
+                self.finishPreDisconnect()
+            } catch {
+                guard let self, !Task.isCancelled, !self.isClosed else { return }
+                Self.logger.error("KVM pre-disconnect action failed: \(error.localizedDescription, privacy: .public)")
+                self.preDisconnectTask = nil
+                self.preDisconnectPhase = .failed(error.localizedDescription)
+                // Bring a background tab forward so the choice is visible.
+                NotificationCenter.default.post(name: .vncPreDisconnectFailed, object: self)
+            }
+        }
+    }
+
+    /// Disconnect without waiting for the action, or after it failed.
+    func disconnectIgnoringPreDisconnectAction() {
+        preDisconnectTask?.cancel()
+        finishPreDisconnect()
+    }
+
+    /// Abandon the close and keep the session.
+    func cancelPreDisconnect() {
+        preDisconnectTask?.cancel()
+        preDisconnectTask = nil
+        preDisconnectCompletion = nil
+        preDisconnectPhase = nil
+    }
+
+    private func finishPreDisconnect() {
+        let completion = preDisconnectCompletion
+        preDisconnectTask = nil
+        preDisconnectCompletion = nil
+        preDisconnectPhase = nil
+        completion?()
+    }
+
     // MARK: - SplitPaneView hooks
 
     @discardableResult
@@ -566,6 +632,9 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
     override func prepareForClose() {
         guard !isClosed else { return }
         isClosed = true
+        preDisconnectTask?.cancel()
+        preDisconnectTask = nil
+        preDisconnectCompletion = nil
         fullScreenController?.paneDidClose(self)
         keyboardCapture.onReservedHostShortcut = nil
         session.disconnect()
@@ -618,15 +687,18 @@ extension KVMPaneView: RemoteScreenPane {
     var remoteSessionIsConnected: Bool { session.connectionState.isConnected }
 
     func sendKeyboardToolbarKeysym(down: Bool, keysym: UInt32) {
+        if down { keyboardCapture.noteExternalInput() }
         session.sendKeysym(down: down, keysym: keysym)
     }
 
     func pasteFromKeyboardToolbar() {
+        keyboardCapture.noteExternalInput()
         pasteClipboard()
     }
 
     func typePasswordFromKeyboardToolbar(pressingReturn: Bool) {
         guard loginPassword.canSend else { return }
+        keyboardCapture.noteExternalInput()
         loginPassword.send(pressingReturn: pressingReturn)
     }
 
@@ -665,16 +737,14 @@ extension KVMPaneView: RemoteScreenPane {
 
 extension KVMPaneView: UIGestureRecognizerDelegate {
 
-    /// The remote-screen view consumes one- and two-finger touches, so a
-    /// three-finger pan is the iPhone path to other tabs (as on VNC panes).
+    /// The remote-screen view consumes every touch, so a three-finger pan
+    /// the remote gestures do not claim is the iPhone path to other tabs (as
+    /// on VNC panes).
     /// iPad installs it for pane presets only: zoom has no on-screen exit.
     private func installTabSwipeGestureIfNeeded() {
         let idiom = UIDevice.current.userInterfaceIdiom
         guard tabSwipePanGesture == nil, idiom == .phone || idiom == .pad else { return }
-        let pan = UIPanGestureRecognizer(target: self, action: #selector(handleAppTabSwipePan))
-        pan.minimumNumberOfTouches = 3
-        pan.maximumNumberOfTouches = 3
-        pan.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+        let pan = RemoteScreenNavigationPan(target: self, action: #selector(handleAppTabSwipePan))
         pan.delegate = self
         addGestureRecognizer(pan)
         tabSwipePanGesture = pan
@@ -682,7 +752,7 @@ extension KVMPaneView: UIGestureRecognizerDelegate {
 
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard gestureRecognizer === tabSwipePanGesture,
-              let pan = gestureRecognizer as? UIPanGestureRecognizer else {
+              let pan = gestureRecognizer as? RemoteScreenNavigationPan else {
             return super.gestureRecognizerShouldBegin(gestureRecognizer)
         }
         let velocity = pan.velocity(in: self)
@@ -690,6 +760,7 @@ extension KVMPaneView: UIGestureRecognizerDelegate {
         guard abs(velocity.x) > abs(velocity.y) || abs(translation.x) > abs(translation.y) else { return false }
         let x = abs(velocity.x) >= abs(translation.x) ? velocity.x : translation.x
         let direction: SwipeDirection = x < 0 ? .left : .right
+        guard !pan.yieldsToRemoteSwipe(direction) else { return false }
         let binding = SwipeGestureManager.shared.binding(for: direction, area: swipeStartArea(of: pan))
         activePaneCycle = nil
         guard let preset = appTabPreset(for: binding) else {
@@ -713,7 +784,8 @@ extension KVMPaneView: UIGestureRecognizerDelegate {
         _ gestureRecognizer: UIGestureRecognizer,
         shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
     ) -> Bool {
-        gestureRecognizer === tabSwipePanGesture
+        guard let pan = tabSwipePanGesture, gestureRecognizer === pan else { return false }
+        return pan.recognizesSimultaneously(with: otherGestureRecognizer)
     }
 
     @objc private func handleAppTabSwipePan(_ gesture: UIPanGestureRecognizer) {

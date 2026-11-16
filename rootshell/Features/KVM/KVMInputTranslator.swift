@@ -47,6 +47,11 @@ nonisolated struct KVMInputTranslator {
 
     var typesTextOnDevice: Bool { hostLayout != Self.usLayout }
 
+    /// The last pointer position sent on this control socket.
+    var lastPointerPosition: (x: Int, y: Int)? { lastPoint }
+
+    var hasHeldInput: Bool { !codeRefs.isEmpty || buttonMask != 0 }
+
     // MARK: Keys
 
     /// A hardware key by physical position. Repeated downs are dropped: the

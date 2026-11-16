@@ -65,7 +65,7 @@ final class KVMLoginPasswordAssistant {
 
     // MARK: - Sending
 
-    /// The HUD's Type Computer Password.
+    /// The HUD's Type Password.
     func requestSend() {
         guard canSend else { return }
         isConfirming = true

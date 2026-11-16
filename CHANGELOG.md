@@ -3,6 +3,79 @@
 All notable changes to the rootshell app for iPhone, iPad, Vision Pro, and Mac, newest first.
 Versions are listed as `release-build`, matching the version shown in Settings, About.
 
+## 1.0.16-178 - November 14, 2026
+
+### Terminal, Tailscale and Shortcuts
+
+- **Terminal Scrolling:** Reduced scroll stutter from agent and task detection by sharing detection work, limiting scan time, and deferring scans during scrolling.
+- **macOS Touch:** Selection handles and normal touch response return sooner after a scroll bounce stops at an edge.
+- **Screen Sharing over Tailscale:** rootshell Only Tailscale connections, including bare peer names, now count as mesh VPN paths. Automatic High Performance bandwidth selects Low Bandwidth, and the connection warning applies to these paths too.
+- **Local Shell Shortcuts:** The Open Local Shell action in Shortcuts adds an optional Command to run in the new tab, alongside Directory.
+
+### Screen Sharing and KVM: iPhone and iPad Keyboard
+
+- **Composed Input:** Fixed CJK and other composed software-keyboard input. Composition stays local until committed, so selecting candidates or deleting unfinished text no longer sends partial input remotely. Improved accented-character and multi-code-point input.
+- **Returning to the App:** The on-screen keyboard returns after switching away and back. Screen Sharing avoids unnecessary Match Client display resizes during that switch, reducing stale frames and repeated remote resizes.
+- **Opening Screen Sharing:** Opening a Screen Sharing tab dismisses the previous terminal's keyboard while the connection starts.
+- **iPhone Duo Toolbar:** The Screen Sharing and KVM keyboard toolbar keeps compact phone sizing, including after display changes.
+
+### Screen Sharing and KVM: Mac Shortcuts
+
+- **Reserved Shortcuts:** Send Reserved Shortcuts forwards more menu and window shortcuts, including Command-Q, Command-H, Command-M, and Control-Tab. Remote shortcut forwarding pauses while a local credential prompt holds the keyboard.
+- **Standalone Input Capture:** Captured sessions can receive Spotlight shortcuts (Command-Space and Command-Option-Space) and Command-Grave for remote window switching. With Send Reserved Shortcuts enabled, Command-Tab and shortcuts registered by other local apps can also reach the remote computer. Command-Shift-M stays local to toggle capture.
+- **Remote Keyboard Focus:** Remote Tab and Space shortcuts no longer move focus to or activate local controls. Held modifiers keep remote switchers open until released.
+
+### Screen Sharing: Downloads and Clipboard
+
+- **Downloads Settings:** Added Settings > Screen Sharing > Downloads to find files and folders left by Drag to Download, including earlier sessions, without reconnecting. View storage used, Save to Files, share, delete individual items, or Clear All.
+- **Download Cleanup:** Downloads in progress are excluded from cleanup. Deleting removes the local temporary copy; remote originals and files saved elsewhere are unaffected. The system may remove temporary downloads when storage runs low.
+- **macOS Shared Clipboard:** Content copied in another app is sent when you return to rootshell. Switching between rootshell windows avoids forwarding another session's clipboard to the wrong remote computer.
+
+### GL.iNet Comet KVM: Before Disconnecting
+
+- **Connection Actions:** Added a per-connection Before Disconnecting action to sleep a Mac display, lock a Mac, Windows, or Linux screen, log out a Mac, send Ctrl-Alt-Del, or send a custom keyboard shortcut. Shortcuts use the configured computer keyboard layout.
+- **Closing and Failures:** Actions run when closing the connection, pane, or tab, excluding network drops, reconnects, and backgrounding. Failed actions offer Stay Connected or Disconnect Anyway.
+- **Logout and Sleep:** Mac logout skips confirmation; unsaved changes may still block it. Sleep Display sends Control-Shift-Power, which can sleep or shut down a Windows or Linux computer.
+
+## 1.0.16-177 - November 13, 2026
+
+### macOS
+
+- **Terminal Touch Support:** Added finger scrolling, text selection with handles and magnifier, pinch font resizing, and touch-and-hold actions for the MacBook Pro with PROLED XDR Display, currently the only Mac with touch support.
+- **Screen Sharing Shortcuts:** Send Reserved Shortcuts now forwards rootshell shortcuts such as Command-T and Command-1 to the remote computer. Command-Shift-M stays local to toggle capture. Fixed remote modifier keys sticking after switching apps, including Control-Option-as-Command input.
+- **Standalone Input Capture:** Captured Screen Sharing and KVM sessions can receive physical Control-Space and Control-Option-Space instead of switching the local input source. Standalone macOS only.
+- **Finder File Transfers:** Fixed Finder file drags into Screen Sharing, including text files. Drag files from a compatible remote Mac out of the window directly into Finder to download them.
+
+### Screen Sharing and KVM: iPhone and iPad Controls
+
+- **Floating Toolbar:** The keyboard toolbar now lives in a draggable glass bar with the session menu. Fold the keys away with the chevron; hold it to switch between floating and docked. Set the default with Floating Toolbar in Screen Sharing settings. The keyboard button hides with a hardware keyboard.
+- **Type Password Key:** Add the optional Type Password key in keyboard toolbar customization. Tap to type the saved password; hold to add Return. Works with Screen Sharing credentials and a KVM profile's saved computer password.
+- **Double-Press Modifiers:** Hold an already locked modifier key to unlock it and send two presses of that modifier to the remote computer, for double-press shortcuts.
+- **Navigation Gestures:** Tab and pane navigation swipes now yield to configured remote three-finger swipes and held-button drags. Use Four Fingers in Screen Sharing settings gives local navigation its own gesture. On iPad, disable the system's Four & Five Finger Gestures to use it.
+
+### GL.iNet Comet KVM: Computer Password
+
+- **Saved Computer Password:** Saved KVM profiles can store the connected computer's password separately from the KVM password, in iCloud Keychain. Type Computer Password in the session menu asks before typing, with or without Return.
+- **Login Screen Recognition:** Offer at Login Screen uses on-device text recognition to offer that confirmation at recognized login, lock, or disk-unlock screens, including macOS, Windows, and Linux. It checks after video starts, the computer wakes, or resolution changes; typing still requires confirmation.
+
+### Screen Sharing: Reliability
+
+- **Input During Resizing:** Fixed lost keystrokes and partially typed passwords around Match Client display resizes on compatible remote Macs, in Standard and High Performance modes.
+- **Display Fit:** Near-matching remote display sizes now fill the pane, removing thin borders caused by display-size rounding.
+- **Clipboard Deliveries:** Shared Clipboard skips repeated deliveries of unchanged content, avoiding duplicate clipboard history entries.
+- **High Performance Warning:** Restored the warning before starting High Performance over cellular or external mesh VPN paths. Choose Continue High Performance or Use Standard for that connection.
+- **Remote Input Source:** Commands > Special Keys adds Control-Space for remote input-source switching.
+
+### Keyboard, Panes and Background Sessions
+
+- **Keyboard and Pane Zoom:** On iPhone and iPad, terminals resize sooner when the software keyboard appears or hides. The keyboard toolbar adds Choose Pane to Zoom and Toggle Pane Zoom, including tmux and herdr control mode.
+- **Background Keepalive:** Location Diary Auto mode now counts Screen Sharing and KVM panes for background keepalive. These sessions also appear in counts and summaries.
+
+### WASM Local Shell: iOS, iPadOS and visionOS
+
+- **Listings and Connections:** Fixed folder listings stopping after roughly 100 entries and TCP/TLS connections hanging on closed or unreachable ports.
+- **Network Discovery and UDP:** Added Bonjour service discovery for SSH, VNC, and remote pairing, UDP reception from multiple senders, multicast sending, and receive timeouts for TCP/UDP.
+
 ## 1.0.16-176 - November 11, 2026
 
 ### Pane Swipe Presets

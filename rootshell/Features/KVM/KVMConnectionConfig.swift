@@ -34,9 +34,15 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
     /// Usually wanted for a Mac, which reverses a USB wheel with its own
     /// natural scrolling setting.
     var reverseScrolling: Bool
+    /// Whose shortcuts the session's Commands menu sends.
+    var computerType: KVMComputerType
+    /// Nudge the pointer, then hold Control, when a connection gets no video.
+    var automaticallyWakeDisplay: Bool
     /// Offer to type the profile's saved computer password when the video
     /// shows a login or lock screen.
     var promptForHostPasswordAtLoginScreen: Bool
+    /// Keys pressed on the remote computer before an intentional disconnect.
+    var preDisconnectAction: KVMPreDisconnectAction
 
     init(
         host: String,
@@ -47,7 +53,10 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         automaticallyEnterFullScreen: Bool = false,
         hostKeyboardLayout: String = KVMInputTranslator.usLayout,
         reverseScrolling: Bool = false,
-        promptForHostPasswordAtLoginScreen: Bool = true
+        computerType: KVMComputerType = .mac,
+        automaticallyWakeDisplay: Bool = true,
+        promptForHostPasswordAtLoginScreen: Bool = true,
+        preDisconnectAction: KVMPreDisconnectAction = KVMPreDisconnectAction()
     ) {
         self.host = host
         self.port = port
@@ -57,15 +66,18 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         self.automaticallyEnterFullScreen = automaticallyEnterFullScreen
         self.hostKeyboardLayout = hostKeyboardLayout
         self.reverseScrolling = reverseScrolling
+        self.computerType = computerType
+        self.automaticallyWakeDisplay = automaticallyWakeDisplay
         self.promptForHostPasswordAtLoginScreen = promptForHostPasswordAtLoginScreen
+        self.preDisconnectAction = preDisconnectAction
     }
 
     // MARK: - Codable (lossy per field)
 
     private enum CodingKeys: String, CodingKey {
         case host, port, username, jump, keyboardToolbar
-        case automaticallyEnterFullScreen, hostKeyboardLayout, reverseScrolling
-        case promptForHostPasswordAtLoginScreen
+        case automaticallyEnterFullScreen, hostKeyboardLayout, reverseScrolling, computerType
+        case promptForHostPasswordAtLoginScreen, preDisconnectAction, automaticallyWakeDisplay
     }
 
     init(from decoder: Decoder) throws {
@@ -85,8 +97,13 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         let layout = ((try? container.decodeIfPresent(String.self, forKey: .hostKeyboardLayout)) ?? nil) ?? ""
         hostKeyboardLayout = layout.isEmpty ? KVMInputTranslator.usLayout : layout
         reverseScrolling = ((try? container.decodeIfPresent(Bool.self, forKey: .reverseScrolling)) ?? nil) ?? false
+        computerType = ((try? container.decodeIfPresent(String.self, forKey: .computerType)) ?? nil)
+            .flatMap(KVMComputerType.init(rawValue:)) ?? .mac
+        automaticallyWakeDisplay = ((try? container.decodeIfPresent(Bool.self, forKey: .automaticallyWakeDisplay)) ?? nil) ?? true
         promptForHostPasswordAtLoginScreen = ((try? container.decodeIfPresent(
             Bool.self, forKey: .promptForHostPasswordAtLoginScreen)) ?? nil) ?? true
+        preDisconnectAction = ((try? container.decodeIfPresent(
+            KVMPreDisconnectAction.self, forKey: .preDisconnectAction)) ?? nil) ?? KVMPreDisconnectAction()
     }
 
     func encode(to encoder: Encoder) throws {
@@ -99,7 +116,12 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         try container.encode(automaticallyEnterFullScreen, forKey: .automaticallyEnterFullScreen)
         try container.encode(hostKeyboardLayout, forKey: .hostKeyboardLayout)
         try container.encode(reverseScrolling, forKey: .reverseScrolling)
+        try container.encode(computerType.rawValue, forKey: .computerType)
+        try container.encode(automaticallyWakeDisplay, forKey: .automaticallyWakeDisplay)
         try container.encode(promptForHostPasswordAtLoginScreen, forKey: .promptForHostPasswordAtLoginScreen)
+        if preDisconnectAction.isEnabled {
+            try container.encode(preDisconnectAction, forKey: .preDisconnectAction)
+        }
     }
 
     // MARK: - Computed
@@ -130,6 +152,12 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         components.port = port
         return components.url
     }
+}
+
+/// The kind of computer behind the KVM, which the device cannot report.
+nonisolated enum KVMComputerType: String, Codable, CaseIterable, Sendable {
+    case mac
+    case pc
 }
 
 /// kvmd's bundled keymaps, by the names `/api/hid/print` accepts.

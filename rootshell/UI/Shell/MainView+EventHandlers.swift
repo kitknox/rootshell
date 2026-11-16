@@ -517,7 +517,10 @@ extension MainView {
             // picking a tab should refocus the terminal for typing.
             if !(showingTabSwitcher && !tabSidebarDismissesOnSelect && !tabSidebarIsDocked) {
                 newFocusAcquired = focus.focusDidChange(true)
+                // Terminals only: a remote-screen pane takes first responder
+                // once connected, and the old keyboard would show until then.
                 newFocusAwaitsWindow = !newFocusAcquired && focus.window == nil
+                    && focus.asTerminal != nil
             }
 
             // USER tab switch into a tmux window tab: sync tmux's current

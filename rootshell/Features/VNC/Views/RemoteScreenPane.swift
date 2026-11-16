@@ -57,6 +57,17 @@ protocol RemoteScreenPane: SplitPaneView {
 
     var brightnessHUDHost: UIHostingController<BrightnessBoostHUDView>? { get set }
     var brightnessHUDHideTask: Task<Void, Never>? { get set }
+
+    /// Run the saved pre-disconnect action, then `disconnect`. Only an
+    /// intentional close comes through here; never calls `disconnect` when
+    /// the user chooses to stay connected.
+    func runPreDisconnectAction(then disconnect: @escaping @MainActor () -> Void)
+}
+
+/// A pre-disconnect action in progress, or failed and waiting on the user.
+enum RemoteScreenPreDisconnectPhase: Equatable {
+    case running
+    case failed(String)
 }
 
 extension RemoteScreenPane {
@@ -80,5 +91,31 @@ extension RemoteScreenPane {
         case .previousTab: ("[", [.command, .shift])
         case .nextTab: ("]", [.command, .shift])
         }
+    }
+
+    /// Mac: while captured with reserved shortcuts routed to the remote, the
+    /// menu bar gives up rootshell's key equivalents. Re-arms on every change.
+    func observeMenuShortcutForwarding() {
+        #if targetEnvironment(macCatalyst)
+        _ = withObservationTracking {
+            (keyboardCapture.isCaptured, keyboardCapture.routesReservedHostShortcutsToVNC,
+             keyboardCapture.remoteInputIsFirstResponder)
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.observeMenuShortcutForwarding()
+            }
+        }
+        reportMenuShortcutForwarding()
+        #endif
+    }
+
+    /// Also called on window moves, which the observation cannot see. A
+    /// local prompt can hold the keyboard with capture still on.
+    func reportMenuShortcutForwarding() {
+        #if targetEnvironment(macCatalyst)
+        MenuShortcutState.shared.setRemoteScreenPane(self, forwardsShortcuts:
+            keyboardCapture.isCaptured && keyboardCapture.routesReservedHostShortcutsToVNC
+                && keyboardCapture.remoteInputIsFirstResponder)
+        #endif
     }
 }

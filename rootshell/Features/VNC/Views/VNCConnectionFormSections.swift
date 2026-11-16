@@ -671,26 +671,8 @@ struct VNCConnectionFormSections: View {
 
     // MARK: Before disconnecting
 
-    /// "Character" row of the key picker; special keys use their raw value.
-    private static let characterKeyTag = ""
-
     private var sshCommandProfiles: [ConnectionProfile] {
         ConnectionProfileManager.shared.profiles.filter(VNCPreDisconnectRunner.canRunCommand(through:))
-    }
-
-    private var shortcutKeyChoice: Binding<String> {
-        Binding(
-            get: { form.preDisconnect.shortcut.specialKey?.rawValue ?? Self.characterKeyTag },
-            set: { form.preDisconnect.shortcut.key = $0 }
-        )
-    }
-
-    /// Keeps the typed key to its last character.
-    private var shortcutCharacter: Binding<String> {
-        Binding(
-            get: { form.preDisconnect.shortcut.character.map(String.init) ?? "" },
-            set: { form.preDisconnect.shortcut.key = String($0.suffix(1)) }
-        )
     }
 
     private var preDisconnectSection: some View {
@@ -717,33 +699,7 @@ struct VNCConnectionFormSections: View {
                         .foregroundStyle(.secondary)
 
                 case .shortcut:
-                    Toggle("Control", isOn: $form.preDisconnect.shortcut.control)
-                    Toggle("Option", isOn: $form.preDisconnect.shortcut.option)
-                    Toggle("Shift", isOn: $form.preDisconnect.shortcut.shift)
-                    Toggle("Command", isOn: $form.preDisconnect.shortcut.command)
-
-                    Picker("Key", selection: shortcutKeyChoice) {
-                        Text("Character").tag(Self.characterKeyTag)
-                        ForEach(VNCPreDisconnectShortcut.SpecialKey.allCases, id: \.self) { key in
-                            Text(key.displayName).tag(key.rawValue)
-                        }
-                    }
-
-                    if form.preDisconnect.shortcut.specialKey == nil {
-                        HStack {
-                            Text("Character")
-                            Spacer()
-                            TextField("Q", text: shortcutCharacter)
-                                .autocapitalization(.none)
-                                .autocorrectionDisabled()
-                                .multilineTextAlignment(.trailing)
-                                .frame(maxWidth: 100)
-                        }
-                    }
-
-                    if form.preDisconnect.shortcut.isValid {
-                        LabeledContent("Sends", value: form.preDisconnect.shortcut.displayName)
-                    }
+                    PreDisconnectShortcutRows(shortcut: $form.preDisconnect.shortcut)
 
                 case .command:
                     if sshCommandProfiles.isEmpty {
@@ -783,6 +739,62 @@ struct VNCConnectionFormSections: View {
         case .followAppSetting: return String(localized: "Follow App Setting", comment: "VNC keyboard toolbar preference")
         case .on: return String(localized: "On", comment: "VNC keyboard toolbar preference")
         case .off: return String(localized: "Off", comment: "VNC keyboard toolbar preference")
+        }
+    }
+}
+
+// MARK: - Pre-disconnect shortcut
+
+/// Modifier toggles and key for a pre-disconnect chord, shared by the Screen
+/// Sharing and KVM forms.
+struct PreDisconnectShortcutRows: View {
+    @Binding var shortcut: VNCPreDisconnectShortcut
+
+    /// "Character" row of the key picker; special keys use their raw value.
+    private static let characterKeyTag = ""
+
+    private var keyChoice: Binding<String> {
+        Binding(
+            get: { shortcut.specialKey?.rawValue ?? Self.characterKeyTag },
+            set: { shortcut.key = $0 }
+        )
+    }
+
+    /// Keeps the typed key to its last character.
+    private var character: Binding<String> {
+        Binding(
+            get: { shortcut.character.map(String.init) ?? "" },
+            set: { shortcut.key = String($0.suffix(1)) }
+        )
+    }
+
+    var body: some View {
+        Toggle("Control", isOn: $shortcut.control)
+        Toggle("Option", isOn: $shortcut.option)
+        Toggle("Shift", isOn: $shortcut.shift)
+        Toggle("Command", isOn: $shortcut.command)
+
+        Picker("Key", selection: keyChoice) {
+            Text("Character").tag(Self.characterKeyTag)
+            ForEach(VNCPreDisconnectShortcut.SpecialKey.allCases, id: \.self) { key in
+                Text(key.displayName).tag(key.rawValue)
+            }
+        }
+
+        if shortcut.specialKey == nil {
+            HStack {
+                Text("Character")
+                Spacer()
+                TextField("Q", text: character)
+                    .autocapitalization(.none)
+                    .autocorrectionDisabled()
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 100)
+            }
+        }
+
+        if shortcut.isValid {
+            LabeledContent("Sends", value: shortcut.displayName)
         }
     }
 }

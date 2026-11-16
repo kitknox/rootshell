@@ -244,14 +244,14 @@ extension MainAlertController {
 
 extension MainView {
 
-    /// Run each Screen Sharing pane's pre-disconnect action in turn, then
+    /// Run each remote-screen pane's pre-disconnect action in turn, then
     /// `close`. Synchronous when no pane has one. A pane the user chooses to
     /// keep connected ends the chain, so `close` never runs.
     func runPreDisconnectActions(
         for panes: [SplitPaneView],
         then close: @escaping @MainActor () -> Void
     ) {
-        let screenPanes = panes.compactMap { $0 as? VNCPaneView }
+        let screenPanes = panes.compactMap { $0 as? any RemoteScreenPane }
         guard let pane = screenPanes.first else {
             close()
             return
@@ -289,7 +289,7 @@ extension MainView {
 
     /// A failed pre-disconnect action asks the user what to do inside its
     /// pane, so bring that pane forward.
-    func revealPaneForPreDisconnectFailure(_ pane: VNCPaneView) {
+    func revealPaneForPreDisconnectFailure(_ pane: SplitPaneView) {
         guard let tab = terminals.first(where: { tab in
             tab.splitTree.contains(where: { $0 === pane })
         }) else { return }

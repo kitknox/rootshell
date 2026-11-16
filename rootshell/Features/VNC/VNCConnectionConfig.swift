@@ -456,22 +456,25 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         }
     }
 
-    /// Whether High Performance asks the Mac for its low-bandwidth range:
-    /// Automatic picks it off Wi-Fi and wired, and on mesh VPN paths that the
-    /// in-app tailnet does not carry itself.
+    /// Whether High Performance asks the Mac for its low-bandwidth range.
     var usesLowBandwidthHighPerformance: Bool {
         switch highPerformanceBandwidth {
         case .full: return false
         case .low: return true
-        case .automatic: break
+        case .automatic: return usesUnreliableHighPerformancePath
         }
+    }
+
+    /// Off Wi-Fi and wired, or a mesh VPN path. The in-app tailnet also
+    /// carries bare peer names the hostname check cannot see.
+    var usesUnreliableHighPerformancePath: Bool {
         let network = NetworkReachabilityMonitor.shared
         let localBearer = network.isConnected
             && (network.connectionType == .wifi || network.connectionType == .wired)
         #if !CHINA_BUILD
         let routing = TailnetRouting.shared
         let meshPath = usesMeshVPNHostname
-            && !(routing.state.enabled && routing.looksLikeTailnet(host))
+            || (routing.state.enabled && routing.looksLikeTailnet(host))
         #else
         let meshPath = usesMeshVPNHostname
         #endif

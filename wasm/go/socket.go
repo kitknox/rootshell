@@ -91,6 +91,18 @@ func socketResolveV4(host unsafe.Pointer, hostLen int32, outBuf unsafe.Pointer, 
 //go:noescape
 func socketResolveV6(host unsafe.Pointer, hostLen int32, outBuf unsafe.Pointer, outMax int32, countOut unsafe.Pointer) int32
 
+// SO_RCVTIMEO: recv/recvfrom return EAGAIN after timeoutMs; 0 waits forever.
+//
+//go:wasmimport rootshell_socket rootshell_socket_set_recv_timeout
+func socketSetRecvTimeout(fd int32, timeoutMs uint32) int32
+
+// Browses for a Bonjour service type for up to timeoutMs and writes one
+// "name\thost\tport\taddr,addr\n" line per instance into outBuf.
+//
+//go:wasmimport rootshell_socket rootshell_socket_bonjour_lookup
+//go:noescape
+func socketBonjourLookup(typ unsafe.Pointer, typLen int32, timeoutMs uint32, outBuf unsafe.Pointer, outMax int32, outLen unsafe.Pointer) int32
+
 //go:wasmimport rootshell_terminal rootshell_terminal_set_raw
 func terminalSetRaw(enabled int32) int32
 
@@ -127,6 +139,8 @@ func errnoName(e int32) string {
 		return "OK"
 	case 2:
 		return "EACCES"
+	case 6:
+		return "EAGAIN"
 	case 8:
 		return "EBADF"
 	case 14:
@@ -137,6 +151,8 @@ func errnoName(e int32) string {
 		return "EINVAL"
 	case 50:
 		return "ENETUNREACH"
+	case 42:
+		return "ENOBUFS"
 	case 73:
 		return "ETIMEDOUT"
 	default:
