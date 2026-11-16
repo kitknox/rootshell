@@ -182,6 +182,8 @@ final class GPGAgentManager: ObservableObject {
                     case .ecdsaP256: return .ecdsaP256
                     case .ecdsaP384: return .ecdsaP384
                     case .ed25519: return .ed25519
+                    // No OpenPGP mapping; unreachable like the software ML-DSA case below.
+                    case .mldsa44, .mldsa65, .mldsa87: return .rsa
                     }
                 }
                 switch key.keyType {

@@ -72,15 +72,20 @@ struct YubiKeyManagementView: View {
             } header: {
                 Text("Connect via")
             } footer: {
-                if connectionManager.connectionState.connectingTransport != nil {
-                    Text("Waiting for YubiKey... Tap the highlighted transport again to cancel.")
+                if let transport = connectionManager.connectionState.connectingTransport {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Waiting for YubiKey... Tap the highlighted transport again to cancel.")
+                        if transport == .usbc {
+                            Text("Already plugged in? The key's smart card (PIV) interface may be turned off for USB. Turn it on in Yubico Authenticator, or run `ykman config usb --enable PIV`.")
+                        }
+                    }
                 }
             }
 
             // Discovered Keys
-            if !discoveredKeys.isEmpty {
+            if !listedKeys.isEmpty {
                 Section {
-                    ForEach(discoveredKeys) { key in
+                    ForEach(listedKeys) { key in
                         DiscoveredKeyRow(key: key) { name in
                             importKey(key, name: name)
                         }
@@ -101,8 +106,9 @@ struct YubiKeyManagementView: View {
                 }
             }
 
-            // PIV Actions
-            if case .connected = connectionManager.connectionState {
+            // PIV Actions. Over NFC each action opens its own session, so they
+            // stay available after the discovery session has ended.
+            if canRunPIVActions {
                 Section {
                     Button {
                         showingGenerateSheet = true
@@ -127,7 +133,11 @@ struct YubiKeyManagementView: View {
                     .themedRow()
 
                     Button {
-                        discoverKeys()
+                        if connectionManager.connectionState.isConnected {
+                            discoverKeys()
+                        } else {
+                            connectAndDiscover()
+                        }
                     } label: {
                         Label("Refresh PIV Keys", systemImage: "arrow.clockwise")
                     }
@@ -194,12 +204,11 @@ struct YubiKeyManagementView: View {
             showingPINPrompt = newValue != nil
         }
         .sheet(isPresented: $showingGenerateSheet) {
-            GenerateYubiKeyKeyView { generated in
+            GenerateYubiKeyKeyView { generated, discovered in
                 generatedKey = generated
                 showingGenerateSheet = false
                 showingGeneratedKeySheet = true
-                // Refresh discovered keys to show the new one
-                discoverKeys()
+                showKeyInSlot(discovered)
             }
             .themedSubSheet(sheetThemeColors)
         }
@@ -226,8 +235,17 @@ struct YubiKeyManagementView: View {
                 importResult = result
                 showingImportSheet = false
                 showingImportResultSheet = true
-                // Refresh discovered keys to show the imported one
-                discoverKeys()
+                let key = result.yubiKeySSHKey
+                if let info = key.yubiKeyInfo, let blob = key.publicKeyBlob {
+                    showKeyInSlot(DiscoveredYubiKeyKey(
+                        yubiKeySerial: info.serialNumber,
+                        slot: info.pivSlot,
+                        algorithm: info.algorithm,
+                        publicKeyData: blob,
+                        fingerprint: key.fingerprint,
+                        requiresPIN: info.pivSlot?.requiresPIN ?? true
+                    ))
+                }
             }
             .themedSubSheet(sheetThemeColors)
         }
@@ -273,8 +291,9 @@ struct YubiKeyManagementView: View {
             }
         }
         .onChange(of: connectionManager.connectionState) { oldState, newState in
-            // Auto-discover keys when YubiKey connects spontaneously via USB-C/Lightning
-            if newState.isConnected && !oldState.isConnected {
+            // Auto-discover keys when YubiKey connects spontaneously via USB-C/Lightning.
+            // NFC connects only for an explicit action, which owns the session.
+            if case .connected(_, let method) = newState, method != .nfc, !oldState.isConnected {
                 // Only auto-discover if we're not already discovering (e.g., from connectAndDiscover)
                 if !isDiscovering && discoveredKeys.isEmpty {
                     discoverKeys()
@@ -299,9 +318,54 @@ struct YubiKeyManagementView: View {
         }
     }
 
+    /// Rows for the key shown in the status section. A later tap with another
+    /// YubiKey must not leave the first key's slots listed under it.
+    private var listedKeys: [DiscoveredYubiKeyKey] {
+        guard let serial = connectionManager.lastReadDevice?.serial else { return discoveredKeys }
+        return discoveredKeys.filter { $0.yubiKeySerial == serial }
+    }
+
+    private var canRunPIVActions: Bool {
+        switch connectionManager.connectionState {
+        case .connected:
+            return true
+        case .disconnected, .error:
+            return connectionManager.lastReadDevice != nil
+        case .connecting, .waitingForDevice, .authenticating, .signing:
+            return false
+        }
+    }
+
     @ViewBuilder
     private var connectionStatusRow: some View {
-        if case .connected(let serial, let method) = connectionManager.connectionState {
+        if !connectionManager.connectionState.isBusy,
+           !connectionManager.connectionState.isConnected,
+           let device = connectionManager.lastReadDevice, device.method == .nfc {
+            // NFC sessions end after each operation; show what was read.
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Circle()
+                        .fill(Color.blue)
+                        .frame(width: 12, height: 12)
+                    Text("Read via NFC")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if isDiscovering {
+                        ProgressView()
+                    }
+                }
+
+                Divider()
+
+                LabeledContent("Model", value: device.formFactor.displayName)
+                LabeledContent("Firmware", value: device.firmwareVersion)
+                LabeledContent("Serial", value: String(device.serial))
+
+                Text("Actions below ask you to hold the key to your iPhone again.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else if case .connected(let serial, let method) = connectionManager.connectionState {
             // Expanded status view when connected
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -367,7 +431,7 @@ struct YubiKeyManagementView: View {
                 // Close NFC session when done (safe to call for non-NFC connections)
                 #if os(iOS) && !os(visionOS)
                 if case .connected(_, .nfc) = connectionManager.connectionState {
-                    await connectionManager.closeNFCSession(withMessage: "Discovery complete")
+                    await connectionManager.closeNFCSession(withMessage: "Done. Remove your YubiKey.")
                 }
                 #endif
             } catch {
@@ -395,6 +459,15 @@ struct YubiKeyManagementView: View {
         connectionManager.cancelPendingConnection()
         discoverTask?.cancel()
         isDiscovering = false
+    }
+
+    /// Show a key just written to a slot without reading the YubiKey again:
+    /// over NFC the operation's session has already ended. Rows listed from
+    /// another YubiKey are dropped; the write may have used a different key.
+    private func showKeyInSlot(_ key: DiscoveredYubiKeyKey) {
+        discoveredKeys.removeAll { $0.slot == key.slot || $0.yubiKeySerial != key.yubiKeySerial }
+        discoveredKeys.append(key)
+        discoveredKeys.sort { ($0.slot?.rawValue ?? "") < ($1.slot?.rawValue ?? "") }
     }
 
     private func discoverKeys() {
@@ -484,7 +557,7 @@ struct YubiKeyManagementView: View {
 
             do {
                 let slotManager = YubiKeySlotManager()
-                try await slotManager.deleteKey(in: slot)
+                try await slotManager.deleteKey(in: slot, expectedSerial: key.yubiKeySerial)
 
                 // Remove from discovered keys list
                 discoveredKeys.removeAll { $0.id == key.id }
@@ -656,7 +729,7 @@ struct YubiKeyKeyRow: View {
 // MARK: - Generate Key View
 
 struct GenerateYubiKeyKeyView: View {
-    let onGenerated: (GeneratedYubiKeyKey) -> Void
+    let onGenerated: (GeneratedYubiKeyKey, DiscoveredYubiKeyKey) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.sheetThemeColors) private var sheetThemeColors
@@ -669,9 +742,17 @@ struct GenerateYubiKeyKeyView: View {
     @State private var errorMessage: String?
     @State private var showingError = false
     @State private var showingOverwriteWarning = false
+    /// Generation will reach the key over NFC, where RSA-4096 never completes.
+    @State private var willUseNFC = false
 
-    // Algorithms supported by PIV (Ed25519 requires YubiKey 5.7+)
-    private let supportedAlgorithms: [YubiKeyAlgorithm] = [.ecdsaP256, .ecdsaP384, .ed25519, .rsa2048, .rsa4096]
+    // Ed25519 needs firmware 5.7+, ML-DSA 6.0+. ML-DSA stays listed while the
+    // firmware is unknown; generation rejects it on older keys.
+    private var supportedAlgorithms: [YubiKeyAlgorithm] {
+        var classic: [YubiKeyAlgorithm] = [.ecdsaP256, .ecdsaP384, .ed25519, .rsa2048, .rsa4096]
+        if willUseNFC { classic.removeAll { $0 == .rsa4096 } }
+        if let major = connectionManager.lastReadDevice?.firmwareMajor, major < 6 { return classic }
+        return classic + [.mldsa44, .mldsa65, .mldsa87]
+    }
 
     var body: some View {
         NavigationStack {
@@ -695,8 +776,15 @@ struct GenerateYubiKeyKeyView: View {
                 } footer: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("The private key will be generated on the YubiKey and never leaves the device.")
+                        if willUseNFC {
+                            Text("RSA-4096 isn't offered over NFC because the YubiKey can't finish generating it on NFC power. Connect it with USB-C to generate one.")
+                        }
                         if selectedAlgorithm == .ed25519 {
                             Text("Note: Ed25519 requires YubiKey firmware 5.7 or later.")
+                                .foregroundStyle(.orange)
+                        }
+                        if selectedAlgorithm.isPostQuantum {
+                            Text("Note: ML-DSA requires YubiKey firmware 6.0 or later, and the server must accept \(selectedAlgorithm.sshKeyTypeString) keys.")
                                 .foregroundStyle(.orange)
                         }
                         if selectedSlot == .signature {
@@ -736,6 +824,12 @@ struct GenerateYubiKeyKeyView: View {
                 }
             }
             .themedList()
+            .task {
+                willUseNFC = await connectionManager.willUseNFC()
+                if !supportedAlgorithms.contains(selectedAlgorithm) {
+                    selectedAlgorithm = .ecdsaP256
+                }
+            }
             .navigationTitle("Generate YubiKey Key")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -788,18 +882,35 @@ struct GenerateYubiKeyKeyView: View {
 
         Task {
             do {
-                let generator = YubiKeyKeyGenerator()
-                let generated = try await generator.generateKey(
-                    in: selectedSlot,
-                    algorithm: selectedAlgorithm,
-                    name: keyName
-                )
-
-                // Import the key automatically
+                // NFC sessions end after each operation; reconnect on demand.
+                try await connectionManager.connect()
                 guard case .connected(let serial, _) = connectionManager.connectionState else {
                     throw YubiKeyError.notConnected
                 }
 
+                let generator = YubiKeyKeyGenerator()
+                let generated: GeneratedYubiKeyKey
+                do {
+                    generated = try await generator.generateKey(
+                        in: selectedSlot,
+                        algorithm: selectedAlgorithm,
+                        name: keyName
+                    )
+                } catch {
+                    #if os(iOS) && !os(visionOS)
+                    if case .connected(_, .nfc) = connectionManager.connectionState {
+                        await connectionManager.closeNFCSession(withError: error.localizedDescription)
+                    }
+                    #endif
+                    throw error
+                }
+                #if os(iOS) && !os(visionOS)
+                if case .connected(_, .nfc) = connectionManager.connectionState {
+                    await connectionManager.closeNFCSession(withMessage: "Key generated. Remove your YubiKey.")
+                }
+                #endif
+
+                // Import the key automatically
                 let discovery = YubiKeyKeyDiscovery()
                 let discoveredKey = DiscoveredYubiKeyKey(
                     yubiKeySerial: serial,
@@ -811,7 +922,7 @@ struct GenerateYubiKeyKeyView: View {
                 )
                 _ = try discovery.importKey(discoveredKey, name: keyName, yubiKeySerial: serial)
 
-                onGenerated(generated)
+                onGenerated(generated, discoveredKey)
             } catch {
                 errorMessage = error.localizedDescription
                 showingError = true

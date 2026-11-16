@@ -186,7 +186,7 @@ nonisolated enum SSHKeyGPGBridge {
             case .ecdsaP256:
                 guard let q = parseSSHECDSAPublicBlob(ref.publicKeyBlob) else { return nil }
                 return (.ecdh(.p256), .ec(q: q))
-            case .ecdsaP384, .ed25519:
+            case .ecdsaP384, .ed25519, .mldsa44, .mldsa65, .mldsa87:
                 return nil
             }
 
@@ -355,6 +355,9 @@ nonisolated enum SSHKeyGPGBridge {
             var prefixed = Data([0x40])
             prefixed.append(q)
             return (.eddsaLegacy(.ed25519), .ec(q: prefixed))
+        case .mldsa44, .mldsa65, .mldsa87:
+            // No OpenPGP mapping, same as software ML-DSA keys.
+            return nil
         }
     }
 
@@ -831,6 +834,8 @@ nonisolated enum SSHKeyGPGBridge {
             throw GPGDecryptError.unsupportedAlgorithm("YubiKey P-384 decrypt not supported")
         case .ed25519:
             throw GPGDecryptError.unsupportedAlgorithm("YubiKey Ed25519 PIV slot can't perform X25519")
+        case .mldsa44, .mldsa65, .mldsa87:
+            throw GPGDecryptError.unsupportedAlgorithm("YubiKey ML-DSA PIV slot can't decrypt")
         }
     }
 
@@ -861,6 +866,8 @@ nonisolated enum SSHKeyGPGBridge {
             return .ecdsa(r: leftPad(r, toCount: 32), s: leftPad(s, toCount: 32))
         case .ecdsaP384:
             throw GPGSignError.unsupportedAlgorithm("ECDSA P-384")
+        case .mldsa44, .mldsa65, .mldsa87:
+            throw GPGSignError.unsupportedAlgorithm(reference.algorithm.rawValue)
         case .rsa2048, .rsa4096:
             // YubiKey RSA `.raw` returns the modulus-width signature
             // directly.

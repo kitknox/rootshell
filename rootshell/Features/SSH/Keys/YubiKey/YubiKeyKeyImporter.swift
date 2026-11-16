@@ -94,10 +94,12 @@ final class YubiKeyKeyImporter {
                 reason: "ECDSA P-521 keys are not supported by YubiKey PIV.",
                 warnings: []
             )
-        case .mldsa44Ed25519, .mldsa44, .mldsa65, .mldsa87:
+        case .mldsa44, .mldsa65, .mldsa87:
+            warnings.append("ML-DSA requires YubiKey firmware 6.0 or later.")
+        case .mldsa44Ed25519:
             return ImportValidation(
                 canImport: false,
-                reason: "ML-DSA keys are not supported by YubiKey PIV.",
+                reason: "ML-DSA-44 + Ed25519 keys cannot be stored in a single PIV slot.",
                 warnings: []
             )
         case .yubiKeyPIV, .yubiKeyFIDO2, .appleFIDO2, .applePasskey, .secureEnclaveP256:
@@ -190,6 +192,11 @@ final class YubiKeyKeyImporter {
                 throw YubiKeyError.unsupportedFeature("Ed25519 requires YubiKey 5.7 or later")
             }
         }
+        if YubiKeyKeyConverter.mldsaParameterSet(for: sshKey.keyType) != nil {
+            guard await session.supports(.mlDSA) else {
+                throw YubiKeyError.unsupportedFeature("ML-DSA requires YubiKey firmware 6.0 or later")
+            }
+        }
 
         // 6. Get serial number for YubiKey info
         guard case .connected(let serial, _) = connectionManager.connectionState else {
@@ -199,6 +206,7 @@ final class YubiKeyKeyImporter {
         // 7. Import the key based on type
         let publicKeyData: Data
         let algorithm: YubiKeyAlgorithm
+        var mldsaPublicKey: YubiKit.MLDSA.PublicKey?
 
         switch parsedKey.keyType {
         case .ed25519:
@@ -254,18 +262,38 @@ final class YubiKeyKeyImporter {
             publicKeyData = result.publicKeyData
             algorithm = result.keySize >= 4096 ? .rsa4096 : .rsa2048
 
+        case .mldsa44, .mldsa65, .mldsa87:
+            let key = try await importMLDSA(
+                parsedKey: parsedKey,
+                session: session,
+                slot: slot,
+                pinPolicy: pinPolicy,
+                touchPolicy: touchPolicy
+            )
+            mldsaPublicKey = key
+            publicKeyData = YubiKeyKeyConverter.sshPublicKeyBlob(for: key)
+            algorithm = YubiKeyKeyConverter.algorithm(for: key.parameterSet)
+            if let expected = sshKey.publicKeyBlob, expected != publicKeyData {
+                throw YubiKeyError.importFailed("The YubiKey reports a different public key than the imported ML-DSA key")
+            }
+
         default:
             throw YubiKeyError.unsupportedKeyTypeForImport(parsedKey.keyType.rawValue)
         }
 
         // 8. Generate and store certificate
-        try await createAndStoreCertificate(
-            session: session,
-            slot: slot.toYubiKitSlot,
-            publicKeyData: publicKeyData,
-            algorithm: algorithm,
-            keyName: sshKey.name
-        )
+        if let mldsaPublicKey {
+            let der = YubiKeyKeyConverter.mldsaSlotCertificate(for: mldsaPublicKey, commonName: sshKey.name)
+            try await session.putCertificate(X509Cert(der: der), in: slot.toYubiKitSlot, compressed: false)
+        } else {
+            try await createAndStoreCertificate(
+                session: session,
+                slot: slot.toYubiKitSlot,
+                publicKeyData: publicKeyData,
+                algorithm: algorithm,
+                keyName: sshKey.name
+            )
+        }
 
         // 9. Create new SSHKey with YubiKey reference
         let fingerprint = generateFingerprint(publicKeyData)
@@ -366,6 +394,36 @@ final class YubiKeyKeyImporter {
         writeSSHBuffer(&publicKeyBuffer, yubiKitKey.publicKey.keyData)
 
         return KeyImportResult(publicKeyData: publicKeyBuffer, keySize: 256)
+    }
+
+    /// Import a pure ML-DSA seed and read the slot's public key back from the
+    /// device, so the stored blob is the one the YubiKey will sign for.
+    private func importMLDSA(
+        parsedKey: SSHKeyParser.ParsedKey,
+        session: PIVSession,
+        slot: PIVSlot,
+        pinPolicy: PIV.PinPolicy,
+        touchPolicy: PIV.TouchPolicy
+    ) async throws -> YubiKit.MLDSA.PublicKey {
+        guard case .mldsa(let yubiKitKey) = try YubiKeyKeyConverter.convert(parsedKey: parsedKey) else {
+            throw YubiKeyError.keyConversionFailed("Expected an ML-DSA key")
+        }
+        Self.logger.info("Importing ML-DSA key")
+
+        do {
+            try await session.putPrivateKey(
+                yubiKitKey,
+                in: slot.toYubiKitSlot,
+                pinPolicy: pinPolicy,
+                touchPolicy: touchPolicy
+            )
+            guard case .mlDSA(let publicKey) = try await session.getMetadata(in: slot.toYubiKitSlot).publicKey else {
+                throw YubiKeyError.importFailed("The YubiKey did not report an ML-DSA public key")
+            }
+            return publicKey
+        } catch let error as PIVSessionError {
+            throw YubiKeyError.from(error)
+        }
     }
 
     /// Import ECDSA key

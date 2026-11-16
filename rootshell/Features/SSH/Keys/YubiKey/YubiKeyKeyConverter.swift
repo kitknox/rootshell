@@ -7,6 +7,7 @@
 //  Copyright (c) 2026 Kit Knox / Rootshell LLC
 //
 
+import CryptoTokenKit
 import Foundation
 import os.log
 import YubiKit
@@ -28,6 +29,7 @@ final class YubiKeyKeyConverter {
         case ed25519(Ed25519.PrivateKey)
         case ec(EC.PrivateKey)
         case rsa(RSA.PrivateKey)
+        case mldsa(YubiKit.MLDSA.PrivateKey)
     }
 
     // MARK: - Ed25519 Conversion
@@ -186,8 +188,16 @@ final class YubiKeyKeyConverter {
         case .ecdsaP521:
             throw YubiKeyError.unsupportedKeyTypeForImport("ECDSA P-521 (not supported by YubiKey PIV)")
 
-        case .mldsa44Ed25519, .mldsa44, .mldsa65, .mldsa87:
-            throw YubiKeyError.unsupportedKeyTypeForImport("ML-DSA (not supported by YubiKey PIV)")
+        case .mldsa44, .mldsa65, .mldsa87:
+            guard let seed = parsedKey.mldsaSeed,
+                  let parameterSet = mldsaParameterSet(for: parsedKey.keyType),
+                  let key = YubiKit.MLDSA.PrivateKey(seed: seed, parameterSet: parameterSet) else {
+                throw YubiKeyError.keyConversionFailed("Missing ML-DSA seed")
+            }
+            return .mldsa(key)
+
+        case .mldsa44Ed25519:
+            throw YubiKeyError.unsupportedKeyTypeForImport("ML-DSA-44 + Ed25519 (a PIV slot holds one key)")
 
         case .yubiKeyPIV, .yubiKeyFIDO2, .appleFIDO2, .applePasskey, .secureEnclaveP256:
             throw YubiKeyError.keyAlreadyOnHardware
@@ -195,6 +205,83 @@ final class YubiKeyKeyConverter {
         case .externalAgent:
             throw YubiKeyError.unsupportedKeyTypeForImport("external SSH agent key (no private material)")
         }
+    }
+
+    // MARK: - ML-DSA
+
+    nonisolated static func mldsaParameterSet(for keyType: SSHKey.KeyType) -> YubiKit.MLDSA.ParameterSet? {
+        switch keyType {
+        case .mldsa44: return .mlDSA44
+        case .mldsa65: return .mlDSA65
+        case .mldsa87: return .mlDSA87
+        default: return nil
+        }
+    }
+
+    nonisolated static func algorithm(for parameterSet: YubiKit.MLDSA.ParameterSet) -> YubiKeyAlgorithm {
+        switch parameterSet {
+        case .mlDSA44: return .mldsa44
+        case .mlDSA65: return .mldsa65
+        case .mlDSA87: return .mldsa87
+        }
+    }
+
+    /// SSH wire blob for a PIV ML-DSA key: `string "ssh-mldsaNN" || string pk`,
+    /// the same encoding as the app's software `ssh-mldsa*` keys.
+    nonisolated static func sshPublicKeyBlob(for key: YubiKit.MLDSA.PublicKey) -> Data {
+        var blob = Data()
+        appendSSHString(&blob, Data(algorithm(for: key.parameterSet).sshKeyTypeString.utf8))
+        appendSSHString(&blob, key.keyData)
+        return blob
+    }
+
+    /// X.509 AlgorithmIdentifier OID TLV for an ML-DSA parameter set (RFC 9881).
+    nonisolated static func mldsaOID(_ parameterSet: YubiKit.MLDSA.ParameterSet) -> Data {
+        let suffix: UInt8
+        switch parameterSet {
+        case .mlDSA44: suffix = 0x11
+        case .mlDSA65: suffix = 0x12
+        case .mlDSA87: suffix = 0x13
+        }
+        return Data([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x03, suffix])
+    }
+
+    /// Minimal self-signed X.509 shell for an ML-DSA slot. Like the app's other
+    /// slot certificates the signature is empty: discovery only reads the key
+    /// back out of it.
+    nonisolated static func mldsaSlotCertificate(for key: YubiKit.MLDSA.PublicKey, commonName: String) -> Data {
+        func tlv(_ tag: UInt8, _ value: Data) -> Data { TKBERTLVRecord(tag: TKTLVTag(tag), value: value).data }
+        func utcTime(_ date: Date) -> Data {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(identifier: "UTC")
+            formatter.dateFormat = "yyMMddHHmmss'Z'"
+            return tlv(0x17, Data(formatter.string(from: date).utf8))
+        }
+
+        var serial = Data((0..<8).map { _ in UInt8.random(in: 0...255) })
+        serial[0] = (serial[0] & 0x7F) | 0x01  // positive, no leading zero byte
+        let signatureAlgorithm = tlv(0x30, mldsaOID(key.parameterSet))
+        let name = tlv(0x30, tlv(0x31, tlv(0x30, Data([0x06, 0x03, 0x55, 0x04, 0x03]) + tlv(0x0C, Data(commonName.utf8)))))
+        let now = Date()
+        let validity = tlv(0x30, utcTime(now) + utcTime(now.addingTimeInterval(365 * 24 * 60 * 60)))
+
+        let tbs = tlv(0x30,
+            tlv(0xA0, Data([0x02, 0x01, 0x02]))
+            + tlv(0x02, serial)
+            + signatureAlgorithm
+            + name
+            + validity
+            + name
+            + key.spki
+        )
+        return tlv(0x30, tbs + signatureAlgorithm + Data([0x03, 0x01, 0x00]))
+    }
+
+    private nonisolated static func appendSSHString(_ buffer: inout Data, _ data: Data) {
+        var length = UInt32(data.count).bigEndian
+        buffer.append(Data(bytes: &length, count: 4))
+        buffer.append(data)
     }
 
     // MARK: - RSA Public Key Parsing
@@ -284,9 +371,9 @@ extension SSHKeyParser.ParsedKey {
     /// Check if this key type can be imported to YubiKey PIV
     var canImportToYubiKey: Bool {
         switch keyType {
-        case .ed25519, .ecdsaP256, .ecdsaP384, .rsa:
+        case .ed25519, .ecdsaP256, .ecdsaP384, .rsa, .mldsa44, .mldsa65, .mldsa87:
             return true
-        case .ecdsaP521, .mldsa44Ed25519, .mldsa44, .mldsa65, .mldsa87:
+        case .ecdsaP521, .mldsa44Ed25519:
             // Not supported by YubiKey PIV
             return false
         case .yubiKeyPIV, .yubiKeyFIDO2, .appleFIDO2, .applePasskey, .secureEnclaveP256:
@@ -303,8 +390,8 @@ extension SSHKeyParser.ParsedKey {
         switch keyType {
         case .ecdsaP521:
             return "ECDSA P-521 is not supported by YubiKey PIV"
-        case .mldsa44Ed25519, .mldsa44, .mldsa65, .mldsa87:
-            return "ML-DSA keys are not supported by YubiKey PIV"
+        case .mldsa44Ed25519:
+            return "ML-DSA-44 + Ed25519 keys cannot be stored in a single PIV slot"
         case .yubiKeyPIV, .yubiKeyFIDO2, .appleFIDO2, .applePasskey, .secureEnclaveP256:
             return "Key is already stored on hardware"
         default:

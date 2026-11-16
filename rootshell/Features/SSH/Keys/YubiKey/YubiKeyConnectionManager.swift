@@ -72,6 +72,10 @@ final class YubiKeyConnectionManager {
     /// Form factor/model of the connected YubiKey
     private(set) var connectedFormFactor: FormFactor?
 
+    /// The key most recently read, kept after an NFC session ends so the UI can
+    /// still show it and offer actions that reconnect on demand.
+    private(set) var lastReadDevice: YubiKeyDeviceSnapshot?
+
     /// Current connection method
     @ObservationIgnored private var currentConnectionMethod: YubiKeyConnectionMethod?
 
@@ -301,6 +305,11 @@ final class YubiKeyConnectionManager {
         // blocks waiting for a key on the port (wait-until-cancel).
         setState(.waitingForDevice(transport: .usbc))
 
+        // A key whose USB smart card (CCID) interface is off never appears as a
+        // slot, so record everything iOS reports for diagnosis.
+        let slots = (try? await USBSmartCardConnection.availableDevices(matching: nil)) ?? []
+        Self.logger.info("USB smart card slots: [\(slots.map(\.name).joined(separator: ", "), privacy: .public)]")
+
         do {
             usbConnection = try await openWiredConnection(transport: .usbc) {
                 try await USBSmartCardConnection()
@@ -475,6 +484,7 @@ final class YubiKeyConnectionManager {
             await closeAllConnections()
 
             isNFCSessionActive = false
+            lastReadDevice = nil
             connectedSerial = nil
             connectedFormFactor = nil
             connectedFirmwareVersion = nil
@@ -651,6 +661,14 @@ final class YubiKeyConnectionManager {
         self.connectedSerial = serial
         self.connectedFormFactor = deviceInfo.formFactor
         self.connectedFirmwareVersion = deviceInfo.version.description
+        if let method = currentConnectionMethod {
+            self.lastReadDevice = YubiKeyDeviceSnapshot(
+                serial: UInt32(truncatingIfNeeded: serial),
+                firmwareVersion: deviceInfo.version.description,
+                formFactor: deviceInfo.formFactor,
+                method: method
+            )
+        }
         Self.logger.info("Device info: formFactor=\(String(describing: deviceInfo.formFactor)), firmware=\(deviceInfo.version.description)")
 
         return serial

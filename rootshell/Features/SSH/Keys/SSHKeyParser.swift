@@ -83,6 +83,8 @@ nonisolated final class SSHKeyParser {
         /// needs it to produce EdDSA JWS signatures, which NIOSSHPrivateKey
         /// doesn't expose.
         let underlyingEd25519Key: Curve25519.Signing.PrivateKey?
+        /// The 32-byte FIPS 204 seed of a pure ML-DSA key, for YubiKey PIV import.
+        let mldsaSeed: Data?
 
         init(
             nioSSHKey: NIOSSHPrivateKey?,
@@ -92,7 +94,8 @@ nonisolated final class SSHKeyParser {
             isEncrypted: Bool,
             rsaCRTParams: RSACRTParameters?,
             underlyingP256Key: P256.Signing.PrivateKey? = nil,
-            underlyingEd25519Key: Curve25519.Signing.PrivateKey? = nil
+            underlyingEd25519Key: Curve25519.Signing.PrivateKey? = nil,
+            mldsaSeed: Data? = nil
         ) {
             self.nioSSHKey = nioSSHKey
             self.rsaKey = rsaKey
@@ -102,6 +105,7 @@ nonisolated final class SSHKeyParser {
             self.rsaCRTParams = rsaCRTParams
             self.underlyingP256Key = underlyingP256Key
             self.underlyingEd25519Key = underlyingEd25519Key
+            self.mldsaSeed = mldsaSeed
         }
     }
 
@@ -1019,7 +1023,8 @@ nonisolated final class SSHKeyParser {
             keyType: sshKeyType,
             fingerprint: generateFingerprint(publicKeyData: publicKeyData),
             isEncrypted: wasEncrypted,
-            rsaCRTParams: nil
+            rsaCRTParams: nil,
+            mldsaSeed: seedData
         )
     }
 

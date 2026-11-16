@@ -510,6 +510,99 @@ final class YubiKeyEd25519PrivateKey: NIOSSHPrivateKeyProtocol, @unchecked Senda
     }
 }
 
+// MARK: - ML-DSA (YubiKey firmware 6.0+)
+
+/// Parameter-set marker; NIOSSH needs a static prefix per key type.
+nonisolated protocol YubiKeyMLDSAVariant: Sendable {
+    static var algorithm: YubiKeyAlgorithm { get }
+}
+
+nonisolated enum YubiKeyMLDSA44: YubiKeyMLDSAVariant { static var algorithm: YubiKeyAlgorithm { .mldsa44 } }
+nonisolated enum YubiKeyMLDSA65: YubiKeyMLDSAVariant { static var algorithm: YubiKeyAlgorithm { .mldsa65 } }
+nonisolated enum YubiKeyMLDSA87: YubiKeyMLDSAVariant { static var algorithm: YubiKeyAlgorithm { .mldsa87 } }
+
+/// Same wire format as the app's software `ssh-mldsa*` keys: `string pk`.
+struct YubiKeyMLDSAPublicKey<Variant: YubiKeyMLDSAVariant>: NIOSSHPublicKeyProtocol, Hashable, Sendable {
+    static var publicKeyPrefix: String { Variant.algorithm.sshKeyTypeString }
+
+    /// `string pk`, as it follows the algorithm name in the blob.
+    private let keyData: Data
+    let publicKeyBlob: Data
+
+    var rawRepresentation: Data { keyData }
+
+    init(reference: YubiKeyReference) {
+        self.publicKeyBlob = reference.publicKeyBlob
+        self.keyData = extractKeyData(from: reference.publicKeyBlob, algorithm: reference.algorithm)
+    }
+
+    func isValidSignature<D: DataProtocol>(_ signature: NIOSSHSignatureProtocol, for data: D) -> Bool {
+        return false  // Server verifies signatures
+    }
+
+    func write(to buffer: inout ByteBuffer) -> Int {
+        buffer.writeBytes(keyData)
+    }
+
+    static func read(from buffer: inout ByteBuffer) throws -> YubiKeyMLDSAPublicKey<Variant> {
+        throw YubiKeyError.unsupportedFeature("Cannot read YubiKey public key from wire format")
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(publicKeyBlob)
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.publicKeyBlob == rhs.publicKeyBlob
+    }
+}
+
+struct YubiKeyMLDSASignature<Variant: YubiKeyMLDSAVariant>: NIOSSHSignatureProtocol, Hashable, Sendable {
+    static var signaturePrefix: String { Variant.algorithm.sshKeyTypeString }
+
+    private let signatureData: Data
+
+    var rawRepresentation: Data { signatureData }
+
+    init(signatureData: Data) {
+        self.signatureData = signatureData
+    }
+
+    func write(to buffer: inout ByteBuffer) -> Int {
+        return writeYubiKeySSHData(&buffer, signatureData)
+    }
+
+    static func read(from buffer: inout ByteBuffer) throws -> YubiKeyMLDSASignature<Variant> {
+        guard let sigData = readYubiKeySSHString(&buffer) else {
+            throw YubiKeyError.signingFailed("Failed to read signature data")
+        }
+        return YubiKeyMLDSASignature(signatureData: Data(sigData.readableBytesView))
+    }
+}
+
+final class YubiKeyMLDSAPrivateKey<Variant: YubiKeyMLDSAVariant>: NIOSSHPrivateKeyProtocol, @unchecked Sendable {
+    static var keyPrefix: String { Variant.algorithm.sshKeyTypeString }
+
+    private let reference: YubiKeyReference
+    private let cachedPublicKey: YubiKeyMLDSAPublicKey<Variant>
+    private static var signingTimeout: TimeInterval { yubiKeyNIOSSHSigningTimeout }
+
+    init(reference: YubiKeyReference) {
+        self.reference = reference
+        self.cachedPublicKey = YubiKeyMLDSAPublicKey(reference: reference)
+        yubiKeyNIOSSHLogger.info("Created YubiKey \(Variant.algorithm.rawValue) private key for key: \(reference.keyID)")
+    }
+
+    var publicKey: NIOSSHPublicKeyProtocol { cachedPublicKey }
+
+    func signature<D: DataProtocol>(for data: D) throws -> NIOSSHSignatureProtocol {
+        yubiKeyNIOSSHLogger.info("\(Variant.algorithm.rawValue) signature requested for key \(self.reference.keyID)")
+
+        let sigBlob = try performSigning(data: data, reference: reference, timeout: Self.signingTimeout)
+        return YubiKeyMLDSASignature<Variant>(signatureData: sigBlob)
+    }
+}
+
 // MARK: - Legacy Private Key Wrapper
 
 /// Legacy wrapper that creates the appropriate algorithm-specific private key
@@ -535,6 +628,12 @@ final class YubiKeyNIOSSHPrivateKey: NIOSSHPrivateKeyProtocol, @unchecked Sendab
         case .ed25519:
             // Ed25519 is now supported on YubiKey 5.7+
             self.innerKey = YubiKeyEd25519PrivateKey(reference: reference)
+        case .mldsa44:
+            self.innerKey = YubiKeyMLDSAPrivateKey<YubiKeyMLDSA44>(reference: reference)
+        case .mldsa65:
+            self.innerKey = YubiKeyMLDSAPrivateKey<YubiKeyMLDSA65>(reference: reference)
+        case .mldsa87:
+            self.innerKey = YubiKeyMLDSAPrivateKey<YubiKeyMLDSA87>(reference: reference)
         }
 
         yubiKeyNIOSSHLogger.info("Created YubiKeyNIOSSHPrivateKey (legacy wrapper) for key: \(reference.keyID), algorithm: \(reference.algorithm.rawValue)")
@@ -565,6 +664,12 @@ func createYubiKeyPrivateKey(reference: YubiKeyReference) -> any NIOSSHPrivateKe
         return YubiKeyECDSAP384PrivateKey(reference: reference)
     case .ed25519:
         return YubiKeyEd25519PrivateKey(reference: reference)
+    case .mldsa44:
+        return YubiKeyMLDSAPrivateKey<YubiKeyMLDSA44>(reference: reference)
+    case .mldsa65:
+        return YubiKeyMLDSAPrivateKey<YubiKeyMLDSA65>(reference: reference)
+    case .mldsa87:
+        return YubiKeyMLDSAPrivateKey<YubiKeyMLDSA87>(reference: reference)
     }
 }
 

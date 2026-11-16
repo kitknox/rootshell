@@ -608,6 +608,7 @@ nonisolated enum SSHKeyGenerator {
             case .ecdsaP384: algorithmName = "ecdsa-sha2-nistp384"
             case .rsa2048, .rsa4096: algorithmName = "ssh-rsa"
             case .ed25519: algorithmName = "ssh-ed25519"
+            case .mldsa44, .mldsa65, .mldsa87: algorithmName = reference.algorithm.sshKeyTypeString
             }
             if comment.isEmpty {
                 return "\(algorithmName) \(base64)"

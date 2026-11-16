@@ -51,7 +51,10 @@ final class YubiKeyKeyDiscovery {
                 let algorithm: YubiKeyAlgorithm
                 let sshPublicKeyData: Data
 
-                if let ed25519Algorithm = detectAlgorithmFromCertificate(certificate), ed25519Algorithm == .ed25519 {
+                if case .mlDSA(let mldsaKey)? = certificate.publicKey {
+                    algorithm = YubiKeyKeyConverter.algorithm(for: mldsaKey.parameterSet)
+                    sshPublicKeyData = YubiKeyKeyConverter.sshPublicKeyBlob(for: mldsaKey)
+                } else if let ed25519Algorithm = detectAlgorithmFromCertificate(certificate), ed25519Algorithm == .ed25519 {
                     // Ed25519: extract raw key from certificate DER
                     algorithm = .ed25519
                     let rawKey = try extractEd25519PublicKey(from: certificate)
@@ -272,6 +275,9 @@ final class YubiKeyKeyDiscovery {
         case .ed25519:
             writeSSHString(&buffer, "ssh-ed25519")
             writeSSHBuffer(&buffer, publicKeyData)
+
+        case .mldsa44, .mldsa65, .mldsa87:
+            throw YubiKeyError.keyConversionFailed("ML-DSA keys have no SecKey form")
         }
 
         return buffer

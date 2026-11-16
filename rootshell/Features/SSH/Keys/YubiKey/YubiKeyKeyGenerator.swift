@@ -75,6 +75,16 @@ final class YubiKeyKeyGenerator {
                 throw YubiKeyError.unsupportedFeature("Ed25519 requires YubiKey 5.7 or later")
             }
         }
+        if algorithm.isPostQuantum {
+            guard await session.supports(.mlDSA) else {
+                throw YubiKeyError.unsupportedFeature("ML-DSA requires YubiKey firmware 6.0 or later")
+            }
+        }
+        // On NFC power the key never answers an RSA-4096 generate; the session
+        // ends in a tag response error instead.
+        if algorithm == .rsa4096, case .connected(_, .nfc) = connectionManager.connectionState {
+            throw YubiKeyError.unsupportedFeature("RSA-4096 keys can't be generated over NFC. Connect the YubiKey with USB-C instead.")
+        }
 
         // Authenticate with management key (SDK auto-detects key type)
         try await authenticateManagement(session: session, customKey: managementKey)
@@ -105,7 +115,15 @@ final class YubiKeyKeyGenerator {
         let sshPublicKeyData: Data
         let fingerprint: String
 
-        if algorithm == .ed25519 {
+        if case .mlDSA(let mldsaKey) = generatedKey {
+            sshPublicKeyData = YubiKeyKeyConverter.sshPublicKeyBlob(for: mldsaKey)
+            fingerprint = generateFingerprint(sshPublicKeyData)
+            try await storeCertificate(
+                YubiKeyKeyConverter.mldsaSlotCertificate(for: mldsaKey, commonName: "YubiKey SSH Key (\(algorithm.displayName))"),
+                session: session,
+                slot: pivSlot
+            )
+        } else if algorithm == .ed25519 {
             // Ed25519: extract raw key and convert directly to SSH format
             let rawKey = try extractEd25519RawKey(from: generatedKey)
             sshPublicKeyData = convertEd25519ToSSHPublicKey(rawKey)
@@ -205,6 +223,8 @@ final class YubiKeyKeyGenerator {
             throw YubiKeyError.keyGenerationFailed("Ed25519 keys should use extractEd25519RawKey")
         case .x25519:
             throw YubiKeyError.keyGenerationFailed("X25519 keys are not supported for SSH")
+        case .mlDSA, .mlKEM:
+            throw YubiKeyError.keyGenerationFailed("Post-quantum keys have no SecKey form")
         }
 
         let attributes: [String: Any] = [
@@ -262,6 +282,14 @@ final class YubiKeyKeyGenerator {
             serialNumber: serialNumber,
             algorithm: algorithm
         )
+    }
+
+    private func storeCertificate(_ der: Data, session: PIVSession, slot: PIV.Slot) async throws {
+        do {
+            try await session.putCertificate(X509Cert(der: der), in: slot, compressed: false)
+        } catch {
+            throw YubiKeyError.keyGenerationFailed("Failed to store certificate: \(String(describing: error))")
+        }
     }
 
     /// Create and store a certificate for Ed25519 keys
@@ -574,6 +602,9 @@ final class YubiKeyKeyGenerator {
         case .ed25519:
             writeSSHString(&buffer, "ssh-ed25519")
             writeSSHBuffer(&buffer, publicKeyData)
+
+        case .mldsa44, .mldsa65, .mldsa87:
+            throw YubiKeyError.keyConversionFailed("ML-DSA keys have no SecKey form")
         }
 
         return buffer
@@ -647,16 +678,6 @@ extension YubiKeyAlgorithm {
         switch self {
         case .rsa2048, .rsa4096: return true
         default: return false
-        }
-    }
-
-    var keySizeInBits: Int {
-        switch self {
-        case .rsa2048: return 2048
-        case .rsa4096: return 4096
-        case .ecdsaP256: return 256
-        case .ecdsaP384: return 384
-        case .ed25519: return 256
         }
     }
 }

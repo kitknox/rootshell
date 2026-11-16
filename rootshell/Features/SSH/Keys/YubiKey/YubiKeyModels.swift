@@ -103,6 +103,10 @@ nonisolated enum YubiKeyAlgorithm: String, Codable, CaseIterable, Sendable {
     case ecdsaP256 = "ECDSA-P256"
     case ecdsaP384 = "ECDSA-P384"
     case ed25519 = "Ed25519"
+    // Pure ML-DSA (FIPS 204) in PIV; YubiKey firmware 6.0+.
+    case mldsa44 = "ML-DSA-44"
+    case mldsa65 = "ML-DSA-65"
+    case mldsa87 = "ML-DSA-87"
 
     var displayName: String {
         rawValue
@@ -119,8 +123,25 @@ nonisolated enum YubiKeyAlgorithm: String, Codable, CaseIterable, Sendable {
             return "ecdsa-sha2-nistp384"
         case .ed25519:
             return "ssh-ed25519"
+        case .mldsa44:
+            return "ssh-mldsa44"
+        case .mldsa65:
+            return "ssh-mldsa65"
+        case .mldsa87:
+            return "ssh-mldsa87"
         }
     }
+
+    var mldsaParameterSet: YubiKit.MLDSA.ParameterSet? {
+        switch self {
+        case .mldsa44: return .mlDSA44
+        case .mldsa65: return .mlDSA65
+        case .mldsa87: return .mlDSA87
+        case .rsa2048, .rsa4096, .ecdsaP256, .ecdsaP384, .ed25519: return nil
+        }
+    }
+
+    var isPostQuantum: Bool { mldsaParameterSet != nil }
 
     /// Convert to YubiKit PIV.KeyType
     var toYubiKitKeyType: PIV.KeyType {
@@ -130,6 +151,9 @@ nonisolated enum YubiKeyAlgorithm: String, Codable, CaseIterable, Sendable {
         case .ecdsaP256: return .ec(.secp256r1)
         case .ecdsaP384: return .ec(.secp384r1)
         case .ed25519: return .ed25519
+        case .mldsa44: return .mlDSA(.mlDSA44)
+        case .mldsa65: return .mlDSA(.mlDSA65)
+        case .mldsa87: return .mlDSA(.mlDSA87)
         }
     }
 
@@ -141,6 +165,9 @@ nonisolated enum YubiKeyAlgorithm: String, Codable, CaseIterable, Sendable {
         case .ec(.secp256r1): return .ecdsaP256
         case .ec(.secp384r1): return .ecdsaP384
         case .ed25519: return .ed25519
+        case .mlDSA(.mlDSA44): return .mldsa44
+        case .mlDSA(.mlDSA65): return .mldsa65
+        case .mlDSA(.mlDSA87): return .mldsa87
         default: return nil
         }
     }
@@ -171,6 +198,20 @@ nonisolated enum YubiKeyConnectionMethod: String, Codable, CaseIterable, Sendabl
         case .nfc: return "wave.3.right"
         case .usbc: return "cable.connector.horizontal"
         }
+    }
+}
+
+// MARK: - Device Snapshot
+
+/// Identity of a YubiKey as last read, independent of whether it is still connected.
+struct YubiKeyDeviceSnapshot: Equatable, Sendable {
+    let serial: UInt32
+    let firmwareVersion: String
+    let formFactor: FormFactor
+    let method: YubiKeyConnectionMethod
+
+    var firmwareMajor: Int? {
+        firmwareVersion.split(separator: ".").first.flatMap { Int($0) }
     }
 }
 

@@ -437,8 +437,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kitknox/yubikit-swift-rootshell.git",
       "state" : {
-        "revision" : "8bab15ec709c02024a3baba28a55ed8c017b808b",
-        "version" : "1.3.1"
+        "revision" : "a70695474299a78c529f6efe4dec01dceabbd36e",
+        "version" : "1.5.0-rootshell.1"
       }
     }
   ],

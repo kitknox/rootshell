@@ -525,7 +525,7 @@ final class YubiKeySigner {
                     in: pivSlot,
                     using: .pkcs1v15
                 )
-            case .ecdsaP256, .ecdsaP384, .ed25519:
+            case .ecdsaP256, .ecdsaP384, .ed25519, .mldsa44, .mldsa65, .mldsa87:
                 throw YubiKeyError.signingFailed("Slot algorithm \(algorithm.rawValue) doesn't support PIV decrypt")
             }
         } catch {
@@ -659,7 +659,7 @@ final class YubiKeySigner {
                     throw YubiKeyError.signingFailed("Failed to parse P-384 peer public key")
                 }
                 shared = try await session.deriveSharedSecret(in: pivSlot, with: pub)
-            case .rsa2048, .rsa4096, .ed25519:
+            case .rsa2048, .rsa4096, .ed25519, .mldsa44, .mldsa65, .mldsa87:
                 throw YubiKeyError.signingFailed("ECDH not applicable for \(algorithm.rawValue)")
             }
         } catch {
@@ -795,6 +795,9 @@ final class YubiKeySigner {
             prepared = digest
             pivKeyType = .ed25519
             pivAlgorithm = .ed25519
+        case .mldsa44, .mldsa65, .mldsa87:
+            // Pure ML-DSA signs the message itself; there is no prehashed form.
+            throw YubiKeyError.unsupportedFeature("ML-DSA keys cannot sign OpenPGP digests")
         }
 
         do {
@@ -949,6 +952,13 @@ final class YubiKeySigner {
                 return try await session.sign(data, in: slot, keyType: .ec(.secp384r1), using: .hash(.sha384))
             case .ed25519:
                 return try await session.sign(data, in: slot, keyType: .ed25519)
+            // Pure ML-DSA with an empty context, as SSH specifies.
+            case .mldsa44:
+                return try await session.sign(data, in: slot, keyType: .mlDSA(.mlDSA44))
+            case .mldsa65:
+                return try await session.sign(data, in: slot, keyType: .mlDSA(.mlDSA65))
+            case .mldsa87:
+                return try await session.sign(data, in: slot, keyType: .mlDSA(.mlDSA87))
             }
         } catch {
             // SDK uses typed throws(PIVSessionError)
@@ -1080,6 +1090,8 @@ final class YubiKeySigner {
             algorithmName = "ecdsa-sha2-nistp384"
         case .ed25519:
             algorithmName = "ssh-ed25519"
+        case .mldsa44, .mldsa65, .mldsa87:
+            algorithmName = algorithm.sshKeyTypeString
         }
 
         // Write algorithm name

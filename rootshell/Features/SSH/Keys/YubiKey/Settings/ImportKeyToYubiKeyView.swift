@@ -159,13 +159,13 @@ struct ImportKeyToYubiKeyView: View {
                 } header: {
                     Text("YubiKey Status")
                 } footer: {
-                    if !connectionManager.connectionState.isConnected {
+                    if !canReachKey {
                         Text("Connect your YubiKey before importing.")
                     }
                 }
 
                 // Import Summary
-                if selectedKey != nil && connectionManager.connectionState.isConnected {
+                if selectedKey != nil && canReachKey {
                     Section {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
@@ -267,9 +267,14 @@ struct ImportKeyToYubiKeyView: View {
         }
     }
 
+    /// Connected now, or read earlier over NFC (import reconnects on demand).
+    private var canReachKey: Bool {
+        connectionManager.connectionState.isConnected || connectionManager.lastReadDevice != nil
+    }
+
     private var canImport: Bool {
         selectedKeyID != nil &&
-        connectionManager.connectionState.isConnected &&
+        canReachKey &&
         validation?.canImport == true &&
         !isImporting
     }
@@ -281,6 +286,7 @@ struct ImportKeyToYubiKeyView: View {
 
         Task {
             do {
+                try await connectionManager.connect()
                 let result = try await importer.importKey(
                     keyID: keyID,
                     slot: selectedSlot,
