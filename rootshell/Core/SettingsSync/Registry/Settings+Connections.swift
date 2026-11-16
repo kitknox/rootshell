@@ -305,6 +305,14 @@ nonisolated extension Settings {
     }
 
     enum ScreenSharing {
+        static let routesControlSpaceToRemoteDefault = SettingKey(
+            "screenSharingRoutesControlSpaceToRemoteDefault", default: true, group: .screenSharing,
+            configKey: "screen-sharing-routes-control-space-to-remote-default",
+            title: String(localized: "Send Control-Space to Remote Computer", comment: "Setting title"))
+        static let capsLockSwitchesInputSourceDefault = SettingKey(
+            "screenSharingCapsLockSwitchesInputSourceDefault", default: false, group: .screenSharing,
+            configKey: "screen-sharing-caps-lock-switches-input-source-default",
+            title: String(localized: "Caps Lock Switches Keyboard Language", comment: "Setting title"))
         static let routeReservedShortcutsToVNCDefault = SettingKey(
             "screenSharingRouteReservedShortcutsToVNCDefault", default: true, group: .screenSharing,
             configKey: "screen-sharing-route-reserved-shortcuts-to-vnc-default",
@@ -379,6 +387,7 @@ nonisolated extension Settings {
             pointerModeDefault.erased, pointerSpeed.erased,
             cursorRenderingDefault.erased, cursorSizeDefault.erased, kvmLocalCursorDefault.erased,
             controlOptionAsCommandDefault.erased, routeReservedShortcutsToVNCDefault.erased,
+            routesControlSpaceToRemoteDefault.erased, capsLockSwitchesInputSourceDefault.erased,
             touchHoldDelay.erased, showsHeldButton.erased,
             swipeUpAction.erased, swipeDownAction.erased, swipeLeftAction.erased, swipeRightAction.erased,
             fourFingerNavigation.erased, floatingToolbarDefault.erased,

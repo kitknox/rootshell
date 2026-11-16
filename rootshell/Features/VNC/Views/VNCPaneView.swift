@@ -306,8 +306,10 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
         keyboardCapture.routeReservedHostShortcutsToVNC(SettingsStore.shared.value(
             Settings.ScreenSharing.routeReservedShortcutsToVNCDefault))
         #if os(iOS) && !targetEnvironment(macCatalyst)
-        // VNC sends characters produced by the local input source.
-        keyboardCapture.localInputSourceLanguages = ["ko", "en"]
+        keyboardCapture.routesControlSpaceToRemote = SettingsStore.shared.value(
+            Settings.ScreenSharing.routesControlSpaceToRemoteDefault)
+        keyboardCapture.capsLockSwitchesInputSource = SettingsStore.shared.value(
+            Settings.ScreenSharing.capsLockSwitchesInputSourceDefault)
         #endif
         self.keyboardCapture = keyboardCapture
         self.displayTitle = config.displayName
