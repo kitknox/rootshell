@@ -7038,8 +7038,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/kitknox/rootshell-vnc.git";
 			requirement = {
-				kind = exactVersion;
-				version = 0.1.44;
+				kind = revision;
+				revision = c3f51ab8da60bb5cfee535adaf379651e8849995;
 			};
 		};
 		477408912ED51B9F0035CE92 /* XCRemoteSwiftPackageReference "Yams-rootshell" */ = {
