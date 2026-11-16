@@ -4,10 +4,8 @@
 //
 //  Thin wrapper over the system text loupe (UITextLoupeSession) shown while
 //  selecting text or dragging a selection handle. visionOS has no native
-//  loupe, so `begin` returns nil there. Excluded from Mac Catalyst.
+//  loupe, so `begin` returns nil there. Mac Catalyst always uses the custom loupe.
 //
-
-#if !targetEnvironment(macCatalyst)
 
 import UIKit
 
@@ -55,4 +53,3 @@ extension Ghostty {
     }
 }
 
-#endif

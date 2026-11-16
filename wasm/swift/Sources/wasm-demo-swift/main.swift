@@ -11,6 +11,7 @@
 //   tls-client <h> <p>          - TLS variant of tcp-client, hits HTTPS hosts
 //   dns-query <name> [resolver] - hand-rolled DNS/A query over UDP
 //   tcp-listen <port>           - bind/listen/accept, echo one line, exit
+//   bonjour <type> [ms]         - find a Bonjour service, e.g. _ssh._tcp
 //   all                         - runs every self-contained subcommand,
 //                                 plus dns-query / tcp-client / tls-client
 //                                 against real internet hosts. tcp-listen
@@ -91,6 +92,8 @@ case "dns-query":
     code = cmdDNSQuery(arg(args, 2, "google.com"), arg(args, 3, "1.1.1.1"))
 case "tcp-listen":
     code = cmdTCPListen(parsePort(arg(args, 2, "0")))
+case "bonjour":
+    code = cmdBonjour(arg(args, 2, "_ssh._tcp"), UInt32(arg(args, 3, "3000")) ?? 3000)
 case "all":
     code = cmdAll()
 default:
@@ -343,6 +346,8 @@ func cmdDNSQuery(_ name: String, _ resolver: String) -> Int32 {
     print("dns-query: sent \(sent) bytes to \(resolver):53 for \(name)")
 
     // ---- Receive the reply ----
+    // Give up after 5 s rather than hang on a lost datagram.
+    _ = rootshell_socket_set_recv_timeout(fd, 5000)
     var buf = [UInt8](repeating: 0, count: 1500)
     var addrBuf = [UInt8](repeating: 0, count: 16)
     var alen: Int32 = Int32(addrBuf.count)
@@ -548,4 +553,28 @@ func cmdAll() -> Int32 {
         print("all: FAIL (composite=\(acc))")
     }
     return acc
+}
+
+/// Browse for a Bonjour service type and print each instance the host
+/// resolved: name, host, port and addresses.
+func cmdBonjour(_ serviceType: String, _ timeoutMs: UInt32) -> Int32 {
+    var buf = [UInt8](repeating: 0, count: 8192)
+    var n: UInt32 = 0
+    let e = withUTF8(serviceType) { typePtr, typeLen in
+        buf.withUnsafeMutableBufferPointer { out in
+            rootshell_socket_bonjour_lookup(typePtr, typeLen, timeoutMs,
+                                            out.baseAddress!, Int32(out.count), &n)
+        }
+    }
+    if e != 0 {
+        eprint("bonjour \(serviceType): \(errnoName(e))")
+        return 1
+    }
+    let text = String(decoding: buf[0..<Int(n)], as: UTF8.self)
+    for line in text.split(separator: "\n") {
+        let f = line.split(separator: "\t", omittingEmptySubsequences: false)
+        guard f.count >= 4 else { continue }
+        print("bonjour: \(f[0]) at \(f[1]):\(f[2]) [\(f[3])]")
+    }
+    return 0
 }

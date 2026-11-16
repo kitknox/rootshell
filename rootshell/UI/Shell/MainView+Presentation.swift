@@ -133,6 +133,8 @@ extension MainView {
                 KeyboardToolbarOrnament(
                     focusedTerminal: terminals.indices.contains(selectedTabIndex)
                         ? terminals[selectedTabIndex].focusedTerminal : nil,
+                    focusedPane: terminals.indices.contains(selectedTabIndex)
+                        ? terminals[selectedTabIndex].focusedPane : nil,
                     isVisible: $showKeyboardToolbar
                 )
             }

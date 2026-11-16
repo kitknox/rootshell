@@ -19,12 +19,15 @@ extension Notification.Name {
 
 struct KeyboardToolbarOrnament: View {
     let focusedTerminal: Ghostty.TerminalView?
+    /// Any pane kind, including Screen Sharing; routes window-scoped pane actions.
+    let focusedPane: SplitPaneView?
     @Binding var isVisible: Bool
     @State private var toolbarHeight: CGFloat = KeyboardSizes.iPad.toolbar.height
 
     var body: some View {
         KeyboardToolbarRepresentable(
             focusedTerminal: focusedTerminal,
+            focusedPane: focusedPane,
             onDismiss: { isVisible = false },
             onHeightChanged: { newHeight in
                 withAnimation(.easeInOut(duration: 0.25)) {
@@ -41,6 +44,7 @@ struct KeyboardToolbarOrnament: View {
 
 struct KeyboardToolbarRepresentable: UIViewRepresentable {
     let focusedTerminal: Ghostty.TerminalView?
+    let focusedPane: SplitPaneView?
     let onDismiss: () -> Void
     let onHeightChanged: (CGFloat) -> Void
 
@@ -81,6 +85,17 @@ struct KeyboardToolbarRepresentable: UIViewRepresentable {
 
         toolbar.onToggleTabBarRequested = { [weak toolbar] in
             NotificationCenter.default.post(name: .toggleTabBar, object: toolbar)
+        }
+
+        toolbar.onChoosePaneToZoomRequested = { [weak coordinator] in
+            // The pane, not the toolbar, identifies the window with several open.
+            guard let pane = coordinator?.focusedPane else { return }
+            NotificationCenter.default.post(name: .choosePaneToZoom, object: pane)
+        }
+
+        toolbar.onTogglePaneZoomRequested = { [weak coordinator] in
+            guard let pane = coordinator?.focusedPane else { return }
+            NotificationCenter.default.post(name: .togglePaneZoom, object: pane)
         }
 
         toolbar.onNewConnectionRequested = { [weak toolbar] in
@@ -146,6 +161,7 @@ struct KeyboardToolbarRepresentable: UIViewRepresentable {
 
         // Update delegate target when focused terminal changes
         coordinator.focusedTerminal = terminal
+        coordinator.focusedPane = focusedPane
 
         // Give the terminal a back-reference for clearOneShotModifiers
         terminal?.externalToolbar = toolbar
@@ -155,6 +171,7 @@ struct KeyboardToolbarRepresentable: UIViewRepresentable {
 
     class Coordinator: KeyboardButtonDelegate {
         weak var focusedTerminal: Ghostty.TerminalView?
+        weak var focusedPane: SplitPaneView?
         weak var toolbar: KeyboardToolbarView?
         var onHeightChanged: ((CGFloat) -> Void)?
         private var layoutChangeObserver: NSObjectProtocol?

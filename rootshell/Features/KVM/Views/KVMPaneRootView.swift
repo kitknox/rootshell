@@ -120,12 +120,18 @@ private struct KVMScreenContent: View {
             showsLocalCursorDot: showsLocalCursor,
             touchGestures: touchGestures,
             brightnessGain: brightnessGain,
-            disconnect: { session.disconnect() },
-            hudMenuExtras: { KVMHUDMenuExtras(pane: pane) })
+            // Close Connection runs the pre-disconnect action first.
+            disconnect: { pane.runPreDisconnectAction { session.disconnect() } },
+            hudMenuExtras: VNCHUDMenuExtras(
+                actions: { KVMHUDMenuExtras(pane: pane, slot: .actions) },
+                display: { KVMHUDMenuExtras(pane: pane, slot: .display) },
+                keyboard: { KVMHUDMenuExtras(pane: pane, slot: .keyboard) },
+                session: { KVMHUDMenuExtras(pane: pane, slot: .session) }))
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
         .hudAccessory(
             isEnabled: pane.keyboardCoordinator?.hudModel.barEnabled ?? false,
             docksToBottom: pane.keyboardCoordinator?.hudModel.docksToBottom ?? false,
+            providesKeyboardButton: pane.keyboardCoordinator?.hudModel.showsKeysButton ?? false,
             buttonStyle: { width in
                 pane.keyboardCoordinator?.hudModel.buttonStyle(availableWidth: width) ?? .standard
             },
@@ -148,17 +154,32 @@ private struct KVMScreenContent: View {
 /// Observes the session itself: the remote-screen view captures its menu
 /// extras once, so they must invalidate on their own.
 private struct KVMHUDMenuExtras: View {
+    /// Where in the HUD menu these items sit.
+    enum Slot { case actions, display, keyboard, session }
+
     let pane: KVMPaneView
+    let slot: Slot
     @Bindable private var session: KVMSession
 
-    init(pane: KVMPaneView) {
+    init(pane: KVMPaneView, slot: Slot) {
         self.pane = pane
+        self.slot = slot
         self._session = Bindable(wrappedValue: pane.session)
     }
 
     private var connected: Bool { session.connectionState.isConnected }
 
     var body: some View {
+        switch slot {
+        case .actions: actionItems
+        case .display: displayItems
+        case .keyboard: keyboardItems
+        case .session: sessionItems
+        }
+    }
+
+    @ViewBuilder
+    private var actionItems: some View {
         if session.isTypingText {
             Button(role: .destructive) {
                 session.cancelTyping()
@@ -178,28 +199,39 @@ private struct KVMHUDMenuExtras: View {
             Button {
                 pane.loginPassword.requestSend()
             } label: {
-                Label("Type Computer Password", systemImage: "key.fill")
+                Label("Type Password", systemImage: "key.fill")
             }
             .disabled(!pane.loginPassword.canSend || session.isTypingText)
         }
+    }
 
+    @ViewBuilder
+    private var keyboardItems: some View {
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        KVMKeyboardToolbarToggle(pane: pane)
         if let coordinator = pane.keyboardCoordinator {
             RemoteScreenFloatingToolbarMenuToggle(coordinator: coordinator)
         }
         #endif
+    }
 
+    @ViewBuilder
+    private var displayItems: some View {
         Menu {
-            ForEach(KVMQualityPreset.allCases, id: \.self) { preset in
-                Button {
-                    session.setQualityPreset(preset)
-                } label: {
-                    Label(
-                        Self.title(for: preset),
-                        systemImage: session.streamer.currentPreset == preset ? "checkmark" : Self.icon(for: preset))
+            Picker("Video Quality", selection: Binding(
+                get: { session.streamer.currentPreset },
+                set: { preset in
+                    if let preset, preset != session.streamer.currentPreset { session.setQualityPreset(preset) }
                 }
-                .disabled(!connected || session.streamer.currentPreset == preset)
+            )) {
+                ForEach(KVMQualityPreset.allCases, id: \.self) { preset in
+                    Label(Self.title(for: preset), systemImage: Self.icon(for: preset))
+                        .tag(Optional(preset))
+                }
             }
+            .pickerStyle(.inline)
+            .labelsHidden()
+            .disabled(!connected)
             if let zeroDelay = session.streamer.zeroDelay {
                 Divider()
                 Toggle(isOn: Binding(
@@ -221,6 +253,11 @@ private struct KVMHUDMenuExtras: View {
             Label("Video Quality", systemImage: "film")
         }
 
+        KVMLocalCursorToggle(pane: pane)
+    }
+
+    @ViewBuilder
+    private var sessionItems: some View {
         if session.atx.enabled {
             Menu {
                 Section(session.atx.powerOn == true
@@ -256,20 +293,12 @@ private struct KVMHUDMenuExtras: View {
             .disabled(!connected || session.atx.busy)
         }
 
-        Menu {
-            #if !os(visionOS) && !targetEnvironment(macCatalyst)
-            KVMKeyboardToolbarToggle(pane: pane)
-            #endif
-            KVMLocalCursorToggle(pane: pane)
-            Button {
-                NotificationCenter.default.post(name: .vncShowConnectionInfo, object: pane)
-            } label: {
-                Label("Connection Info", systemImage: "info.circle")
-            }
-            .disabled(!connected)
+        Button {
+            NotificationCenter.default.post(name: .vncShowConnectionInfo, object: pane)
         } label: {
-            Label("Session", systemImage: "gearshape")
+            Label("Connection Info", systemImage: "info.circle")
         }
+        .disabled(!connected)
     }
 
     private static func title(for preset: KVMQualityPreset) -> String {
@@ -302,7 +331,7 @@ private struct KVMKeyboardToolbarToggle: View {
             get: { pane.effectiveKeyboardToolbarPreference != .off },
             set: { pane.setKeyboardToolbarEnabled($0) }
         )) {
-            Label("Keyboard Toolbar", systemImage: "keyboard")
+            Label("Keyboard Toolbar", systemImage: "ellipsis.rectangle")
         }
     }
 }
@@ -398,7 +427,14 @@ private struct KVMSessionOverlay: View {
     @ViewBuilder
     private var card: some View {
         let subtitle = pane.config.displayName
-        if pane.needsPassword {
+        if let phase = pane.preDisconnectPhase {
+            VNCPreDisconnectCard(
+                subtitle: subtitle,
+                actionName: pane.config.preDisconnectAction.kind.displayName,
+                phase: phase,
+                onDisconnect: { pane.disconnectIgnoringPreDisconnectAction() },
+                onStay: { pane.cancelPreDisconnect() })
+        } else if pane.needsPassword {
             KVMPasswordCard(
                 subtitle: subtitle,
                 rejected: pane.passwordRejected,
@@ -442,9 +478,9 @@ private struct KVMSessionOverlay: View {
                 }
             case .connected:
                 if session.streamer.sourceOnline == false {
-                    KVMNoVideoCard(waiting: false, subtitle: subtitle)
+                    KVMNoVideoCard(waiting: false, waking: session.isAttemptingWake, subtitle: subtitle)
                 } else if !session.hasFirstFrame {
-                    KVMNoVideoCard(waiting: true, subtitle: subtitle)
+                    KVMNoVideoCard(waiting: true, waking: session.isAttemptingWake, subtitle: subtitle)
                 }
             default:
                 EmptyView()
@@ -590,14 +626,17 @@ private struct KVMOneTimeCodeCard: View {
 private struct KVMNoVideoCard: View {
     /// No frame yet, versus the device reporting no signal.
     let waiting: Bool
+    /// An automatic wake attempt is running.
+    let waking: Bool
     let subtitle: String
 
     var body: some View {
         VNCOverlayCard(
-            title: waiting ? String(localized: "Waiting for Video") : String(localized: "No Video Signal"),
+            title: waking ? String(localized: "Waking Computer")
+                : waiting ? String(localized: "Waiting for Video") : String(localized: "No Video Signal"),
             subtitle: subtitle,
             icon: {
-                if waiting {
+                if waiting || waking {
                     ProgressView().controlSize(.large)
                 } else {
                     Image(systemName: "display.trianglebadge.exclamationmark")
@@ -607,7 +646,9 @@ private struct KVMNoVideoCard: View {
                 }
             },
             content: {
-                Text(waiting
+                Text(waking
+                    ? String(localized: "The computer isn't sending video, so it's being woken automatically. You can also press a key or move the pointer.")
+                    : waiting
                     ? String(localized: "If the computer's display is asleep, press a key or move the pointer to wake it.")
                     : String(localized: "The computer connected to the KVM isn't sending video. It may be asleep or turned off. Press a key or move the pointer to wake it."))
                     .font(.callout)

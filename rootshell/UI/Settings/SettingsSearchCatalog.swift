@@ -55,6 +55,7 @@ enum SettingsSearchDestination: String, Hashable, CaseIterable {
     case backgroundTunnels
     case roam
     case screenSharing
+    case screenSharingDownloads
     case uploads
     case sshTransport
     case multiplexers
@@ -282,6 +283,10 @@ extension SettingsSearchDestination {
         case .screenSharing:
             Meta(section: .connections, title: String(localized: "Screen Sharing"), systemImage: "display.2",
                  keywords: ["vnc", "remote desktop", "clipboard", "panning", "pointer", "encryption", "tunnel"])
+        case .screenSharingDownloads:
+            Meta(section: .connections, title: String(localized: "Screen Sharing Downloads"), systemImage: "arrow.down.circle",
+                 keywords: ["downloads", "drag to download", "temporary files", "file transfer", "storage", "disk space",
+                            "clear all", "delete", "export", "share", "vnc"])
         case .uploads:
             Meta(section: .connections, title: String(localized: "Uploads"), systemImage: "arrow.up.doc",
                  keywords: ["upload", "image", "paste", "drop", "attachment", "markdown", "sftp", "pdf", "screenshot"])
@@ -948,7 +953,7 @@ struct SettingsSearchEntry: Identifiable, Hashable {
             // MARK: Screen Sharing
             row("screen-sharing-ctrl-opt", String(localized: "Control+Option as Command"), in: .screenSharing, icon: "keyboard",
                 keywords: ["hardware keyboard", "command key", "vnc", "mac"]),
-            row("screen-sharing-reserved", String(localized: "Route Reserved Shortcuts to VNC"), in: .screenSharing, icon: "keyboard.badge.ellipsis",
+            row("screen-sharing-reserved", String(localized: "Route Reserved Shortcuts to Remote Computer"), in: .screenSharing, icon: "keyboard.badge.ellipsis",
                 keywords: ["reserved shortcuts", "keyboard", "vnc"]),
             row("screen-sharing-floating-toolbar", String(localized: "Floating Keyboard Toolbar"), in: .screenSharing, icon: "rectangle.bottomthird.inset.filled",
                 keywords: ["toolbar", "floating", "docked", "glass", "keys", "drag", "keyboard", "remote screen"],
@@ -969,6 +974,9 @@ struct SettingsSearchEntry: Identifiable, Hashable {
                 keywords: ["right drag", "middle drag", "middle click", "mouse button", "indicator", "two-finger", "three-finger"]),
             row("screen-sharing-swipes", String(localized: "Three-Finger Swipes"), in: .screenSharing, icon: "hand.draw",
                 keywords: ["swipe", "mission control", "application windows", "spaces", "gesture", "three-finger"]),
+            row("screen-sharing-four-finger-navigation", String(localized: "Four-Finger Tab and Pane Swipes"), in: .screenSharing, icon: "hand.raised.fingers.spread",
+                keywords: ["swipe", "tab", "pane", "next pane", "previous pane", "gesture", "four-finger", "three-finger"],
+                available: !isCatalyst && !isVisionOS),
             row("screen-sharing-cursor-rendering", String(localized: "Cursor Rendering"), in: .screenSharing, icon: "cursorarrow",
                 keywords: ["cursor", "pointer", "remote", "local",
                            "server rendered", "draw", "mouse"]),
@@ -1261,6 +1269,8 @@ func settingsSearchDestinationView(for destination: SettingsSearchDestination) -
         RoamSettingsView()
     case .screenSharing:
         ScreenSharingSettingsView()
+    case .screenSharingDownloads:
+        ScreenSharingDownloadsView()
     case .uploads:
         AttachmentUploadSettingsView()
     case .sshTransport:

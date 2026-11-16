@@ -324,8 +324,8 @@ struct GestureHelpView: View {
                     helpRow(
                         .remoteTabs,
                         "Screen Sharing tabs",
-                        "Swipe horizontally with three fingers over a Screen Sharing session to switch app tabs, even in fullscreen. One- and two-finger gestures remain available for the remote desktop.",
-                        requirement: "Requires the swipe direction to be assigned to app-tab navigation in Swipe Gestures."
+                        "Swipe horizontally with three fingers over a Screen Sharing session to switch app tabs, even in fullscreen. Screen Sharing settings can move this to four fingers.",
+                        requirement: "Requires the swipe direction to be assigned to app-tab navigation in Swipe Gestures and, with three fingers, its Three-Finger Swipe in Screen Sharing settings to be Off."
                     )
                 } else {
                     helpRow(

@@ -20,6 +20,7 @@ protocol TerminalKeyboardAccessoryHost: AnyObject {
     /// Window whose `SoftwareKeyboardHideIntentStore` entry governs this host.
     /// nil opts out: the chevron falls back to resigning first responder.
     var keyboardHideIntentWindow: UIWindow? { get }
+    var keyboardSizes: KeyboardSizes { get }
 
     @discardableResult
     func keyboardBecomeFirstResponder() -> Bool
@@ -60,6 +61,7 @@ protocol TerminalKeyboardAccessoryHost: AnyObject {
 extension TerminalKeyboardAccessoryHost {
     var keyboardAccessoryOmitsBottomSafeAreaStrip: Bool { false }
     var keyboardHideIntentWindow: UIWindow? { nil }
+    var keyboardSizes: KeyboardSizes { KeyboardSizes.accessory(traitCollection: keyboardHostView.traitCollection) }
     func keyboardSendModifierDoublePress(_ modifier: KeyModifiers) {}
     func keyboardTypePassword(pressingReturn: Bool) {}
     func keyboardToggleToolbarFloating() {}
@@ -772,6 +774,8 @@ final class TerminalKeyboardAccessoryController: NSObject {
     private var keyboardStateTask: Task<Void, Never>?
     private var keyboardVisibilityTask: Task<Void, Never>?
     private var keyboardAnimationTask: Task<Void, Never>?
+    /// Hinge detection can land after setup; the trait change alone would miss it.
+    private var duoDisplayTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
     init(host: TerminalKeyboardAccessoryHost) {
@@ -1002,7 +1006,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
         // Prefer the intrinsic height (toolbar + reserved strip) over `bounds`:
         // intrinsic moves in the same pass as the state that changes it, while
         // bounds lag one layout pass in both directions.
-        let fallbackHeight = KeyboardSizes.current(traitCollection: host.keyboardHostView.traitCollection).toolbar.height
+        let fallbackHeight = host.keyboardSizes.toolbar.height
             + reservedToolbarBottomInset
         if let intrinsicHeight = presentedToolbarView?.intrinsicContentSize.height,
            intrinsicHeight > 0 {
@@ -1157,7 +1161,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
               // A predictive bar would occupy the space below the fold.
               (host.keyboardHostView as? UITextInputTraits)?.autocorrectionType == .no
         else { return nil }
-        let row = KeyboardSizes.current(traitCollection: host.keyboardHostView.traitCollection).toolbar.height
+        let row = host.keyboardSizes.toolbar.height
         // Drawer rows stack above the main row and may reach over the fold.
         let height = max(row, accessory.intrinsicContentSize.height)
         return CGRect(x: window.bounds.minX, y: fold.maxY + 2 + row - height,
@@ -1245,7 +1249,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
         guard let host else { return }
 
         #if !os(visionOS)
-        keyboardAccessory = KeyboardAccessoryView(sizes: KeyboardSizes.current(traitCollection: host.keyboardHostView.traitCollection))
+        keyboardAccessory = KeyboardAccessoryView(sizes: host.keyboardSizes)
         keyboardAccessory?.delegate = delegate
 
         keyboardAccessory?.onModifiersChanged = { [weak self] modifiers in
@@ -1323,6 +1327,16 @@ final class TerminalKeyboardAccessoryController: NSObject {
         keyboardAccessory?.onToggleTabBarRequested = { [weak host] in
             guard let host else { return }
             NotificationCenter.default.post(name: .toggleTabBar, object: host.keyboardHostView)
+        }
+
+        keyboardAccessory?.onChoosePaneToZoomRequested = { [weak host] in
+            guard let host else { return }
+            NotificationCenter.default.post(name: .choosePaneToZoom, object: host.keyboardHostView)
+        }
+
+        keyboardAccessory?.onTogglePaneZoomRequested = { [weak host] in
+            guard let host else { return }
+            NotificationCenter.default.post(name: .togglePaneZoom, object: host.keyboardHostView)
         }
 
         keyboardAccessory?.onNewConnectionRequested = { [weak host] in
@@ -1508,6 +1522,13 @@ final class TerminalKeyboardAccessoryController: NSObject {
             }
         }
 
+        duoDisplayTask = Task { @MainActor [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: .duoDisplayDidChange) {
+                guard let self else { break }
+                self.host?.keyboardUpdateAccessoryForTraitCollection()
+            }
+        }
+
         _ = host.keyboardBecomeFirstResponder()
         host.keyboardReloadInputViews()
 
@@ -1585,6 +1606,8 @@ final class TerminalKeyboardAccessoryController: NSObject {
         keyboardVisibilityTask = nil
         keyboardAnimationTask?.cancel()
         keyboardAnimationTask = nil
+        duoDisplayTask?.cancel()
+        duoDisplayTask = nil
         cancellables.removeAll()
     }
 

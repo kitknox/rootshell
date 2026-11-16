@@ -29,24 +29,212 @@ nonisolated struct AgentDetectionManifest {
 
     // MARK: - Compiled types
 
-    /// One region, in the three forms the matchers need. `flat` is
-    /// `lower` with every run of whitespace — newlines included —
+    /// One region, in the three forms the matchers need. `flat` is the
+    /// lowercased text with every run of whitespace — newlines included —
     /// collapsed to a single space, which is what makes `contains`
     /// survive line wrapping: a TUI soft-wraps its footer at a word
     /// boundary ("… Esc to" / "cancel"), and a needle spanning that break
     /// is otherwise invisible. Wrapping is width-dependent, so without
     /// this a rule works on a wide terminal and silently stops matching
-    /// on a narrow one.
-    nonisolated struct RegionText {
+    /// on a narrow one. `lines` is the raw text by row, for `lineRegex`.
+    ///
+    /// The derived forms are built on first use: most gates fail on their
+    /// first matcher and never need the others.
+    nonisolated final class RegionText {
         let text: String
-        let lower: String
-        let flat: String
+        private(set) lazy var flat = String(decoding: flatBytes, as: UTF8.self)
+        /// Byte forms, for the needle and pattern prefilters.
+        private(set) lazy var flatBytes = Self.flatten(text)
+        private(set) lazy var textBytes = ContiguousArray(text.utf8)
+        private(set) lazy var lines: [Substring] =
+            text.utf8.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: false)
+                .map { Substring($0) }
 
         init(_ text: String) {
             self.text = text
-            let lower = text.lowercased()
-            self.lower = lower
-            self.flat = lower.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        }
+
+        /// Lowercases and collapses whitespace in one pass over the scalars.
+        private static func flatten(_ text: String) -> ContiguousArray<UInt8> {
+            var bytes = ContiguousArray<UInt8>()
+            bytes.reserveCapacity(text.utf8.count)
+            var pendingSpace = false
+            for scalar in text.unicodeScalars {
+                let value = scalar.value
+                let isSpace = value < 0x80
+                    ? value == 0x20 || (0x09...0x0D).contains(value)
+                    : scalar.properties.isWhitespace
+                if isSpace {
+                    pendingSpace = !bytes.isEmpty
+                    continue
+                }
+                if pendingSpace {
+                    bytes.append(0x20)
+                    pendingSpace = false
+                }
+                if value < 0x80 {
+                    let byte = UInt8(value)
+                    bytes.append((0x41...0x5A).contains(byte) ? byte | 0x20 : byte)
+                } else if scalar.properties.changesWhenLowercased {
+                    bytes.append(contentsOf: scalar.properties.lowercaseMapping.utf8)
+                } else {
+                    bytes.append(contentsOf: scalar.utf8)
+                }
+            }
+            return bytes
+        }
+    }
+
+    /// A `contains` needle, pre-lowercased. An ASCII needle that is absent
+    /// as bytes cannot match as text, so the byte search rules most out.
+    nonisolated struct Needle {
+        let text: String
+        let bytes: ContiguousArray<UInt8>
+        let isASCII: Bool
+
+        init(_ raw: String) {
+            text = raw.lowercased()
+            bytes = ContiguousArray(text.utf8)
+            isASCII = !bytes.isEmpty && bytes.allSatisfy { $0 < 0x80 }
+        }
+
+        func isIn(_ region: RegionText) -> Bool {
+            if isASCII, !AgentDetectionRegions.containsBytes(region.flatBytes, bytes) {
+                return false
+            }
+            return region.flat.contains(text)
+        }
+    }
+
+    /// A compiled regex plus, where one can be read off the source, a
+    /// literal every match must contain. Searching for the literal first
+    /// skips the regex on the screens that cannot match, which is most.
+    nonisolated struct Pattern {
+        let regex: Regex<AnyRegexOutput>
+        private let literal: ContiguousArray<UInt8>?
+        private let caseInsensitive: Bool
+
+        init?(_ source: String) {
+            guard let regex = try? Regex(source) else { return nil }
+            self.regex = regex
+            let required = Self.requiredLiteral(in: source)
+            literal = required.map { ContiguousArray($0.text.utf8) }
+            caseInsensitive = required?.caseInsensitive ?? false
+        }
+
+        /// False only when the required literal is absent from the region.
+        func mayMatch(_ region: RegionText) -> Bool {
+            guard let literal else { return true }
+            return AgentDetectionRegions.containsBytes(
+                caseInsensitive ? region.flatBytes : region.textBytes, literal)
+        }
+
+        func matches(_ text: String) -> Bool {
+            ((try? regex.firstMatch(in: text)) ?? nil) != nil
+        }
+
+        func matches(_ line: Substring) -> Bool {
+            ((try? regex.firstMatch(in: line)) ?? nil) != nil
+        }
+
+        /// The longest run of letters, digits and inner spaces that sits
+        /// outside every group, class and quantifier. Anything this does
+        /// not fully understand (top-level alternation, inline flags past
+        /// the leading group) yields nil, so the regex runs unfiltered.
+        static func requiredLiteral(in source: String) -> (text: String, caseInsensitive: Bool)? {
+            var chars = Array(source.unicodeScalars)
+            var caseInsensitive = false
+            if chars.count >= 3, chars[0] == "(", chars[1] == "?",
+               let close = chars.firstIndex(of: ")"),
+               close > 2, chars[2..<close].allSatisfy({ "ims".unicodeScalars.contains($0) }) {
+                caseInsensitive = chars[2..<close].contains("i")
+                chars.removeFirst(close + 1)
+            }
+            guard !source.contains("\\Q") else { return nil }
+
+            var best: [Unicode.Scalar] = []
+            var run: [Unicode.Scalar] = []
+            func endRun() {
+                while run.first == " " { run.removeFirst() }
+                while run.last == " " { run.removeLast() }
+                if run.count > best.count { best = run }
+                run = []
+            }
+            var depth = 0
+            var index = 0
+            while index < chars.count {
+                let char = chars[index]
+                index += 1
+                switch char {
+                case "\\":
+                    endRun()
+                    guard index < chars.count else { return nil }
+                    let escaped = chars[index]
+                    index += 1
+                    let isAlphanumeric = escaped.isASCII
+                        && (escaped.properties.isAlphabetic || escaped.properties.numericType != nil)
+                    if !isAlphanumeric || "dDsSwWbBAzZnrtfvhHR".unicodeScalars.contains(escaped) {
+                        break
+                    }
+                    // \u{…}, \p{…}: the braces are the payload. Any other
+                    // escape (\x63, \1, \cA) has one this cannot consume.
+                    guard "uxpPN".unicodeScalars.contains(escaped),
+                          index < chars.count, chars[index] == "{",
+                          let close = chars[index...].firstIndex(of: "}") else { return nil }
+                    index = close + 1
+                case "[":
+                    endRun()
+                    if index < chars.count, chars[index] == "^" { index += 1 }
+                    // A leading `]` is a member, not the end.
+                    guard index < chars.count, chars[index] != "]" else { return nil }
+                    while index < chars.count, chars[index] != "]" {
+                        guard chars[index] != "[" else { return nil }
+                        index += chars[index] == "\\" ? 2 : 1
+                    }
+                    guard index < chars.count else { return nil }
+                    index += 1
+                case "(":
+                    endRun()
+                    depth += 1
+                    if index < chars.count, chars[index] == "?" {
+                        // Only plain non-capturing groups and lookarounds.
+                        let rest = String(String.UnicodeScalarView(chars[index...].prefix(3)))
+                        guard ["?:", "?=", "?!", "?<=", "?<!"].contains(where: rest.hasPrefix) else {
+                            return nil
+                        }
+                    }
+                case ")":
+                    endRun()
+                    depth -= 1
+                    guard depth >= 0 else { return nil }
+                case "|":
+                    // Inside a group it only varies what is already ignored.
+                    guard depth > 0 else { return nil }
+                case "?", "*":
+                    if !run.isEmpty { run.removeLast() }
+                    endRun()
+                case "{":
+                    if !run.isEmpty { run.removeLast() }
+                    endRun()
+                    guard let close = chars[index...].firstIndex(of: "}") else { return nil }
+                    index = close + 1
+                default:
+                    let isLiteral = char.isASCII
+                        && (char.properties.isAlphabetic || char.properties.numericType != nil || char == " ")
+                    if depth == 0, isLiteral {
+                        run.append(char)
+                    } else {
+                        endRun()
+                    }
+                }
+            }
+            endRun()
+            guard depth == 0, best.count >= 3 else { return nil }
+            let text = String(String.UnicodeScalarView(best))
+            guard caseInsensitive else { return (text, false) }
+            // Searched in the flattened text, so collapse spaces the same way.
+            let collapsed = text.lowercased().split(separator: " ").joined(separator: " ")
+            return (collapsed, true)
         }
     }
 
@@ -56,9 +244,9 @@ nonisolated struct AgentDetectionManifest {
     /// line; all `all` gates must match; at least one `any` gate must
     /// match when `any` is non-empty; no `not` gate may match.
     nonisolated struct Gate {
-        var contains: [String] = []           // pre-lowercased at compile
-        var regex: [Regex<AnyRegexOutput>] = []
-        var lineRegex: [Regex<AnyRegexOutput>] = []
+        var contains: [Needle] = []
+        var regex: [Pattern] = []
+        var lineRegex: [Pattern] = []
         var all: [Gate] = []
         var any: [Gate] = []
         var not: [Gate] = []
@@ -67,13 +255,15 @@ nonisolated struct AgentDetectionManifest {
             // Wrap-tolerant: needles match the whitespace-collapsed form.
             // Anchored patterns keep the raw text — line anchors and (?m)
             // must still see real rows.
-            for needle in contains where !region.flat.contains(needle) { return false }
-            for pattern in regex where !Self.firstMatch(pattern, in: region.text) { return false }
+            for needle in contains where !needle.isIn(region) { return false }
             for pattern in lineRegex {
-                let lines = region.text.split(separator: "\n", omittingEmptySubsequences: false)
-                guard lines.contains(where: { Self.firstMatch(pattern, in: String($0)) }) else {
+                guard pattern.mayMatch(region),
+                      region.lines.contains(where: { pattern.matches($0) }) else {
                     return false
                 }
+            }
+            for pattern in regex {
+                guard pattern.mayMatch(region), pattern.matches(region.text) else { return false }
             }
             for gate in all where !gate.matches(region) { return false }
             if !any.isEmpty, !any.contains(where: { $0.matches(region) }) {
@@ -81,10 +271,6 @@ nonisolated struct AgentDetectionManifest {
             }
             for gate in not where gate.matches(region) { return false }
             return true
-        }
-
-        private static func firstMatch(_ pattern: Regex<AnyRegexOutput>, in text: String) -> Bool {
-            ((try? pattern.firstMatch(in: text)) ?? nil) != nil
         }
 
         /// A gate (or one of its descendants) must carry at least one
@@ -303,7 +489,11 @@ nonisolated struct AgentDetectionManifest {
     }
 
     private func matchesStrongSignature(_ agent: Agent, _ cache: inout RegionCache) -> Bool {
-        strongSignatureMatches(agent, &cache) > 0
+        for signature in agent.screenSignatures
+        where !signature.weak && !signature.requiresAltScreen {
+            if signature.gate.matches(cache.text(for: signature.region)) { return true }
+        }
+        return false
     }
 
     /// Extracts + normalizes each region spec once per pass; regions
@@ -350,33 +540,38 @@ nonisolated struct AgentDetectionManifest {
     /// Classify an identified agent's pane from a snapshot. Rules run
     /// priority-descending, first match wins; no match falls back to
     /// `.idle` (strict-blocked bias: only explicit approval UI may map
-    /// to blocked). `excludingOSCRegions` restricts to screen-chrome
-    /// rules — used while a visible blocker is established, since titles
-    /// keep animating through approval waits and must not clear blocked.
-    func classify(
+    /// to blocked). `screenOnly` skips the OSC-region rules — used while
+    /// a visible blocker is established, since titles keep animating
+    /// through approval waits and must not clear blocked. A scan needs
+    /// both answers and they share every screen rule, so one pass
+    /// produces the pair.
+    func classifyScreenAndFull(
         agent: Agent,
-        input: AgentDetectionInput,
-        excludingOSCRegions: Bool = false
-    ) -> AgentClassification {
+        input: AgentDetectionInput
+    ) -> (screenOnly: AgentClassification, full: AgentClassification) {
         var cache = RegionCache(input: input)
+        var firstOSC: AgentClassification?
         for rule in agent.rules {
-            if excludingOSCRegions, rule.region == "osc_title" || rule.region == "osc_progress" {
-                continue
-            }
-            let region = cache.text(for: rule.region)
-            if rule.gate.matches(region) {
-                return AgentClassification(
-                    state: rule.state,
-                    visibleIdle: rule.visibleIdle,
-                    visibleBlocker: rule.visibleBlocker,
-                    visibleWorking: rule.visibleWorking,
-                    skipStateUpdate: rule.skipStateUpdate,
-                    matchedRuleID: rule.id,
-                    matchedRuleRegion: rule.region
-                )
+            let isOSC = rule.region == "osc_title" || rule.region == "osc_progress"
+            if isOSC, firstOSC != nil { continue }
+            guard rule.gate.matches(cache.text(for: rule.region)) else { continue }
+            let match = AgentClassification(
+                state: rule.state,
+                visibleIdle: rule.visibleIdle,
+                visibleBlocker: rule.visibleBlocker,
+                visibleWorking: rule.visibleWorking,
+                skipStateUpdate: rule.skipStateUpdate,
+                matchedRuleID: rule.id,
+                matchedRuleRegion: rule.region
+            )
+            if isOSC {
+                firstOSC = match
+            } else {
+                return (match, firstOSC ?? match)
             }
         }
-        return AgentClassification(state: .idle)
+        let idle = AgentClassification(state: .idle)
+        return (idle, firstOSC ?? idle)
     }
 
     // MARK: - Task classification
@@ -779,16 +974,16 @@ nonisolated struct AgentDetectionManifest {
     private static func compileGate(_ raw: GateFile?, agentID: String, depth: Int) -> Gate? {
         guard let raw, depth < maxGateDepth else { return nil }
         var gate = Gate()
-        gate.contains = (raw.contains ?? []).map { $0.lowercased() }
+        gate.contains = (raw.contains ?? []).map(Needle.init)
         for pattern in raw.regex ?? [] {
-            guard let regex = try? Regex(pattern) else {
+            guard let regex = Pattern(pattern) else {
                 logger.error("agent \(agentID, privacy: .public): invalid regex pattern")
                 return nil
             }
             gate.regex.append(regex)
         }
         for pattern in raw.lineRegex ?? [] {
-            guard let regex = try? Regex(pattern) else {
+            guard let regex = Pattern(pattern) else {
                 logger.error("agent \(agentID, privacy: .public): invalid lineRegex pattern")
                 return nil
             }

@@ -90,4 +90,11 @@ struct KeyboardSizes {
         return traitCollection.verticalSizeClass == .compact ? .iPhoneLandscape : .iPhonePortrait
         #endif
     }
+
+    /// The terminal and Screen Sharing toolbars keep the Duo's regular-width
+    /// inner display on phone sizes.
+    static func accessory(traitCollection: UITraitCollection) -> KeyboardSizes {
+        guard DuoHingeEvents.hasHinge else { return current(traitCollection: traitCollection) }
+        return traitCollection.verticalSizeClass == .compact ? .iPhoneLandscape : .iPhonePortrait
+    }
 }

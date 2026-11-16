@@ -149,11 +149,15 @@ nonisolated enum AgentFleetRows {
     /// Row selectors and status dots that prefix a fleet row.
     private static let rowMarkers: Set<Character> = ["❯", ">", "⏺", "◯", "○", "●", "◌", "✓", "✗", "•", "-"]
 
+    private static let tokensBytes = ContiguousArray("tokens".utf8)
+
     /// Every fleet row carrying a live counter, session row excluded.
     static func rows(in lines: [String]) -> [Row] {
         var result: [Row] = []
         for line in lines {
-            guard let match = line.firstMatch(of: counterSuffix) else { continue }
+            // The counter always ends in this word; most rows lack it.
+            guard AgentDetectionRegions.containsBytes(line, tokensBytes),
+                  let match = line.firstMatch(of: counterSuffix) else { continue }
             let prefix = line[line.startIndex..<match.range.lowerBound]
             // The session's own status line prints the same counter, but
             // parenthesized ("✻ Waddling… (2m 49s · ↓ 5.1k tokens · …)")

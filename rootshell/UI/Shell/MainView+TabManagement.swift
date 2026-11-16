@@ -615,7 +615,7 @@ extension MainView {
     /// cwd. Accepts `~`-relative, relative, or absolute paths; anything
     /// non-absolute resolves against Documents (the shell's HOME). A path
     /// that doesn't exist falls back to HOME inside the session.
-    /// `startupCommand` (AppleScript) is typed into the shell once it starts.
+    /// `startupCommand` (AppleScript, Shortcuts) is typed into the shell once it starts.
     func createLocalShellTab(intentDirectory: String?, startupCommand: String? = nil) {
         // Backstop: automation must never materialize a tab in the hidden visor.
         guard !isVisorWindow else { return }

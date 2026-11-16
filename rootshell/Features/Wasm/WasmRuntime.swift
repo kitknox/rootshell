@@ -48,6 +48,7 @@ final class WasmRuntime: NSObject {
     func processExit(processID: UUID, code: Int32) {
         guard let proc = current, proc.id == processID else { return }
         current = nil
+        socketBroker.closeAll(for: proc)
         proc.onExit?(code)
     }
 
@@ -374,6 +375,7 @@ final class WasmRuntime: NSObject {
             if let proc = current {
                 proc.onStderr?(Data("wasm: \(msg)\n".utf8))
                 current = nil
+                socketBroker.closeAll(for: proc)
                 proc.onExit?(1)
             } else {
                 lastBootstrapError = msg

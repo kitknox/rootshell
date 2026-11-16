@@ -67,6 +67,17 @@ unsafe extern "C" {
         out_buf: *mut u8, out_max: i32,
         count_out: *mut u32,
     ) -> i32;
+
+    // SO_RCVTIMEO: recv/recvfrom return EAGAIN after timeout_ms; 0 waits forever.
+    pub unsafe fn rootshell_socket_set_recv_timeout(fd: i32, timeout_ms: u32) -> i32;
+    // Browses for a Bonjour service type for up to timeout_ms and writes one
+    // "name\thost\tport\taddr,addr\n" line per instance into out_buf.
+    pub unsafe fn rootshell_socket_bonjour_lookup(
+        type_: *const u8, type_len: i32,
+        timeout_ms: u32,
+        out_buf: *mut u8, out_max: i32,
+        out_len: *mut u32,
+    ) -> i32;
 }
 
 // -------- Terminal (raw / cooked input mode) --------
@@ -93,6 +104,8 @@ pub fn errno_name(e: i32) -> &'static str {
     match e {
         0 => "OK",
         2 => "EACCES",
+        6 => "EAGAIN",
+        42 => "ENOBUFS",
         14 => "ECONNREFUSED",
         50 => "ENETUNREACH",
         73 => "ETIMEDOUT",

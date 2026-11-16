@@ -786,6 +786,13 @@ extension LocalShellSession {
             .replacingOccurrences(of: "\n", with: "\r\n")  // Convert all \n to \r\n
     }
 
+    /// Like `normalizeLineEndings` but keeps a lone `\r`, so progress lines redraw in place.
+    func normalizeNewlinesKeepingCR(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\n", with: "\r\n")
+    }
+
     // MARK: - bat Theme Palette
 
     /// Push the current terminal palette into bat's global theme override.

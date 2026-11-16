@@ -311,6 +311,16 @@ extension MainView {
                     restoreFirstResponderAfterSheetDismissal()
                 }
             }
+            .onChange(of: alerts.showVNCHighPerformanceTransportAlert) { oldValue, newValue in
+                if newValue {
+                    alerts.enqueue(.vncHighPerformanceTransport)
+                } else if oldValue {
+                    if alerts.presentedKind == .vncHighPerformanceTransport {
+                        alerts.completePresented(clearBackingState: false)
+                    }
+                    restoreFirstResponderAfterSheetDismissal()
+                }
+            }
             #if !CHINA_BUILD
             .onChange(of: alerts.showAIAgentSSHRequiredAlert) { oldValue, newValue in
                 if newValue {
@@ -368,9 +378,7 @@ extension MainView {
                 }
             }
             .onChange(of: isAnySheetPresented) { _, sheetPresented in
-                #if !targetEnvironment(macCatalyst)
                 setSelectionUIOccludedByPresentation(sheetPresented)
-                #endif
                 if !sheetPresented {
                     resyncSelectionHandlesAfterTransientOcclusion()
                 }

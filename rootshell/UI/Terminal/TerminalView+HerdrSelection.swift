@@ -1,7 +1,6 @@
 // Copyright (c) 2026 Kit Knox / Rootshell LLC
 import UIKit
 
-#if !targetEnvironment(macCatalyst)
 extension Ghostty.TerminalView {
     func handleEndpointSelectionGesture(_ gesture: UIGestureRecognizer) {
         guard let state = herdrEndpointPane, !isMouseCaptured else { return }
@@ -69,4 +68,3 @@ extension Ghostty.TerminalView {
         }
     }
 }
-#endif

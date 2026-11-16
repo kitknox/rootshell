@@ -227,4 +227,78 @@ final class KVMProtocolTests: XCTestCase {
         XCTAssertEqual(ping.type, "ping")
         XCTAssertTrue(ping.event.isEmpty)
     }
+
+    // MARK: - Pre-disconnect actions
+
+    func testPreDisconnectChords() throws {
+        XCTAssertEqual(try KVMPreDisconnectAction(kind: .none).keyCodes(layout: "en-us"), [])
+        XCTAssertEqual(try KVMPreDisconnectAction(kind: .sleepDisplayMac).keyCodes(layout: "en-us"), ["ControlLeft", "ShiftLeft", "Power"])
+        XCTAssertEqual(try KVMPreDisconnectAction(kind: .lockScreenMac).keyCodes(layout: "en-us"), ["ControlLeft", "MetaLeft", "KeyQ"])
+        XCTAssertEqual(try KVMPreDisconnectAction(kind: .lockScreenPC).keyCodes(layout: "en-us"), ["MetaLeft", "KeyL"])
+        XCTAssertEqual(try KVMPreDisconnectAction(kind: .logOutMac).keyCodes(layout: "en-us"), ["ShiftLeft", "AltLeft", "MetaLeft", "KeyQ"])
+        XCTAssertEqual(try KVMPreDisconnectAction(kind: .controlAltDelete).keyCodes(layout: "en-us"), ["ControlLeft", "AltLeft", "Delete"])
+    }
+
+    func testPreDisconnectShortcutCodes() throws {
+        var shortcut = VNCPreDisconnectShortcut()
+        shortcut.control = true
+        shortcut.command = true
+        shortcut.key = "Q"
+        XCTAssertEqual(try KVMPreDisconnectAction.keyCodes(for: shortcut, layout: "en-us"), ["ControlLeft", "MetaLeft", "KeyQ"])
+
+        shortcut = VNCPreDisconnectShortcut()
+        shortcut.option = true
+        shortcut.key = "?"
+        XCTAssertEqual(try KVMPreDisconnectAction.keyCodes(for: shortcut, layout: "en-us"), ["AltLeft", "ShiftLeft", "Slash"])
+
+        shortcut = VNCPreDisconnectShortcut()
+        shortcut.key = VNCPreDisconnectShortcut.SpecialKey.f12.rawValue
+        XCTAssertEqual(try KVMPreDisconnectAction.keyCodes(for: shortcut, layout: "en-us"), ["F12"])
+        shortcut.key = VNCPreDisconnectShortcut.SpecialKey.forwardDelete.rawValue
+        XCTAssertEqual(try KVMPreDisconnectAction.keyCodes(for: shortcut, layout: "en-us"), ["Delete"])
+
+        shortcut.key = ""
+        XCTAssertThrowsError(try KVMPreDisconnectAction.keyCodes(for: shortcut, layout: "en-us"))
+        shortcut.key = "é"
+        XCTAssertThrowsError(try KVMPreDisconnectAction.keyCodes(for: shortcut, layout: "en-us"))
+    }
+
+    func testPreDisconnectLettersFollowHostLayout() throws {
+        XCTAssertEqual(try KVMPreDisconnectAction(kind: .lockScreenMac).keyCodes(layout: "fr"), ["ControlLeft", "MetaLeft", "KeyA"])
+        // kvmd's "bepo" keymap is xkb's French Dvorak.
+        XCTAssertEqual(try KVMPreDisconnectAction(kind: .lockScreenMac).keyCodes(layout: "bepo"), ["ControlLeft", "MetaLeft", "KeyX"])
+        XCTAssertEqual(try KVMPreDisconnectAction(kind: .lockScreenPC).keyCodes(layout: "bepo"), ["MetaLeft", "Comma"])
+        XCTAssertEqual(try KVMPreDisconnectAction(kind: .lockScreenMac).keyCodes(layout: "ru"), ["ControlLeft", "MetaLeft", "KeyQ"])
+
+        var shortcut = VNCPreDisconnectShortcut()
+        shortcut.command = true
+        shortcut.key = "z"
+        XCTAssertEqual(try KVMPreDisconnectAction.keyCodes(for: shortcut, layout: "de"), ["MetaLeft", "KeyY"])
+        XCTAssertEqual(try KVMPreDisconnectAction.keyCodes(for: shortcut, layout: "fr"), ["MetaLeft", "KeyW"])
+        XCTAssertEqual(try KVMPreDisconnectAction.keyCodes(for: shortcut, layout: "sl"), ["MetaLeft", "KeyZ"])
+
+        // Digits only where unshifted; punctuation only on US layouts.
+        shortcut.key = "1"
+        XCTAssertEqual(try KVMPreDisconnectAction.keyCodes(for: shortcut, layout: "de"), ["MetaLeft", "Digit1"])
+        XCTAssertThrowsError(try KVMPreDisconnectAction.keyCodes(for: shortcut, layout: "fr"))
+        shortcut.key = "0"
+        XCTAssertEqual(try KVMPreDisconnectAction.keyCodes(for: shortcut, layout: "hu"), ["MetaLeft", "Backquote"])
+        shortcut.key = "/"
+        XCTAssertThrowsError(try KVMPreDisconnectAction.keyCodes(for: shortcut, layout: "de"))
+    }
+
+    func testPreDisconnectCodableIsLossy() throws {
+        var shortcut = VNCPreDisconnectShortcut()
+        shortcut.shift = true
+        shortcut.key = "k"
+        let action = KVMPreDisconnectAction(kind: .shortcut, shortcut: shortcut)
+        let decoded = try JSONDecoder().decode(KVMPreDisconnectAction.self, from: JSONEncoder().encode(action))
+        XCTAssertEqual(decoded, action)
+
+        let unknown = try JSONDecoder().decode(KVMPreDisconnectAction.self, from: Data(#"{"kind":"hibernate"}"#.utf8))
+        XCTAssertEqual(unknown.kind, .none)
+
+        let lock = KVMPreDisconnectAction(kind: .lockScreenMac, shortcut: shortcut)
+        XCTAssertEqual(lock.normalized, KVMPreDisconnectAction(kind: .lockScreenMac))
+    }
 }

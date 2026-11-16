@@ -959,9 +959,7 @@ extension MainView {
             )
         }
 
-        #if !targetEnvironment(macCatalyst)
         resyncSelectionHandlesAfterTransientOcclusion()
-        #endif
 
         // Fire a single coalesced `objectWillChange` from any manager that
         // suppresses per-event publishes during background. Without this,

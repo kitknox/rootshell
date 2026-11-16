@@ -18,10 +18,13 @@ struct KVMFormState: Hashable {
     var automaticallyEnterFullScreen = false
     var hostKeyboardLayout = KVMInputTranslator.usLayout
     var reverseScrolling = false
+    var computerType = KVMComputerType.mac
+    var automaticallyWakeDisplay = true
     /// Profile editor only. Blank keeps the saved computer password.
     var hostPassword = ""
     var removeSavedHostPassword = false
     var promptForHostPasswordAtLoginScreen = true
+    var preDisconnect = KVMPreDisconnectAction()
     /// Only the `jump*` fields are used; Screen Sharing's jump UI and builder edit them.
     var jump = VNCFormState()
 
@@ -37,7 +40,10 @@ struct KVMFormState: Hashable {
         automaticallyEnterFullScreen = config.automaticallyEnterFullScreen
         hostKeyboardLayout = config.hostKeyboardLayout
         reverseScrolling = config.reverseScrolling
+        computerType = config.computerType
+        automaticallyWakeDisplay = config.automaticallyWakeDisplay
         promptForHostPasswordAtLoginScreen = config.promptForHostPasswordAtLoginScreen
+        preDisconnect = config.preDisconnectAction
         var jumpForm = VNCFormState(config: VNCConnectionConfig(host: config.host, quality: .standard, jump: config.jump))
         jumpForm.quality = .standard
         jump = jumpForm
@@ -45,6 +51,7 @@ struct KVMFormState: Hashable {
 
     var isValid: Bool {
         jumpForm().isValid && !username.trimmingCharacters(in: .whitespaces).isEmpty
+            && (try? preDisconnect.keyCodes(layout: hostKeyboardLayout)) != nil
     }
 
     func buildConfig(sanitizeJumpPasswordForPersistence: Bool = false) throws -> KVMConnectionConfig {
@@ -53,6 +60,9 @@ struct KVMFormState: Hashable {
         let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard KVMConnectionConfig.baseURL(host: built.host, port: built.port) != nil else {
             throw VNCFormState.BuildError(message: String(localized: "Please enter a valid hostname."))
+        }
+        guard (try? preDisconnect.keyCodes(layout: hostKeyboardLayout)) != nil else {
+            throw VNCFormState.BuildError(message: String(localized: "Choose a letter or special key for the shortcut sent before disconnecting. Other characters can't be placed on the computer's keyboard layout."))
         }
         return KVMConnectionConfig(
             host: built.host,
@@ -63,7 +73,10 @@ struct KVMFormState: Hashable {
             automaticallyEnterFullScreen: automaticallyEnterFullScreen,
             hostKeyboardLayout: hostKeyboardLayout,
             reverseScrolling: reverseScrolling,
-            promptForHostPasswordAtLoginScreen: promptForHostPasswordAtLoginScreen)
+            computerType: computerType,
+            automaticallyWakeDisplay: automaticallyWakeDisplay,
+            promptForHostPasswordAtLoginScreen: promptForHostPasswordAtLoginScreen,
+            preDisconnectAction: preDisconnect.normalized)
     }
 
     /// Host and port validate and build through the Screen Sharing form.
@@ -136,6 +149,18 @@ struct KVMConnectionFormSections: View {
         }
 
         Section {
+            Picker("Computer Type", selection: $form.computerType) {
+                Text("Mac").tag(KVMComputerType.mac)
+                Text("Windows or Linux").tag(KVMComputerType.pc)
+            }
+            .themedRow()
+        } header: {
+            Text("Computer")
+        } footer: {
+            Text("Chooses the shortcuts the session's Commands menu sends, such as Command-C or Control-C for Copy.")
+        }
+
+        Section {
             Picker("Computer's Keyboard Layout", selection: $form.hostKeyboardLayout) {
                 ForEach(KVMKeyboardLayouts.all, id: \.self) { keymap in
                     Text(KVMKeyboardLayouts.displayName(keymap)).tag(keymap)
@@ -157,6 +182,15 @@ struct KVMConnectionFormSections: View {
             Text("Turn this on if scrolling moves the wrong way. A Mac usually needs it, because it applies its own natural scrolling to the KVM's mouse.")
         }
 
+        Section {
+            Toggle("Wake Display Automatically", isOn: $form.automaticallyWakeDisplay)
+                .themedRow()
+        } header: {
+            Text("Wake")
+        } footer: {
+            Text("When a connection gets no video, nudge the pointer and then press the Control key to wake the computer. Nothing is clicked or typed.")
+        }
+
         RemoteScreenJumpSection(
             form: $form.jump,
             footer: String(localized: "Tunnel the KVM connection through an SSH host."))
@@ -175,6 +209,48 @@ struct KVMConnectionFormSections: View {
             .themedRow()
         } header: {
             Text("Session")
+        }
+
+        preDisconnectSection
+    }
+
+    private var preDisconnectSection: some View {
+        Section {
+            Group {
+                Picker("Action", selection: $form.preDisconnect.kind) {
+                    ForEach(KVMPreDisconnectAction.Kind.allCases, id: \.self) { kind in
+                        Text(kind.displayName).tag(kind)
+                    }
+                }
+
+                switch form.preDisconnect.kind {
+                case .none, .lockScreenMac, .lockScreenPC:
+                    EmptyView()
+
+                case .sleepDisplayMac:
+                    Text("Presses Control-Shift-Power. On Windows or Linux the Power key can sleep or shut down the computer.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                case .logOutMac:
+                    Text("Logs out of the Mac without asking. Apps with unsaved changes can still stop the logout.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                case .controlAltDelete:
+                    Text("For Windows and Linux computers. A Mac ignores it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                case .shortcut:
+                    PreDisconnectShortcutRows(shortcut: $form.preDisconnect.shortcut)
+                }
+            }
+            .themedRow()
+        } header: {
+            Text("Before Disconnecting")
+        } footer: {
+            Text("Keys sent when you close this connection or its tab. They're not sent when the connection drops, reconnects, or the app moves to the background.")
         }
     }
 
@@ -207,7 +283,7 @@ struct KVMConnectionFormSections: View {
         } header: {
             Text("Computer Password")
         } footer: {
-            Text("Optional. The password of the computer connected to the KVM, which is usually different from the KVM's own. Type it with Type Computer Password in the session menu, or when a login or lock screen is detected. It's saved in iCloud Keychain and only typed after you confirm.")
+            Text("Optional. The password of the computer connected to the KVM, which is usually different from the KVM's own. Type it with Type Password in the session menu, or when a login or lock screen is detected. It's saved in iCloud Keychain and only typed after you confirm.")
         }
     }
 }

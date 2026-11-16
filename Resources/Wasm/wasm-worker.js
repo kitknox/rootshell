@@ -462,26 +462,34 @@ function wasiPreview1Imports() {
             new Uint8Array(memory.buffer).set(enc, ptr);
             return 0;
         },
-        fd_readdir(fd, bufPtr, bufLen, _cookie, retPtr) {
-            const r = callFs("fd_readdir", { fd });
-            if (r.errno !== 0) return r.errno;
-            // Simplified WASI dirent encoding: just write a sequence of
-            // (8B d_next, 8B d_ino, 4B namlen, 1B type, name). Most demos
-            // re-call fd_readdir, we don't bother resuming via cookie here.
+        fd_readdir(fd, bufPtr, bufLen, cookie, retPtr) {
+            // WASI dirent: 8B d_next (the cookie), 8B d_ino, 4B namlen,
+            // 1B type, 3B pad, name. A full buffer with the last entry cut
+            // short tells wasi-libc to call again from that entry's cookie;
+            // a short buffer means the end, so keep paging until full.
             const enc = new TextEncoder();
-            const buf = new Uint8Array(memory.buffer);
+            const end = bufPtr + bufLen;
             let off = bufPtr;
-            for (let i = 0; i < r.entries.length; i++) {
-                const name = enc.encode(r.entries[i].name);
-                if (off + 24 + name.length > bufPtr + bufLen) break;
-                const dv = new DataView(memory.buffer);
-                dv.setBigUint64(off + 0, BigInt(i + 1), true);
-                dv.setBigUint64(off + 8, BigInt(i + 1), true);
-                dv.setUint32(off + 16, name.length, true);
-                dv.setUint8(off + 20, r.entries[i].isDir ? 3 : 4);
-                buf.set(name, off + 24);
-                off += 24 + name.length;
-            }
+            let index = Number(cookie);
+            do {
+                const r = callFs("fd_readdir", { fd, cookie: index, bufLen: end - off });
+                if (r.errno !== 0) return r.errno;
+                if (r.entries.length === 0) break;
+                const buf = new Uint8Array(memory.buffer);
+                for (let i = 0; i < r.entries.length && off < end; i++, index++) {
+                    const name = enc.encode(r.entries[i].name);
+                    const ent = new Uint8Array(24 + name.length);
+                    const dv = new DataView(ent.buffer);
+                    dv.setBigUint64(0, BigInt(index + 1), true);
+                    dv.setBigUint64(8, BigInt(index + 1), true);
+                    dv.setUint32(16, name.length, true);
+                    dv.setUint8(20, r.entries[i].isDir ? 3 : 4);
+                    ent.set(name, 24);
+                    const n = Math.min(ent.length, end - off);
+                    buf.set(ent.subarray(0, n), off);
+                    off += n;
+                }
+            } while (off < end);
             new DataView(memory.buffer).setUint32(retPtr, off - bufPtr, true);
             return 0;
         },
@@ -682,7 +690,7 @@ function rootshellSocketImports() {
             const bytes = b64ToBytes(r.data || "");
             new Uint8Array(memory.buffer).set(bytes, bufPtr);
             new DataView(memory.buffer).setUint32(recvOutPtr, bytes.length, true);
-            // Materialize the source sockaddr the BSD way. addrLenIO is
+            // Materialize the datagram's sender the BSD way. addrLenIO is
             // in/out: read capacity, write the actual sockaddr length back.
             // If the caller passed null buffers or the broker couldn't tell
             // us who sent the datagram, leave addrLenIO at 0 so apps see
@@ -699,6 +707,30 @@ function rootshellSocketImports() {
         },
         rootshell_socket_shutdown(fd, how) {
             return callSocket("shutdown", { fd, how }).errno || 0;
+        },
+        // SO_RCVTIMEO: recv/recvfrom give up with EAGAIN after timeoutMs; 0 waits forever.
+        rootshell_socket_set_recv_timeout(fd, timeoutMs) {
+            return callSocket("set_recv_timeout", { fd, timeoutMs: timeoutMs >>> 0 }).errno || 0;
+        },
+        // Browses for a Bonjour service type such as "_ssh._tcp" for up to
+        // timeoutMs. Writes one "name\thost\tport\taddr,addr\n" line per
+        // instance, whole lines only; ENOBUFS when not even one fits.
+        rootshell_socket_bonjour_lookup(typePtr, typeLen, timeoutMs, outBufPtr, outMax, outLenPtr) {
+            const type = readString(typePtr, typeLen);
+            const r = callSocket("bonjour_lookup", { type, timeoutMs: timeoutMs >>> 0 });
+            if (r.errno !== 0) return r.errno;
+            const enc = new TextEncoder();
+            const buf = new Uint8Array(memory.buffer);
+            let written = 0;
+            for (const line of (r.text || "").split("\n")) {
+                if (!line) continue;
+                const bytes = enc.encode(line + "\n");
+                if (written + bytes.length > outMax) break;
+                buf.set(bytes, outBufPtr + written);
+                written += bytes.length;
+            }
+            new DataView(memory.buffer).setUint32(outLenPtr, written, true);
+            return written === 0 ? 42 /* ENOBUFS */ : 0;
         },
         rootshell_socket_close(fd) {
             return callSocket("close", { fd }).errno || 0;
@@ -891,13 +923,21 @@ function writeSockaddr(ptr, cap, host, port) {
     return 16;
 }
 
-/* Parses a canonical IPv6 literal into an 8-element array of u16 words.
- * Accepts the standard "::" zero compression, zone suffixes ("fe80::1%en0"),
- * but not IPv4-in-IPv6 mixed forms (those don't show up from
- * Network.framework path endpoints — they get returned as IPv4).
+/* Parses an IPv6 literal into an 8-element array of u16 words. Accepts
+ * "::" zero compression, zone suffixes ("fe80::1%en0"), and a dotted IPv4
+ * tail ("::ffff:192.0.2.1"), which a v6 socket reports for IPv4 senders.
  */
 function parseIPv6Literal(s) {
     s = s.split("%")[0]; // strip zone suffix
+    const lastColon = s.lastIndexOf(":");
+    const v4 = s.slice(lastColon + 1);
+    if (lastColon >= 0 && v4.includes(".")) {
+        const o = v4.split(".").map(p => /^\d{1,3}$/.test(p) ? parseInt(p, 10) : NaN);
+        if (o.length !== 4 || o.some(v => isNaN(v) || v > 255)) return null;
+        const hi = ((o[0] << 8) | o[1]).toString(16);
+        const lo = ((o[2] << 8) | o[3]).toString(16);
+        s = s.slice(0, lastColon + 1) + hi + ":" + lo;
+    }
     const halves = s.split("::");
     if (halves.length > 2) return null;
     const head = halves[0] && halves[0].length ? halves[0].split(":") : [];
