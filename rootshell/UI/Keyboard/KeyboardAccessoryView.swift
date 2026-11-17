@@ -300,6 +300,15 @@ class KeyboardAccessoryView: UIInputView {
         invalidateIntrinsicContentSize()
     }
 
+    /// The strip continues a flat plate to the screen edge. A glass capsule
+    /// ends above it and leaves the keyboard's backdrop showing.
+    private func updateBottomStrip() {
+        let extendsPlate = reservedBottomSafeArea > 0 && !toolbarView.usesGlassPlate
+            && !toolbarView.usesSectionPlates
+        bottomStripBlurView.isHidden = !extendsPlate
+        toolbarView.setBottomEdgeSquared(extendsPlate)
+    }
+
     #if !os(visionOS) && !targetEnvironment(macCatalyst)
     @objc private func handleBottomEdgePan(_: UIScreenEdgePanGestureRecognizer) {
         // Recognition itself is the behavior: it cancels the toolbar control's
@@ -330,6 +339,7 @@ class KeyboardAccessoryView: UIInputView {
     /// Rebuild the toolbar view in response to a layout configuration change.
     private func rebuildToolbar() {
         toolbarView.rebuildForCurrentWidth()
+        updateBottomStrip()
         invalidateLayoutAndNotify()
     }
 
@@ -370,8 +380,7 @@ class KeyboardAccessoryView: UIInputView {
         guard abs(clamped - reservedBottomSafeArea) > 0.5 else { return false }
         reservedBottomSafeArea = clamped
         toolbarBottomConstraint?.constant = -clamped
-        bottomStripBlurView.isHidden = clamped <= 0
-        toolbarView.setBottomEdgeSquared(clamped > 0)
+        updateBottomStrip()
         toolbarView.setNeedsLayout()
         setNeedsLayout()
         invalidateIntrinsicContentSize()

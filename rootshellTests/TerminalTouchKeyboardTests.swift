@@ -669,6 +669,113 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         }
     }
 
+    func testPinnedGroupsKeepTheirSlotsWhileTheMiddleOverflows() {
+        let leading = ["Escape", "Control"]
+        let main = ["Tab", "Paste", "Compose", "More"]
+        let trailing = ["Dismiss"]
+        let drawers = [["Alt"], ["Command"]]
+        func layout(_ capacity: Int, reserved: Int = 0) -> (main: [String], drawers: [[String]]) {
+            KeyboardToolbarOverflow.layout(leading: leading, main: main, trailing: trailing, drawers: drawers,
+                capacity: capacity, reservedSlots: reserved, drawerToggle: "More", keepsDrawerToggleVisible: true)
+        }
+        XCTAssertEqual(layout(7).main, leading + main + trailing)
+        XCTAssertEqual(layout(7).drawers, drawers)
+        // The middle gives way first, and the drawer toggle stays reachable.
+        XCTAssertEqual(layout(5).main, ["Escape", "Control", "Tab", "More", "Dismiss"])
+        XCTAssertEqual(layout(5).drawers, [["Paste", "Compose", "Alt"], drawers[1]])
+        // With no room for the middle, the pinned keys nearest it leave.
+        XCTAssertEqual(layout(3).main, ["Escape", "Control", "More"])
+        XCTAssertEqual(layout(3).drawers, [["Tab", "Paste", "Compose", "Dismiss", "Alt"], drawers[1]])
+        XCTAssertEqual(layout(2).main, ["Escape", "More"])
+        XCTAssertEqual(layout(2).drawers[0], ["Control", "Tab", "Paste", "Compose", "Dismiss", "Alt"])
+        for capacity in 1...9 {
+            for reserved in [0, 1] {
+                let fitted = layout(capacity, reserved: reserved)
+                XCTAssertEqual(Set(fitted.main + fitted.drawers.flatMap { $0 }),
+                               Set(leading + main + trailing + drawers.flatMap { $0 }))
+                XCTAssertEqual((fitted.main + fitted.drawers.flatMap { $0 }).count, 9)
+                XCTAssertEqual(fitted.main.filter { $0 == "More" }.count, 1)
+                XCTAssertLessThanOrEqual(fitted.main.count + reserved, max(capacity, reserved + 1))
+                XCTAssertEqual(fitted.drawers[1], drawers[1])
+            }
+        }
+    }
+
+    func testScrollingMainRowKeepsEveryKeyAndHoldsTheToggleStill() {
+        let leading = ["Escape"]
+        let main = ["Tab", "Paste", "More", "Compose", "Alt", "Command"]
+        let trailing = ["Dismiss"]
+        let drawers = [["Tilde"], ["Pipe"]]
+        func layout(_ capacity: Int, reserved: Int = 0) -> (leading: [String], middle: [String], trailing: [String], drawers: [[String]])? {
+            KeyboardToolbarOverflow.scrollingLayout(leading: leading, main: main, trailing: trailing, drawers: drawers,
+                capacity: capacity, reservedSlots: reserved, drawerToggle: "More", keepsDrawerToggleVisible: true)
+        }
+        // A row that fits does not scroll.
+        XCTAssertNil(layout(8))
+        // The toggle leaves the scrolling middle for the right end; nothing overflows.
+        let scrolling = layout(5)
+        XCTAssertEqual(scrolling?.leading, leading)
+        XCTAssertEqual(scrolling?.middle, ["Tab", "Paste", "Compose", "Alt", "Command"])
+        XCTAssertEqual(scrolling?.trailing, ["Dismiss", "More"])
+        XCTAssertEqual(scrolling?.drawers, drawers)
+        // Pinned keys that fill the row leave nothing to scroll in, and one
+        // slot is too few: its key could be one that keeps drags to itself.
+        XCTAssertNil(layout(3))
+        XCTAssertNil(layout(4))
+        XCTAssertNil(layout(5, reserved: 1))
+    }
+
+    func testScrollingRowSnapsToAKeyInTheDirectionOfAFlick() {
+        func snap(_ target: Double, _ velocity: Double) -> Double {
+            TerminalTouchKeyboardModel.snappedScrollOffset(target: target, velocity: velocity, unit: 100, furthest: 450)
+        }
+        // A short flick still moves on a key rather than springing back.
+        XCTAssertEqual(snap(20, 1), 100)
+        XCTAssertEqual(snap(180, -1), 100)
+        // Let go at rest, it settles on the nearest key.
+        XCTAssertEqual(snap(140, 0), 100)
+        XCTAssertEqual(snap(160, 0), 200)
+        // The end of the row need not be a whole key.
+        XCTAssertEqual(snap(430, 1), 450)
+        XCTAssertEqual(snap(-30, -1), 0)
+    }
+
+    func testMinimumKeyWidthFitsFewerToolbarKeys() {
+        // The row's own 40 points is the floor; a narrower minimum changes nothing.
+        XCTAssertEqual(TerminalTouchKeyboardModel.toolbarCapacity(width: 410), 10)
+        XCTAssertEqual(TerminalTouchKeyboardModel.toolbarCapacity(width: 410, minimumKeyWidth: 24), 10)
+        XCTAssertEqual(TerminalTouchKeyboardModel.toolbarCapacity(width: 410, minimumKeyWidth: 80), 5)
+        XCTAssertEqual(TerminalTouchKeyboardModel.toolbarCapacity(width: 410, minimumKeyWidth: 1000), 1)
+    }
+
+    func testMinimumKeyWidthGivesWayToPinnedKeys() {
+        // Three pinned keys and the drawer toggle keep their room, with one key between them.
+        XCTAssertEqual(KeyboardToolbarOverflow.capacity(usual: 10, widened: 4, pinned: 3, drawerToggle: true), 5)
+        // With room to spare the minimum holds.
+        XCTAssertEqual(KeyboardToolbarOverflow.capacity(usual: 10, widened: 6, pinned: 3, drawerToggle: true), 6)
+        // Never past what the row fits at its usual key width.
+        XCTAssertEqual(KeyboardToolbarOverflow.capacity(usual: 4, widened: 2, pinned: 5, drawerToggle: true), 4)
+        XCTAssertEqual(KeyboardToolbarOverflow.capacity(usual: 10, widened: 3, pinned: 0, reservedSlots: 3,
+                                                        drawerToggle: false), 4)
+        // A scrolling row keeps two keys between the pinned ones.
+        XCTAssertEqual(KeyboardToolbarOverflow.capacity(usual: 10, widened: 4, pinned: 3, drawerToggle: true,
+                                                        scrolls: true), 6)
+    }
+
+    func testPinnedToolbarSectionsStandApart() {
+        let keys = (0..<5).map { Model.Key(title: "\($0)", action: .text("\($0)")) }
+        let gap = Model.toolbarSectionGap
+        let frames = Model.sectionedFrames(keys: keys, leading: 1, trailing: 1, width: 100 + gap * 2, y: 0, height: 10)
+        XCTAssertEqual(frames.map { Double($0.width) }, [20, 20, 20, 20, 20])
+        XCTAssertEqual(frames.map { Double($0.minX) }, [0, 20 + gap, 40 + gap, 60 + gap, 80 + gap * 2])
+        // Only the sections that have keys are separated.
+        let leadingOnly = Model.sectionedFrames(keys: keys, leading: 2, trailing: 0, width: 100 + gap, y: 0, height: 10)
+        XCTAssertEqual(leadingOnly.map { Double($0.minX) }, [0, 20, 40 + gap, 60 + gap, 80 + gap])
+        // Nothing pinned is the plain row.
+        XCTAssertEqual(Model.sectionedFrames(keys: keys, leading: 0, trailing: 0, width: 100, y: 0, height: 10),
+                       Model.frames(keys: keys, width: 100, y: 0, height: 10))
+    }
+
     func testCustomDrawersStackAboveFirstRowThenClose() {
         var state = Model.ToolbarDrawerState.closed
         for expected in [[0], [1, 0], [2, 1, 0], []] {

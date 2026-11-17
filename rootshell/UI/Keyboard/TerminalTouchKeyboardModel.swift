@@ -29,21 +29,79 @@ nonisolated struct KeyboardToolbarDrawerDrag {
 /// One partition for the system toolbar and the touch keyboard. Runtime buttons
 /// reserve main-row slots without changing the user's saved configuration.
 nonisolated enum KeyboardToolbarOverflow {
-    static func layout<Slot: Equatable>(main: [Slot], drawers: [[Slot]], capacity: Int,
+    /// The main row's capacity under a minimum key width. `usual` is what
+    /// fits at the toolbar's own key width and `widened` at the minimum. The
+    /// minimum gives way to the pinned keys: they, the drawer toggle and one
+    /// key between them keep their room whenever the row has it.
+    static func capacity(usual: Int, widened: Int, pinned: Int, reservedSlots: Int = 0,
+                         drawerToggle: Bool, scrolls: Bool = false) -> Int {
+        let needed = pinned + max(0, reservedSlots) + (drawerToggle ? 1 : 0)
+            + (scrolls ? scrollingMiddleSlots : 1)
+        return max(1, min(usual, max(widened, needed)))
+    }
+
+    /// The fewest keys a scrolling middle shows. With two on screen there is
+    /// always one a drag can start on, whatever the other does with drags.
+    static let scrollingMiddleSlots = 2
+
+    /// `leading` and `trailing` are pinned: they take their slots first and
+    /// `main` fills what is left. Pinned keys give way only once `main` is
+    /// empty, from the end nearest the middle.
+    static func layout<Slot: Equatable>(leading: [Slot] = [], main: [Slot], trailing: [Slot] = [],
+                                       drawers: [[Slot]], capacity: Int,
                                        reservedSlots: Int = 0, drawerToggle: Slot,
                                        keepsDrawerToggleVisible: Bool) -> (main: [Slot], drawers: [[Slot]]) {
         let available = max(1, capacity - max(0, reservedSlots))
-        var visible = Array(main.prefix(available))
-        var overflow = Array(main.dropFirst(available))
+        var lead = Array(leading.prefix(available))
+        var trail = Array(trailing.suffix(available - lead.count))
+        var leadOverflow = Array(leading.dropFirst(lead.count))
+        var trailOverflow = Array(trailing.dropLast(trail.count))
+        let room = available - lead.count - trail.count
+        var visible = Array(main.prefix(room))
+        var overflow = Array(main.dropFirst(room))
         var rows = drawers.isEmpty ? [[]] : drawers
-        let hasContent = (overflow + rows.flatMap { $0 }).contains { $0 != drawerToggle }
-        if hasContent, keepsDrawerToggleVisible, !visible.contains(drawerToggle) {
-            if visible.count == available { overflow.insert(visible.removeLast(), at: 0) }
+        let hasContent = (leadOverflow + overflow + trailOverflow + rows.flatMap { $0 }).contains { $0 != drawerToggle }
+        if hasContent, keepsDrawerToggleVisible, !(lead + visible + trail).contains(drawerToggle) {
+            if lead.count + visible.count + trail.count == available {
+                if !visible.isEmpty {
+                    overflow.insert(visible.removeLast(), at: 0)
+                } else if !trail.isEmpty {
+                    trailOverflow.append(trail.removeFirst())
+                } else if !lead.isEmpty {
+                    leadOverflow.insert(lead.removeLast(), at: 0)
+                }
+            }
             visible.append(drawerToggle)
         }
-        rows[0] = overflow + rows[0]
+        rows[0] = leadOverflow + overflow + trailOverflow + rows[0]
         rows = rows.map { $0.filter { $0 != drawerToggle } }
-        return (visible, rows)
+        return (lead + visible + trail, rows)
+    }
+
+    /// A main row that scrolls: every key stays on the row, with `leading` and
+    /// `trailing` held still and the middle scrolling between them. The drawer
+    /// toggle never scrolls, so it stays reachable. nil when the row fits, or
+    /// when the pinned keys leave too little to scroll in; `layout` handles
+    /// those, and its overflow keeps every key reachable in the drawer.
+    static func scrollingLayout<Slot: Equatable>(
+        leading: [Slot] = [], main: [Slot], trailing: [Slot] = [], drawers: [[Slot]], capacity: Int,
+        reservedSlots: Int = 0, drawerToggle: Slot, keepsDrawerToggleVisible: Bool
+    ) -> (leading: [Slot], middle: [Slot], trailing: [Slot], drawers: [[Slot]])? {
+        let available = max(1, capacity - max(0, reservedSlots))
+        guard leading.count + main.count + trailing.count > available else { return nil }
+        let rows = (drawers.isEmpty ? [[]] : drawers).map { $0.filter { $0 != drawerToggle } }
+        var middle = main
+        var trailing = trailing
+        if !leading.contains(drawerToggle), !trailing.contains(drawerToggle) {
+            let wasPlaced = middle.contains(drawerToggle)
+            middle.removeAll { $0 == drawerToggle }
+            if wasPlaced || (keepsDrawerToggleVisible && rows.contains { !$0.isEmpty }) {
+                trailing.append(drawerToggle)
+            }
+        }
+        let middleSlots = available - leading.count - trailing.count
+        guard !middle.isEmpty, middleSlots >= min(scrollingMiddleSlots, middle.count) else { return nil }
+        return (leading, middle, trailing, rows)
     }
 }
 
@@ -358,6 +416,9 @@ nonisolated enum TerminalTouchKeyboardModel {
         var symbol: String? = nil
         var weight: Double = 1
         var accessibility: String? = nil
+        /// A toolbar key's glyph color, as hex. Part of the key, so a new
+        /// color rebuilds the caps like any other toolbar change.
+        var glyphColor: String? = nil
 
         var isText: Bool { if case .text = action { return true }; return false }
         var letter: String? {
@@ -734,12 +795,40 @@ nonisolated enum TerminalTouchKeyboardModel {
         }
     }
 
+    /// Keys the keyboard's own toolbar row holds at a width. A wider
+    /// `minimumKeyWidth` than the row's own 40 points fits fewer.
+    static func toolbarCapacity(width: CGFloat, minimumKeyWidth: Double = 0) -> Int {
+        max(1, Int(max(0, width - 10) / max(40, minimumKeyWidth)))
+    }
+
+    /// The row's capacity for a layout: its minimum key width, less whatever
+    /// the pinned keys need back. A pinned drawer toggle counts as pinned.
+    static func toolbarCapacity(width: CGFloat, minimumKeyWidth: Double, pinned: Int, drawerToggle: Bool,
+                                scrolls: Bool = false) -> Int {
+        KeyboardToolbarOverflow.capacity(
+            usual: toolbarCapacity(width: width),
+            widened: toolbarCapacity(width: width, minimumKeyWidth: minimumKeyWidth),
+            pinned: pinned, drawerToggle: drawerToggle, scrolls: scrolls)
+    }
+
+    /// Where a scrolling row comes to rest: on a whole key, and a key onward
+    /// in the direction of a flick, so a short drag never springs back.
+    static func snappedScrollOffset(target: Double, velocity: Double, unit: Double, furthest: Double) -> Double {
+        guard unit > 0 else { return min(max(0, target), max(0, furthest)) }
+        let keys = target / unit
+        let whole = velocity > 0 ? (keys - 0.1).rounded(.up) : velocity < 0 ? (keys + 0.1).rounded(.down) : keys.rounded()
+        return min(max(0, furthest), max(0, whole * unit))
+    }
+
     /// Keep configured rows intact. Main-row overflow joins the first drawer,
     /// including a button displaced to keep the drawer toggle reachable.
-    static func toolbarKeys(main: [Key], drawers: [[Key]], width: CGFloat,
+    static func toolbarKeys(leading: [Key] = [], main: [Key], trailing: [Key] = [], drawers: [[Key]], width: CGFloat,
+                            minimumKeyWidth: Double = 0,
                             drawerToggle: Key? = nil) -> (main: [Key], drawers: [[Key]]) {
-        KeyboardToolbarOverflow.layout(main: main, drawers: drawers,
-            capacity: max(1, Int(max(0, width - 10) / 40)),
+        KeyboardToolbarOverflow.layout(leading: leading, main: main, trailing: trailing, drawers: drawers,
+            capacity: toolbarCapacity(width: width, minimumKeyWidth: minimumKeyWidth,
+                                      pinned: leading.count + trailing.count,
+                                      drawerToggle: drawerToggle.map { !(leading + trailing).contains($0) } ?? false),
             drawerToggle: drawerToggle ?? Key(title: "…", action: .drawer),
             keepsDrawerToggleVisible: drawerToggle != nil)
     }
@@ -830,6 +919,28 @@ nonisolated enum TerminalTouchKeyboardModel {
         return keys.map { key in
             defer { x += unit * key.weight }
             return CGRect(x: x, y: y, width: unit * key.weight, height: height)
+        }
+    }
+
+    /// Space the toolbar leaves between a pinned section and the keys beside it.
+    static let toolbarSectionGap: Double = 14
+
+    /// `frames` with the pinned sections standing apart: the first `leading`
+    /// keys and the last `trailing` keys each keep a gap from the middle. Every
+    /// key still gets one unit per weight.
+    static func sectionedFrames(keys: [Key], leading: Int, trailing: Int, width: Double, y: Double,
+                                height: Double, inset: Double = 0) -> [CGRect] {
+        let leading = min(max(0, leading), keys.count)
+        let trailing = min(max(0, trailing), keys.count - leading)
+        let middle = keys.count - leading - trailing
+        let sections = [leading, middle, trailing].filter { $0 > 0 }.count
+        let gaps = Double(max(0, sections - 1)) * toolbarSectionGap
+        return frames(keys: keys, width: width - gaps, y: y, height: height, inset: inset).enumerated().map { index, frame in
+            // A key moves over by one gap for each section with keys before its own.
+            var sectionsBefore = 0
+            if index >= leading, leading > 0 { sectionsBefore += 1 }
+            if index >= leading + middle, middle > 0 { sectionsBefore += 1 }
+            return frame.offsetBy(dx: Double(sectionsBefore) * toolbarSectionGap, dy: 0)
         }
     }
 

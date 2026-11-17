@@ -42,6 +42,12 @@ class KeyboardModifierButton: KeyboardButton {
     private var sweepUnlocks = false
     private var sweepCommitted = false
     private var sweepAppliedOnTouchDown = false
+    /// The state and tap time a touch-down replaced, to put back if a scroll takes the touch.
+    private var sweepRestore: (state: ModifierState, tap: CFAbsoluteTime)?
+
+    /// True once a touch is a hold or a sweep across modifiers. A scrolling
+    /// row may take a touch back only before that.
+    var holdsTouch: Bool { sweepTouch != nil && (sweepCommitted || sweepButtons.count > 1) }
 
     /// Three-state modifier: inactive → oneShot → locked → inactive
     var modifierState: ModifierState = .inactive {
@@ -87,7 +93,6 @@ class KeyboardModifierButton: KeyboardButton {
 
         // Create lock indicator bar (shown when locked)
         lockIndicatorBar = UIView()
-        lockIndicatorBar.backgroundColor = .label
         lockIndicatorBar.layer.cornerRadius = 1
         lockIndicatorBar.alpha = 0
         lockIndicatorBar.translatesAutoresizingMaskIntoConstraints = false
@@ -158,7 +163,9 @@ class KeyboardModifierButton: KeyboardButton {
         // Accessory mode activates on touch-down so a chord with another key sees it.
         sweepAppliedOnTouchDown = interactionMode == .accessory
         isHighlighted = true
+        sweepRestore = nil
         if sweepAppliedOnTouchDown {
+            sweepRestore = (modifierState, lastTapTimestamp)
             sendKey()
             playHaptic()
         }
@@ -177,7 +184,7 @@ class KeyboardModifierButton: KeyboardButton {
             return
         }
         let hoveredButton = sweepPeers?().first {
-            $0.modifier != nil && $0.bounds.contains(touch.location(in: $0))
+            $0.modifier != nil && $0.hitBounds.contains(touch.location(in: $0))
         }
         if let button = hoveredButton, button !== sweepHoveredButton {
             if !sweepButtons.contains(button) { sweepButtons.append(button) }
@@ -219,6 +226,12 @@ class KeyboardModifierButton: KeyboardButton {
     // Also reached from touchesCancelled and window removal.
     override func cancelTouchInteraction() {
         super.cancelTouchInteraction()
+        // A touch a scroll took back never pressed the key.
+        if sweepTouch != nil, !holdsTouch, let restore = sweepRestore, restore.state != modifierState {
+            modifierState = restore.state
+            lastTapTimestamp = restore.tap
+            onStateChange?(restore.state)
+        }
         endSweep()
     }
 
@@ -261,6 +274,7 @@ class KeyboardModifierButton: KeyboardButton {
         sweepTimer?.invalidate()
         sweepTimer = nil
         sweepTouch = nil
+        sweepRestore = nil
         sweepHoveredButton = nil
         for button in sweepButtons { button.isHighlighted = false }
         sweepButtons.removeAll()
@@ -319,21 +333,30 @@ class KeyboardModifierButton: KeyboardButton {
         }
     }
 
+    override func applyFill() {
+        updateVisualState()
+    }
+
+    override func applyGlyphColor() {
+        updateVisualState()
+    }
+
     private func updateVisualState() {
         // Background and icon change instantly so double-tap feels responsive
         switch modifierState {
         case .inactive:
-            backgroundColor = isHighlighted ? KeyboardKeyColors.highlight : .clear
+            backgroundColor = isHighlighted ? fill.highlight : fill.resting
             updateIconVariant(filled: false)
         case .oneShot:
-            backgroundColor = KeyboardKeyColors.active
+            backgroundColor = fill.active
             updateIconVariant(filled: true)
         case .locked:
-            backgroundColor = KeyboardKeyColors.active
+            backgroundColor = fill.active
             updateIconVariant(filled: true)
         }
-        label.textColor = .label
-        iconView?.tintColor = .label
+        label.textColor = glyphInk
+        iconView?.tintColor = glyphInk
+        lockIndicatorBar.backgroundColor = glyphInk
 
         // Only the lock indicator bar animates
         let targetAlpha: CGFloat = modifierState == .locked ? 1 : 0

@@ -86,6 +86,40 @@ enum KeyboardKeyColors {
         let alpha: CGFloat = traits.accessibilityContrast == .high ? 0.42 : 0.28
         return base.withAlphaComponent(alpha)
     }
+
+    // Keycaps take the system keyboard's own key colors, so the toolbar reads
+    // as one more row of it.
+    static let keycap = UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.271, green: 0.286, blue: 0.298, alpha: 1)
+            : .white
+    }
+
+    static let keycapHighlight = UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.42, green: 0.435, blue: 0.45, alpha: 1)
+            : UIColor(red: 0.68, green: 0.70, blue: 0.73, alpha: 1)
+    }
+
+    static let keycapActive = UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.52, green: 0.535, blue: 0.55, alpha: 1)
+            : UIColor(red: 0.60, green: 0.62, blue: 0.65, alpha: 1)
+    }
+}
+
+/// A toolbar key's fill at rest, while pressed, and while active.
+struct KeyboardKeyFill {
+    let isKeycap: Bool
+    let resting: UIColor
+    let highlight: UIColor
+    let active: UIColor
+
+    static let plain = KeyboardKeyFill(
+        isKeycap: false, resting: .clear, highlight: KeyboardKeyColors.highlight, active: KeyboardKeyColors.active)
+    static let keycap = KeyboardKeyFill(
+        isKeycap: true, resting: KeyboardKeyColors.keycap, highlight: KeyboardKeyColors.keycapHighlight,
+        active: KeyboardKeyColors.keycapActive)
 }
 
 // MARK: - KeyboardButton
@@ -122,6 +156,40 @@ class KeyboardButton: UIControl {
     /// Dual-symbol keys deliberately allow a downward drag to select a symbol.
     var allowsDownwardTouchSelection: Bool { false }
 
+    var fill = KeyboardKeyFill.plain {
+        didSet { applyFill() }
+    }
+
+    /// Subclasses with an active state of their own override this.
+    func applyFill() {
+        backgroundColor = isHighlighted ? fill.highlight : fill.resting
+    }
+
+    /// The color the key's symbol or label takes; nil is the label color.
+    var glyphColor: UIColor? {
+        didSet { applyGlyphColor() }
+    }
+
+    var glyphInk: UIColor { glyphColor ?? .label }
+
+    /// Subclasses recolor what they draw.
+    func applyGlyphColor() {}
+
+    /// Keycaps sit apart; a touch in the gap goes to a neighboring key.
+    var hitOutset: CGFloat = 0
+
+    /// The key's bounds for every touch test, so a touch that hit-tests to
+    /// this key is never then rejected for being outside it.
+    var hitBounds: CGRect { bounds.insetBy(dx: -hitOutset, dy: 0) }
+
+    /// Set in a scrolling row: the key sends on release, and a scroll that
+    /// starts first takes the touch, so it sends nothing.
+    var yieldsToScrolling = false
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        hitBounds.contains(point)
+    }
+
     var canDispatchTouchAction: Bool {
         guard let window else { return false }
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
@@ -138,7 +206,7 @@ class KeyboardButton: UIControl {
             return false
         }
         currentTouchMode = interactionMode
-        if currentTouchMode == .spacedBottom && !bounds.contains(touch.location(in: self)) {
+        if currentTouchMode == .spacedBottom && !hitBounds.contains(touch.location(in: self)) {
             cancelTouchInteraction()
             return false
         }
@@ -161,10 +229,10 @@ class KeyboardButton: UIControl {
             let valid: Bool
             if allowsDownwardTouchSelection {
                 valid = abs(dx) <= 10 && dy >= -10
-                    && local.x >= bounds.minX && local.x <= bounds.maxX
-                    && local.y >= bounds.minY
+                    && local.x >= hitBounds.minX && local.x <= hitBounds.maxX
+                    && local.y >= hitBounds.minY
             } else {
-                valid = hypot(dx, dy) <= 10 && bounds.contains(local)
+                valid = hypot(dx, dy) <= 10 && hitBounds.contains(local)
             }
             guard valid else {
                 cancelTouchInteraction()
@@ -237,7 +305,7 @@ class KeyboardButton: UIControl {
         super.touchesBegan(touches, with: event)
         guard beginTouchInteraction(touches) else { return }
         SystemShiftReader.shared.noteTouchEvent(event)
-        defersCurrentTouchUntilRelease = currentTouchMode != .accessory
+        defersCurrentTouchUntilRelease = currentTouchMode != .accessory || yieldsToScrolling
         sentKeyDuringCurrentTouch = false
 
         if !defersCurrentTouchUntilRelease {
@@ -323,11 +391,7 @@ class KeyboardButton: UIControl {
 
     private func updateAppearance() {
         UIView.animate(withDuration: 0.1, delay: 0, options: .allowUserInteraction) {
-            if self.isHighlighted {
-                self.backgroundColor = KeyboardKeyColors.highlight
-            } else {
-                self.backgroundColor = .clear
-            }
+            self.backgroundColor = self.isHighlighted ? self.fill.highlight : self.fill.resting
         }
     }
 

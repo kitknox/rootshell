@@ -39,6 +39,8 @@ protocol RemoteScreenPane: SplitPaneView {
     var keyboardCapture: VNCKeyboardCapture { get }
     var keyboardCoordinator: VNCKeyboardAccessoryCoordinator? { get }
     var effectiveKeyboardToolbarPreference: VNCConnectionConfig.KeyboardToolbarPreference { get }
+    /// Whose toolbar layout the pane's keyboard toolbar shows.
+    var keyboardToolbarContext: ToolbarContext { get }
     var usesAppleModifierConvention: Bool { get }
     /// Observable through `withObservationTracking`.
     var remoteSessionIsConnected: Bool { get }
@@ -71,6 +73,8 @@ enum RemoteScreenPreDisconnectPhase: Equatable {
 }
 
 extension RemoteScreenPane {
+    var keyboardToolbarContext: ToolbarContext { .screenSharing }
+
     /// The full-screen takeover covers a Duo's side rail, whose column the
     /// window still reports as safe area; the HUD may dock at that edge.
     var hudSafeAreaEdges: Edge.Set {

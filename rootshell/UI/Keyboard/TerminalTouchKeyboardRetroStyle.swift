@@ -200,7 +200,7 @@ final class TerminalTouchRetroKeycap: TerminalTouchKeycap {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         artwork.image = images.indices.contains(index) ? images[index] : nil
         plate.backgroundColor = artwork.image == nil ? material.face.ui : .clear
-        let ink = material.ink.ui
+        let ink = legendInk(material.ink.ui, selected: index >= 2)
         label.textColor = ink; subtitleLabel.textColor = ink
         icon.tintColor = ink; lockIndicator.backgroundColor = ink
         homeMark.strokeColor = ink.withAlphaComponent(material.highContrast ? 1 : 0.5).cgColor

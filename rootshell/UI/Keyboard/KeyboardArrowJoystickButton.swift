@@ -31,7 +31,7 @@ class KeyboardArrowJoystickButton: UIView {
         // Joystick movement is intentional. Only drawer taps use tap slop.
         if currentTouchMode == .spacedBottom && mode == .drawer {
             let location = touch.location(in: window)
-            guard bounds.contains(touch.location(in: self)),
+            guard hitBounds.contains(touch.location(in: self)),
                   hypot(location.x - touchStartInWindow.x, location.y - touchStartInWindow.y) <= 10 else {
                 cancelTouchInteraction()
                 return false
@@ -69,11 +69,33 @@ class KeyboardArrowJoystickButton: UIView {
         didSet { updateAppearance() }
     }
 
+    var fill = KeyboardKeyFill.plain {
+        didSet {
+            highlightView.backgroundColor = fill.highlight
+            updateAppearance()
+        }
+    }
+
+    /// As on `KeyboardButton`; nil is the label color.
+    var glyphColor: UIColor? {
+        didSet { iconView.tintColor = glyphColor ?? .label }
+    }
+
+    /// Keycaps sit apart; a touch in the gap goes to a neighboring key.
+    var hitOutset: CGFloat = 0
+    var hitBounds: CGRect { bounds.insetBy(dx: -hitOutset, dy: 0) }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        hitBounds.contains(point)
+    }
+
     private(set) var mode: Mode = .joystick {
         didSet { updateAppearance() }
     }
 
     private var sizes: KeyboardSizes
+    /// The key height this button was last sized for.
+    var keyHeight: CGFloat { sizes.button.height }
 
     // Touch state
     private var touchStartPoint: CGPoint = .zero
@@ -159,7 +181,7 @@ class KeyboardArrowJoystickButton: UIView {
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard canDispatchTouchAction, let touch = touches.first else { return }
         currentTouchMode = interactionMode
-        if currentTouchMode == .spacedBottom && !bounds.contains(touch.location(in: self)) { return }
+        if currentTouchMode == .spacedBottom && !hitBounds.contains(touch.location(in: self)) { return }
         currentTouch = touch
         touchStartInWindow = touch.location(in: window)
 
@@ -341,7 +363,7 @@ class KeyboardArrowJoystickButton: UIView {
         // Background: active only when drawer is open
         let showActive = isDrawerActive
         UIView.animate(withDuration: 0.1) {
-            self.backgroundColor = showActive ? KeyboardKeyColors.active : .clear
+            self.backgroundColor = showActive ? self.fill.active : self.fill.resting
         }
     }
 

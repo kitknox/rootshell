@@ -78,10 +78,18 @@ class TerminalTouchKeycap: UIView {
     var activate: (() -> Void)?
     var pressed = false
     var selected = false
+    private let glyphTint: UIColor?
 
     init(_ key: TerminalTouchKeyboardModel.Key, small: Bool = false) {
         self.key = key
+        glyphTint = key.glyphColor.flatMap { UIColor(hex: $0) }
         super.init(frame: .zero)
+    }
+
+    /// The legend color for a style's `ink`. A chosen toolbar glyph color
+    /// replaces it, except on a cap the style draws as selected.
+    func legendInk(_ ink: UIColor, selected: Bool) -> UIColor {
+        selected ? ink : glyphTint ?? ink
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     var legendScale: CGFloat { TerminalTouchLegend.scale(label.text) }

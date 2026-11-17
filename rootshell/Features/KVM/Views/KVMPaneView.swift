@@ -61,6 +61,8 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
         keyboardToolbarOverride ?? config.keyboardToolbar
     }
 
+    var keyboardToolbarContext: ToolbarContext { .kvm }
+
     func setKeyboardToolbarEnabled(_ enabled: Bool) {
         keyboardToolbarOverride = enabled ? .on : .off
         keyboardCoordinator?.toolbarPreferenceDidChange()

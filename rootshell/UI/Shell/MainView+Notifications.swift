@@ -756,6 +756,11 @@ extension MainView {
 
         observerBag.observeOnMainActor(.showToolbarSettings) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
+            // Open on the toolbar the key was pressed in, as it was showing there.
+            let source = (notification.object as? any RemoteScreenPane)?.keyboardToolbarContext
+                ?? (notification.object as? KeyboardToolbarView)?.context ?? .terminal
+            self.toolbarSettingsContext = source
+            self.toolbarSettingsSurface = notification.userInfo?[ToolbarPreviewSurface.userInfoKey] as? ToolbarPreviewSurface
             self.showToolbarSettings = true
         }
 

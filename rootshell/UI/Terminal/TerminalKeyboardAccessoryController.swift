@@ -21,6 +21,11 @@ protocol TerminalKeyboardAccessoryHost: AnyObject {
     /// nil opts out: the chevron falls back to resigning first responder.
     var keyboardHideIntentWindow: UIWindow? { get }
     var keyboardSizes: KeyboardSizes { get }
+    /// Whose toolbar layout this host shows.
+    var keyboardToolbarContext: ToolbarContext { get }
+    /// Whether a remote screen's own bar carries the toolbar floating or docked.
+    /// nil where the toolbar rides on the keyboard.
+    var keyboardGlassBarIsFloating: Bool? { get }
 
     @discardableResult
     func keyboardBecomeFirstResponder() -> Bool
@@ -62,6 +67,8 @@ extension TerminalKeyboardAccessoryHost {
     var keyboardAccessoryOmitsBottomSafeAreaStrip: Bool { false }
     var keyboardHideIntentWindow: UIWindow? { nil }
     var keyboardSizes: KeyboardSizes { KeyboardSizes.accessory(traitCollection: keyboardHostView.traitCollection) }
+    var keyboardToolbarContext: ToolbarContext { .terminal }
+    var keyboardGlassBarIsFloating: Bool? { nil }
     func keyboardSendModifierDoublePress(_ modifier: KeyModifiers) {}
     func keyboardTypePassword(pressingReturn: Bool) {}
     func keyboardToggleToolbarFloating() {}
@@ -167,6 +174,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
             scope.keyboard.host = keyboardHost
             scope.keyboard.sequenceDelegate = delegate
         }
+        scope.keyboard.toolbarContext = host.keyboardToolbarContext
         scope.keyboard.textFieldMode = host.keyboardTouchKeyboardShowsToolbar ? .off : .keysOnly
         let stateChanged = boundTouchKeyboardState !== scope.state(tabID: host.keyboardTabID, perTab: touchStatePerTab)
         if stateChanged {
@@ -1162,6 +1170,21 @@ final class TerminalKeyboardAccessoryController: NSObject {
     }
     #endif
 
+    /// Where the toolbar is showing right now, for its settings to preview.
+    private var toolbarSurface: ToolbarPreviewSurface {
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        // The terminal keyboard carries the toolbar as its own row, except
+        // beside a remote screen's floating bar, where it shows keys only.
+        let onTerminalKeyboard = usesFullTouchKeyboard || usesTouchKeyboardToolbar
+        if let floating = host?.keyboardGlassBarIsFloating {
+            return !floating && onTerminalKeyboard ? .terminalKeyboard : .glassBar(floating: floating)
+        }
+        return onTerminalKeyboard ? .terminalKeyboard : .systemKeyboard
+        #else
+        return .systemKeyboard
+        #endif
+    }
+
     /// Empty primary input view used when a host wants the accessory docked
     /// without presenting the system software keyboard. This does not mutate
     /// the controller's user-driven persistent-toolbar state.
@@ -1176,6 +1199,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
 
         #if !os(visionOS)
         keyboardAccessory = KeyboardAccessoryView(sizes: host.keyboardSizes)
+        keyboardAccessory?.toolbarView.context = host.keyboardToolbarContext
         keyboardAccessory?.delegate = delegate
 
         keyboardAccessory?.onModifiersChanged = { [weak self] modifiers in
@@ -1236,9 +1260,11 @@ final class TerminalKeyboardAccessoryController: NSObject {
             NotificationCenter.default.post(name: .showTabSwitcher, object: host.keyboardHostView)
         }
 
-        keyboardAccessory?.onToolbarSettingsRequested = { [weak host] in
-            guard let host else { return }
-            NotificationCenter.default.post(name: .showToolbarSettings, object: host.keyboardHostView)
+        keyboardAccessory?.onToolbarSettingsRequested = { [weak self] in
+            guard let self, let host = self.host else { return }
+            NotificationCenter.default.post(
+                name: .showToolbarSettings, object: host.keyboardHostView,
+                userInfo: [ToolbarPreviewSurface.userInfoKey: self.toolbarSurface])
         }
 
         keyboardAccessory?.onPasteRequested = { [weak self] in
@@ -1329,6 +1355,18 @@ final class TerminalKeyboardAccessoryController: NSObject {
             }
         }
         cancellables.insert(AnyCancellable { NotificationCenter.default.removeObserver(hwToolbarObserver) })
+
+        // The toolbar size is a setting per display, so either changing resizes the keys.
+        for name in [Notification.Name.settingsDidChange, .duoDisplayDidChange] {
+            let sizeObserver = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, let host = self.host, let toolbar = self.keyboardAccessory?.toolbarView,
+                          toolbar.rowHeight != host.keyboardSizes.toolbar.height else { return }
+                    host.keyboardUpdateAccessoryForTraitCollection()
+                }
+            }
+            cancellables.insert(AnyCancellable { NotificationCenter.default.removeObserver(sizeObserver) })
+        }
 
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
         let foldObserver = NotificationCenter.default.addObserver(

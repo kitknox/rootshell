@@ -191,7 +191,7 @@ extension MainView {
             ))
             .sheet(isPresented: $showToolbarSettings) {
                 NavigationStack {
-                    KeyboardToolbarSettingsView()
+                    KeyboardToolbarSettingsView(context: toolbarSettingsContext, surface: toolbarSettingsSurface)
                 }
                 .themedSheet(themeColors: sheetTheme.themeColors, accentColor: sheetTheme.accentColor, colorScheme: sheetTheme.colorScheme)
             }

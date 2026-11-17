@@ -16,6 +16,7 @@ struct KeyboardSizes {
         let spacing: CGFloat  // Horizontal spacing between buttons
         let cornerRadius: CGFloat
         let drawerHeight: CGFloat  // Height of expandable drawer row (0 on iPad)
+        let keycapGap: CGFloat  // Space between keys drawn as keycaps, as on the system keyboard
     }
 
     struct Button {
@@ -37,7 +38,7 @@ struct KeyboardSizes {
 
     /// iPhone portrait (small)
     static let iPhonePortrait = KeyboardSizes(
-        toolbar: Toolbar(height: 44, padding: 0, spacing: 0, cornerRadius: 16, drawerHeight: 44),
+        toolbar: Toolbar(height: 44, padding: 0, spacing: 0, cornerRadius: 16, drawerHeight: 44, keycapGap: 6),
         button: Button(
             height: 38,
             iconWidth: 48,
@@ -51,7 +52,7 @@ struct KeyboardSizes {
 
     /// iPhone landscape (compact)
     static let iPhoneLandscape = KeyboardSizes(
-        toolbar: Toolbar(height: 38, padding: 0, spacing: 0, cornerRadius: 14, drawerHeight: 38),
+        toolbar: Toolbar(height: 38, padding: 0, spacing: 0, cornerRadius: 14, drawerHeight: 38, keycapGap: 6),
         button: Button(
             height: 32,
             iconWidth: 44,
@@ -65,7 +66,7 @@ struct KeyboardSizes {
 
     /// iPad (all orientations)
     static let iPad = KeyboardSizes(
-        toolbar: Toolbar(height: 55, padding: 6, spacing: 0, cornerRadius: 18, drawerHeight: 55),
+        toolbar: Toolbar(height: 55, padding: 6, spacing: 0, cornerRadius: 18, drawerHeight: 55, keycapGap: 7),
         button: Button(
             height: 43,
             iconWidth: 58,
@@ -91,10 +92,39 @@ struct KeyboardSizes {
         #endif
     }
 
+    /// These sizes at a chosen toolbar size.
+    func applying(_ size: KeyboardToolbarSize) -> KeyboardSizes {
+        let scale = size.scale
+        guard scale != 1 else { return self }
+        func scaled(_ value: CGFloat) -> CGFloat { (value * scale).rounded() }
+        return KeyboardSizes(
+            toolbar: Toolbar(height: scaled(toolbar.height), padding: toolbar.padding, spacing: toolbar.spacing,
+                             cornerRadius: scaled(toolbar.cornerRadius), drawerHeight: scaled(toolbar.drawerHeight),
+                             keycapGap: toolbar.keycapGap),
+            button: Button(height: scaled(button.height), iconWidth: scaled(button.iconWidth),
+                           normalWidth: scaled(button.normalWidth), wideWidth: scaled(button.wideWidth),
+                           cornerRadius: scaled(button.cornerRadius), fontSize: scaled(button.fontSize),
+                           symbolSize: scaled(button.symbolSize)))
+    }
+
+    /// These sizes with another key height, for keys drawn as keycaps.
+    func withButtonHeight(_ height: CGFloat) -> KeyboardSizes {
+        KeyboardSizes(toolbar: toolbar, button: Button(
+            height: height, iconWidth: button.iconWidth, normalWidth: button.normalWidth,
+            wideWidth: button.wideWidth, cornerRadius: button.cornerRadius,
+            fontSize: button.fontSize, symbolSize: button.symbolSize))
+    }
+
     /// The terminal and Screen Sharing toolbars keep the Duo's regular-width
     /// inner display on phone sizes.
+    /// The size class picks the preset; the display's toolbar size then scales it.
     static func accessory(traitCollection: UITraitCollection) -> KeyboardSizes {
-        guard DuoHingeEvents.hasHinge else { return current(traitCollection: traitCollection) }
-        return traitCollection.verticalSizeClass == .compact ? .iPhoneLandscape : .iPhonePortrait
+        let preset: KeyboardSizes
+        if DuoHingeEvents.hasHinge {
+            preset = traitCollection.verticalSizeClass == .compact ? .iPhoneLandscape : .iPhonePortrait
+        } else {
+            preset = current(traitCollection: traitCollection)
+        }
+        return preset.applying(KeyboardToolbarSize.current)
     }
 }

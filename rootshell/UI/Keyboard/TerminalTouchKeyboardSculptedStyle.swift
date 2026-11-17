@@ -411,7 +411,7 @@ final class TerminalTouchSculptedKeycap: TerminalTouchKeycap {
         CATransaction.setDisableActions(true)
         artwork.image = images.indices.contains(index) ? images[index] : nil
         plate.backgroundColor = artwork.image == nil ? finish.surface.uiColor : .clear
-        let ink = finish.ink.uiColor
+        let ink = legendInk(finish.ink.uiColor, selected: index >= 2)
         label.textColor = ink
         subtitleLabel.textColor = ink
         icon.tintColor = ink

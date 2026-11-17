@@ -191,8 +191,9 @@ final class TerminalTouchSteampunkKeycap: TerminalTouchKeycap {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         artwork.image = images.indices.contains(index) ? images[index] : nil
         plate.backgroundColor = artwork.image == nil ? material.face.ui : .clear
-        label.textColor = material.ink.ui; subtitleLabel.textColor = material.ink.ui
-        icon.tintColor = material.ink.ui; lockBadge.tintColor = material.ink.ui
+        let ink = legendInk(material.ink.ui, selected: index >= 2)
+        label.textColor = ink; subtitleLabel.textColor = ink
+        icon.tintColor = ink; lockBadge.tintColor = ink
         homeMark.strokeColor = material.ink.ui.withAlphaComponent(material.highContrast ? 1 : 0.5).cgColor
         contactRim.strokeColor = (material.highContrast ? material.ink.ui : Art.RGB(1, 0.83, 0.43).ui).cgColor
         contactRim.opacity = pressed ? 0.85 : 0
