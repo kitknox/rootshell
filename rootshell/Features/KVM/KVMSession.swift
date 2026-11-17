@@ -122,11 +122,15 @@ final class KVMSession {
     /// computer), so the input layer gets a size even without video.
     var interactionFrameSize: CGSize {
         if framebufferSize.width > 0, framebufferSize.height > 0 { return framebufferSize }
-        if let width = streamer.sourceWidth, let height = streamer.sourceHeight, width > 0, height > 0 {
+        if let width = streamer.sourceWidth, let height = streamer.sourceHeight,
+           Self.supportedVideoDimensions.contains(width), Self.supportedVideoDimensions.contains(height) {
             return CGSize(width: width, height: height)
         }
         return CGSize(width: 1920, height: 1080)
     }
+
+    /// Server-reported, so unchecked values could trap in Int(CGFloat) conversions.
+    private static let supportedVideoDimensions = 1...8192
 
     var displayLabel: String {
         deviceInfo.model.map { "\($0) (\(config.displayName))" } ?? config.displayName
