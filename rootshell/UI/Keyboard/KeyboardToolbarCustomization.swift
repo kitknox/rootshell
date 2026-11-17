@@ -382,6 +382,112 @@ enum DrawerToggleMode: String, Codable, CaseIterable, Sendable {
     }
 }
 
+// MARK: - ToolbarContext
+
+/// The kind of session a toolbar layout serves. Raw values are persisted.
+nonisolated enum ToolbarContext: String, CaseIterable, Hashable, Sendable {
+    case terminal
+    case screenSharing
+    case kvm
+
+    var displayName: String {
+        switch self {
+        case .terminal: return String(localized: "Terminal")
+        case .screenSharing: return String(localized: "Screen Sharing")
+        case .kvm: return String(localized: "KVM")
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .terminal: return "apple.terminal"
+        case .screenSharing: return "display.2"
+        case .kvm: return "cable.connector"
+        }
+    }
+
+    /// Screen Sharing and KVM draw their toolbar inside the remote screen's glass bar.
+    var usesGlassBar: Bool { self != .terminal }
+}
+
+// MARK: - KeyboardToolbarStyle
+
+/// How the system keyboard's toolbar is drawn. Both sit on the keyboard's own
+/// backdrop; glass adds a capsule around the keys. Raw values are persisted.
+enum KeyboardToolbarStyle: String, CaseIterable, Sendable {
+    case flat
+    case glass
+
+    var displayName: String {
+        switch self {
+        case .flat: return String(localized: "Flat")
+        case .glass: return String(localized: "Glass")
+        }
+    }
+}
+
+// MARK: - KeyboardToolbarSize
+
+/// How large a toolbar's keys are, chosen per kind of display. Raw values are persisted.
+enum KeyboardToolbarSize: String, CaseIterable, Sendable {
+    /// The system keyboard's toolbar at its usual size; the terminal
+    /// keyboard's toolbar row sized with the keyboard.
+    case automatic
+    case small
+    case medium
+    case large
+    case extraLarge
+
+    var displayName: String {
+        switch self {
+        case .automatic: return String(localized: "Automatic")
+        case .small: return String(localized: "Small")
+        case .medium: return String(localized: "Medium")
+        case .large: return String(localized: "Large")
+        case .extraLarge: return String(localized: "Extra Large")
+        }
+    }
+
+    /// Applied to the system keyboard toolbar's usual key sizes.
+    var scale: CGFloat {
+        switch self {
+        case .automatic, .medium: return 1
+        case .small: return 0.86
+        case .large: return 1.16
+        case .extraLarge: return 1.34
+        }
+    }
+
+    /// The terminal keyboard's toolbar and drawer row heights; nil sizes them with the keyboard.
+    var terminalKeyboardRows: (toolbar: CGFloat, drawer: CGFloat)? {
+        switch self {
+        case .automatic: return nil
+        case .small: return (38, 36)
+        case .medium: return (42, 40)
+        case .large: return (48, 44)
+        case .extraLarge: return (56, 52)
+        }
+    }
+
+    /// The setting for the display the app is on: a Duo's two displays each
+    /// have their own, as do iPhone and iPad.
+    static var currentKey: SettingKey<KeyboardToolbarSize> {
+        if DuoHingeEvents.hasHinge {
+            return DuoHingeEvents.isFrontDisplay ? Settings.KeyboardToolbar.sizeDuoFront : Settings.KeyboardToolbar.sizeDuoInner
+        }
+        return UIDevice.current.userInterfaceIdiom == .pad ? Settings.KeyboardToolbar.sizePad : Settings.KeyboardToolbar.sizePhone
+    }
+
+    /// visionOS draws the toolbar as a fixed-size ornament, so it has no size to choose.
+    static var current: KeyboardToolbarSize {
+        #if os(visionOS)
+        .automatic
+        #else
+        SettingsStore.shared.value(currentKey)
+        #endif
+    }
+}
+
 // MARK: - ToolbarLayoutConfig
 
 /// Persisted toolbar layout configuration.
@@ -391,6 +497,36 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
     /// One or more drawer rows. Invariant: never empty — always at least one row (possibly `[]`).
     var drawerRows: [[KeySlot]]
     var hiddenKeys: Set<KeyID>
+    /// Optional groups at the ends of the main row, which keep their place when
+    /// the row overflows. nil while a group is off.
+    var pinnedLeading: [KeySlot]? = nil
+    var pinnedTrailing: [KeySlot]? = nil
+    /// Drawer keys take the main row's key width, so every row shares its
+    /// columns. The terminal keyboard's own toolbar always does.
+    var drawerMatchesMainRow = false
+    /// A main row too long for its width scrolls between the pinned sections
+    /// rather than spilling into the drawer.
+    var mainRowScrolls = false
+    /// The narrowest a main-row key may get, in points; 0 leaves it to the
+    /// toolbar. Keys fill the row and narrow as more are added, so a wider
+    /// floor scrolls or overflows the row sooner.
+    var minimumKeyWidth: Double = 0
+    static let minimumKeyWidthRange: ClosedRange<Double> = 40...140
+
+    /// Every placed slot, in display order.
+    var placedSlots: [KeySlot] {
+        (pinnedLeading ?? []) + mainRow + (pinnedTrailing ?? []) + drawerRows.flatMap { $0 }
+    }
+
+    /// Takes a slot out of whichever row holds it.
+    mutating func remove(_ slot: KeySlot) {
+        pinnedLeading?.removeAll { $0 == slot }
+        mainRow.removeAll { $0 == slot }
+        pinnedTrailing?.removeAll { $0 == slot }
+        for index in drawerRows.indices {
+            drawerRows[index].removeAll { $0 == slot }
+        }
+    }
 
     // MARK: - Defaults
 
@@ -588,9 +724,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
         if saved.version < 18 { migrated.hiddenKeys.insert(.typePassword) }
 
         // Collect all KeyIDs currently in the saved config
-        let savedKeyIDs = Set(
-            (migrated.mainRow + migrated.drawerRows.flatMap { $0 }).compactMap(\.keyID)
-        )
+        let savedKeyIDs = Set(migrated.placedSlots.compactMap(\.keyID))
 
         // Find new keys in defaults that aren't in saved and aren't hidden
         let defaultMainKeyIDs = defaults.mainRow.compactMap(\.keyID)
@@ -639,12 +773,31 @@ extension ToolbarLayoutConfig: Codable {
         case drawerRows
         case drawerRow  // legacy (v ≤ 10)
         case hiddenKeys
+        case pinnedLeading
+        case pinnedTrailing
+        case drawerMatchesMainRow
+        case mainRowScrolls
+        // Points. An earlier name held a preset, which this never reads.
+        case minimumKeyWidth = "minimumKeyWidthPoints"
     }
 
+    // `mainRow` is stored with the pinned groups folded in, so a build that
+    // predates them shows the same row. Its edits win: a pinned key it moved
+    // or hid is no longer pinned here.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decode(Int.self, forKey: .version)
-        mainRow = try container.decode([KeySlot].self, forKey: .mainRow)
+        let storedMainRow = try container.decode([KeySlot].self, forKey: .mainRow)
+        let leading = try container.decodeIfPresent([KeySlot].self, forKey: .pinnedLeading)?
+            .filter { storedMainRow.contains($0) }
+        let trailing = try container.decodeIfPresent([KeySlot].self, forKey: .pinnedTrailing)?
+            .filter { storedMainRow.contains($0) && leading?.contains($0) != true }
+        pinnedLeading = leading
+        pinnedTrailing = trailing
+        mainRow = storedMainRow.filter { leading?.contains($0) != true && trailing?.contains($0) != true }
+        drawerMatchesMainRow = try container.decodeIfPresent(Bool.self, forKey: .drawerMatchesMainRow) ?? false
+        mainRowScrolls = try container.decodeIfPresent(Bool.self, forKey: .mainRowScrolls) ?? false
+        minimumKeyWidth = (try? container.decodeIfPresent(Double.self, forKey: .minimumKeyWidth)) ?? 0
         hiddenKeys = try container.decode(Set<KeyID>.self, forKey: .hiddenKeys)
         if let rows = try container.decodeIfPresent([[KeySlot]].self, forKey: .drawerRows) {
             drawerRows = rows.isEmpty ? [[]] : rows
@@ -656,11 +809,32 @@ extension ToolbarLayoutConfig: Codable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(version, forKey: .version)
-        try container.encode(mainRow, forKey: .mainRow)
+        try container.encode((pinnedLeading ?? []) + mainRow + (pinnedTrailing ?? []), forKey: .mainRow)
         try container.encode(drawerRows, forKey: .drawerRows)
         try container.encode(drawerRows[0], forKey: .drawerRow)
         try container.encode(hiddenKeys, forKey: .hiddenKeys)
+        try container.encodeIfPresent(pinnedLeading, forKey: .pinnedLeading)
+        try container.encodeIfPresent(pinnedTrailing, forKey: .pinnedTrailing)
+        if drawerMatchesMainRow { try container.encode(true, forKey: .drawerMatchesMainRow) }
+        if mainRowScrolls { try container.encode(true, forKey: .mainRowScrolls) }
+        if minimumKeyWidth > 0 { try container.encode(minimumKeyWidth, forKey: .minimumKeyWidth) }
     }
+}
+
+// MARK: - SavedToolbarLayout
+
+/// A named copy of one toolbar's layout, to return to after experimenting.
+struct SavedToolbarLayout: Identifiable, Codable, Equatable, Sendable {
+    var id = UUID()
+    var name: String
+    /// Raw `ToolbarContext` it was saved from; a newer build's reads as the terminal.
+    var sourceName: String
+    var date: Date
+    var layout: ToolbarLayoutConfig
+    /// The custom keys the layout places, so restoring brings back any deleted since.
+    var customKeys: [CustomKey]
+
+    var source: ToolbarContext { ToolbarContext(rawValue: sourceName) ?? .terminal }
 }
 
 // MARK: - CustomKey

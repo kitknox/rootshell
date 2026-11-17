@@ -177,7 +177,7 @@ class KeyboardModifierButton: KeyboardButton {
             return
         }
         let hoveredButton = sweepPeers?().first {
-            $0.modifier != nil && $0.bounds.contains(touch.location(in: $0))
+            $0.modifier != nil && $0.hitBounds.contains(touch.location(in: $0))
         }
         if let button = hoveredButton, button !== sweepHoveredButton {
             if !sweepButtons.contains(button) { sweepButtons.append(button) }
@@ -319,17 +319,21 @@ class KeyboardModifierButton: KeyboardButton {
         }
     }
 
+    override func applyFill() {
+        updateVisualState()
+    }
+
     private func updateVisualState() {
         // Background and icon change instantly so double-tap feels responsive
         switch modifierState {
         case .inactive:
-            backgroundColor = isHighlighted ? KeyboardKeyColors.highlight : .clear
+            backgroundColor = isHighlighted ? fill.highlight : fill.resting
             updateIconVariant(filled: false)
         case .oneShot:
-            backgroundColor = KeyboardKeyColors.active
+            backgroundColor = fill.active
             updateIconVariant(filled: true)
         case .locked:
-            backgroundColor = KeyboardKeyColors.active
+            backgroundColor = fill.active
             updateIconVariant(filled: true)
         }
         label.textColor = .label

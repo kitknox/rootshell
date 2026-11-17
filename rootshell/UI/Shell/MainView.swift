@@ -121,6 +121,9 @@ struct MainView: View {
 
     @State var showSettings = false
     @State var showToolbarSettings = false
+    /// The toolbar, and where it was showing, when its settings key was pressed.
+    @State var toolbarSettingsContext = ToolbarContext.terminal
+    @State var toolbarSettingsSurface: ToolbarPreviewSurface?
     @State var settingsDestination: SettingsDestination?
     @State var showConnectionSidebar = false
     @State var connectionSidebarInitialTab: ConnectionSidebarTab = .lastUsed

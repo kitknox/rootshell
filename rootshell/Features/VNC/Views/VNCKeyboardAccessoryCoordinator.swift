@@ -507,6 +507,14 @@ extension VNCKeyboardAccessoryCoordinator: TerminalKeyboardAccessoryHost {
     }
 
     var keyboardAIAgentOverlayActive: Bool { false }
+    var keyboardToolbarContext: ToolbarContext { pane?.keyboardToolbarContext ?? .screenSharing }
+    var keyboardGlassBarIsFloating: Bool? {
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        hudModel.isFloating
+        #else
+        nil
+        #endif
+    }
     var keyboardToolbarOnlyMode: Bool { controller.toolbarOnlyMode }
     var keyboardAccessoryOmitsBottomSafeAreaStrip: Bool { true }
 

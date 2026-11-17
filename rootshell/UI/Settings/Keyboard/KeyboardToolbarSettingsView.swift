@@ -2,23 +2,57 @@
 //  KeyboardToolbarSettingsView.swift
 //  rootshell
 //
-//  Settings view for keyboard toolbar customization.
-//  Supports reordering, hiding, and restoring keys, plus custom key management.
+//  Settings for the keyboard toolbars: one screen, with a picker for which
+//  toolbar it shows and edits.
 //
 
 import SwiftUI
 
+extension ToolbarContext {
+    var toolbarTitle: String {
+        switch self {
+        case .terminal: return String(localized: "Terminal Toolbar")
+        case .screenSharing: return String(localized: "Screen Sharing Toolbar")
+        case .kvm: return String(localized: "KVM Toolbar")
+        }
+    }
+}
+
 struct KeyboardToolbarSettingsView: View {
     @Environment(\.sheetThemeColors) private var sheetThemeColors
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #if os(visionOS)
     @Environment(\.dismiss) private var dismiss
     #endif
     @State private var manager = KeyboardToolbarManager.shared
+    /// The toolbar on screen. Opens on the one the settings key was pressed in.
+    @State private var context: ToolbarContext
+    /// The surface the preview draws; nil is the one this toolbar appears on first.
+    @State private var chosenSurface: ToolbarPreviewSurface?
     @State private var editorContentHeight: CGFloat = 360
-    @State private var availableWidth: CGFloat = 0
+    @State private var previewMetrics = ToolbarLayoutPreviewMetrics()
     @State private var showingResetConfirmation = false
+    @State private var showingResetAllConfirmation = false
+    @Setting(Settings.Keyboard.touchEnabled) private var terminalKeyboard
+    @Setting(Settings.ScreenSharing.floatingToolbarDefault) private var floatingBar
+
+    /// `surface` is where the toolbar was showing when its settings key was pressed.
+    init(context: ToolbarContext = .terminal, surface: ToolbarPreviewSurface? = nil) {
+        _context = State(initialValue: context)
+        _chosenSurface = State(initialValue: surface)
+    }
+
+    private var layout: ToolbarLayoutConfig { manager.layout(for: context) }
+    private var hasOwnLayout: Bool { manager.hasOwnLayout(context) }
+    /// The layout edits land in: this toolbar's own, or the terminal's while it is shared.
+    private var editedContext: ToolbarContext { hasOwnLayout ? context : .terminal }
+
+    private var surfaces: [ToolbarPreviewSurface] {
+        ToolbarPreviewSurface.available(for: context, terminalKeyboard: terminalKeyboard, floatingBar: floatingBar)
+    }
+    /// A choice this toolbar does not offer falls back to its first surface.
+    private var previewSurface: ToolbarPreviewSurface {
+        chosenSurface.flatMap { surfaces.contains($0) ? $0 : nil } ?? surfaces[0]
+    }
 
     /// The embedded editor self-sizes to its full content so its rows flow as
     /// part of the surrounding list (the outer List does the scrolling, not the
@@ -27,23 +61,16 @@ struct KeyboardToolbarSettingsView: View {
         max(editorContentHeight, 120)
     }
 
-    /// Computed from the settings list width (matching the previous
-    /// implementation) so the "X / Y" capacity badge reads the same as before.
-    private var capacity: Int {
-        #if os(visionOS)
-        let sizes = KeyboardSizes.iPad
-        #else
-        let sizes: KeyboardSizes = horizontalSizeClass == .regular ? .iPad
-            : (verticalSizeClass == .compact ? .iPhoneLandscape : .iPhonePortrait)
-        #endif
-        return manager.mainRowCapacity(availableWidth: availableWidth, sizes: sizes)
-    }
-
     var body: some View {
         List {
+            toolbarPickerSection
+            previewSection
+            optionsSection
+            if !hasOwnLayout {
+                sharedLayoutSection
+            }
             toolbarLayoutSection
             customKeysSection
-            drawerBehaviorSection
             hiddenKeysSection
             relatedSection
             resetSection
@@ -68,38 +95,194 @@ struct KeyboardToolbarSettingsView: View {
                 EditButton()
             }
         }
-        .confirmationDialog("Reset to Defaults?", isPresented: $showingResetConfirmation) {
+        .confirmationDialog(resetTitle, isPresented: $showingResetConfirmation) {
+            Button(role: .destructive) {
+                manager.resetLayout(for: context)
+            } label: {
+                context == .terminal ? Text("Reset") : Text("Use Terminal Toolbar")
+            }
+        } message: {
+            Text(resetMessage)
+        }
+        .confirmationDialog("Reset All Toolbars?", isPresented: $showingResetAllConfirmation) {
             Button("Reset", role: .destructive) {
                 manager.resetToDefaults()
             }
         } message: {
-            Text("This will restore the default key layout and remove all custom keys from the toolbar.")
+            Text("This will restore the default Terminal toolbar, remove the Screen Sharing and KVM toolbars' own layouts, and delete all custom keys. Saved layouts are kept.")
         }
-        .background(
-            GeometryReader { geo in
-                Color.clear
-                    .onAppear { availableWidth = geo.size.width }
-                    .onChange(of: geo.size.width) { _, newWidth in
-                        availableWidth = newWidth
-                    }
-            }
-        )
     }
 
-    // MARK: - Toolbar Layout Editor (Main Row + Drawer)
+    // MARK: - Toolbar Picker
 
-    // The editor hosts its own two inset-grouped sections (Main Row + Drawer)
-    // with native headers/footers, so it is NOT wrapped in a SwiftUI Section —
-    // an empty Section would add a second top gap above the "Main Row" header on
-    // top of the editor's own first-section spacing. As a bare, clear-background,
-    // full-width row, only the editor's grouped chrome shows.
+    private var toolbarPickerSection: some View {
+        Section {
+            Picker("Toolbar", selection: Binding(
+                get: { context },
+                set: {
+                    context = $0
+                    // Each toolbar opens on the surface it appears on first.
+                    chosenSurface = nil
+                }
+            )) {
+                ForEach(ToolbarContext.allCases, id: \.self) { context in
+                    Text(context.displayName).tag(context)
+                }
+            }
+            .pickerStyle(.segmented)
+            .themedRow()
+        } footer: {
+            Text("Screen Sharing and KVM use the Terminal toolbar until you customize them.")
+        }
+    }
+
+    // MARK: - Preview
+
+    private var previewSection: some View {
+        Section {
+            if surfaces.count > 1 {
+                Picker("Preview", selection: Binding(
+                    get: { previewSurface },
+                    set: { chosenSurface = $0 }
+                )) {
+                    ForEach(surfaces, id: \.self) { surface in
+                        Text(surface.displayName).tag(surface)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .themedRow()
+            }
+            ToolbarLayoutPreview(toolbar: context, surface: previewSurface, showsDrawers: true,
+                                 metrics: $previewMetrics)
+                .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
+                .themedRow()
+        } header: {
+            Text("Preview")
+        } footer: {
+            Text(previewFooter)
+        }
+    }
+
+    private var previewFooter: String {
+        switch previewSurface {
+        case .systemKeyboard:
+            return String(localized: "The toolbar above the system keyboard, at this window's width.")
+        case .terminalKeyboard where context.usesGlassBar:
+            return String(localized: "The terminal keyboard's own toolbar row, which carries these keys while the remote screen's toolbar is docked and the keyboard is up.")
+        case .terminalKeyboard:
+            return String(localized: "The terminal keyboard's own toolbar row, in your keyboard style, at this window's width.")
+        case .glassBar(floating: true):
+            return String(localized: "The remote screen's floating toolbar. Its own buttons take the right end.")
+        case .glassBar(floating: false):
+            return String(localized: "The remote screen's toolbar docked along the bottom, at this window's width. Its own buttons take the right end.")
+        }
+    }
+
+    // MARK: - Options
+
+    // How the toolbar looks and how its rows are arranged each live a level
+    // down, so this screen stays the preview and the keys. Each row says what is set.
+    private var optionsSection: some View {
+        Section {
+            NavigationLink {
+                ToolbarAppearanceSettingsView(context: context)
+            } label: {
+                optionRow("Appearance", systemImage: "paintbrush", value: appearanceSummary)
+            }
+            .themedRow()
+
+            NavigationLink {
+                ToolbarArrangementSettingsView(context: context)
+            } label: {
+                optionRow("Layout", systemImage: "rectangle.split.3x1", value: arrangementSummary)
+            }
+            .themedRow()
+
+            NavigationLink {
+                ToolbarSavedLayoutsView(context: context)
+            } label: {
+                optionRow("Copy and Save", systemImage: "tray.full", value: savedSummary)
+            }
+            .themedRow()
+        }
+    }
+
+    private var savedSummary: String {
+        manager.savedLayouts.isEmpty ? "" : String(localized: "\(manager.savedLayouts.count) Saved")
+    }
+
+    private func optionRow(_ title: LocalizedStringKey, systemImage: String, value: String) -> some View {
+        HStack(spacing: 12) {
+            // A fixed box: a tall symbol would otherwise make its row a fraction taller.
+            Image(systemName: systemImage)
+                .foregroundStyle(.tint)
+                .frame(width: 24, height: 20)
+            Text(title)
+            Spacer()
+            if !value.isEmpty {
+                Text(value)
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var appearanceSummary: String {
+        guard surfaces.contains(.systemKeyboard) else { return KeyboardToolbarSize.current.displayName }
+        return manager.showsKeycaps
+            ? String(localized: "\(manager.toolbarStyle.displayName), Keycaps")
+            : manager.toolbarStyle.displayName
+    }
+
+    private var arrangementSummary: String {
+        var parts: [String] = []
+        switch (layout.pinnedLeading != nil, layout.pinnedTrailing != nil) {
+        case (true, true): parts.append(String(localized: "Pinned Both Ends"))
+        case (true, false): parts.append(String(localized: "Pinned Left"))
+        case (false, true): parts.append(String(localized: "Pinned Right"))
+        case (false, false): break
+        }
+        if layout.mainRowScrolls { parts.append(String(localized: "Scrolls")) }
+        if layout.drawerRows.count > 1 { parts.append(String(localized: "\(layout.drawerRows.count) Drawer Rows")) }
+        return parts.isEmpty ? String(localized: "Default") : parts.joined(separator: ", ")
+    }
+
+    // MARK: - Shared Layout
+
+    private var sharedLayoutSection: some View {
+        Section {
+            Button {
+                manager.splitLayout(for: context)
+            } label: {
+                Label("Customize This Toolbar", systemImage: "plus.square.on.square")
+            }
+            .themedRow()
+        } header: {
+            Text("Shared with Terminal")
+        } footer: {
+            Text("\(context.displayName) uses the Terminal toolbar, so changes below change both. Customizing gives \(context.displayName) a copy of its own and leaves the Terminal toolbar as it is.")
+        }
+    }
+
+    // MARK: - Toolbar Layout Editor
+
+    // The editor hosts its own inset-grouped sections (Main Row, Drawer, and any
+    // pinned groups) with native headers/footers, so it is NOT wrapped in a
+    // SwiftUI Section — an empty Section would add a second top gap above the
+    // first header on top of the editor's own first-section spacing. As a bare,
+    // clear-background, full-width row, only the editor's grouped chrome shows.
     private var toolbarLayoutSection: some View {
         ToolbarLayoutEditor(
             manager: manager,
+            toolbar: editedContext,
             themeColors: sheetThemeColors,
-            capacity: capacity,
+            capacity: previewMetrics.capacity,
+            marksHostBarKeys: context.usesGlassBar,
             contentHeight: $editorContentHeight
         )
+        // The editor is bound to one layout; another toolbar needs a new editor.
+        .id(editedContext)
         .frame(height: editorFrameHeight)
         .listRowInsets(EdgeInsets())
         .listRowBackground(Color.clear)
@@ -141,7 +324,7 @@ struct KeyboardToolbarSettingsView: View {
             NavigationLink {
                 CustomKeyEditorView(
                     onSave: { newKey in
-                        manager.createCustomKey(newKey)
+                        manager.createCustomKey(newKey, in: editedContext)
                     }
                 )
             } label: {
@@ -151,113 +334,44 @@ struct KeyboardToolbarSettingsView: View {
         } header: {
             Text("Custom Keys")
         } footer: {
-            Text("Create buttons that send key sequences.")
-        }
-    }
-
-    // MARK: - Drawer Behavior Section
-
-    private var drawerBehaviorSection: some View {
-        Section {
-            Stepper(value: Binding(
-                get: { manager.drawerRowCount },
-                set: { manager.setDrawerRowCount($0) }
-            ), in: 1...KeyboardToolbarManager.maxDrawerRows) {
-                HStack {
-                    Text("Drawer Rows")
-                    Spacer()
-                    Text("\(manager.drawerRowCount)")
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .themedRow()
-
-            if manager.drawerRowCount > 1 {
-                Picker("More Button Behavior", selection: Binding(
-                    get: { manager.drawerToggleMode },
-                    set: { manager.drawerToggleMode = $0 }
-                )) {
-                    ForEach(DrawerToggleMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .themedRow()
-                .settingContextMenu(Settings.KeyboardToolbar.drawerToggleMode)
-            }
-
-            SettingToggle(
-                Settings.KeyboardToolbar.drawerOpenByDefault,
-                isOn: Binding(
-                    get: { manager.drawerOpenByDefault },
-                    set: { manager.drawerOpenByDefault = $0 }
-                ),
-                title: "Open Drawer by Default"
-            )
-            .themedRow()
-        } footer: {
-            Text(drawerBehaviorFooter)
-        }
-    }
-
-    private var drawerBehaviorFooter: String {
-        guard manager.drawerRowCount > 1 else {
-            return String(localized: "When enabled, the drawer starts open each time the keyboard appears.")
-        }
-        switch manager.drawerToggleMode {
-        case .stack:
-            return String(localized: "Each press of the ••• button reveals one more drawer row; when all are open, the next press closes them. \"Open Drawer by Default\" opens the first row when the keyboard appears.")
-        case .cycle:
-            return String(localized: "Each press of the ••• button swaps the drawer row's contents to the next set of keys, then closes. \"Open Drawer by Default\" opens the first row when the keyboard appears.")
+            Text("Create buttons that send key sequences. Custom keys are shared by every toolbar; each toolbar chooses where to place them.")
         }
     }
 
     // MARK: - Hidden Keys Section
 
     private var hiddenKeysSection: some View {
-        Section {
-            if manager.config.hiddenKeys.isEmpty && manager.unplacedCustomKeys.isEmpty {
+        let hiddenKeys = layout.hiddenKeys.sorted { $0.rawValue < $1.rawValue }
+        let unplacedKeys = manager.unplacedCustomKeys(in: editedContext)
+        return Section {
+            if hiddenKeys.isEmpty && unplacedKeys.isEmpty {
                 Text("No hidden keys.")
                     .foregroundStyle(.secondary)
                     .font(.subheadline)
                     .themedRow()
             } else {
-                ForEach(Array(manager.config.hiddenKeys).sorted(by: { $0.rawValue < $1.rawValue }), id: \.self) { keyID in
+                ForEach(hiddenKeys, id: \.self) { keyID in
                     Button {
-                        manager.unhideKey(keyID)
+                        manager.unhideKey(keyID, in: editedContext)
                     } label: {
                         HStack {
                             Image(systemName: "plus.circle.fill")
                                 .foregroundStyle(.green)
-                            keyBadge(for: keyID)
+                            keyBadge(symbol: keyID.iconName, text: keyID.keyValue)
                             Text(keyID.displayName)
                                 .foregroundStyle(.primary)
                         }
                     }
                     .themedRow()
                 }
-                ForEach(manager.unplacedCustomKeys) { key in
+                ForEach(unplacedKeys) { key in
                     Button {
-                        manager.addCustomKeyToLayout(id: key.id, section: .drawer(0))
+                        manager.addCustomKeyToLayout(id: key.id, section: .drawer(0), in: editedContext)
                     } label: {
                         HStack {
                             Image(systemName: "plus.circle.fill")
                                 .foregroundStyle(.green)
-                            if let iconName = key.iconName {
-                                Image(systemName: iconName)
-                                    .font(.caption)
-                                    .foregroundStyle(.tint)
-                                    .frame(width: 28, height: 28)
-                                    .background(sheetThemeColors?.rowBackground ?? Color(uiColor: .tertiarySystemGroupedBackground))
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                            } else {
-                                Text(String(key.label.prefix(2)))
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(.tint)
-                                    .frame(width: 28, height: 28)
-                                    .background(sheetThemeColors?.rowBackground ?? Color(uiColor: .tertiarySystemGroupedBackground))
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                            }
+                            keyBadge(symbol: key.iconName, text: String(key.label.prefix(2)))
                             Text(key.label)
                                 .foregroundStyle(.primary)
                         }
@@ -273,7 +387,7 @@ struct KeyboardToolbarSettingsView: View {
         } header: {
             Text("Hidden Keys")
         } footer: {
-            if !manager.config.hiddenKeys.isEmpty || !manager.unplacedCustomKeys.isEmpty {
+            if !hiddenKeys.isEmpty || !unplacedKeys.isEmpty {
                 Text("Tap to restore a hidden key to the drawer. Swipe left on a custom key to delete it.")
             }
         }
@@ -313,12 +427,30 @@ struct KeyboardToolbarSettingsView: View {
 
     private var resetSection: some View {
         Section {
+            if hasOwnLayout {
+                Button(role: .destructive) {
+                    showingResetConfirmation = true
+                } label: {
+                    HStack {
+                        Spacer()
+                        if context == .terminal {
+                            Label("Reset to Defaults", systemImage: "arrow.counterclockwise")
+                        } else {
+                            Label("Use Terminal Toolbar", systemImage: "arrow.uturn.backward")
+                        }
+                        Spacer()
+                    }
+                }
+                .disabled(!manager.isCustomized(context))
+                .themedRow()
+            }
+
             Button(role: .destructive) {
-                showingResetConfirmation = true
+                showingResetAllConfirmation = true
             } label: {
                 HStack {
                     Spacer()
-                    Label("Reset to Defaults", systemImage: "arrow.counterclockwise")
+                    Label("Reset All Toolbars", systemImage: "trash")
                     Spacer()
                 }
             }
@@ -327,25 +459,33 @@ struct KeyboardToolbarSettingsView: View {
         }
     }
 
-    // MARK: - Badge Views
-
-    @ViewBuilder
-    private func keyBadge(for keyID: KeyID) -> some View {
-        if let iconName = keyID.iconName {
-            Image(systemName: iconName)
-                .font(.caption)
-                .foregroundStyle(.tint)
-                .frame(width: 28, height: 28)
-                .background(sheetThemeColors?.rowBackground ?? Color(uiColor: .tertiarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-        } else {
-            Text(keyID.keyValue)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.tint)
-                .frame(width: 28, height: 28)
-                .background(sheetThemeColors?.rowBackground ?? Color(uiColor: .tertiarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-        }
+    private var resetTitle: String {
+        context == .terminal
+            ? String(localized: "Reset to Defaults?")
+            : String(localized: "Use the Terminal Toolbar?")
     }
 
+    private var resetMessage: String {
+        context == .terminal
+            ? String(localized: "This will restore the default key layout. Custom keys stay available under Hidden Keys.")
+            : String(localized: "This removes this toolbar's own layout. It will show the Terminal toolbar again.")
+    }
+
+    // MARK: - Badge Views
+
+    private func keyBadge(symbol: String?, text: String) -> some View {
+        Group {
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.caption)
+            } else {
+                Text(text)
+                    .font(.system(.caption, design: .monospaced))
+            }
+        }
+        .foregroundStyle(.tint)
+        .frame(width: 28, height: 28)
+        .background(sheetThemeColors?.rowBackground ?? Color(uiColor: .tertiarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
 }

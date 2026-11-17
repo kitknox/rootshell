@@ -9,6 +9,8 @@ import Foundation
 
 extension Ghostty.OptionKeyAsAlt: SettingValue {}
 extension DrawerToggleMode: SettingValue {}
+extension KeyboardToolbarStyle: SettingValue {}
+extension KeyboardToolbarSize: SettingValue {}
 extension TerminalWritingAssistanceMode: SettingValue {}
 extension KeyboardArrowJoystickButton.Mode: SettingValue {}
 extension TerminalTouchKeyboardModel.FloatingGlassStyle: SettingValue {}
@@ -122,9 +124,25 @@ nonisolated extension Settings {
         static let config = SettingKey<Data?>(
             "keyboardToolbarConfig", default: nil, group: .keyboardToolbar, policy: .localByDefault,
             title: String(localized: "Toolbar Layout", comment: "Setting title"))
+        /// nil while Screen Sharing uses the terminal's layout.
+        static let screenSharingConfig = SettingKey<Data?>(
+            "keyboardToolbarConfigScreenSharing", default: nil, group: .keyboardToolbar, policy: .localByDefault,
+            title: String(localized: "Screen Sharing Toolbar Layout", comment: "Setting title"))
+        /// nil while KVM uses the terminal's layout.
+        static let kvmConfig = SettingKey<Data?>(
+            "keyboardToolbarConfigKVM", default: nil, group: .keyboardToolbar, policy: .localByDefault,
+            title: String(localized: "KVM Toolbar Layout", comment: "Setting title"))
         static let customKeys = SettingKey<Data?>(
             "keyboardToolbarCustomKeys", default: nil, group: .keyboardToolbar, policy: .localByDefault,
             title: String(localized: "Custom Toolbar Keys", comment: "Setting title"))
+        /// Named copies of toolbar layouts, kept through a reset.
+        static let savedLayouts = SettingKey<Data?>(
+            "keyboardToolbarSavedLayouts", default: nil, group: .keyboardToolbar, policy: .localByDefault,
+            title: String(localized: "Saved Toolbar Layouts", comment: "Setting title"))
+        static let style = SettingKey(
+            "keyboardToolbarStyle", default: KeyboardToolbarStyle.flat, group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-style",
+            title: String(localized: "Toolbar Style", comment: "Setting title"))
         static let deviceIdiom = SettingKey<String?>(
             "keyboardToolbarDeviceIdiom", default: nil, group: .keyboardToolbar, policy: .deviceOnly,
             title: String(localized: "Toolbar Layout Device", comment: "Setting title"))
@@ -132,6 +150,26 @@ nonisolated extension Settings {
             "keyboardToolbarDrawerOpenByDefault", default: false, group: .keyboardToolbar, policy: .localByDefault,
             configKey: "keyboard-toolbar-drawer-open-by-default",
             title: String(localized: "Open Drawer by Default", comment: "Setting title"))
+        static let sizePhone = SettingKey(
+            "keyboardToolbarSizePhone", default: KeyboardToolbarSize.automatic, group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-size-iphone",
+            title: String(localized: "Toolbar Size on iPhone", comment: "Setting title"))
+        static let sizePad = SettingKey(
+            "keyboardToolbarSizePad", default: KeyboardToolbarSize.automatic, group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-size-ipad",
+            title: String(localized: "Toolbar Size on iPad", comment: "Setting title"))
+        static let sizeDuoInner = SettingKey(
+            "keyboardToolbarSizeDuoInner", default: KeyboardToolbarSize.automatic, group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-size-duo-inner",
+            title: String(localized: "Toolbar Size on the Inner Display", comment: "Setting title"))
+        static let sizeDuoFront = SettingKey(
+            "keyboardToolbarSizeDuoFront", default: KeyboardToolbarSize.automatic, group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-size-duo-front",
+            title: String(localized: "Toolbar Size on the Front Display", comment: "Setting title"))
+        static let keycaps = SettingKey(
+            "keyboardToolbarKeycaps", default: false, group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-keycaps",
+            title: String(localized: "Toolbar Keycaps", comment: "Setting title"))
         static let drawerToggleMode = SettingKey(
             "keyboardToolbarDrawerToggleMode", default: DrawerToggleMode.stack, group: .keyboardToolbar, policy: .localByDefault,
             configKey: "keyboard-toolbar-drawer-toggle-mode",
@@ -153,10 +191,22 @@ nonisolated extension Settings {
             title: String(localized: "Show Toolbar Keys in Remote Screen Controls", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
-            config.erased, customKeys.erased, deviceIdiom.erased, drawerOpenByDefault.erased, drawerToggleMode.erased,
+            config.erased, screenSharingConfig.erased, kvmConfig.erased, customKeys.erased, savedLayouts.erased,
+            deviceIdiom.erased,
+            drawerOpenByDefault.erased, drawerToggleMode.erased, keycaps.erased, style.erased,
+            sizePhone.erased, sizePad.erased, sizeDuoInner.erased, sizeDuoFront.erased,
             persistent.erased, showWithHardwareKeyboard.erased, arrowJoystickMode.erased,
             remoteScreenStripExpanded.erased,
         ]
+
+        /// The key holding a context's layout.
+        static func layoutKey(for context: ToolbarContext) -> SettingKey<Data?> {
+            switch context {
+            case .terminal: config
+            case .screenSharing: screenSharingConfig
+            case .kvm: kvmConfig
+            }
+        }
     }
 
     enum Keybinds {

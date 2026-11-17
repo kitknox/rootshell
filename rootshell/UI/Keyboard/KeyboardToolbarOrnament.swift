@@ -162,6 +162,7 @@ struct KeyboardToolbarRepresentable: UIViewRepresentable {
         // Update delegate target when focused terminal changes
         coordinator.focusedTerminal = terminal
         coordinator.focusedPane = focusedPane
+        toolbar.context = (focusedPane as? any RemoteScreenPane)?.keyboardToolbarContext ?? .terminal
 
         // Give the terminal a back-reference for clearOneShotModifiers
         terminal?.externalToolbar = toolbar

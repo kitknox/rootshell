@@ -29,6 +29,10 @@ final class KeyboardWritingAssistanceButton: KeyboardSymbolButton {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    /// Only the menu button may take touches here; a touch beside it would
+    /// reach this key and send its name to the terminal.
+    override var hitBounds: CGRect { bounds }
+
     private func refresh() {
         let mode = SettingsStore.shared.value(Settings.Keyboard.writingAssistance)
         menuButton.accessibilityValue = mode.title

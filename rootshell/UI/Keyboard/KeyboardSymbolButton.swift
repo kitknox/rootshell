@@ -229,7 +229,7 @@ class KeyboardSymbolButton: KeyboardButton {
             SystemShiftReader.shared.noteTouchEvent(event)
             touchFirstLocation = touch.location(in: self)
             isHighlighted = true
-            playHaptic()
+            if !yieldsToScrolling { playHaptic() }
         } else {
             // Non-dual-text uses standard behavior
             super.touchesBegan(touches, with: event)
@@ -283,6 +283,7 @@ class KeyboardSymbolButton: KeyboardButton {
 
         // Send the key
         let modifiers = currentModifiers()
+        if yieldsToScrolling { playHaptic() }
         delegate?.keyPressed(triggeredKey, modifiers: modifiers)
 
         // Reset progress with animation
@@ -318,13 +319,15 @@ class KeyboardSymbolButton: KeyboardButton {
 
     private func updateActiveAppearance() {
         UIView.animate(withDuration: 0.1) {
-            if self.isActive {
-                self.backgroundColor = KeyboardKeyColors.active
-            } else if self.isHighlighted {
-                self.backgroundColor = KeyboardKeyColors.highlight
-            } else {
-                self.backgroundColor = .clear
-            }
+            self.applyFill()
+        }
+    }
+
+    override func applyFill() {
+        if isActive {
+            backgroundColor = fill.active
+        } else {
+            super.applyFill()
         }
     }
 

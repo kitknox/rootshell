@@ -85,6 +85,8 @@ class TerminalTouchRepeatingButton: UIButton {
     private var touchMode: KeyboardToolbarInteractionMode = .accessory
     private var trackedTouch: UITouch?
     private var repeatGesture: UILongPressGestureRecognizer?
+    private var holdGesture: UILongPressGestureRecognizer?
+    private var holdAction: (() -> Void)?
     private var touchOrigin = CGPoint.zero
 
     private var validTouch: Bool {
@@ -118,13 +120,18 @@ class TerminalTouchRepeatingButton: UIButton {
         // The repeating recognizer cancels UIButton's tap when it takes over.
         // Keep its contact until that recognizer ends or fails validation.
         if repeatGesture?.state == .began || repeatGesture?.state == .changed { return }
+        // The hold recognizer cancels the tap the same way, just before it acts.
+        if holdGesture?.state == .began { return }
         cancelInteraction()
     }
+    /// Runs whenever the contact is dropped, which need not send `.touchCancel`.
+    var onInteractionCancelled: (() -> Void)?
     func cancelInteraction() {
         trackedTouch = nil
         cancelRepeat()
         cancelTracking(with: nil)
         isHighlighted = false
+        onInteractionCancelled?()
     }
     func enableRepeat(_ action: @escaping () -> Void) {
         repeatAction = action
@@ -149,12 +156,51 @@ class TerminalTouchRepeatingButton: UIButton {
             cancelInteraction()
         }
     }
+    /// One action once the finger has rested `delay`, in place of the tap.
+    func enableHold(after delay: TimeInterval, _ action: @escaping () -> Void) {
+        holdAction = action
+        let hold = UILongPressGestureRecognizer(target: self, action: #selector(handleSingleHold(_:)))
+        hold.minimumPressDuration = delay
+        holdGesture = hold
+        addGestureRecognizer(hold)
+    }
+    @objc private func handleSingleHold(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began else { return }
+        let valid = validTouch
+        cancelInteraction()
+        if valid { holdAction?() }
+    }
     func cancelRepeat() {
         repeatTask?.cancel(); repeatTask = nil
         repeatingContact = false
         updateContactAppearance()
     }
     override func didMoveToWindow() { super.didMoveToWindow(); if window == nil { cancelInteraction() } }
+}
+
+/// The toolbar row's scrolling middle. Keys take a touch at once, so a held
+/// modifier chords with the next key; a drag takes the touch back from any
+/// key but a modifier or the joystick, which then never sends.
+private final class TerminalToolbarScrollRow: UIScrollView {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        delaysContentTouches = false
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func touchesShouldCancel(in view: UIView) -> Bool {
+        var current: UIView? = view
+        while let candidate = current, candidate !== self {
+            if let button = candidate as? TerminalTouchDrawerButton {
+                switch button.keycap.key.action {
+                case .modifier, .joystick: return false
+                default: return true
+                }
+            }
+            current = candidate.superview
+        }
+        return true
+    }
 }
 
 /// Checks every coalesced sample, so a fast real swipe is never mistaken for a jump.
@@ -378,6 +424,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     private var pinnedHidden = false
     private var toolbarInteractionMode: KeyboardToolbarInteractionMode = .accessory
     var toolbarContentHeight: CGFloat { toolbarHeight }
+    /// Drawer rows up to the last one holding keys at this width, for a preview to open.
+    var filledToolbarDrawerCount: Int { (toolbarDrawerKeys.lastIndex { !$0.isEmpty } ?? -1) + 1 }
 
     func setToolbarPresentation(only: Bool, bottomInset: CGFloat, showsRestore: Bool, pinned: Bool) {
         let changed = isToolbarOnly != only || toolbarBottomInset != bottomInset
@@ -404,7 +452,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         cancelInteraction(preservingModifiers: true)
         toolbarInteractionMode = mode
         writingAssistanceButton.interactionMode = mode
-        toolbarDrawerButtons.flatMap { $0 }.forEach { $0.interactionMode = mode }
+        allToolbarRowButtons.forEach { $0.interactionMode = mode }
     }
 
     private var pendingPresentationOffsets: Model.PresentationState?
@@ -470,15 +518,38 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     private var toolbarDrawerIndices: [Int] = []
     private var toolbarDrawerButtons: [[TerminalTouchDrawerButton]] = []
     private var toolbarDrawerCache: [Int: (UIScrollView, [TerminalTouchDrawerButton])] = [:]
-    private var toolbarDrawerHeight: CGFloat { CGFloat(toolbarDrawerRows.count) * keyboardHeight.toolbarDrawerRowHeight }
-    private var toolbarHeight: CGFloat { hidesToolbar ? 0 : keyboardHeight.toolbarRowHeight + toolbarDrawerHeight }
+    private var toolbarDrawerHeight: CGFloat { CGFloat(toolbarDrawerRows.count) * toolbarMetrics.toolbarDrawerRowHeight }
+    private var toolbarHeight: CGFloat { hidesToolbar ? 0 : toolbarMetrics.toolbarRowHeight + toolbarDrawerHeight }
+    private var configuredLeading: [Model.Key] = []
     private var configuredMain: [Model.Key] = []
+    private var configuredTrailing: [Model.Key] = []
+    /// A main row too long for its width scrolls between the pinned keys.
+    private var configuredMainScrolls = false
+    private var configuredMinimumKeyWidth = 0.0
+    /// The scrolling middle of the toolbar row, built like a drawer row.
+    private var toolbarMiddleRow: UIScrollView?
+    private var toolbarMiddleButtons: [TerminalTouchDrawerButton] = []
+    private var toolbarMiddleKeys: [Model.Key] = []
+    /// Modifiers a finger is holding down in the scrolling middle.
+    private var toolbarHeldModifiers: Set<Model.Modifier> = []
+    /// One key's width while the row scrolls, which the drawers match.
+    private var toolbarScrollUnit: CGFloat?
+    private var allToolbarRowButtons: [TerminalTouchDrawerButton] {
+        toolbarDrawerButtons.flatMap { $0 } + toolbarMiddleButtons
+    }
+    /// Keys at each end of the toolbar row that belong to a pinned section.
+    private var toolbarPinned = (leading: 0, trailing: 0)
+    /// Width the gaps beside the pinned sections take from the row.
+    private var toolbarSectionGaps: CGFloat = 0
     private var configuredDrawers: [[Model.Key]] = []
     private var rows: [[TerminalTouchKeycap]] = []
     private var controls: [TerminalTouchKeycap] = []
     private let background = UIView()
     private let floatingGlass = UIVisualEffectView()
     private let controlGlass = UIVisualEffectView()
+    private var toolbarSectionPlates: [UIVisualEffectView] = []
+    /// How the toolbar plate was last dressed, for plates made later.
+    private var controlGlassStyle: (toolbar: UIColor, floating: Bool)?
     private var steampunkMachinery: TerminalTouchSteampunkMachineryView?
     private var retroBackdrop: TerminalTouchRetroBackdropView?
     private struct GlassAppearance: Equatable {
@@ -519,7 +590,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     private var drawerColumns = 6
     private var allKeycaps: [TerminalTouchKeycap] {
         controls + rows.flatMap { $0 } + drawerButtons.map(\.keycap)
-            + toolbarDrawerButtons.flatMap { $0 }.map(\.keycap)
+            + allToolbarRowButtons.map(\.keycap)
     }
     private let suggestions = UIStackView()
     private var keyboardStyle = SettingsStore.shared.value(Settings.Keyboard.touchStyle)
@@ -554,6 +625,14 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     private var heightSetting = TerminalTouchKeyboardView.resolvedHeightSetting()
     /// The detached keyboard sizes itself, so it keeps the default metrics.
     private var keyboardHeight: Model.Height { isFloating ? .large : heightSetting }
+    /// The toolbar row's own size for this display, when one is chosen. It
+    /// holds docked, detached and on a keys-folded toolbar alike.
+    private var toolbarSize = KeyboardToolbarSize.current
+    /// The toolbar's row heights: the chosen size's, or the keyboard's own.
+    private var toolbarMetrics: (toolbarRowHeight: CGFloat, toolbarDrawerRowHeight: CGFloat) {
+        if let rows = toolbarSize.terminalKeyboardRows { return (rows.toolbar, rows.drawer) }
+        return (keyboardHeight.toolbarRowHeight, keyboardHeight.toolbarDrawerRowHeight)
+    }
     private var glyphsEnabled = SettingsStore.shared.value(Settings.Keyboard.touchGlyphs)
     #if !os(visionOS)
     private lazy var haptic = UIImpactFeedbackGenerator(style: .light, view: self)
@@ -670,6 +749,21 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         }
     }
     private var hidesToolbar: Bool { textFieldMode == .keysOnly }
+
+    /// Whose toolbar layout the toolbar row shows. One keyboard serves every
+    /// pane in the window, so this follows whichever pane holds it.
+    var toolbarContext = ToolbarContext.terminal {
+        didSet {
+            let manager = KeyboardToolbarManager.shared
+            guard manager.layout(for: oldValue) != manager.layout(for: toolbarContext) else { return }
+            cancelInteraction(preservingModifiers: true)
+            loadToolbarConfiguration()
+            rebuildKeys()
+            rebuildDrawer()
+            invalidateIntrinsicContentSize()
+            onHeightChanged?()
+        }
+    }
 
     init(textFieldMode: TextFieldMode = .off) {
         self.textFieldMode = textFieldMode
@@ -991,7 +1085,10 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         }
         let height = Self.resolvedHeightSetting()
         let glyphs = SettingsStore.shared.value(Settings.Keyboard.touchGlyphs)
-        if heightSetting != height || glyphsEnabled != glyphs { cancelInteraction() }
+        let toolbarSize = KeyboardToolbarSize.current
+        let toolbarSizeChanged = self.toolbarSize != toolbarSize
+        if heightSetting != height || glyphsEnabled != glyphs || toolbarSizeChanged { cancelInteraction() }
+        self.toolbarSize = toolbarSize
         heightSetting = height
         glyphsEnabled = glyphs
         loadToolbarConfiguration()
@@ -999,6 +1096,10 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         updateAppearance()
         rebuildDrawer()
         setNeedsLayout()
+        if toolbarSizeChanged {
+            invalidateIntrinsicContentSize()
+            onHeightChanged?()
+        }
     }
 
     private func updateAppearance() {
@@ -1035,7 +1136,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         preview.palette = keycapPalette
         accents.backgroundColor = keycapPalette?.key ?? .secondarySystemBackground
         (controls + rows.flatMap { $0 }).forEach { $0.palette = keycapPalette }
-        (drawerButtons + toolbarDrawerButtons.flatMap { $0 }).forEach { $0.updatePalette(keycapPalette) }
+        (drawerButtons + allToolbarRowButtons).forEach { $0.updatePalette(keycapPalette) }
         refreshWritingAssistance()
         rebuildToolbarDrawers()
         updateModifierAppearance()
@@ -1060,6 +1161,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             }
         }
         configureControlGlass(controlGlass, toolbar: toolbar, usesFloatingGlass: usesFloatingGlass)
+        controlGlassStyle = (toolbar, usesFloatingGlass)
+        toolbarSectionPlates.forEach { configureControlGlass($0, toolbar: toolbar, usesFloatingGlass: usesFloatingGlass) }
         if !usesFloatingGlass { floatingGlass.effect = nil }
     }
 
@@ -1219,7 +1322,11 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     private func loadToolbarConfiguration() {
         guard !hidesToolbar else {
             configuredDrawerToggle = nil
+            configuredLeading = []
             configuredMain = []
+            configuredTrailing = []
+            configuredMainScrolls = false
+            configuredMinimumKeyWidth = 0
             configuredDrawers = []
             toolbarDrawerState = .closed
             // Showing the toolbar again opens its drawer by default, as at creation.
@@ -1227,13 +1334,14 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             return
         }
         let manager = KeyboardToolbarManager.shared
+        let toolbarLayout = manager.layout(for: toolbarContext)
         func key(for slot: KeySlot) -> Model.Key? {
             switch slot {
             case .custom(let id):
                 guard let custom = manager.customKey(for: id) else { return nil }
                 return Model.Key(title: custom.label, action: .custom(id), symbol: custom.iconName, accessibility: custom.label)
             case .builtIn(let id):
-                guard !manager.config.hiddenKeys.contains(id) else { return nil }
+                guard !toolbarLayout.hiddenKeys.contains(id) else { return nil }
                 guard id.isAvailable else { return nil }
                 let action: Model.Action
                 let title: String
@@ -1259,21 +1367,87 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             }
         }
         configuredDrawerToggle = key(for: .builtIn(.drawerToggle))
-        configuredMain = manager.config.mainRow.compactMap(key)
-        configuredDrawers = manager.config.drawerRows.map { $0.compactMap(key) }
+        configuredLeading = (toolbarLayout.pinnedLeading ?? []).compactMap(key)
+        configuredMain = toolbarLayout.mainRow.compactMap(key)
+        configuredTrailing = (toolbarLayout.pinnedTrailing ?? []).compactMap(key)
+        configuredMainScrolls = toolbarLayout.mainRowScrolls
+        configuredMinimumKeyWidth = toolbarLayout.minimumKeyWidth
+        configuredDrawers = toolbarLayout.drawerRows.map { $0.compactMap(key) }
         if manager.drawerOpenByDefault && !toolbarDrawerOpenByDefault && toolbarDrawerState == .closed {
             toolbarDrawerState = .closed.toggled(rowCount: configuredDrawers.count, cycle: manager.drawerToggleMode == .cycle)
         }
         toolbarDrawerOpenByDefault = manager.drawerOpenByDefault
     }
 
+    /// Keys the toolbar row holds at a width, for the configured layout.
+    private func toolbarSlots(width: CGFloat) -> Int {
+        let pinned = configuredLeading + configuredTrailing
+        return Model.toolbarCapacity(
+            width: toolbarWidth(width), minimumKeyWidth: configuredMinimumKeyWidth, pinned: pinned.count,
+            drawerToggle: configuredDrawerToggle.map { !pinned.contains($0) } ?? false)
+    }
+
+    /// The one fitting of the configured rows. Building the keys and checking
+    /// them in layout must agree, or layout rebuilds forever.
+    private func fittedToolbar(width: CGFloat) -> FittedToolbar {
+        // Split around a fold, the row keeps its columns and overflows as before.
+        if configuredMainScrolls, splitFoldSpan == nil,
+           let scrolling = KeyboardToolbarOverflow.scrollingLayout(
+               leading: configuredLeading, main: configuredMain, trailing: configuredTrailing,
+               drawers: configuredDrawers, capacity: toolbarSlots(width: width),
+               drawerToggle: configuredDrawerToggle ?? Model.Key(title: "…", action: .drawer),
+               keepsDrawerToggleVisible: configuredDrawerToggle != nil) {
+            return FittedToolbar(caps: scrolling.leading + scrolling.trailing, drawers: scrolling.drawers,
+                                 middle: scrolling.middle, leading: scrolling.leading.count,
+                                 trailing: scrolling.trailing.count)
+        }
+        let fitted = Model.toolbarKeys(leading: configuredLeading, main: configuredMain, trailing: configuredTrailing,
+            drawers: configuredDrawers, width: toolbarWidth(width), minimumKeyWidth: configuredMinimumKeyWidth,
+            drawerToggle: configuredDrawerToggle)
+        return FittedToolbar(caps: fitted.main, drawers: fitted.drawers,
+                             leading: fitted.main.prefix { configuredLeading.contains($0) }.count,
+                             trailing: fitted.main.reversed().prefix { configuredTrailing.contains($0) }.count)
+    }
+
+    /// The toolbar row as it fits a width.
+    private struct FittedToolbar {
+        /// Keys drawn as caps: the whole row, or only the pinned ends while it scrolls.
+        var caps: [Model.Key]
+        var drawers: [[Model.Key]]
+        /// Keys in the scrolling middle; empty when the row does not scroll.
+        var middle: [Model.Key] = []
+        /// Caps at each end that belong to a pinned section.
+        var leading = 0
+        var trailing = 0
+    }
+
+    private func rebuildToolbarMiddleRow(_ keys: [Model.Key]) {
+        toolbarMiddleButtons.forEach { $0.cancelRepeat() }
+        let offset = toolbarMiddleRow?.contentOffset ?? .zero
+        toolbarMiddleRow?.removeFromSuperview()
+        toolbarMiddleRow = nil
+        toolbarMiddleButtons = []
+        toolbarMiddleKeys = keys
+        guard !keys.isEmpty else { return }
+        let row = TerminalToolbarScrollRow()
+        row.contentOffset = offset
+        row.showsHorizontalScrollIndicator = false
+        row.alwaysBounceHorizontal = false
+        row.delegate = self
+        addSubview(row)
+        toolbarMiddleButtons = makeToolbarRowButtons(keys, in: row, mainRow: true)
+        toolbarMiddleRow = row
+    }
+
     private func rebuildKeys() { rebuildKeysForWidth(max(0, bounds.width - safeAreaInsets.left - safeAreaInsets.right)) }
 
     private func rebuildKeysForWidth(_ width: CGFloat) {
         (controls + rows.flatMap { $0 }).forEach { $0.removeFromSuperview() }
-        let toolbar = Model.toolbarKeys(main: configuredMain, drawers: configuredDrawers, width: toolbarWidth(width), drawerToggle: configuredDrawerToggle)
-        controls = toolbar.main.map { makeCap($0, small: true) }
+        let toolbar = fittedToolbar(width: width)
+        controls = toolbar.caps.map { makeCap($0, small: true) }
+        toolbarPinned = (toolbar.leading, toolbar.trailing)
         toolbarDrawerKeys = toolbar.drawers
+        rebuildToolbarMiddleRow(toolbar.middle)
         rebuildToolbarDrawers()
         if let cap = controls.first(where: { $0.key.action == .toolbar(KeyID.writingAssistance.keyValue) }) {
             cap.isAccessibilityElement = false
@@ -1290,6 +1464,55 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         updateModifierAppearance()
         refreshPlacementActions()
         setNeedsLayout()
+    }
+
+    /// Pinned sections each draw on a plate of their own, and so do the open
+    /// drawers. The single plate then draws nothing, though it still marks
+    /// the toolbar's frame for the effects placed over it.
+    private func layoutToolbarSectionPlates(leading: CGFloat, width: CGFloat, top: CGFloat) {
+        var rects: [CGRect] = []
+        if !hidesToolbar, toolbarColumns == nil, toolbarPinned.leading + toolbarPinned.trailing > 0 {
+            if toolbarDrawerHeight > 0 {
+                rects.append(CGRect(x: leading + 2, y: top + 2, width: max(0, width - 4),
+                                    height: max(0, toolbarDrawerHeight - 2)))
+            }
+            let rowY = top + toolbarDrawerHeight + 2
+            let rowHeight = max(0, toolbarMetrics.toolbarRowHeight - 4)
+            // Each section's extent: its caps, or the scrolling row in the middle.
+            func span(_ caps: ArraySlice<TerminalTouchKeycap>) -> ClosedRange<CGFloat>? {
+                guard let first = caps.first, let last = caps.last else { return nil }
+                return first.frame.minX...last.frame.maxX
+            }
+            let middle = toolbarMiddleRow.map { $0.frame.minX...$0.frame.maxX }
+                ?? span(controls.dropFirst(toolbarPinned.leading).dropLast(toolbarPinned.trailing))
+            let spans = [span(controls.prefix(toolbarPinned.leading)), middle,
+                         span(controls.suffix(toolbarPinned.trailing))].compactMap { $0 }
+            for (index, span) in spans.enumerated() {
+                // Plates reach into each gap, and to the row's ends.
+                let minX = index == 0 ? leading + 2 : span.lowerBound - 4
+                let maxX = index == spans.count - 1 ? leading + width - 2 : span.upperBound + 4
+                rects.append(CGRect(x: minX, y: rowY, width: max(0, maxX - minX), height: rowHeight))
+            }
+        }
+        while toolbarSectionPlates.count < rects.count {
+            let plate = UIVisualEffectView()
+            plate.isUserInteractionEnabled = false
+            plate.layer.cornerCurve = .continuous
+            plate.clipsToBounds = true
+            insertSubview(plate, aboveSubview: controlGlass)
+            if let style = controlGlassStyle {
+                configureControlGlass(plate, toolbar: style.toolbar, usesFloatingGlass: style.floating)
+            }
+            toolbarSectionPlates.append(plate)
+        }
+        while toolbarSectionPlates.count > rects.count {
+            toolbarSectionPlates.removeLast().removeFromSuperview()
+        }
+        for (plate, rect) in zip(toolbarSectionPlates, rects) {
+            plate.frame = rect
+            plate.layer.cornerRadius = min(22, rect.height / 2)
+        }
+        controlGlass.alpha = rects.isEmpty ? 1 : 0
     }
 
     override func layoutSubviews() {
@@ -1319,7 +1542,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             y: top + 2,
             width: max(0, width - 4),
             height: max(0, toolbarHeight - 4))
-        controlGlass.layer.cornerRadius = min(22, (keyboardHeight.toolbarRowHeight - 4) / 2)
+        controlGlass.layer.cornerRadius = min(22, (toolbarMetrics.toolbarRowHeight - 4) / 2)
         controlGlass.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner,
                                            .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         layoutBackgroundEffect()
@@ -1327,19 +1550,55 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             cancelInteraction(preservingModifiers: true)
             rebuildKeysForWidth(width)
         }
-        let toolbar = Model.toolbarKeys(main: configuredMain, drawers: configuredDrawers, width: toolbarWidth(width), drawerToggle: configuredDrawerToggle)
-        if controls.map(\.key) != toolbar.main || toolbarDrawerKeys != toolbar.drawers {
+        let toolbar = fittedToolbar(width: width)
+        if controls.map(\.key) != toolbar.caps || toolbarDrawerKeys != toolbar.drawers
+            || toolbarMiddleKeys != toolbar.middle {
             cancelInteraction(preservingModifiers: true)
             rebuildKeysForWidth(width)
             rebuildDrawer()
             setNeedsLayout()
         }
         toolbarColumns = splitColumns(count: controls.count, width: width)
-        let controlFrames = toolbarColumns.map { columns in
-            controls.indices.map { CGRect(x: 5 + CGFloat(columns.x(column: $0)), y: top + toolbarDrawerHeight,
-                                          width: CGFloat(columns.unit), height: keyboardHeight.toolbarRowHeight) }
-        } ?? Model.frames(keys: controls.map(\.key), width: width, y: top + toolbarDrawerHeight, height: keyboardHeight.toolbarRowHeight, inset: 5)
-        for (cap, rect) in zip(controls, controlFrames) { cap.frame = rect.offsetBy(dx: leading, dy: 0) }
+        if let row = toolbarMiddleRow {
+            // The pinned caps hold a key's width each at the ends, and the row
+            // between them scrolls. Every key is one width, a full row's worth.
+            let gap = CGFloat(Model.toolbarSectionGap)
+            let slots = CGFloat(toolbarSlots(width: width))
+            let pinnedSections = (toolbarPinned.leading > 0 ? 1 : 0) + (toolbarPinned.trailing > 0 ? 1 : 0)
+            toolbarSectionGaps = CGFloat(pinnedSections) * gap
+            let unit = max(1, (width - 10 - toolbarSectionGaps) / slots)
+            toolbarScrollUnit = unit
+            let rowY = top + toolbarDrawerHeight
+            let rowHeight = toolbarMetrics.toolbarRowHeight
+            for (index, cap) in controls.enumerated() {
+                let x = index < toolbarPinned.leading
+                    ? 5 + CGFloat(index) * unit
+                    : width - 5 - CGFloat(controls.count - index) * unit
+                cap.frame = CGRect(x: leading + x, y: rowY, width: unit, height: rowHeight)
+            }
+            let leadingWidth = CGFloat(toolbarPinned.leading) * unit + (toolbarPinned.leading > 0 ? gap : 0)
+            let trailingWidth = CGFloat(toolbarPinned.trailing) * unit + (toolbarPinned.trailing > 0 ? gap : 0)
+            row.frame = CGRect(x: leading + 5 + leadingWidth, y: rowY,
+                               width: max(0, width - 10 - leadingWidth - trailingWidth), height: rowHeight)
+            for (index, button) in toolbarMiddleButtons.enumerated() {
+                button.frame = CGRect(x: CGFloat(index) * unit, y: 2, width: unit, height: rowHeight - 4)
+            }
+            row.contentSize = CGSize(width: CGFloat(toolbarMiddleButtons.count) * unit, height: rowHeight)
+        } else {
+            toolbarScrollUnit = nil
+            let controlFrames = toolbarColumns.map { columns in
+                controls.indices.map { CGRect(x: 5 + CGFloat(columns.x(column: $0)), y: top + toolbarDrawerHeight,
+                                              width: CGFloat(columns.unit), height: toolbarMetrics.toolbarRowHeight) }
+            } ?? Model.sectionedFrames(keys: controls.map(\.key), leading: toolbarPinned.leading,
+                trailing: toolbarPinned.trailing, width: width, y: top + toolbarDrawerHeight,
+                height: toolbarMetrics.toolbarRowHeight, inset: 5)
+            // Split around a fold, the row keeps its columns and draws no gaps.
+            let middleKeys = controls.count - toolbarPinned.leading - toolbarPinned.trailing
+            let sections = [toolbarPinned.leading, middleKeys, toolbarPinned.trailing].filter { $0 > 0 }.count
+            toolbarSectionGaps = toolbarColumns == nil ? CGFloat(max(0, sections - 1)) * CGFloat(Model.toolbarSectionGap) : 0
+            for (cap, rect) in zip(controls, controlFrames) { cap.frame = rect.offsetBy(dx: leading, dy: 0) }
+        }
+        layoutToolbarSectionPlates(leading: leading, width: width, top: top)
         if let cap = controls.first(where: { $0.key.action == .toolbar(KeyID.writingAssistance.keyValue) }) {
             writingAssistanceButton.frame = cap.frame
             writingAssistanceButton.isHidden = false
@@ -1585,7 +1844,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             contact.originalDrawerState = toolbarDrawerState
             contact.drawerDrag = KeyboardToolbarDrawerDrag(initialCount: count,
                 origin: contact.windowOrigin, buttonFrame: convert(key.frame, to: window),
-                rowHeight: keyboardHeight.toolbarDrawerRowHeight)
+                rowHeight: toolbarMetrics.toolbarDrawerRowHeight)
             return
         }
         if case .modifier(let mod) = key.key.action {
@@ -1936,7 +2195,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         contacts.removeAll()
         for contact in drawerContacts { finishToolbarDrawerDrag(contact, activate: false) }
         allKeycaps.forEach { $0.finishVisualTransition() }
-        (drawerButtons + toolbarDrawerButtons.flatMap { $0 }).forEach { $0.cancelInteraction() }
+        (drawerButtons + allToolbarRowButtons).forEach { $0.cancelInteraction() }
         writingAssistanceButton.cancelInteraction()
         styleMenuButton.cancelTracking(with: nil)
         keyboardSwitchCap?.pressed = false
@@ -1980,7 +2239,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                   let locks = modifierState.heldSweepLocks(sweep.modifiers) else { continue }
             for modifier in sweep.modifiers { heldLocks[modifier] = locks }
         }
-        for cap in controls + rows.flatMap({ $0 }) + toolbarDrawerButtons.flatMap({ $0 }).map(\.keycap) {
+        for cap in controls + rows.flatMap({ $0 }) + allToolbarRowButtons.map(\.keycap) {
             if cap.key.action == .drawer { cap.selected = toolbarDrawerState != .closed }
             switch cap.key.action {
             case .key("\u{1b}"): cap.setSymbol(glyphsEnabled ? "escape" : nil)
@@ -2014,7 +2273,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                 }
             }
         }
-        for button in toolbarDrawerButtons.flatMap({ $0 }) {
+        for button in allToolbarRowButtons {
             button.refreshAppearance()
         }
     }
@@ -2284,14 +2543,19 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     }
     @discardableResult
     private func drawerButton(_ title: String, subtitle: String? = nil, repeats: Bool = false,
-                              key: Model.Key? = nil, in container: UIView? = nil,
+                              key: Model.Key? = nil, in container: UIView? = nil, feedbackOnRelease: Bool = false,
                               action: @escaping () -> Void) -> TerminalTouchDrawerButton {
         let button = keyboardStyle.makeDrawerButton(
             key: key ?? Model.Key(title: title, action: toolPage == .symbols ? .text(title) : .key(title)),
             subtitle: subtitle, toolbar: container != nil, palette: keycapPalette)
         button.accessibilityLabel = [title, subtitle].compactMap { $0 }.joined(separator: ", ")
-        button.addAction(UIAction { [weak self] _ in self?.feedback() }, for: .touchDown)
-        button.addAction(UIAction { [weak self] _ in guard self?.canSendReclaimingFocus == true else { return }; action() }, for: .touchUpInside)
+        // A scroll can take the touch back, and a key it took back must stay silent.
+        if !feedbackOnRelease { button.addAction(UIAction { [weak self] _ in self?.feedback() }, for: .touchDown) }
+        button.addAction(UIAction { [weak self] _ in
+            guard let self, self.canSendReclaimingFocus else { return }
+            if feedbackOnRelease { self.feedback() }
+            action()
+        }, for: .touchUpInside)
         if repeats { button.enableRepeat { [weak self] in guard self?.canSend == true else { return }; action() } }
         (container ?? drawer).addSubview(button)
         if container == nil { drawerButtons.append(button) }
@@ -2432,14 +2696,14 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
 
     private func layoutToolbarDrawer(_ row: UIScrollView, buttons: [TerminalTouchDrawerButton],
                                      position: Int, leading: CGFloat, width: CGFloat) {
-        let rowHeight = keyboardHeight.toolbarDrawerRowHeight
+        let rowHeight = toolbarMetrics.toolbarDrawerRowHeight
         row.frame = CGRect(x: leading + 5,
             y: contentTop + CGFloat(position) * rowHeight,
             width: max(0, width - 10), height: rowHeight)
         // Snap to the main toolbar row's columns so drawer keys sit under its keys,
         // whether or not the row scrolls. Long titles span whole columns.
-        let unit = toolbarColumns.map { CGFloat($0.unit) }
-            ?? max(1, row.bounds.width / max(1, controls.reduce(0) { $0 + $1.key.weight }))
+        let unit = toolbarColumns.map { CGFloat($0.unit) } ?? toolbarScrollUnit
+            ?? max(1, (row.bounds.width - toolbarSectionGaps) / max(1, controls.reduce(0) { $0 + $1.key.weight }))
         let widths = buttons.map { button -> CGFloat in
             let title = button.keycap.icon.image == nil ? button.keycap.key.title : ""
             let titleWidth = title.count <= 4 ? 0 : (title as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: 13, weight: .medium)]).width + 20
@@ -2584,11 +2848,91 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         }
     }
 
+    /// The keys of one scrolling toolbar row: a drawer, or the main row's middle.
+    /// Main-row modifiers are down from first contact, like the row's fixed keys.
+    private func makeToolbarRowButtons(_ keys: [Model.Key], in row: UIScrollView,
+                                       mainRow: Bool = false) -> [TerminalTouchDrawerButton] {
+        var buttons: [TerminalTouchDrawerButton] = []
+        for key in keys {
+            let repeats: Bool = { if case .key = key.action { return true }; return false }()
+            let heldModifier: Model.Modifier? = {
+                if mainRow, case .modifier(let modifier) = key.action { return modifier }
+                return nil
+            }()
+            let button = drawerButton(key.title, repeats: repeats, key: key, in: row,
+                                      feedbackOnRelease: mainRow && heldModifier == nil) { [weak self] in
+                guard let self, heldModifier == nil else { return }
+                if case .modifier(let modifier) = key.action {
+                    self.modifierState.begin(modifier)
+                    self.modifierState.end(modifier, at: ProcessInfo.processInfo.systemUptime)
+                    self.publishModifiers()
+                } else { self.perform(key) }
+            }
+            if let heldModifier { trackHeldModifier(heldModifier, on: button) }
+            if mainRow { addHoldAction(for: key, to: button) }
+            button.interactionMode = toolbarInteractionMode
+            if key.action == .joystick {
+                // Overflow puts the joystick here in narrow cards; its drags must not scroll the row.
+                let drag = UIPanGestureRecognizer(target: self, action: #selector(dragDrawerJoystick(_:)))
+                button.addGestureRecognizer(drag)
+                row.panGestureRecognizer.require(toFail: drag)
+            }
+            button.accessibilityLabel = key.accessibility ?? key.title
+            if key.action == .toolbar(KeyID.writingAssistance.keyValue) {
+                button.showsMenuAsPrimaryAction = true
+                button.menu = writingAssistanceMenu()
+            }
+            buttons.append(button)
+        }
+        return buttons
+    }
+
+    /// As long as a fixed toolbar key waits before its hold acts.
+    private static let toolbarKeyHoldDelay: TimeInterval = 0.42
+
+    /// The holds a fixed main-row key answers, for the same key while it scrolls.
+    private func addHoldAction(for key: Model.Key, to button: TerminalTouchDrawerButton) {
+        let held: (() -> Void)?
+        switch key.action {
+        case .dismiss:
+            held = { [weak self] in self?.onPinHidden?() }
+        case .toolbar(let action) where action == KeyID.typePassword.keyValue:
+            held = { [weak self] in self?.onToolbarAction?(KeyID.typePasswordReturnKeyValue) }
+        default:
+            held = nil
+        }
+        guard let held else { return }
+        button.enableHold(after: Self.toolbarKeyHoldDelay) { [weak self] in
+            guard let self, self.canSend else { return }
+            self.cancelInteraction()
+            held()
+        }
+    }
+
+    /// Holds a modifier from touch-down to release, so a key typed meanwhile
+    /// chords with it; a plain tap still latches, and a second locks.
+    private func trackHeldModifier(_ modifier: Model.Modifier, on button: TerminalTouchDrawerButton) {
+        button.addAction(UIAction { [weak self] _ in
+            guard let self, self.canSendReclaimingFocus,
+                  self.toolbarHeldModifiers.insert(modifier).inserted else { return }
+            self.modifierState.begin(modifier)
+            self.publishModifiers()
+        }, for: .touchDown)
+        let release: (Bool) -> Void = { [weak self] cancelled in
+            guard let self, self.toolbarHeldModifiers.remove(modifier) != nil else { return }
+            self.modifierState.end(modifier, at: ProcessInfo.processInfo.systemUptime, cancelled: cancelled)
+            self.publishModifiers()
+        }
+        button.addAction(UIAction { _ in release(false) }, for: .touchUpInside)
+        button.addAction(UIAction { _ in release(true) }, for: [.touchUpOutside, .touchCancel])
+        button.onInteractionCancelled = { release(true) }
+    }
+
     /// Reuse rows during a toggle; configuration and appearance changes rebuild
     /// them. The caller keeps outgoing rows alive only for their exit animation.
     @discardableResult
     private func rebuildToolbarDrawers(preservingRows: Bool = false) -> [UIScrollView] {
-        toolbarDrawerButtons.flatMap { $0 }.forEach { $0.cancelRepeat() }
+        allToolbarRowButtons.forEach { $0.cancelRepeat() }
         let previousRows = Dictionary(uniqueKeysWithValues: zip(toolbarDrawerIndices, zip(toolbarDrawerRows, toolbarDrawerButtons)))
         if preservingRows {
             toolbarDrawerCache.merge(previousRows) { _, current in current }
@@ -2622,31 +2966,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             row.alwaysBounceHorizontal = false
             addSubview(row)
             toolbarDrawerRows.append(row)
-            var buttons: [TerminalTouchDrawerButton] = []
-            for key in toolbarDrawerKeys[index] {
-                let repeats: Bool = { if case .key = key.action { return true }; return false }()
-                let button = drawerButton(key.title, repeats: repeats, key: key, in: row) { [weak self] in
-                    guard let self else { return }
-                    if case .modifier(let modifier) = key.action {
-                        self.modifierState.begin(modifier)
-                        self.modifierState.end(modifier, at: ProcessInfo.processInfo.systemUptime)
-                        self.publishModifiers()
-                    } else { self.perform(key) }
-                }
-                button.interactionMode = toolbarInteractionMode
-                if key.action == .joystick {
-                    // Overflow puts the joystick here in narrow cards; its drags must not scroll the row.
-                    let drag = UIPanGestureRecognizer(target: self, action: #selector(dragDrawerJoystick(_:)))
-                    button.addGestureRecognizer(drag)
-                    row.panGestureRecognizer.require(toFail: drag)
-                }
-                button.accessibilityLabel = key.accessibility ?? key.title
-                if key.action == .toolbar(KeyID.writingAssistance.keyValue) {
-                    button.showsMenuAsPrimaryAction = true
-                    button.menu = writingAssistanceMenu()
-                }
-                buttons.append(button)
-            }
+            let buttons = makeToolbarRowButtons(toolbarDrawerKeys[index], in: row)
             toolbarDrawerButtons.append(buttons)
             toolbarDrawerCache[index] = (row, buttons)
         }
@@ -2744,4 +3064,14 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     }
 }
 
+extension TerminalTouchKeyboardView: UIScrollViewDelegate {
+    /// The scrolling toolbar row comes to rest on a whole key.
+    func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint,
+                                   targetContentOffset: UnsafeMutablePointer<CGPoint>) {
+        guard scrollView === toolbarMiddleRow, let unit = toolbarScrollUnit, unit > 0 else { return }
+        let furthest = max(0, scrollView.contentSize.width - scrollView.bounds.width)
+        let snapped = (targetContentOffset.pointee.x / unit).rounded() * unit
+        targetContentOffset.pointee.x = min(furthest, max(0, snapped))
+    }
+}
 #endif
