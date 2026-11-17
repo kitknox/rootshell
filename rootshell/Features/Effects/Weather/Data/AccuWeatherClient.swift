@@ -8,6 +8,8 @@ import Foundation
 
 nonisolated struct AccuWeatherClient {
     private static let host = URL(string: "https://api.accuweather.com")!
+    /// MinuteCast covers minutes 0 through 119.
+    private static let minuteCastHorizon = 120
 
     let apiKey: String
     /// Nil sends an empty header; leaving it unset would let CFNetwork name the app.
@@ -146,11 +148,13 @@ nonisolated struct AccuWeatherClient {
         }
         if segments.isEmpty {
             for summary in response.Summaries ?? [] {
-                guard let first = summary.StartMinute, let last = summary.EndMinute, last >= first else { continue }
+                guard let first = summary.StartMinute, let last = summary.EndMinute,
+                      (0..<minuteCastHorizon).contains(first), last >= first else { continue }
+                let end = min(last, minuteCastHorizon - 1) + 1
                 let reading = AccuWeatherConditionMapping.nowcastReading(type: summary.type, typeID: summary.TypeId, rate: nil)?
                     .refined(byPhrase: summary.MinuteText)
                 segments.append(.init(start: base.addingTimeInterval(Double(first) * 60),
-                                      end: base.addingTimeInterval(Double(last + 1) * 60),
+                                      end: base.addingTimeInterval(Double(end) * 60),
                                       kind: reading?.kind, precipitationRate: reading?.precipitationRate))
             }
         }

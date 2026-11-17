@@ -703,6 +703,18 @@ final class LiveWeatherLogicTests: XCTestCase {
         XCTAssertNil(nowcast.outlook(at: base.addingTimeInterval(4_000)))
     }
 
+    func testAccuWeatherNowcastBoundsSummaryMinutes() throws {
+        let base = Date(timeIntervalSince1970: 1_794_888_000)
+        let json = """
+        {"Summaries":[{"StartMinute":0,"EndMinute":9223372036854775807,"Type":"RAIN","TypeId":1},
+          {"StartMinute":-5,"EndMinute":3,"Type":"RAIN","TypeId":1},
+          {"StartMinute":200,"EndMinute":300,"Type":"RAIN","TypeId":1}]}
+        """
+        let nowcast = try AccuWeatherClient.nowcast(from: Data(json.utf8), now: base)
+        XCTAssertEqual(nowcast.segments.map(\.start), [base])
+        XCTAssertEqual(nowcast.segments.map(\.end), [base.addingTimeInterval(7_200)])
+    }
+
     func testAccuWeatherNowcastFromRadarIntervals() throws {
         let base = Date(timeIntervalSince1970: 1_794_888_000)
         let json = """
