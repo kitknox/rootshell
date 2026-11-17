@@ -17,11 +17,7 @@ import rootshellVNC
 final class RemoteScreenHUDKeysModel {
     /// The toolbar's own key metrics for the pane's size class.
     struct Metrics: Equatable {
-        var keyCount = 0
-        var edgePadding: CGFloat = 0
-        /// One key's width where the bar is fitted to its keys.
-        var slotWidth: CGFloat = 46
-        var minimumSlotWidth: CGFloat = 30
+        var bar = ToolbarHostBarGeometry()
         var rowHeight: CGFloat = 46
         var symbolPointSize: CGFloat = 17
     }
@@ -62,16 +58,20 @@ final class RemoteScreenHUDKeysModel {
     var showsKeysButton: Bool { !KeyboardTracker.shared.isHardwareKeyboard }
 
     /// Buttons over the toolbar's trailing end: fold, keys, and the HUD menu.
-    private var trailingButtonCount: CGFloat { showsKeysButton ? 3 : 2 }
+    private var trailingButtonCount: Int { showsKeysButton ? 3 : 2 }
+
+    /// The bar carries the toolbar row now.
+    private var showsStrip: Bool { stripAvailable && keysExpanded }
 
     /// Pinned along the bottom, with the screen fitted above it.
-    var docksToBottom: Bool { !isFloating && stripAvailable && keysExpanded }
+    var docksToBottom: Bool { !isFloating && showsStrip }
 
-    /// Docked, the keys share the full width; floating, each keeps its natural size.
+    /// Docked, the keys share the full width; floating, each keeps its natural
+    /// size until the bar runs out of room, then they share it as docked.
     func slotWidth(availableWidth: CGFloat) -> CGFloat {
-        guard docksToBottom else { return metrics.slotWidth }
-        let slots = CGFloat(metrics.keyCount) + trailingButtonCount
-        return max(metrics.minimumSlotWidth, (availableWidth - metrics.edgePadding * 2) / slots)
+        guard showsStrip else { return metrics.bar.slotWidth }
+        return metrics.bar.slotWidth(availableWidth: availableWidth, buttons: trailingButtonCount,
+                                     docked: docksToBottom)
     }
 
     func buttonStyle(availableWidth: CGFloat) -> VNCHUDButtonStyle {
@@ -81,15 +81,12 @@ final class RemoteScreenHUDKeysModel {
     }
 
     func trailingReserve(availableWidth: CGFloat) -> CGFloat {
-        slotWidth(availableWidth: availableWidth) * trailingButtonCount
+        slotWidth(availableWidth: availableWidth) * CGFloat(trailingButtonCount)
     }
 
     /// A narrow pane squeezes the keys, then moves the rest to a drawer.
     func barWidth(availableWidth: CGFloat) -> CGFloat {
-        guard !docksToBottom else { return availableWidth }
-        let fitted = CGFloat(metrics.keyCount) * metrics.slotWidth + metrics.edgePadding * 2
-            + trailingReserve(availableWidth: availableWidth)
-        return min(availableWidth, fitted)
+        metrics.bar.barWidth(availableWidth: availableWidth, buttons: trailingButtonCount, docked: docksToBottom)
     }
 }
 

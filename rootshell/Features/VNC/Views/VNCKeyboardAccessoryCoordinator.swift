@@ -482,10 +482,7 @@ extension VNCKeyboardAccessoryCoordinator {
         guard pane != nil, let toolbar = controller.keyboardAccessory?.toolbarView else { return }
         let sizes = keyboardSizes
         let metrics = RemoteScreenHUDKeysModel.Metrics(
-            keyCount: toolbar.mainRowKeyCount(forHostChrome: true),
-            edgePadding: toolbar.mainRowEdgePadding,
-            slotWidth: sizes.button.iconWidth,
-            minimumSlotWidth: sizes.button.normalWidth,
+            bar: toolbar.hostBarGeometry(),
             rowHeight: sizes.toolbar.height,
             symbolPointSize: sizes.button.symbolSize)
         let height = toolbar.intrinsicContentSize.height

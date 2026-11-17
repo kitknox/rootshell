@@ -762,6 +762,61 @@ final class TerminalTouchKeyboardTests: XCTestCase {
                                                         scrolls: true), 6)
     }
 
+    func testFittedWidthKeepsEveryKeyOnTheRow() {
+        // Each preset's drawn and counted key widths, at whole and fractional scales.
+        let presets: [(drawn: CGFloat, counted: CGFloat)] = [(48, 33), (44, 30), (58, 48)]
+        for scale: CGFloat in [0.85, 1, 1.15, 1.3, 1.37] {
+            for preset in presets {
+                for minimum: CGFloat in [0, 60, 140] {
+                    for spacing: CGFloat in [0, 6] {
+                        let drawn = max(preset.drawn * scale, minimum)
+                        let counted = max(preset.counted * scale, minimum)
+                        for keys in 1...16 {
+                            let width = KeyboardToolbarOverflow.fittedWidth(
+                                keys: keys, keyWidth: drawn, countedKeyWidth: counted, spacing: spacing)
+                            let usual = KeyboardToolbarOverflow.keysFitting(
+                                width: width, keyWidth: preset.counted * scale, spacing: spacing)
+                            let widened = KeyboardToolbarOverflow.keysFitting(
+                                width: width, keyWidth: counted, spacing: spacing)
+                            XCTAssertGreaterThanOrEqual(widened, keys)
+                            for pinned in 0...2 {
+                                XCTAssertGreaterThanOrEqual(KeyboardToolbarOverflow.capacity(
+                                    usual: usual, widened: widened, pinned: pinned, reservedSlots: 1,
+                                    drawerToggle: true), keys)
+                            }
+                            // No wider than the keys drawn, give or take the rounding guard.
+                            XCTAssertLessThanOrEqual(
+                                width, CGFloat(keys) * drawn + CGFloat(keys - 1) * spacing + 0.5 + 1e-6)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func testFloatingHostBarFitsItsKeysThenSharesTheWidthLikeDocked() {
+        let row: CGFloat = 9 * 48 + 4.5
+        let bar = ToolbarHostBarGeometry(keyCount: 9, edgePadding: 2, fittedRowWidth: row,
+                                         slotWidth: 48, minimumSlotWidth: 33)
+        // With room to spare it fits its keys, buttons at their own width.
+        XCTAssertEqual(bar.barWidth(availableWidth: 1000, buttons: 3, docked: false), row + 144)
+        XCTAssertEqual(bar.slotWidth(availableWidth: 1000, buttons: 3, docked: false), 48)
+        // Docked, keys and buttons share the full width.
+        XCTAssertEqual(bar.barWidth(availableWidth: 1000, buttons: 3, docked: true), 1000)
+        XCTAssertEqual(bar.slotWidth(availableWidth: 1000, buttons: 3, docked: true), 83)
+        // Short of room, floating shares the width exactly as docked does.
+        for available: CGFloat in [300, 366, 450, 560] {
+            XCTAssertEqual(bar.barWidth(availableWidth: available, buttons: 3, docked: false), available)
+            XCTAssertEqual(bar.slotWidth(availableWidth: available, buttons: 3, docked: false),
+                           bar.slotWidth(availableWidth: available, buttons: 3, docked: true))
+        }
+        // No jump as the room runs out.
+        XCTAssertEqual(bar.slotWidth(availableWidth: row + 144, buttons: 3, docked: false), 48)
+        XCTAssertEqual(bar.slotWidth(availableWidth: row + 143, buttons: 3, docked: false), 48, accuracy: 0.5)
+        // Fewer buttons, a narrower bar.
+        XCTAssertEqual(bar.barWidth(availableWidth: 1000, buttons: 2, docked: false), row + 96)
+    }
+
     func testPinnedToolbarSectionsStandApart() {
         let keys = (0..<5).map { Model.Key(title: "\($0)", action: .text("\($0)")) }
         let gap = Model.toolbarSectionGap

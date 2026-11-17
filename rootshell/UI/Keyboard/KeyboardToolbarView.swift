@@ -678,6 +678,9 @@ class KeyboardToolbarView: UIView {
 
     /// Track last known width to detect meaningful size changes
     private var lastBuiltWidth: CGFloat = 0
+    /// The main row's capacity at the last build, so a smaller width change
+    /// that moves a key between the row and the drawer still rebuilds.
+    private var lastBuiltCapacity = 0
     private var effectiveDrawerRows: [[KeySlot]] = [[]]
     private var groupDividers: [UIView] = []
 
@@ -692,7 +695,8 @@ class KeyboardToolbarView: UIView {
     private var sectionPlates: [ToolbarPlateView] = []
     /// Space between two sections' keys. Each section's plate reaches
     /// `sectionOutset` into it, so keys sit clear of the rounded ends.
-    private var sectionGap: CGFloat { showsKeycaps ? 18 : 12 }
+    private var sectionGap: CGFloat { Self.sectionGap(keycaps: showsKeycaps) }
+    private static func sectionGap(keycaps: Bool) -> CGFloat { keycaps ? 18 : 12 }
     private var sectionOutset: CGFloat { showsKeycaps ? 7 : 4 }
     /// The layout pins keys, so the row is drawn as separate sections.
     private var layoutPinsKeys = false
@@ -755,8 +759,11 @@ class KeyboardToolbarView: UIView {
     private func currentEdgePadding() -> CGFloat {
         // A plate's rounded ends need room before the first and last key.
         if !usesHostChrome, usesGlassPlate || layoutPinsKeys { return 2 + sectionOutset }
-        return isPhoneLandscape ? 6 : 2
+        return plainEdgePadding
     }
+
+    /// Edge padding with no plate of our own, as inside a host's bar.
+    private var plainEdgePadding: CGFloat { isPhoneLandscape ? 6 : 2 }
 
     /// The row sits inside a host's own glass (a remote screen's HUD): no plate,
     /// no window insets, and drawers open in place, since the host grows with them.
@@ -795,19 +802,71 @@ class KeyboardToolbarView: UIView {
     enum PreviewDrawers { case closed, open }
     var previewDrawers: PreviewDrawers?
 
-    /// Keys the main row shows given unlimited width, for a host that fits itself to them.
-    func mainRowKeyCount(forHostChrome: Bool) -> Int {
-        let reserved = onTouchKeyboardRequested == nil ? 0 : 1
-        let layout = KeyboardToolbarManager.shared.effectiveLayout(
-            for: context, availableWidth: 100_000, reservedMainRowSlots: reserved, sizes: sizes)
-        return layout.main.filter { !(forHostChrome && $0 == .builtIn(.dismiss)) }.count + reserved
+    /// Slots a host's bar draws nothing for: it has its own keyboard button.
+    private static let hostHiddenSlots: Set<KeySlot> = [.builtIn(.dismiss)]
+
+    /// Slots this row draws nothing for, which take no room on it either.
+    private var omittedSlots: Set<KeySlot> { usesHostChrome ? Self.hostHiddenSlots : [] }
+
+    /// The terminal keyboard's switch takes a main-row slot of its own.
+    private var reservedMainRowSlots: Int { onTouchKeyboardRequested == nil ? 0 : 1 }
+
+    /// Pinned sections the layout has; each stands a gap apart from the middle.
+    private var configuredPinnedSections: Int {
+        let layout = KeyboardToolbarManager.shared.layout(for: context)
+        return [layout.pinnedLeading, layout.pinnedTrailing].filter { $0?.isEmpty == false }.count
+    }
+
+    /// How this row sizes inside a remote screen's bar, at its current sizes
+    /// and layout, whether or not it is in one now.
+    func hostBarGeometry() -> ToolbarHostBarGeometry {
+        let reserved = reservedMainRowSlots
+        func layout(keysWidth: CGFloat) -> EffectiveToolbarLayout {
+            KeyboardToolbarManager.shared.effectiveLayout(for: context, availableWidth: keysWidth,
+                reservedMainRowSlots: reserved, sizes: sizes, omitting: Self.hostHiddenSlots)
+        }
+        let keyCount = layout(keysWidth: 100_000).main.count + reserved
+        let minimum = CGFloat(KeyboardToolbarSize.currentMinimumKeyWidth)
+        let keyWidth = max(sizes.button.iconWidth, minimum)
+        var keysWidth = KeyboardToolbarOverflow.fittedWidth(keys: keyCount, keyWidth: keyWidth,
+            countedKeyWidth: max(sizes.button.normalWidth, minimum), spacing: sizes.toolbar.spacing)
+        // The partition has the last word: widen a key at a time until it keeps every key.
+        for _ in 0..<4 {
+            let fitted = layout(keysWidth: keysWidth)
+            if fitted.visibleKeys == nil, fitted.main.count + reserved >= keyCount { break }
+            keysWidth += keyWidth
+        }
+        let edge = plainEdgePadding
+        let gaps = CGFloat(configuredPinnedSections) * Self.sectionGap(keycaps: false)
+        return ToolbarHostBarGeometry(
+            keyCount: keyCount, edgePadding: edge, fittedRowWidth: keysWidth + gaps + edge * 2,
+            slotWidth: sizes.button.iconWidth, minimumSlotWidth: sizes.button.normalWidth)
+    }
+
+    /// Configured main-row keys the row holds at `width`, beside a host's
+    /// buttons `reserve` wide. Keys this row omits fit at no cost.
+    func mainRowCapacity(width: CGFloat, hostTrailingReserve reserve: CGFloat) -> Int {
+        let manager = KeyboardToolbarManager.shared
+        let omitted = omittedSlots
+        let capacity = manager.mainRowCapacity(
+            for: context, availableWidth: mainRowKeysWidth(width: width, hostTrailingReserve: reserve),
+            reservedMainRowSlots: reservedMainRowSlots, sizes: sizes, omitting: omitted)
+        guard !omitted.isEmpty else { return capacity }
+        let layout = manager.layout(for: context)
+        let mainRow = (layout.pinnedLeading ?? []) + layout.mainRow + (layout.pinnedTrailing ?? [])
+        return capacity + manager.validSlots(mainRow, in: layout).filter(omitted.contains).count
+    }
+
+    /// The main row's width for keys, once its padding, the host's buttons
+    /// and the gaps beside pinned sections are taken out.
+    private func mainRowKeysWidth(width: CGFloat, hostTrailingReserve reserve: CGFloat) -> CGFloat {
+        let chromeInsets = currentChromeHorizontalInsets()
+        return width - currentEdgePadding() * 2 - chromeInsets.left - chromeInsets.right - reserve
+            - CGFloat(configuredPinnedSections) * sectionGap
     }
 
     /// The main row's height at the sizes this toolbar was last given.
     var rowHeight: CGFloat { sizes.toolbar.height }
-
-    /// Padding at each end of the main row.
-    var mainRowEdgePadding: CGFloat { currentEdgePadding() }
 
     /// False where a touch on `view` drives a drag of its own: modifier
     /// sweeps, the joystick, the drawer toggle, swipe keys, scrolling rows.
@@ -1050,8 +1109,10 @@ class KeyboardToolbarView: UIView {
         let width = bounds.width
         guard width > 0 else { return }
 
-        // Rebuild buttons when width changes meaningfully (e.g. rotation)
-        if abs(width - lastBuiltWidth) > 10 {
+        // Rebuild when the width changes meaningfully (e.g. rotation), or by
+        // enough to move a key between the row and the drawer.
+        if abs(width - lastBuiltWidth) > 10
+            || mainRowCapacity(width: width, hostTrailingReserve: hostTrailingReserve) != lastBuiltCapacity {
             rebuildForCurrentWidth()
         }
         // Small width changes skip the rebuild but still move the sections.
@@ -1092,10 +1153,7 @@ class KeyboardToolbarView: UIView {
         lastBuiltWidth = width
 
         let manager = KeyboardToolbarManager.shared
-        let config = manager.layout(for: context)
-        // Each pinned section stands apart from the middle by a gap.
-        let pinnedSections = [config.pinnedLeading, config.pinnedTrailing].filter { $0?.isEmpty == false }.count
-        layoutPinsKeys = pinnedSections > 0
+        layoutPinsKeys = configuredPinnedSections > 0
         // The toolbar style can change with the layout.
         updateInsetsForCurrentTraits()
         updatePlateAppearance()
@@ -1116,12 +1174,10 @@ class KeyboardToolbarView: UIView {
         extraKeysToggleButton = nil
 
         // Build main row from effective slots
-        let edgePadding = currentEdgePadding()
-        let chromeInsets = currentChromeHorizontalInsets()
-        let availableWidth = width - edgePadding * 2 - chromeInsets.left - chromeInsets.right - hostTrailingReserve
-            - CGFloat(pinnedSections) * sectionGap
-        let layout = manager.effectiveLayout(for: context, availableWidth: availableWidth,
-            reservedMainRowSlots: onTouchKeyboardRequested == nil ? 0 : 1, sizes: sizes)
+        let layout = manager.effectiveLayout(
+            for: context, availableWidth: mainRowKeysWidth(width: width, hostTrailingReserve: hostTrailingReserve),
+            reservedMainRowSlots: reservedMainRowSlots, sizes: sizes, omitting: omittedSlots)
+        lastBuiltCapacity = mainRowCapacity(width: width, hostTrailingReserve: hostTrailingReserve)
         effectiveDrawerRows = layout.drawers
         // A layout rebuild can change a row's contents. Ordinary drawer count
         // changes reuse these views and their horizontal scroll positions.

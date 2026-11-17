@@ -663,17 +663,17 @@ class KeyboardToolbarManager {
 
     /// How many standard buttons fit in the main row before runtime additions.
     func mainRowCapacity(availableWidth: CGFloat, sizes: KeyboardSizes, minimumKeyWidth: Double = 0) -> Int {
-        let buttonWidth = max(sizes.button.normalWidth, CGFloat(minimumKeyWidth)) + sizes.toolbar.spacing
-        guard buttonWidth > 0 else { return 0 }
-        return max(1, Int((availableWidth + sizes.toolbar.spacing) / buttonWidth))
+        KeyboardToolbarOverflow.keysFitting(width: availableWidth,
+            keyWidth: max(sizes.button.normalWidth, CGFloat(minimumKeyWidth)), spacing: sizes.toolbar.spacing)
     }
 
     /// A context's main-row capacity: its minimum key width, less whatever
-    /// its pinned keys need back.
+    /// its pinned keys need back. `omitting` slots take no room.
     func mainRowCapacity(for context: ToolbarContext, availableWidth: CGFloat, reservedMainRowSlots: Int = 0,
-                         sizes: KeyboardSizes) -> Int {
+                         sizes: KeyboardSizes, omitting omitted: Set<KeySlot> = []) -> Int {
         let layout = self.layout(for: context)
         let pinned = validSlots((layout.pinnedLeading ?? []) + (layout.pinnedTrailing ?? []), in: layout)
+            .filter { !omitted.contains($0) }
         return KeyboardToolbarOverflow.capacity(
             usual: mainRowCapacity(availableWidth: availableWidth, sizes: sizes),
             widened: mainRowCapacity(availableWidth: availableWidth, sizes: sizes,
@@ -685,16 +685,20 @@ class KeyboardToolbarManager {
 
     /// Main row and drawers must share the same capacity and reservation. A
     /// displaced key leads the first drawer, ahead of its configured contents.
+    /// `omitting` slots are left out entirely, for a row that draws nothing for them.
     func effectiveLayout(for context: ToolbarContext, availableWidth: CGFloat, reservedMainRowSlots: Int = 0,
-                         sizes: KeyboardSizes) -> EffectiveToolbarLayout {
+                         sizes: KeyboardSizes, omitting omitted: Set<KeySlot> = []) -> EffectiveToolbarLayout {
         let layout = self.layout(for: context)
-        let leading = validSlots(layout.pinnedLeading ?? [], in: layout)
-        let trailing = validSlots(layout.pinnedTrailing ?? [], in: layout)
-        let main = validSlots(layout.mainRow, in: layout)
-        let drawers = layout.drawerRows.map { validSlots($0, in: layout) }
+        func slots(_ row: [KeySlot]) -> [KeySlot] {
+            validSlots(row, in: layout).filter { !omitted.contains($0) }
+        }
+        let leading = slots(layout.pinnedLeading ?? [])
+        let trailing = slots(layout.pinnedTrailing ?? [])
+        let main = slots(layout.mainRow)
+        let drawers = layout.drawerRows.map(slots)
         let keepsDrawerToggle = !layout.hiddenKeys.contains(.drawerToggle)
         let capacity = mainRowCapacity(for: context, availableWidth: availableWidth,
-                                       reservedMainRowSlots: reservedMainRowSlots, sizes: sizes)
+                                       reservedMainRowSlots: reservedMainRowSlots, sizes: sizes, omitting: omitted)
         if layout.mainRowScrolls, let scrolling = KeyboardToolbarOverflow.scrollingLayout(
             leading: leading, main: main, trailing: trailing, drawers: drawers, capacity: capacity,
             reservedSlots: reservedMainRowSlots, drawerToggle: .builtIn(.drawerToggle),

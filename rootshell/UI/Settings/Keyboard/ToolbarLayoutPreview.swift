@@ -304,21 +304,19 @@ final class ToolbarLayoutPreviewHostView: UIView {
             }
         }
 
-        let edge = toolbar.mainRowEdgePadding
+        var edge: CGFloat = 0
         var barWidth = width
         var reserve: CGFloat = 0
         // What the bar's buttons take once the keys are squeezed to their narrowest.
         var narrowestReserve: CGFloat = 0
         if case .glassBar(let floating) = surface {
-            // As the remote screen's bar sizes itself: fitted to its keys while
-            // floating, sharing the full width with them when docked.
-            let buttons = CGFloat(Self.hostButtonSymbols.count)
-            let keys = CGFloat(toolbar.mainRowKeyCount(forHostChrome: true))
-            let slot = floating ? sizes.button.iconWidth
-                : max(sizes.button.normalWidth, (width - edge * 2) / (keys + buttons))
-            reserve = slot * buttons
-            narrowestReserve = (floating ? sizes.button.iconWidth : sizes.button.normalWidth) * buttons
-            if floating { barWidth = min(width, keys * slot + edge * 2 + reserve) }
+            // As the remote screen's bar sizes itself.
+            let bar = toolbar.hostBarGeometry()
+            let buttons = Self.hostButtonSymbols.count
+            edge = bar.edgePadding
+            reserve = bar.slotWidth(availableWidth: width, buttons: buttons, docked: !floating) * CGFloat(buttons)
+            narrowestReserve = bar.minimumSlotWidth * CGFloat(buttons)
+            barWidth = bar.barWidth(availableWidth: width, buttons: buttons, docked: !floating)
             if abs(toolbar.hostTrailingReserve - reserve) > 0.5 { toolbar.hostTrailingReserve = reserve }
         }
 
@@ -332,8 +330,7 @@ final class ToolbarLayoutPreviewHostView: UIView {
             hostButtons.frame = CGRect(x: barWidth - edge - reserve, y: height - sizes.toolbar.height,
                                        width: reserve, height: sizes.toolbar.height)
         }
-        let capacity = KeyboardToolbarManager.shared.mainRowCapacity(
-            for: context, availableWidth: width - edge * 2 - narrowestReserve, sizes: sizes)
+        let capacity = toolbar.mainRowCapacity(width: width, hostTrailingReserve: narrowestReserve)
         return (CGSize(width: barWidth, height: height), capacity)
     }
 
