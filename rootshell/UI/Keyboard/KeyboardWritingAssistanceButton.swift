@@ -1,5 +1,6 @@
 import UIKit
 import Combine
+import os
 
 /// A native primary-action menu inside the toolbar's standard-sized key. The
 /// child consumes touches, so selecting a mode never emits a terminal key.
@@ -13,6 +14,9 @@ final class KeyboardWritingAssistanceButton: KeyboardSymbolButton {
         menuButton.translatesAutoresizingMaskIntoConstraints = false
         menuButton.showsMenuAsPrimaryAction = true
         menuButton.accessibilityLabel = String(localized: "Writing Assistance")
+        menuButton.addAction(UIAction { _ in
+            Ghostty.logger.debug("KeyboardToolbar: writing assistance menu opened")
+        }, for: .menuActionTriggered)
         addSubview(menuButton)
         NSLayoutConstraint.activate([
             menuButton.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -35,6 +39,7 @@ final class KeyboardWritingAssistanceButton: KeyboardSymbolButton {
         menuButton.menu = UIMenu(children: TerminalWritingAssistanceMode.allCases.map { choice in
             UIAction(title: choice.title, image: UIImage(systemName: choice.icon),
                      state: choice == mode ? .on : .off) { _ in
+                Ghostty.logger.debug("KeyboardToolbar: writing assistance mode selected, \(choice.title, privacy: .public)")
                 SettingsStore.shared.set(Settings.Keyboard.writingAssistance, choice)
             }
         })
