@@ -3592,13 +3592,15 @@ extension Ghostty.TerminalView {
         let topY = min(metrics.startPoint.y, metrics.endPoint.y)
         let bottomY = max(metrics.startPoint.y, metrics.endPoint.y) + cellHeight
 
+        // The band drawn under the toolbar and keyboard is no place for the menu.
+        let bottomLimit = bounds.height - bottomUnderlap - verticalInset
         var anchor = CGPoint(x: anchorX, y: topY - menuGap)
         if anchor.y < verticalInset {
-            anchor.y = min(bounds.height - verticalInset, bottomY + menuGap)
+            anchor.y = min(bottomLimit, bottomY + menuGap)
         }
 
         anchor.x = min(max(anchor.x, horizontalInset), bounds.width - horizontalInset)
-        anchor.y = min(max(anchor.y, verticalInset), bounds.height - verticalInset)
+        anchor.y = min(max(anchor.y, verticalInset), bottomLimit)
         return anchor
     }
 

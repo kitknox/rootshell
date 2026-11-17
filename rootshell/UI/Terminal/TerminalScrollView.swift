@@ -183,6 +183,51 @@ extension Ghostty {
     /// Terminal view top constraint (updated to follow scroll position)
     private var terminalTopConstraint: NSLayoutConstraint?
 
+    private var scrollViewBottomConstraint: NSLayoutConstraint?
+
+    /// How far the scroll view, and the terminal in it, reach below this view:
+    /// under a glass toolbar and the keyboard. The terminal insets its grid by as
+    /// much, so only scrollback is drawn there. Nothing here clips that band.
+    var bottomUnderlap: CGFloat = 0 {
+        didSet {
+            guard bottomUnderlap != oldValue else { return }
+            scrollViewBottomConstraint?.constant = bottomUnderlap
+            scrollView.verticalScrollIndicatorInsets.bottom = bottomUnderlap
+            terminalView.bottomUnderlap = bottomUnderlap
+            applyCardClip()
+        }
+    }
+
+    /// A rounded pane card clips to its shape. With an underlap the shape reaches
+    /// on down under the toolbar and keyboard, so scrollback is not cut at the pane.
+    var clipsToCard = false {
+        didSet { if clipsToCard != oldValue { applyCardClip() } }
+    }
+    private lazy var cardMask = CAShapeLayer()
+
+    private func applyCardClip() {
+        guard clipsToCard, bottomUnderlap > 0 else {
+            layer.mask = nil
+            clipsToBounds = clipsToCard
+            return
+        }
+        clipsToBounds = false
+        var shape = bounds
+        shape.size.height += bottomUnderlap
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        cardMask.frame = bounds
+        cardMask.path = UIBezierPath(roundedRect: CGRect(origin: .zero, size: shape.size),
+                                     cornerRadius: PaneCardStyle.cornerRadius).cgPath
+        CATransaction.commit()
+        if layer.mask !== cardMask { layer.mask = cardMask }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if layer.mask === cardMask { applyCardClip() }
+    }
+
     /// Progress bar view (for OSC 9;4 progress indicators)
     private var progressBarView: ProgressBarView?
 
@@ -606,11 +651,13 @@ extension Ghostty {
 
         addSubview(scrollView)
 
+        let bottom = scrollView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: bottomUnderlap)
+        scrollViewBottomConstraint = bottom
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: topAnchor),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor)
+            bottom
         ])
     }
 

@@ -51,6 +51,10 @@ private struct TerminalTopSafeEdgeKey: EnvironmentKey {
     static let defaultValue: CGFloat = 0
 }
 
+private struct TerminalKeyboardUnderlapKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
 extension EnvironmentValues {
     var duoLayout: DuoLayoutContext {
         get { self[DuoLayoutContextKey.self] }
@@ -62,6 +66,13 @@ extension EnvironmentValues {
     var terminalTopSafeEdge: CGFloat {
         get { self[TerminalTopSafeEdgeKey.self] }
         set { self[TerminalTopSafeEdgeKey.self] = newValue }
+    }
+
+    /// How far the terminal's bottom panes draw below it, under a glass toolbar
+    /// and the keyboard, so scrollback slides under them; 0 otherwise.
+    var terminalKeyboardUnderlap: CGFloat {
+        get { self[TerminalKeyboardUnderlapKey.self] }
+        set { self[TerminalKeyboardUnderlapKey.self] = newValue }
     }
 }
 

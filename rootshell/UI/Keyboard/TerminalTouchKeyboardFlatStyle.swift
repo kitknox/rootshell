@@ -57,7 +57,6 @@ final class TerminalTouchFlatKeycap: TerminalTouchKeycap {
         }
     }
     override func updateColor() {
-        let character: Bool = { if case .text = key.action { return true }; return false }()
         let selected = self.selected, pressed = self.pressed, toolbarKey = self.toolbarKey
         // A keyboard can acquire its final appearance after attachment. Do not
         // mix a light-only background with a dynamically changing .label color.
@@ -66,7 +65,7 @@ final class TerminalTouchFlatKeycap: TerminalTouchKeycap {
                 return pressed ? UIColor.label.resolvedColor(with: traits).withAlphaComponent(0.12) : .clear
             }
             let colors = TerminalTouchKeyboardModel.keyColors(dark: traits.userInterfaceStyle == .dark,
-                character: character, pressed: pressed, selected: selected)
+                pressed: pressed, selected: selected)
             if traits.userInterfaceStyle == .dark, !selected {
                 return UIColor(red: colors.background, green: colors.background, blue: colors.background + 4 / 255, alpha: 1)
             }
@@ -74,7 +73,7 @@ final class TerminalTouchFlatKeycap: TerminalTouchKeycap {
         }
         var ink = UIColor { traits in
             let colors = TerminalTouchKeyboardModel.keyColors(dark: traits.userInterfaceStyle == .dark,
-                character: character, pressed: pressed, selected: selected)
+                pressed: pressed, selected: selected)
             return UIColor(white: colors.ink, alpha: 1)
         }
         if let palette {
@@ -184,13 +183,21 @@ final class TerminalTouchFlatDrawerButton: TerminalTouchDrawerButton {
         let key = keycap.key
         let subtitle = self.subtitle
         let palette = keycap.palette
-        // Recreate the base style too: following a theme uses a filled button,
-        // while system colors use UIKit's tinted treatment.
-        var config = palette == nil ? UIButton.Configuration.tinted() : UIButton.Configuration.filled()
+        var config = UIButton.Configuration.filled()
         config.title = key.title
         config.subtitle = subtitle
-        config.baseForegroundColor = palette?.ink ?? .label
-        config.baseBackgroundColor = palette?.key ?? .secondaryLabel
+        if let palette {
+            config.baseForegroundColor = palette.ink
+            config.baseBackgroundColor = palette.key
+        } else {
+            // Solid in the system keyboard's key colors, like the main keys.
+            func systemKey(_ traits: UITraitCollection) -> (background: Double, ink: Double) {
+                TerminalTouchKeyboardModel.keyColors(dark: traits.userInterfaceStyle == .dark,
+                                                     pressed: false, selected: false)
+            }
+            config.baseBackgroundColor = UIColor { UIColor(white: systemKey($0).background, alpha: 1) }
+            config.baseForegroundColor = UIColor { UIColor(white: systemKey($0).ink, alpha: 1) }
+        }
         config.cornerStyle = .medium
         config.contentInsets = NSDirectionalEdgeInsets(top: 2, leading: 3, bottom: 2, trailing: 3)
         config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { input in

@@ -1037,13 +1037,11 @@ final class TerminalTouchKeyboardTests: XCTestCase {
             white <= 0.04045 ? white / 12.92 : pow((white + 0.055) / 1.055, 2.4)
         }
         for dark in [false, true] {
-            for character in [false, true] {
-                for pressed in [false, true] {
-                    for selected in [false, true] {
-                        let colors = Model.keyColors(dark: dark, character: character, pressed: pressed, selected: selected)
-                        let a = luminance(colors.background), b = luminance(colors.ink)
-                        XCTAssertGreaterThanOrEqual((max(a, b) + 0.05) / (min(a, b) + 0.05), 4.5)
-                    }
+            for pressed in [false, true] {
+                for selected in [false, true] {
+                    let colors = Model.keyColors(dark: dark, pressed: pressed, selected: selected)
+                    let a = luminance(colors.background), b = luminance(colors.ink)
+                    XCTAssertGreaterThanOrEqual((max(a, b) + 0.05) / (min(a, b) + 0.05), 4.5)
                 }
             }
         }

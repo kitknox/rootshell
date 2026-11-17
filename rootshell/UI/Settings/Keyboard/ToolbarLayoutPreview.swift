@@ -91,8 +91,9 @@ struct ToolbarLayoutPreview: View {
             for: toolbar, terminalKeyboard: terminalKeyboard, floatingBar: floatingBar)[0]
         ToolbarLayoutPreviewRepresentable(toolbar: toolbar, surface: drawn, showsDrawers: showsDrawers,
                                           metrics: $metrics)
-            // Each toolbar and surface is its own view; switching builds a new one.
-            .id(PreviewIdentity(toolbar: toolbar, surface: drawn))
+            // Each toolbar, surface and style is its own view; switching builds a new one.
+            .id(PreviewIdentity(toolbar: toolbar, surface: drawn,
+                                style: KeyboardToolbarManager.shared.toolbarStyle.resolved))
             .frame(height: metrics.height)
     }
 }
@@ -100,6 +101,7 @@ struct ToolbarLayoutPreview: View {
 private nonisolated struct PreviewIdentity: Hashable {
     let toolbar: ToolbarContext
     let surface: ToolbarPreviewSurface
+    let style: KeyboardToolbarStyle
 }
 
 private struct ToolbarLayoutPreviewRepresentable: UIViewRepresentable {
@@ -149,6 +151,10 @@ final class ToolbarLayoutPreviewHostView: UIView {
     private let keyboardHost = PreviewKeyboardHost()
     #endif
     private let glass = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
+    /// Terminal text behind the glass bar, one line running under it.
+    private let terminalBackdrop = UIView()
+    private let visibleLine = UILabel()
+    private let coveredLine = UILabel()
     private let hostButtons = UIStackView()
     private var appliedSizes: KeyboardSizes?
     private var reportedMetrics: ToolbarLayoutPreviewMetrics?
@@ -160,10 +166,19 @@ final class ToolbarLayoutPreviewHostView: UIView {
         return false
     }
 
+    /// The Glass Bar style over the system keyboard: the terminal shows through it.
+    private let isTerminalGlassBar: Bool
+
     init(context: ToolbarContext, surface: ToolbarPreviewSurface, showsDrawers: Bool) {
         self.context = context
         self.surface = surface
         self.showsDrawers = showsDrawers
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        isTerminalGlassBar = surface == .systemKeyboard
+            && KeyboardToolbarManager.shared.toolbarStyle.resolved == .glassBar
+        #else
+        isTerminalGlassBar = false
+        #endif
         super.init(frame: .zero)
 
         isUserInteractionEnabled = false
@@ -210,6 +225,7 @@ final class ToolbarLayoutPreviewHostView: UIView {
         toolbar.context = context
         toolbar.isEmbeddedPreview = true
         toolbar.previewDrawers = showsDrawers ? .open : .closed
+        if isTerminalGlassBar { makeTerminalBackdrop() }
         if isGlassBar {
             toolbar.usesHostChrome = true
             glass.clipsToBounds = true
@@ -229,6 +245,24 @@ final class ToolbarLayoutPreviewHostView: UIView {
             stage.addSubview(hostButtons)
         }
         self.toolbar = toolbar
+    }
+
+    /// A strip of the terminal in its theme, so the glass reads as it does live.
+    private func makeTerminalBackdrop() {
+        let (name, _) = ThemeOverrideManager.shared.resolveTheme(tabId: nil, windowId: nil)
+        let colors = ThemeManager.shared.themeInfo(for: name)?.colors
+        terminalBackdrop.backgroundColor = colors.flatMap { UIColor(hex: $0.background) } ?? .black
+        terminalBackdrop.layer.cornerRadius = 10
+        terminalBackdrop.layer.cornerCurve = .continuous
+        terminalBackdrop.clipsToBounds = true
+        let ink = colors.flatMap { UIColor(hex: $0.foreground) } ?? .white
+        for (label, text) in [(visibleLine, "~ % git log --oneline"), (coveredLine, "4f2c9e1 Update the build script")] {
+            label.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+            label.textColor = ink
+            label.text = text
+            terminalBackdrop.addSubview(label)
+        }
+        stage.addSubview(terminalBackdrop)
     }
 
     /// The terminal keyboard with its keys folded away, as it shows beside a
@@ -320,7 +354,11 @@ final class ToolbarLayoutPreviewHostView: UIView {
             if abs(toolbar.hostTrailingReserve - reserve) > 0.5 { toolbar.hostTrailingReserve = reserve }
         }
 
-        toolbar.frame = CGRect(x: 0, y: 0, width: barWidth, height: max(toolbar.bounds.height, sizes.toolbar.height))
+        // The glass bar shows a line of terminal text above it and one through it.
+        let textBand = isTerminalGlassBar ? ceil(visibleLine.font.lineHeight) + 4 : 0
+
+        toolbar.frame = CGRect(x: 0, y: textBand, width: barWidth,
+                               height: max(toolbar.bounds.height, sizes.toolbar.height))
         toolbar.layoutIfNeeded()
         let height = toolbar.intrinsicContentSize.height
         toolbar.frame.size.height = height
@@ -330,8 +368,16 @@ final class ToolbarLayoutPreviewHostView: UIView {
             hostButtons.frame = CGRect(x: barWidth - edge - reserve, y: height - sizes.toolbar.height,
                                        width: reserve, height: sizes.toolbar.height)
         }
+        let stageSize = CGSize(width: barWidth, height: textBand + height)
+        if isTerminalGlassBar {
+            terminalBackdrop.frame = CGRect(origin: .zero, size: stageSize)
+            let lineHeight = ceil(visibleLine.font.lineHeight)
+            visibleLine.frame = CGRect(x: 10, y: 2, width: stageSize.width - 20, height: lineHeight)
+            coveredLine.frame = CGRect(x: 10, y: toolbar.frame.maxY - sizes.toolbar.height / 2 - lineHeight / 2,
+                                       width: stageSize.width - 20, height: lineHeight)
+        }
         let capacity = toolbar.mainRowCapacity(width: width, hostTrailingReserve: narrowestReserve)
-        return (CGSize(width: barWidth, height: height), capacity)
+        return (stageSize, capacity)
     }
 
     private func layoutTerminalKeyboard(width: CGFloat) -> (size: CGSize, capacity: Int) {

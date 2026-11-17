@@ -15,6 +15,7 @@ import os
 struct TerminalSplitTreeView: UIViewRepresentable {
     @Environment(\.duoLayout) private var duoLayout
     @Environment(\.terminalTopSafeEdge) private var terminalTopSafeEdge
+    @Environment(\.terminalKeyboardUnderlap) private var terminalKeyboardUnderlap
     @Environment(\.paneCardBackdrop) private var paneCardBackdrop
     @Environment(\.paneCardRimPalette) private var paneCardRimPalette
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -70,6 +71,7 @@ struct TerminalSplitTreeView: UIViewRepresentable {
         uiView.terminalEffectsEnabled = terminalEffectsEnabled
         uiView.reservesTerminalBottomSafeArea = !duoLayout.extendsTerminalToVerticalEdges
         uiView.terminalTopSafeEdge = terminalTopSafeEdge
+        uiView.terminalKeyboardUnderlap = terminalKeyboardUnderlap
         uiView.routesFocusedProgressToIntegratedEdge = routesFocusedProgressToIntegratedEdge
         uiView.progressBarPosition = progressBarPosition
         uiView.paneUnderlay = paneUnderlay
@@ -470,6 +472,25 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
             updateTerminalEffectsEligibility()
         }
     }
+    /// How far panes on the bottom row draw below this view, under a glass
+    /// toolbar and the keyboard. Their grids stay above it.
+    var terminalKeyboardUnderlap: CGFloat = 0 {
+        didSet {
+            guard terminalKeyboardUnderlap != oldValue else { return }
+            setNeedsLayout()
+        }
+    }
+    /// A herdr pane overflowed its slot once, so panes are clipped to this view
+    /// from then on, except below its bottom edge while panes draw under the
+    /// toolbar and keyboard.
+    private var clipsPaneOverflow = false {
+        didSet { if clipsPaneOverflow != oldValue { applyOverflowClip() } }
+    }
+    private lazy var overflowMask: CALayer = {
+        let mask = CALayer()
+        mask.backgroundColor = UIColor.black.cgColor
+        return mask
+    }()
     var routesFocusedProgressToIntegratedEdge: Bool = false {
         didSet {
             guard routesFocusedProgressToIntegratedEdge != oldValue else { return }
@@ -681,6 +702,43 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
         updateFocusAppearance()
     }
 
+    /// Only panes on the bottom row sit over the toolbar and keyboard. Each draws
+    /// on to the same edge: a herdr pane snapped to whole rows can end short of
+    /// this view's bottom, or past it while another client's grid is taller.
+    private func applyKeyboardUnderlap() {
+        #if !targetEnvironment(macCatalyst) && !os(visionOS)
+        applyOverflowClip()
+        guard let tree else { return }
+        let edge = bounds.maxY + terminalKeyboardUnderlap
+        for terminal in tree.terminalLeaves {
+            guard let wrapper = terminal.enclosingTerminalScrollView else { continue }
+            let scale = max(terminal.contentScaleFactor, 1)
+            let rowSlack = terminal.cellSize.height / scale + 1
+            let onBottomRow = wrapper.superview === self && wrapper.frame.maxY >= bounds.maxY - rowSlack
+            wrapper.bottomUnderlap = onBottomRow && terminalKeyboardUnderlap > 0
+                ? max(0, edge - wrapper.frame.maxY) : 0
+        }
+        #endif
+    }
+
+    /// Clips overflowing panes to this view, but lets bottom panes draw on under
+    /// the toolbar and keyboard.
+    private func applyOverflowClip() {
+        guard clipsPaneOverflow else { return }
+        let underlap = terminalKeyboardUnderlap
+        guard underlap > 0 else {
+            layer.mask = nil
+            clipsToBounds = true
+            return
+        }
+        clipsToBounds = false
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        overflowMask.frame = CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: bounds.height + underlap)
+        CATransaction.commit()
+        if layer.mask !== overflowMask { layer.mask = overflowMask }
+    }
+
     private func updateTerminalEffectsEligibility() {
         guard let tree else { return }
         for terminal in tree.terminalLeaves {
@@ -776,6 +834,7 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
         cleanupTerminalViews(keeping: usedTerminals)
         hideUnusedDividers(from: dividerReuseIndex)
         updateCardBackdrop()
+        applyKeyboardUnderlap()
         updateCardDepth()
         pushPaneUnderlay()
         pushIntegratedTabSurface()
@@ -1387,7 +1446,7 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
             frame.height, cells: grid.rows, cellPixels: size.cell_height_px, chrome: chrome.height, scale: scale,
             preserveGrid: preserveGrid)
         if preserveGrid, clamped.maxX > bounds.maxX || clamped.maxY > bounds.maxY {
-            clipsToBounds = true
+            clipsPaneOverflow = true
         }
         if terminal.herdrForeignAreaCells != nil {
             // Another client's grid may exceed this slot on either axis: that
@@ -1397,8 +1456,8 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
                 cells: grid.cols, cellPixels: size.cell_width_px, chrome: chrome.width, scale: scale)
             let neededH = HerdrGeometry.requiredExtent(
                 cells: grid.rows, cellPixels: size.cell_height_px, chrome: chrome.height, scale: scale)
-            if neededW > frame.width + 1 { clipsToBounds = true; clamped.size.width = neededW }
-            if neededH > frame.height + 1 { clipsToBounds = true; clamped.size.height = neededH }
+            if neededW > frame.width + 1 { clipsPaneOverflow = true; clamped.size.width = neededW }
+            if neededH > frame.height + 1 { clipsPaneOverflow = true; clamped.size.height = neededH }
         }
         return clamped
     }
@@ -1765,7 +1824,11 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
         // TerminalScrollView always clips on Catalyst.
         container.clipsToBounds = rounded || container is Ghostty.TerminalScrollView
         #else
-        container.clipsToBounds = rounded
+        if let scrollView = container as? Ghostty.TerminalScrollView {
+            scrollView.clipsToCard = rounded
+        } else {
+            container.clipsToBounds = rounded
+        }
         // A rubber-band pull moves the surface inside the pane; fill the
         // uncovered strip with the terminal background, square panes included,
         // so the backdrop never shows through. A translucent terminal fills just

@@ -185,6 +185,15 @@ extension Ghostty {
             }
         }
 
+        /// Points this terminal draws below its pane, under a glass toolbar and
+        /// the keyboard. Part of the bottom inset, so only scrollback is drawn there.
+        var bottomUnderlap: CGFloat = 0 {
+            didSet {
+                guard bottomUnderlap != oldValue else { return }
+                setNeedsLayout()
+            }
+        }
+
         /// Window-space y of the safe-area top when the Duo inner side-rail
         /// layout extends the surface under it (0 otherwise). The grid starts
         /// below it while scrollback fills the band.
@@ -709,6 +718,9 @@ extension Ghostty {
         }
         override var dockedTouchKeyboardFrameInScreen: CGRect? {
             keyboardAccessoryController?.dockedTouchKeyboardFrameInScreen
+        }
+        override var keyboardToolbarShowsGlassBar: Bool {
+            keyboardAccessoryController?.toolbarShowsGlassBar ?? false
         }
         override var reservedKeyboardToolbarHeightAtBottom: CGFloat {
             // Hold the pre-resign reserve while an overlay owns the keyboard so
@@ -2287,7 +2299,7 @@ extension Ghostty {
         /// the new inset even when the view bounds are unchanged.
         private func refreshBottomInset() {
             surfaceController.invalidateCachedSize()
-            updateBottomInset()
+            updateBottomInset(deferringToSize: true)
             sizeDidChange(bounds.size)
         }
         #endif
@@ -2337,7 +2349,7 @@ extension Ghostty {
             // recovery (clearSizeSuppression + relayout) re-applies them
             // together.
             guard !surfaceController.sizeUpdatesSuppressed else { return }
-            updateBottomInset()
+            updateBottomInset(deferringToSize: true)
             sizeDidChange(bounds.size)
         }
 
@@ -2882,8 +2894,17 @@ extension Ghostty {
         /// rows fill it on scrollback. Returns 0 when the terminal ends above the
         /// strip (keyboard/toolbar up pushes it up), when a bottom-rendering
         /// effect owns the strip (ocean/solar waves), or on platforms without a
-        /// strip (macOS, home-button devices).
+        /// strip (macOS, home-button devices). Any band drawn below the pane under a
+        /// glass toolbar (`bottomUnderlap`) is reserved the same way.
         func currentBottomInsetPixels() -> Double {
+            let scale = contentScaleFactor
+            guard scale > 0 else { return 0 }
+            return visibleBottomInsetPixels() + Double(bottomUnderlap * scale)
+        }
+
+        /// The bottom inset within the pane itself, without the band it draws
+        /// below it. Layouts that size panes by their frames budget only this.
+        func visibleBottomInsetPixels() -> Double {
             guard reservesBottomSafeArea else { return 0 }
             if terminalEffectsEnabled,
                EffectManager.shared.terminalBottomInsetFraction > 0 { return 0 }
@@ -2900,7 +2921,9 @@ extension Ghostty {
             guard let window = self.window else { return 0 }
             let safeBottom = window.safeAreaInsets.bottom
             guard safeBottom > 0 else { return 0 }
+            // The band drawn below the pane belongs to the underlap, not the strip.
             let frameInWindow = self.convert(self.bounds, to: window)
+                .divided(atDistance: bottomUnderlap, from: .maxYEdge).remainder
             let stripTop = window.bounds.maxY - safeBottom
             let overlap = min(max(0, frameInWindow.maxY - stripTop), safeBottom)
             let scale = contentScaleFactor
@@ -2932,8 +2955,8 @@ extension Ghostty {
         /// reserves the home-indicator strip (the drawable covers it;
         /// smooth-scroll overscan fills it on scrollback). Deduped, so it is
         /// safe to call on every layout pass.
-        func updateBottomInset() {
-            surfaceController.updateBottomInset()
+        func updateBottomInset(deferringToSize: Bool = false) {
+            surfaceController.updateBottomInset(deferringToSize: deferringToSize)
             relayoutMultiplexerForTopInset()
         }
 
@@ -3884,7 +3907,8 @@ extension Ghostty {
             // reporting the (now taller, safe-area-ignoring) size, so the grid is
             // computed at its final row count in one step instead of briefly
             // growing into the strip and snapping back. Deduped internally.
-            updateBottomInset()
+            // If the size changes too, both are applied together by sizeDidChange.
+            updateBottomInset(deferringToSize: true)
 
             // sizeDidChange itself gates on the keyboard resize hold, so
             // bounds seen while a show/hide settles are skipped here and
@@ -3978,6 +4002,8 @@ extension Ghostty {
             // keyboard never flashes on tab switch or overlay dismissal.
             keyboardAccessoryController?.activateTouchKeyboardState()
             keyboardAccessoryController?.reconcileWithHideIntent()
+            // After claiming the window's keyboard, so its placement is this pane's.
+            refreshKeyboardAppearance()
 
             // Tmux focus reconciliation may reassert focus on the current
             // responder. Its input session is already installed.
@@ -4105,6 +4131,7 @@ extension Ghostty {
         private var pendingInputViewReload = false
 
         override func reloadInputViews() {
+            refreshKeyboardAppearance()
             // UIKit has nothing to reload for an inactive or detached
             // responder. More importantly, iPadOS 27 may still have another
             // field's remote-keyboard placeholder installed during a responder
@@ -4220,6 +4247,22 @@ extension Ghostty {
         var mathExpressionCompletionType: UITextMathExpressionCompletionType = .no
         var writingToolsBehavior: UIWritingToolsBehavior = .none
         var keyboardType: UIKeyboardType = .default
+        var keyboardAppearance: UIKeyboardAppearance = .default
+
+        /// Under the terminal keyboard in Glass Bar, UIKit's backdrop takes the terminal
+        /// theme's lightness, as the keys on it do. Apple's keyboard keeps the system's.
+        func refreshKeyboardAppearance() {
+            #if !targetEnvironment(macCatalyst) && !os(visionOS)
+            var appearance = UIKeyboardAppearance.default
+            if keyboardAccessoryController?.touchKeyboardDocksGlass == true,
+               SettingsStore.shared.value(Settings.Keyboard.touchThemeAware),
+               let colors = touchKeyboardThemeColors,
+               let surface = EffectiveSurface.resolve(backgroundHex: colors.background) {
+                appearance = surface.isLight ? .light : .dark
+            }
+            if keyboardAppearance != appearance { keyboardAppearance = appearance }
+            #endif
+        }
 
         #if targetEnvironment(macCatalyst)
         private enum CatalystNonTextInsert {
@@ -4998,6 +5041,7 @@ extension Ghostty.TerminalView: TerminalKeyboardAccessoryHost {
     var keyboardIsFirstResponder: Bool { isFirstResponder }
     var keyboardAIAgentOverlayActive: Bool { aiAgentOverlayActive }
     var keyboardToolbarOnlyMode: Bool { toolbarOnlyMode }
+    var keyboardHostBottomUnderlap: CGFloat { bottomUnderlap }
 
     @discardableResult
     func keyboardBecomeFirstResponder() -> Bool {
@@ -5743,8 +5787,9 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
         let isAtBottom = scrollbarOffset + scrollbarLen >= scrollbarTotal
         guard scrollbarTotal != 0, !isAtBottom else { return }
 
-        // Calculate scroll indicator position and size
-        let viewHeight = bounds.height
+        // Calculate scroll indicator position and size, above any band drawn
+        // under the toolbar and keyboard.
+        let viewHeight = bounds.height - bottomUnderlap
         let indicatorWidth: CGFloat = 4
         let inset: CGFloat = 2
 

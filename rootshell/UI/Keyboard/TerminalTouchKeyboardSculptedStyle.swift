@@ -365,7 +365,7 @@ final class TerminalTouchSculptedKeycap: TerminalTouchKeycap {
         prepared = next
         let role: TerminalTouchKeyArtwork.Role = toolbarKey ? .toolbar : (character ? .character : .utility)
         func finish(selected: Bool, pressed: Bool) -> TerminalTouchKeyArtwork.Finish {
-            let colors = TerminalTouchKeyboardModel.keyColors(dark: dark, character: character, pressed: pressed, selected: selected)
+            let colors = TerminalTouchKeyboardModel.keyColors(dark: dark, pressed: pressed, selected: selected)
             var surface = TerminalTouchKeyColor(red: colors.background, green: colors.background,
                                                 blue: colors.background + (dark && !selected ? 4 / 255 : 0))
             var ink = TerminalTouchKeyColor(red: colors.ink, green: colors.ink, blue: colors.ink)

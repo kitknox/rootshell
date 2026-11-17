@@ -223,8 +223,9 @@ struct KeyboardToolbarSettingsView: View {
     private var appearanceSummary: String {
         var parts: [String] = []
         if surfaces.contains(.systemKeyboard) {
-            parts.append(manager.toolbarStyle.displayName)
-            if manager.showsKeycaps { parts.append(String(localized: "Keycaps")) }
+            let style = manager.toolbarStyle.resolved
+            parts.append(style.displayName)
+            if manager.showsKeycaps && style != .glassBar { parts.append(String(localized: "Keycaps")) }
         }
         if manager.glyphColoring != .standard { parts.append(manager.glyphColoring.displayName) }
         let size = KeyboardToolbarSize.current

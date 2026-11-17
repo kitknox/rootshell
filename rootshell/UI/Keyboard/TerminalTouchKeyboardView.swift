@@ -29,6 +29,8 @@ protocol TerminalTouchKeyboardHost: AnyObject {
     var touchKeyboardCanSend: Bool { get }
     var touchKeyboardSuggestionContext: TerminalTouchKeyboardModel.SuggestionContext? { get }
     var touchKeyboardPredictionContext: TerminalTouchKeyboardModel.PredictionSnapshot? { get }
+    /// Modifiers held outside the keyboard, on a toolbar above it, that join its next key.
+    var touchKeyboardHeldModifiers: KeyModifiers { get }
     func touchKeyboardInsert(_ text: String)
     /// `shifted` is the layout's Shift output for a letter key; nil keeps US casing.
     func touchKeyboardSend(_ key: String, modifiers: KeyModifiers, shifted: Character?)
@@ -46,6 +48,7 @@ extension TerminalTouchKeyboardHost {
     #endif
     var touchKeyboardThemeColors: ThemeManager.ThemeInfo.ThemeColors? { nil }
     var touchKeyboardPredictionContext: TerminalTouchKeyboardModel.PredictionSnapshot? { nil }
+    var touchKeyboardHeldModifiers: KeyModifiers { [] }
     func touchKeyboardSend(_ key: String, modifiers: KeyModifiers) {
         touchKeyboardSend(key, modifiers: modifiers, shifted: nil)
     }
@@ -307,13 +310,46 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     /// Steampunk keeps its brass-matched ivory/enamel caps unless explicitly opted in.
     /// Retro styles keep their signature colors and blend their neutrals toward the palette.
     private var keycapPalette: TerminalTouchKeyboardPalette? {
-        switch keyboardStyle {
+        // On glass, every style draws its keys in the system keyboard's colors unless asked otherwise.
+        if keysTakeSystemColors { return nil }
+        return switch keyboardStyle {
         case .steampunk: SettingsStore.shared.value(Settings.Keyboard.touchSteampunkThemeAwareKeycaps) ? palette : nil
         case .flat, .sculpted, .phosphor, .beigeBox, .neonGrid, .circuitBoard: palette
         }
     }
     var onAppearanceChanged: (() -> Void)?
     var containerBackgroundColor: UIColor { palette?.background ?? TerminalTouchKeyboardAppearance.background }
+
+    /// The toolbar row takes the glass bar's look, as the system keyboard's does:
+    /// clear glass and plain keys instead of this keyboard's style.
+    private var toolbarUsesGlassBar: Bool {
+        let manager = KeyboardToolbarManager.shared
+        return manager.toolbarStyle.resolved == .glassBar && manager.terminalKeyboardUsesGlassBar
+    }
+
+    /// Docked, the whole keyboard turns to glass with it: nothing is painted in the
+    /// terminal's colors, so its scrollback shows through wherever UIKit's keyboard
+    /// backdrop lets it. The detached card keeps its own glass settings.
+    var docksGlass: Bool {
+        toolbarUsesGlassBar && !isFloating && !UIAccessibility.isReduceTransparencyEnabled
+    }
+
+    /// The toolbar row's band is left clear, with the glass bar's plate on it.
+    private var clearsToolbarBand: Bool { docksGlass && !hidesToolbar }
+
+    /// The keys sit on glass: docked with the glass bar, or on the detached card's
+    /// glass. Either way they take the system keyboard's key colors by default.
+    private var keysOnGlass: Bool {
+        docksGlass || (isFloating && !UIAccessibility.isReduceTransparencyEnabled
+            && SettingsStore.shared.value(Settings.Keyboard.touchFloatingGlassStyle) != .solid)
+    }
+
+    /// Keys on glass draw in the system keyboard's colors, unless the theme's are asked for.
+    private var keysTakeSystemColors: Bool {
+        keysOnGlass && !(palette != nil && SettingsStore.shared.value(Settings.Keyboard.touchGlassThemeKeys))
+    }
+
+    private var toolbarKeyStyle: Model.Style { toolbarUsesGlassBar ? .flat : keyboardStyle }
     weak var sequenceDelegate: KeyboardButtonDelegate?
     var onModifiersChanged: ((KeyModifiers) -> Void)?
     var onDismiss: (() -> Void)?
@@ -592,6 +628,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         let style: Model.FloatingGlassStyle
         let tintOpacity: Double
         let reduceTransparency: Bool
+        let clearToolbar: Bool
+        let dockedGlass: Bool
     }
     private var glassAppearance: GlassAppearance?
     // Previews own their surface. Terminal controllers bind the surface from
@@ -1142,19 +1180,22 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         if overrideUserInterfaceStyle != style { overrideUserInterfaceStyle = style }
         let toolbar = palette?.background ?? TerminalTouchKeyboardAppearance.toolbar
         let floatingStyle = SettingsStore.shared.value(Settings.Keyboard.touchFloatingGlassStyle)
-        let usesFloatingGlass = isFloating && floatingStyle != .solid && !UIAccessibility.isReduceTransparencyEnabled
-        floatingGlass.isHidden = !usesFloatingGlass
+        let usesFloatingGlass = keysOnGlass
+        // Docked, UIKit's own keyboard backdrop behind the input view is the glass;
+        // another layer on it frosts the terminal twice. The detached card has none.
+        floatingGlass.isHidden = !usesFloatingGlass || docksGlass
         background.isHidden = usesFloatingGlass
         background.backgroundColor = palette?.background ?? TerminalTouchKeyboardAppearance.background
         // Paint the gaps around the glass toolbar too. A clear input root lets
         // UIKit's independently styled keyboard backdrop show through here.
-        backgroundColor = usesFloatingGlass ? .clear : containerBackgroundColor
+        backgroundColor = usesFloatingGlass || clearsToolbarBand ? .clear : containerBackgroundColor
         let tintOpacity = Model.floatingGlassTintOpacity(SettingsStore.shared.value(Settings.Keyboard.touchFloatingGlassTintOpacity))
         let nextGlassAppearance = GlassAppearance(
             toolbar: toolbar.resolvedColor(with: traitCollection),
             background: containerBackgroundColor.resolvedColor(with: traitCollection),
             floating: isFloating, style: floatingStyle, tintOpacity: tintOpacity,
-            reduceTransparency: UIAccessibility.isReduceTransparencyEnabled)
+            reduceTransparency: UIAccessibility.isReduceTransparencyEnabled, clearToolbar: clearsToolbarBand,
+            dockedGlass: docksGlass)
         // Replacing an identical glass effect briefly rebuilds its backdrop.
         // A new terminal input target does not require a new glass material.
         if glassAppearance != nextGlassAppearance {
@@ -1183,14 +1224,17 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             let tint = containerBackgroundColor.withAlphaComponent(CGFloat(tintOpacity))
             // One material for the whole detached card lets terminal content
             // show through the gaps without blurring the key labels themselves.
+            // Docked with the glass bar, the keys sit on untinted clear glass, as the
+            // row above them does: frosted or tinted glass turns solid on a light theme.
+            let docked = docksGlass
             if #available(iOS 26.0, *) {
-                let glass = UIGlassEffect(style: floatingStyle == .clear ? .clear : .regular)
-                glass.tintColor = tint
+                let glass = UIGlassEffect(style: docked || floatingStyle == .clear ? .clear : .regular)
+                glass.tintColor = docked ? nil : tint
                 floatingGlass.effect = glass
                 floatingGlass.contentView.backgroundColor = .clear
             } else {
-                floatingGlass.effect = UIBlurEffect(style: floatingStyle == .clear ? .systemUltraThinMaterial : .systemThinMaterial)
-                floatingGlass.contentView.backgroundColor = tint
+                floatingGlass.effect = UIBlurEffect(style: docked || floatingStyle == .clear ? .systemUltraThinMaterial : .systemThinMaterial)
+                floatingGlass.contentView.backgroundColor = docked ? .clear : tint
             }
         }
         configureControlGlass(controlGlass, toolbar: toolbar, usesFloatingGlass: usesFloatingGlass)
@@ -1201,7 +1245,15 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
 
     /// Configure the terminal keyboard's single toolbar plate.
     private func configureControlGlass(_ plate: UIVisualEffectView, toolbar: UIColor, usesFloatingGlass: Bool) {
-        if usesFloatingGlass {
+        plate.layer.borderWidth = 0
+        if clearsToolbarBand {
+            // UIKit's keyboard backdrop behind the input view is already the glass;
+            // the bar keeps only its outline, so the row is frosted once.
+            plate.effect = nil
+            plate.contentView.backgroundColor = .clear
+            plate.layer.borderWidth = 1 / max(traitCollection.displayScale, 1)
+            plate.layer.borderColor = UIColor.separator.resolvedColor(with: traitCollection).cgColor
+        } else if usesFloatingGlass {
             plate.effect = nil
             plate.contentView.backgroundColor = toolbar.withAlphaComponent(0.14)
         } else if isFloating {
@@ -1256,7 +1308,9 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     /// These are artwork bands, not hit cells: the final band includes the
     /// bottom safe area (or floating grabber) so row-based details reach the edge.
     private var styleBackdropBands: [CGRect] {
-        var bands = hidesToolbar ? [] : [CGRect(x: 0, y: contentTop, width: bounds.width, height: toolbarHeight)]
+        // A clear toolbar row keeps its band free of the style's artwork.
+        var bands = hidesToolbar || clearsToolbarBand ? []
+            : [CGRect(x: 0, y: contentTop, width: bounds.width, height: toolbarHeight)]
         if !isToolbarOnly {
             if drawerOpen {
                 bands.append(CGRect(x: 0, y: drawer.frame.minY, width: bounds.width, height: drawer.frame.height))
@@ -1297,6 +1351,9 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         }
     }
 
+    /// Glass, ours or UIKit's, is behind the keys: an effect keeps it visible.
+    private var usesGlassBackdrop: Bool { !floatingGlass.isHidden || docksGlass }
+
     private func updateBackgroundEffect() {
         updateSteampunkMachinery()
         effectPlacement = SettingsStore.shared.value(Settings.Shaders.keyboardBackgroundEffect)
@@ -1308,7 +1365,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
 
         // Keep glass above the effect, with the existing tint and material.
         // A detached glass keyboard must retain its transparent backdrop.
-        let color: UIColor = !floatingGlass.isHidden ? .clear : (effectPlacement == .toolbar
+        let color: UIColor = usesGlassBackdrop ? .clear : (effectPlacement == .toolbar
             ? (palette?.background ?? TerminalTouchKeyboardAppearance.toolbar) : containerBackgroundColor)
         effectSurface.attach(to: self, above: background, effectID: ObjectIdentifier(effect), backgroundColor: color) {
             AnyView(TerminalTouchKeyboardEffectBackground(appearance: effectSurface.appearance, effect: effect))
@@ -1318,7 +1375,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
 
     private func layoutBackgroundEffect() {
         guard let view = effectSurface?.contentView, view.superview === self else { return }
-        view.frame = effectPlacement == .toolbar ? controlGlass.frame : bounds
+        // A clear toolbar row stays clear of a whole-keyboard effect too.
+        view.frame = effectPlacement == .toolbar ? controlGlass.frame : (clearsToolbarBand ? background.frame : bounds)
         view.layer.cornerRadius = effectPlacement == .toolbar ? 22 : (isFloating ? 24 : 0)
     }
 
@@ -1326,8 +1384,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         effectSurface?.detach(from: self)
     }
 
-    private func makeCap(_ key: Model.Key, small: Bool = false) -> TerminalTouchKeycap {
-        let cap = keyboardStyle.makeKeycap(key, small: small)
+    private func makeCap(_ key: Model.Key, small: Bool = false, style: Model.Style? = nil) -> TerminalTouchKeycap {
+        let cap = (style ?? keyboardStyle).makeKeycap(key, small: small)
         cap.palette = keycapPalette
         cap.activate = { [weak self, weak cap] in
             guard let self, let cap, self.canSend else { return }
@@ -1484,7 +1542,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     private func rebuildKeysForWidth(_ width: CGFloat) {
         (controls + rows.flatMap { $0 }).forEach { $0.removeFromSuperview() }
         let toolbar = fittedToolbar(width: width)
-        controls = toolbar.caps.map { makeCap($0, small: true) }
+        controls = toolbar.caps.map { makeCap($0, small: true, style: toolbarKeyStyle) }
         toolbarPinned = (toolbar.leading, toolbar.trailing)
         toolbarDrawerKeys = toolbar.drawers
         rebuildToolbarMiddleRow(toolbar.middle)
@@ -1557,7 +1615,6 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        floatingGlass.frame = bounds
         if previousWidth != bounds.width {
             if previousWidth != 0 { cancelInteraction(preservingModifiers: true) }
             previousWidth = bounds.width
@@ -1575,6 +1632,9 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         let width = max(0, bounds.width - leading - trailing)
         background.frame = isFloating ? bounds : CGRect(x: 0, y: top + toolbarHeight, width: bounds.width, height: max(0, bounds.height - top - toolbarHeight))
         background.layer.maskedCorners = isFloating ? [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        // Docked glass takes the panel's place below the toolbar row.
+        floatingGlass.frame = background.frame
+        floatingGlass.layer.maskedCorners = background.layer.maskedCorners
         if isFloating { layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: 24).cgPath }
         grabber.isHidden = !isFloating
         grabber.frame = CGRect(x: (bounds.width - 88) / 2, y: bounds.height - 44, width: 88, height: 44)
@@ -2327,12 +2387,15 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         switch key.action {
         case .text(let text):
             let mods = modifiers ?? KeyModifiers(rawValue: modifierState.rawValue)
-            if mods.subtracting(.shift).isEmpty {
+            let held = host?.touchKeyboardHeldModifiers ?? []
+            if held.isEmpty, mods.subtracting(.shift).isEmpty {
                 // Shift changes letters without invoking terminal shortcut encoding.
                 host?.touchKeyboardInsert(mods.contains(.shift) ? layout.shifted(text) : text)
             } else {
                 // Chords keep the base key; only the text payload follows the layout's Shift.
-                host?.touchKeyboardSend(text, modifiers: mods, shifted: mods.contains(.shift) ? layout.shiftedLetter(text) : nil)
+                // The host adds the held modifiers to the chord.
+                let shifted = mods.union(held).contains(.shift) ? layout.shiftedLetter(text) : nil
+                host?.touchKeyboardSend(text, modifiers: mods, shifted: shifted)
             }
             modifierState.consume(mods.rawValue); publishModifiers(); updateSuggestions(); updatePrediction()
         case .key(let value): keyPressed(value, modifiers: [])
@@ -2589,7 +2652,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     private func drawerButton(_ title: String, subtitle: String? = nil, repeats: Bool = false,
                               key: Model.Key? = nil, in container: UIView? = nil, feedbackOnRelease: Bool = false,
                               action: @escaping () -> Void) -> TerminalTouchDrawerButton {
-        let button = keyboardStyle.makeDrawerButton(
+        let button = (container != nil ? toolbarKeyStyle : keyboardStyle).makeDrawerButton(
             key: key ?? Model.Key(title: title, action: toolPage == .symbols ? .text(title) : .key(title)),
             subtitle: subtitle, toolbar: container != nil, palette: keycapPalette)
         button.accessibilityLabel = [title, subtitle].compactMap { $0 }.joined(separator: ", ")

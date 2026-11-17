@@ -69,6 +69,10 @@ nonisolated extension Settings {
         static let touchThemeAware = SettingKey(
             "terminalTouchKeyboardThemeAware", default: true, group: .keyboard, policy: .localByDefault,
             configKey: "terminal-touch-keyboard-theme-aware", title: String(localized: "Follow Terminal Theme"))
+        /// On glass, keys take the terminal theme's colors instead of the system keyboard's.
+        static let touchGlassThemeKeys = SettingKey(
+            "terminalTouchKeyboardGlassThemeKeys", default: false, group: .keyboard, policy: .localByDefault,
+            configKey: "terminal-touch-keyboard-glass-theme-keys", title: String(localized: "Theme Keys on Glass"))
         static let touchSteampunkThemeAwareKeycaps = SettingKey(
             "terminalTouchKeyboardSteampunkThemeAwareKeycaps", default: false, group: .keyboard, policy: .localByDefault,
             configKey: "terminal-touch-keyboard-steampunk-theme-aware-keycaps", title: String(localized: "Theme-Aware Keycaps"))
@@ -115,7 +119,7 @@ nonisolated extension Settings {
             optionKeyAsAlt.erased, forceASCIIKeyboard.erased, doubleSpaceForPeriod.erased, composeAutocorrect.erased,
             writingAssistance.erased, touchEnabled.erased, touchInTextFields.erased, touchLayout.erased, touchSuggestions.erased, touchHaptics.erased, touchCharacterPreview.erased,
             touchHeight.erased, touchHeightDuoFront.erased, touchSplit.erased, touchGlyphs.erased, touchStyle.erased, touchThemeAware.erased, touchLetterPrediction.erased,
-            touchSteampunkThemeAwareKeycaps.erased, touchPhosphorColor.erased, touchClickSound.erased,
+            touchSteampunkThemeAwareKeycaps.erased, touchGlassThemeKeys.erased, touchPhosphorColor.erased, touchClickSound.erased,
             touchStatePerTab.erased, touchSystemFloating.erased, touchFloatingGlassStyle.erased, touchFloatingGlassTintOpacity.erased,
             touchChooserPresented.erased,
         ]
@@ -144,6 +148,11 @@ nonisolated extension Settings {
             "keyboardToolbarStyle", default: KeyboardToolbarStyle.flat, group: .keyboardToolbar, policy: .localByDefault,
             configKey: "keyboard-toolbar-style",
             title: String(localized: "Toolbar Style", comment: "Setting title"))
+        /// The docked terminal keyboard shows the glass bar instead of its own toolbar row.
+        static let glassBarWithTerminalKeyboard = SettingKey(
+            "keyboardToolbarGlassBarWithTerminalKeyboard", default: false, group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-glass-bar-terminal-keyboard",
+            title: String(localized: "Glass Bar with Terminal Keyboard", comment: "Setting title"))
         static let deviceIdiom = SettingKey<String?>(
             "keyboardToolbarDeviceIdiom", default: nil, group: .keyboardToolbar, policy: .deviceOnly,
             title: String(localized: "Toolbar Layout Device", comment: "Setting title"))
@@ -250,7 +259,7 @@ nonisolated extension Settings {
             sizePhone.erased, sizePad.erased, sizeDuoInner.erased, sizeDuoFront.erased,
             minKeyWidthPhone.erased, minKeyWidthPad.erased, minKeyWidthDuoInner.erased, minKeyWidthDuoFront.erased,
             persistent.erased, showWithHardwareKeyboard.erased, arrowJoystickMode.erased,
-            remoteScreenStripExpanded.erased,
+            remoteScreenStripExpanded.erased, glassBarWithTerminalKeyboard.erased,
         ]
 
         /// The key holding a context's layout.

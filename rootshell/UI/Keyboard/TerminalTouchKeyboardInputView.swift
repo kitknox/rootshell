@@ -165,7 +165,8 @@ final class TerminalTouchKeyboardInputView: UIInputView, UIGestureRecognizerDele
     }
 
     private func updateAppearance() {
-        backgroundColor = suppressed || awaitingFloatingLayout
+        // A glass keyboard leaves itself to UIKit's backdrop and what is behind it.
+        backgroundColor = suppressed || awaitingFloatingLayout || keyboard.docksGlass
             || (keyboard.isFloating && !UIAccessibility.isReduceTransparencyEnabled)
             ? .clear : keyboard.containerBackgroundColor
         overrideUserInterfaceStyle = keyboard.overrideUserInterfaceStyle
@@ -399,7 +400,7 @@ final class TerminalTouchKeyboardToolbarInputView: UIInputView {
     }
 
     func updateAppearance() {
-        backgroundColor = keyboard.containerBackgroundColor
+        backgroundColor = keyboard.docksGlass ? .clear : keyboard.containerBackgroundColor
         overrideUserInterfaceStyle = keyboard.overrideUserInterfaceStyle
     }
 

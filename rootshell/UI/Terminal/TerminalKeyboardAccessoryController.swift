@@ -17,6 +17,8 @@ protocol TerminalKeyboardAccessoryHost: AnyObject {
     var keyboardToolbarOnlyMode: Bool { get }
     /// The host lays out its own accessory, so no home-indicator strip is added.
     var keyboardAccessoryOmitsBottomSafeAreaStrip: Bool { get }
+    /// How far the host view reaches below its pane, under the toolbar and keyboard.
+    var keyboardHostBottomUnderlap: CGFloat { get }
     /// Window whose `SoftwareKeyboardHideIntentStore` entry governs this host.
     /// nil opts out: the chevron falls back to resigning first responder.
     var keyboardHideIntentWindow: UIWindow? { get }
@@ -65,6 +67,7 @@ protocol TerminalKeyboardAccessoryHost: AnyObject {
 
 extension TerminalKeyboardAccessoryHost {
     var keyboardAccessoryOmitsBottomSafeAreaStrip: Bool { false }
+    var keyboardHostBottomUnderlap: CGFloat { 0 }
     var keyboardHideIntentWindow: UIWindow? { nil }
     var keyboardSizes: KeyboardSizes { KeyboardSizes.accessory(traitCollection: keyboardHostView.traitCollection) }
     var keyboardToolbarContext: ToolbarContext { .terminal }
@@ -175,7 +178,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
             scope.keyboard.sequenceDelegate = delegate
         }
         scope.keyboard.toolbarContext = host.keyboardToolbarContext
-        scope.keyboard.textFieldMode = host.keyboardTouchKeyboardShowsToolbar ? .off : .keysOnly
+        scope.keyboard.textFieldMode = touchKeyboardRowMode
         let stateChanged = boundTouchKeyboardState !== scope.state(tabID: host.keyboardTabID, perTab: touchStatePerTab)
         if stateChanged {
             boundTouchKeyboardState = scope.activate(tabID: host.keyboardTabID, perTab: touchStatePerTab)
@@ -195,10 +198,54 @@ final class TerminalKeyboardAccessoryController: NSObject {
         }
     }
 
+    /// Keys only beside a host's own toolbar, or under the system toolbar when
+    /// the glass bar carries the terminal keyboard's row.
+    private var touchKeyboardRowMode: TerminalTouchKeyboardView.TextFieldMode {
+        (host?.keyboardTouchKeyboardShowsToolbar ?? true) && !glassBarCarriesTouchToolbar ? .off : .keysOnly
+    }
+
+    /// Glass Bar with Use with Terminal Keyboard: the docked terminal keyboard
+    /// shows its keys, and the system toolbar sits above them in UIKit's accessory
+    /// slot, which gets no keyboard backdrop of its own.
+    var glassBarCarriesTouchToolbar: Bool {
+        let manager = KeyboardToolbarManager.shared
+        return usesFullTouchKeyboard && host?.keyboardSoftwareKeyboardRequest == nil
+            && touchKeyboardPlacement == .docked && manager.toolbarStyle.resolved == .glassBar
+            && manager.terminalKeyboardUsesGlassBar
+    }
+
+    /// The docked terminal keyboard, or its toolbar row alone once minimized, is
+    /// glass over UIKit's keyboard backdrop, so that backdrop takes the theme's appearance.
+    var touchKeyboardDocksGlass: Bool {
+        glassBarCarriesTouchToolbar || (usesTouchKeyboardToolbar && touchKeyboard?.docksGlass == true)
+    }
+
+    /// Modifiers held on the carried glass bar, for the next terminal keyboard key.
+    var glassBarHeldModifiers: KeyModifiers {
+        glassBarCarriesTouchToolbar ? (keyboardAccessory?.toolbarView.activeModifiers ?? []) : []
+    }
+
+    func consumeGlassBarModifiers() {
+        keyboardAccessory?.toolbarView.clearOneShotModifiers()
+    }
+
+    private var carriedToolbarReload: DispatchWorkItem?
+
+    private func scheduleCarriedToolbarReload() {
+        carriedToolbarReload?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.glassBarCarriesTouchToolbar else { return }
+            self.host?.keyboardReloadInputViews()
+            EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
+        }
+        carriedToolbarReload = work
+        DispatchQueue.main.async(execute: work)
+    }
+
     /// The host's answer to `keyboardTouchKeyboardShowsToolbar` changed.
     func refreshTouchKeyboardToolbarRow() {
-        guard let host, let keyboard = touchKeyboard else { return }
-        keyboard.textFieldMode = host.keyboardTouchKeyboardShowsToolbar ? .off : .keysOnly
+        guard let keyboard = touchKeyboard else { return }
+        keyboard.textFieldMode = touchKeyboardRowMode
     }
 
     /// Give up the window's keyboard. The presentation stays mounted so an
@@ -277,7 +324,8 @@ final class TerminalKeyboardAccessoryController: NSObject {
         case .modifiersChanged(let modifiers):
             // Full custom typing renders Shift into text. In toolbar-only
             // mode it must also modify keys arriving from a physical keyboard.
-            let effective = usesTouchKeyboardToolbar ? modifiers : modifiers.subtracting(.shift)
+            let effective = (usesTouchKeyboardToolbar ? modifiers : modifiers.subtracting(.shift))
+                .union(glassBarHeldModifiers)
             guard activeKeyboardModifiers != effective else { return }
             activeKeyboardModifiers = effective
             onActiveKeyboardModifiersChanged?(effective)
@@ -300,11 +348,19 @@ final class TerminalKeyboardAccessoryController: NSObject {
             // Reloading input views here tears down the keyboard during each
             // drawer transition, flashing the entire typing surface.
             EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
+            // UIKit resizes the self-sizing keys but leaves an accessory above them
+            // where it was. Keys-only has no drawer, so one reload once settled is safe.
+            if glassBarCarriesTouchToolbar { scheduleCarriedToolbarReload() }
         case .placementRequested(let placement): setTouchKeyboardPlacement(placement)
         case .nativePlacementChanged(let placement):
             if touchSystemFloating {
                 // UIKit already moved the input root. Reloading it here can
                 // interrupt the native pinch/drag and restore a stale frame.
+                // The card shows its own toolbar row; the dock takes the glass bar back.
+                refreshTouchKeyboardToolbarRow()
+                if placement == .docked, glassBarCarriesTouchToolbar, keyboardAccessory?.window == nil {
+                    scheduleCarriedToolbarReload()
+                }
                 EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
             } else if placement == .floating {
                 setTouchKeyboardPlacement(.floating)
@@ -641,7 +697,10 @@ final class TerminalKeyboardAccessoryController: NSObject {
               let window = host.keyboardHostView.window,
               let keyboard = touchKeyboard, !keyboard.isFloating,
               let input = touchKeyboardInputView else { return nil }
-        let height = input.intrinsicContentSize.height
+        // The system toolbar above the keys is part of the docked region.
+        let toolbar = glassBarCarriesTouchToolbar && accessoryIsVisible
+            ? (keyboardAccessory?.intrinsicContentSize.height ?? 0) : 0
+        let height = input.intrinsicContentSize.height + toolbar
         guard height > 0 else { return nil }
         let frame = window.convert(window.bounds, to: window.screen.coordinateSpace)
         return CGRect(x: frame.minX, y: frame.maxY - height,
@@ -671,6 +730,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
     func activateTouchKeyboardState() {}
     func releaseTouchKeyboardState() {}
     func refreshTouchKeyboardToolbarRow() {}
+    var glassBarCarriesTouchToolbar: Bool { false }
     func abandonTouchKeyboardActivation() {}
     func cancelTouchKeyboardInteraction() {}
     func dismissFloatingTouchKeyboard() {}
@@ -795,6 +855,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
         if usesTouchKeyboard {
             touchKeyboard?.clearOneShotModifiers()
+            if glassBarCarriesTouchToolbar { consumeGlassBarModifiers() }
             return
         }
         #endif
@@ -823,6 +884,18 @@ final class TerminalKeyboardAccessoryController: NSObject {
               !accessoryWindow.isHidden, !accessory.isHidden,
               accessory.alpha > 0, !accessory.bounds.isEmpty else { return nil }
         return accessory.convert(accessory.bounds, to: accessoryWindow.screen.coordinateSpace)
+        #endif
+    }
+
+    /// The toolbar row is the glass bar: the system keyboard's in Glass Bar style,
+    /// or the terminal keyboard's when that setting carries the style to it.
+    var toolbarShowsGlassBar: Bool {
+        #if os(visionOS) || targetEnvironment(macCatalyst)
+        return false
+        #else
+        let manager = KeyboardToolbarManager.shared
+        guard manager.toolbarStyle == .glassBar else { return false }
+        return !usesTouchKeyboard || manager.terminalKeyboardUsesGlassBar
         #endif
     }
 
@@ -1015,9 +1088,14 @@ final class TerminalKeyboardAccessoryController: NSObject {
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
         scheduleFoldToolbarUpdate()
         #endif
-        if usesFullTouchKeyboard { return nil }
+        if usesFullTouchKeyboard {
+            refreshTouchKeyboardToolbarRow()
+            return glassBarCarriesTouchToolbar && accessoryIsVisible ? keyboardAccessory : nil
+        }
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
         if usesCompactTouchKeyboard {
+            // The same keyboard may arrive keys-only from the carried glass bar.
+            refreshTouchKeyboardToolbarRow()
             return usesTouchKeyboardToolbar && !touchToolbarUsesPrimaryInputView ? touchKeyboardToolbarInputView : nil
         }
         #endif
@@ -1060,6 +1138,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
         applyBottomSafeAreaStrip()
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
         updateBottomEdgeHomeGestureProtection()
+        if usesFullTouchKeyboard || usesCompactTouchKeyboard { refreshTouchKeyboardToolbarRow() }
         if usesTouchKeyboardToolbar && touchToolbarUsesPrimaryInputView {
             return touchKeyboardToolbarInputView
         }
@@ -1738,7 +1817,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
         let margin: CGFloat = 10
         let halfWidth = collapsedKeyboardToolbarButtonSize.width / 2
         let halfHeight = collapsedKeyboardToolbarButtonSize.height / 2
-        let bottomLimit = view.bounds.maxY - view.safeAreaInsets.bottom
+        let bottomLimit = view.bounds.maxY - max(view.safeAreaInsets.bottom, host?.keyboardHostBottomUnderlap ?? 0)
 
         let x = view.bounds.maxX - view.safeAreaInsets.right - margin - halfWidth
         let y = bottomLimit - margin - halfHeight
@@ -1757,7 +1836,8 @@ final class TerminalKeyboardAccessoryController: NSObject {
         let minX = view.bounds.minX + view.safeAreaInsets.left + margin + halfWidth
         let maxX = view.bounds.maxX - view.safeAreaInsets.right - margin - halfWidth
         let minY = view.bounds.minY + view.safeAreaInsets.top + margin + halfHeight
-        let maxY = view.bounds.maxY - view.safeAreaInsets.bottom - margin - halfHeight
+        let bottom = max(view.safeAreaInsets.bottom, host?.keyboardHostBottomUnderlap ?? 0)
+        let maxY = view.bounds.maxY - bottom - margin - halfHeight
 
         return CGPoint(
             x: min(max(center.x, minX), max(minX, maxX)),

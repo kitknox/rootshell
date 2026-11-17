@@ -50,6 +50,7 @@ class KeyboardToolbarManager {
         Settings.KeyboardToolbar.drawerToggleMode.name,
         Settings.KeyboardToolbar.keycaps.name,
         Settings.KeyboardToolbar.style.name,
+        Settings.KeyboardToolbar.glassBarWithTerminalKeyboard.name,
         Settings.KeyboardToolbar.glyphColoring.name,
         Settings.KeyboardToolbar.keyColors.name,
         Settings.KeyboardToolbar.minKeyWidthPhone.name,
@@ -134,6 +135,15 @@ class KeyboardToolbarManager {
         didSet {
             guard !isReloading, toolbarStyle != oldValue else { return }
             SettingsStore.shared.set(Settings.KeyboardToolbar.style, toolbarStyle)
+            notifyChange()
+        }
+    }
+
+    /// The docked terminal keyboard drops its own toolbar row for the glass bar.
+    var terminalKeyboardUsesGlassBar: Bool {
+        didSet {
+            guard !isReloading, terminalKeyboardUsesGlassBar != oldValue else { return }
+            SettingsStore.shared.set(Settings.KeyboardToolbar.glassBarWithTerminalKeyboard, terminalKeyboardUsesGlassBar)
             notifyChange()
         }
     }
@@ -348,6 +358,7 @@ class KeyboardToolbarManager {
         drawerToggleMode = SettingsStore.shared.get(Settings.KeyboardToolbar.drawerToggleMode)
         showsKeycaps = SettingsStore.shared.get(Settings.KeyboardToolbar.keycaps)
         toolbarStyle = SettingsStore.shared.get(Settings.KeyboardToolbar.style)
+        terminalKeyboardUsesGlassBar = SettingsStore.shared.get(Settings.KeyboardToolbar.glassBarWithTerminalKeyboard)
         glyphColoring = SettingsStore.shared.get(Settings.KeyboardToolbar.glyphColoring)
 
         // Check if device idiom changed (e.g. restored backup from different device)
@@ -399,6 +410,9 @@ class KeyboardToolbarManager {
         }
         if keys.contains(Settings.KeyboardToolbar.style.name) {
             toolbarStyle = SettingsStore.shared.get(Settings.KeyboardToolbar.style)
+        }
+        if keys.contains(Settings.KeyboardToolbar.glassBarWithTerminalKeyboard.name) {
+            terminalKeyboardUsesGlassBar = SettingsStore.shared.get(Settings.KeyboardToolbar.glassBarWithTerminalKeyboard)
         }
         if keys.contains(Settings.KeyboardToolbar.glyphColoring.name) {
             glyphColoring = SettingsStore.shared.get(Settings.KeyboardToolbar.glyphColoring)

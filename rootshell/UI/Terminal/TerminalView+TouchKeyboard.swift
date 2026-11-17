@@ -11,6 +11,8 @@ extension Ghostty.TerminalView: TerminalTouchKeyboardHost {
         isFirstResponder && window != nil && !aiAgentOverlayActive && !showComposeOverlay
     }
 
+    var touchKeyboardHeldModifiers: KeyModifiers { keyboardAccessoryController?.glassBarHeldModifiers ?? [] }
+
     func prepareTouchKeyboardSwitch() {
         // Resolve the current input method before replacing its input view.
         commitKoreanCompositionIfNeeded(external: true)
@@ -29,6 +31,9 @@ extension Ghostty.TerminalView: TerminalTouchKeyboardHost {
 
     func touchKeyboardSend(_ key: String, modifiers: KeyModifiers, shifted: Character?) {
         guard touchKeyboardCanSend else { return }
+        let held = touchKeyboardHeldModifiers
+        let modifiers = modifiers.union(held)
+        defer { if !held.isEmpty { keyboardAccessoryController?.consumeGlassBarModifiers() } }
         // Special keys bypass insertText, but still interrupt consecutive spaces.
         resetDoubleSpaceTracking()
         if key == "\u{7f}", modifiers.isEmpty {

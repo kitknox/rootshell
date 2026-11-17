@@ -108,6 +108,10 @@ class SplitPaneView: UIView, Identifiable {
     /// self-sizing height can change without a system keyboard notification.
     var dockedTouchKeyboardFrameInScreen: CGRect? { nil }
 
+    /// The pane's keyboard toolbar is the glass bar, so the terminal may draw
+    /// under it and the keyboard.
+    var keyboardToolbarShowsGlassBar: Bool { false }
+
     /// Live interaction state for bottom-edge system-gesture arbitration.
     /// Unlike the reserved height, this must never remain latched after focus
     /// leaves the pane.

@@ -40,17 +40,20 @@ private final class ToolbarPlateView: UIVisualEffectView {
 
     private struct Material: Equatable {
         let glass: Bool
+        /// Untinted regular glass, as the remote screen's bar draws it.
+        let clear: Bool
         let tint: UIColor
         let reducesTransparency: Bool
     }
     /// The material last applied, so layout passes do not rebuild it.
     private var appliedMaterial: Material?
 
-    func configure(radius: CGFloat, corners: CACornerMask, showsTopEdge: Bool, tint: UIColor, glass: Bool = false) {
+    func configure(radius: CGFloat, corners: CACornerMask, showsTopEdge: Bool, tint: UIColor,
+                   glass: Bool = false, clear: Bool = false) {
         layer.cornerRadius = radius
         layer.maskedCorners = corners
         topBorder.isHidden = !showsTopEdge
-        apply(Material(glass: glass, tint: tint,
+        apply(Material(glass: glass, clear: glass && clear, tint: tint,
                        reducesTransparency: UIAccessibility.isReduceTransparencyEnabled))
         // A zero-height preview must not leave the border or backdrop visible.
         isHidden = bounds.height == 0
@@ -72,6 +75,11 @@ private final class ToolbarPlateView: UIVisualEffectView {
         }
         #if !os(visionOS)
         if #available(iOS 26.0, *) {
+            if material.clear {
+                effect = UIGlassEffect(style: .regular)
+                tintOverlay.backgroundColor = .clear
+                return
+            }
             let glass = UIGlassEffect(style: .clear)
             glass.tintColor = material.tint
             effect = glass
@@ -81,6 +89,11 @@ private final class ToolbarPlateView: UIVisualEffectView {
             return
         }
         #endif
+        if material.clear {
+            effect = UIBlurEffect(style: .systemUltraThinMaterial)
+            tintOverlay.backgroundColor = .clear
+            return
+        }
         effect = UIBlurEffect(style: .systemThinMaterial)
         tintOverlay.backgroundColor = material.tint
     }
@@ -1356,7 +1369,7 @@ class KeyboardToolbarView: UIView {
             plate.configure(radius: radius,
                             corners: [.layerMinXMinYCorner, .layerMaxXMinYCorner,
                                       .layerMinXMaxYCorner, .layerMaxXMaxYCorner],
-                            showsTopEdge: false, tint: tint, glass: glass)
+                            showsTopEdge: false, tint: tint, glass: glass, clear: usesClearGlass)
         }
     }
 
@@ -1894,7 +1907,7 @@ class KeyboardToolbarView: UIView {
             // A capsule around the keys, floating over what is behind.
             backgroundBlurView.configure(
                 radius: max(0, min(22, backgroundBlurView.bounds.height / 2)), corners: allCorners,
-                showsTopEdge: false, tint: glassPlateTint(for: traitCollection), glass: true)
+                showsTopEdge: false, tint: glassPlateTint(for: traitCollection), glass: true, clear: usesClearGlass)
         } else {
             // Over sections this plate holds only the drawers, as a bar of its own.
             backgroundBlurView.configure(radius: sizes.toolbar.cornerRadius, corners: sections ? allCorners : mainCorners,
@@ -2302,10 +2315,18 @@ class KeyboardToolbarView: UIView {
     var plateLeadingAnchor: NSLayoutXAxisAnchor { backgroundBlurView.leadingAnchor }
     var plateTrailingAnchor: NSLayoutXAxisAnchor { backgroundBlurView.trailingAnchor }
 
-    /// Glass draws the plate as a capsule on the keyboard's backdrop. A host
-    /// with its own glass draws no plate at all.
+    /// Glass draws the plate as a capsule on the keyboard's backdrop, as does the
+    /// glass bar. A host with its own glass draws no plate at all.
     var usesGlassPlate: Bool {
-        !usesHostChrome && KeyboardToolbarManager.shared.toolbarStyle == .glass
+        guard !usesHostChrome else { return false }
+        let style = KeyboardToolbarManager.shared.toolbarStyle.resolved
+        return style == .glass || style == .glassBar
+    }
+
+    /// The glass bar: untinted regular glass the terminal scrolls under, as on a
+    /// remote screen's bar, instead of a capsule in the keyboard's color.
+    private var usesClearGlass: Bool {
+        usesGlassPlate && KeyboardToolbarManager.shared.toolbarStyle.resolved == .glassBar
     }
 
     private var plateInset: CGFloat { usesGlassPlate ? 2 : 0 }
@@ -2314,14 +2335,19 @@ class KeyboardToolbarView: UIView {
     /// A host's bar is one plate already.
     var usesSectionPlates: Bool { !usesHostChrome && hasPinnedSections }
 
-    /// A host's bar draws its own buttons plain, so keys in it stay plain too.
-    private var showsKeycaps: Bool { !usesHostChrome && KeyboardToolbarManager.shared.showsKeycaps }
+    /// A host's bar draws its own buttons plain, so keys in it stay plain too, as
+    /// they do on the glass bar.
+    private var showsKeycaps: Bool {
+        !usesHostChrome && !usesClearGlass && KeyboardToolbarManager.shared.showsKeycaps
+    }
 
     private var keySpacing: CGFloat { showsKeycaps ? sizes.toolbar.keycapGap : sizes.toolbar.spacing }
 
     /// The system keyboard's own panel color, so a capsule reads as part of it.
+    /// Clear glass takes no tint; this is only its Reduce Transparency fill.
     private func glassPlateTint(for traitCollection: UITraitCollection) -> UIColor {
-        traitCollection.userInterfaceStyle == .dark
+        if usesClearGlass { return .secondarySystemBackground }
+        return traitCollection.userInterfaceStyle == .dark
             ? UIColor(red: 0.129, green: 0.145, blue: 0.165, alpha: 0.82)
             : UIColor(red: 0.82, green: 0.83, blue: 0.86, alpha: 0.82)
     }

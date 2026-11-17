@@ -19,6 +19,7 @@ struct ToolbarAppearanceSettingsView: View {
     @State private var previewMetrics = ToolbarLayoutPreviewMetrics()
     @State private var chosenSurface: ToolbarPreviewSurface?
     @Setting(Settings.Keyboard.touchEnabled) private var terminalKeyboard
+    @Setting(Settings.Keyboard.touchThemeAware) private var terminalKeyboardThemeAware
     @Setting(Settings.ScreenSharing.floatingToolbarDefault) private var floatingBar
 
     private var surfaces: [ToolbarPreviewSurface] {
@@ -26,6 +27,13 @@ struct ToolbarAppearanceSettingsView: View {
     }
     /// Style and keycaps only show above the system keyboard.
     private var showsSystemKeyboardOptions: Bool { surfaces.contains(.systemKeyboard) }
+    private var styleFooter: String {
+        guard KeyboardToolbarStyle.selectableCases.contains(.glassBar) else {
+            return String(localized: "Glass draws each section as a glass capsule in the system keyboard's color. Keycaps draws each key as a cap like the keyboard's own. The terminal keyboard and the remote screen toolbar have their own look.")
+        }
+        return String(localized: "Glass draws each section as a glass capsule in the system keyboard's color. Glass Bar draws the toolbar in clear glass like the remote screen's bar, and scrollback slides under it and, where the keyboard allows, under the keyboard too. Keycaps draws each key as a cap like the keyboard's own; Glass Bar keeps keys plain. The remote screen toolbar has its own look, and so does the terminal keyboard unless Use with Terminal Keyboard turns it to glass too. On glass its keys take the system keyboard's colors; Theme Keys on Glass uses the terminal theme's instead.")
+    }
+
     /// Opens on the system keyboard, where style and keycaps show; key colors show on every surface.
     private var previewSurface: ToolbarPreviewSurface {
         chosenSurface.flatMap { surfaces.contains($0) ? $0 : nil }
@@ -51,10 +59,10 @@ struct ToolbarAppearanceSettingsView: View {
             if showsSystemKeyboardOptions {
                 Section {
                     Picker("Style", selection: Binding(
-                        get: { manager.toolbarStyle },
+                        get: { manager.toolbarStyle.resolved },
                         set: { manager.toolbarStyle = $0 }
                     )) {
-                        ForEach(KeyboardToolbarStyle.allCases, id: \.self) { style in
+                        ForEach(KeyboardToolbarStyle.selectableCases, id: \.self) { style in
                             Text(style.displayName).tag(style)
                         }
                     }
@@ -70,11 +78,30 @@ struct ToolbarAppearanceSettingsView: View {
                         ),
                         title: "Keycaps"
                     )
+                    // The glass bar keeps keys plain, as the remote screen bar does.
+                    .disabled(manager.toolbarStyle.resolved == .glassBar)
                     .themedRow()
+
+                    if manager.toolbarStyle.resolved == .glassBar && terminalKeyboard {
+                        SettingToggle(
+                            Settings.KeyboardToolbar.glassBarWithTerminalKeyboard,
+                            isOn: Binding(
+                                get: { manager.terminalKeyboardUsesGlassBar },
+                                set: { manager.terminalKeyboardUsesGlassBar = $0 }
+                            ),
+                            title: "Use with Terminal Keyboard"
+                        )
+                        .themedRow()
+                        if manager.terminalKeyboardUsesGlassBar {
+                            SettingToggle(Settings.Keyboard.touchGlassThemeKeys, title: "Theme Keys on Glass")
+                                .disabled(!terminalKeyboardThemeAware)
+                                .themedRow()
+                        }
+                    }
                 } header: {
                     Text("System Keyboard Toolbar")
                 } footer: {
-                    Text("Glass draws each section as a glass capsule in the system keyboard's color. Keycaps draws each key as a cap like the keyboard's own. The terminal keyboard and the remote screen toolbar have their own look.")
+                    Text(styleFooter)
                 }
             }
 

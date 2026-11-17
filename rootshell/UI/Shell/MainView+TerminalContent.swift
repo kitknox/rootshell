@@ -1197,6 +1197,9 @@ extension MainView {
         let selectedBottomToolbarHeight = terminals.indices.contains(selectedTabIndex)
             ? (terminals[selectedTabIndex].focusedPane?.reservedKeyboardToolbarHeightAtBottom ?? 0)
             : 0
+        // A glass toolbar lets bottom panes draw on under it and the keyboard.
+        let toolbarIsGlass = terminals.indices.contains(selectedTabIndex)
+            && terminals[selectedTabIndex].focusedPane?.keyboardToolbarShowsGlassBar == true
         ZStack {
             ForEach(Array(terminals.enumerated()), id: \.element.id) { index, tab in
                 if !tab.splitTree.isEmpty {
@@ -1259,6 +1262,8 @@ extension MainView {
                                 paneCardGaps: roundedPanes ? paneCardGaps : nil,
                                 tabID: tab.id
                             )
+                            // The padding is exactly the band the toolbar and keyboard cover.
+                            .environment(\.terminalKeyboardUnderlap, toolbarIsGlass ? bottomPadding : 0)
                             // NOTE: the tmux control-mode client size is NOT driven from here.
                             // A tmux pane is a real ghostty surface, so its grid is recomputed
                             // in the core (cell/font/inset-aware) on every resize/keyboard/font

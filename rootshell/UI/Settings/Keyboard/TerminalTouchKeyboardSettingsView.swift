@@ -153,6 +153,9 @@ struct TerminalTouchKeyboardSettingsView: View {
                 .themedRow()
                 SettingToggle(Settings.Keyboard.touchThemeAware, title: "Follow Terminal Theme", icon: "paintpalette")
                     .themedRow()
+                SettingToggle(Settings.Keyboard.touchGlassThemeKeys, title: "Theme Keys on Glass", icon: "square.grid.3x3")
+                    .disabled(!themeAware)
+                    .themedRow()
                 if keyboardStyle == .steampunk {
                     SettingToggle(Settings.Keyboard.touchSteampunkThemeAwareKeycaps, title: "Theme-Aware Keycaps", icon: "keyboard")
                         .disabled(!themeAware)
@@ -172,7 +175,7 @@ struct TerminalTouchKeyboardSettingsView: View {
             } header: {
                 Text("Appearance")
             } footer: {
-                Text("Flat is the original keyboard style. Sculpted adds raised keycaps and depth. Steampunk adds brass-rimmed instrument keys and a mechanical drive that responds to touch. Phosphor draws glowing keys on a dark CRT screen. Beige Box has tall keys like a classic office keyboard. Neon Grid puts glowing keys over a synthwave horizon whose grid moves as you type. Circuit Board sends a pulse along the board’s traces with each key press. Animations stop when idle, with Reduce Motion, or in Low Power Mode. Follow Terminal Theme matches the active terminal’s colors, including tab and window themes. Key labels keep their contrast in every mode.")
+                Text("Flat is the original keyboard style. Sculpted adds raised keycaps and depth. Steampunk adds brass-rimmed instrument keys and a mechanical drive that responds to touch. Phosphor draws glowing keys on a dark CRT screen. Beige Box has tall keys like a classic office keyboard. Neon Grid puts glowing keys over a synthwave horizon whose grid moves as you type. Circuit Board sends a pulse along the board’s traces with each key press. Animations stop when idle, with Reduce Motion, or in Low Power Mode. Follow Terminal Theme matches the active terminal’s colors, including tab and window themes. On glass (the detached keyboard, or Glass Bar with Use with Terminal Keyboard), keys use the system keyboard’s colors; turn on Theme Keys on Glass to use the theme’s. Key labels keep their contrast in every mode.")
                 if keyboardStyle == .steampunk {
                     Text("Steampunk uses matching ivory and dark enamel keycaps by default. With Follow Terminal Theme on, enable Theme-Aware Keycaps to also match the keycaps to your terminal’s colors.")
                 }

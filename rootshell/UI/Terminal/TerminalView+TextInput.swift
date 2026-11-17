@@ -641,7 +641,7 @@ extension Ghostty.TerminalView {
     }
 
     private func imeVisibleBounds() -> CGRect {
-        let bottomInset = max(safeAreaInsets.bottom, reservedKeyboardToolbarHeightAtBottom)
+        let bottomInset = max(safeAreaInsets.bottom, reservedKeyboardToolbarHeightAtBottom, bottomUnderlap)
         let insets = UIEdgeInsets(top: safeAreaInsets.top, left: 0, bottom: bottomInset, right: 0)
         let visibleBounds = bounds.inset(by: insets)
         guard !visibleBounds.isNull, !visibleBounds.isEmpty else { return bounds }

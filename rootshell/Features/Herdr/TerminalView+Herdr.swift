@@ -230,7 +230,7 @@ extension Ghostty.TerminalView {
             paddingX: PaddingManager.shared.effectivePaddingX,
             paddingY: PaddingManager.shared.effectivePaddingY,
             scale: scale,
-            bottomInsetPixels: currentBottomInsetPixels(),
+            bottomInsetPixels: visibleBottomInsetPixels(),
             topInsetPixels: currentTopInsetPixels()
         )
     }

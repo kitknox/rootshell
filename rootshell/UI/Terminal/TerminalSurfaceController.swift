@@ -513,7 +513,21 @@ final class TerminalSurfaceController: NSObject {
         Ghostty.logger.info("Initial occlusion set: visible=\(visible)")
     }
 
-    func updateBottomInset() {
+    /// Insets held for the size push that follows in the same layout pass.
+    private var pendingInsets: (bottom: Double, top: Double)?
+
+    private nonisolated struct HeldInsets: Sendable {
+        let bottom: Double
+        let top: Double
+        /// Set after the size when the size grows, before it when it shrinks.
+        let afterSize: Bool
+    }
+
+    /// `deferringToSize`: the caller pushes the size next. When that size will
+    /// change too, both go in one block, so the grid never passes through a
+    /// size neither the old nor the new layout has (a glass toolbar's underlap
+    /// grows the drawable and the inset by the same amount).
+    func updateBottomInset(deferringToSize: Bool = false) {
         guard let surface else { return }
         guard !host.surfaceSuppressBottomInsetUpdatesForScrollRubberBand else { return }
         // Insets change the terminal's row count too. Keep them under the
@@ -536,6 +550,27 @@ final class TerminalSurfaceController: NSObject {
         if abs(insetPx - lastBottomInsetPx) < 0.5, abs(topInsetPx - lastTopInsetPx) < 0.5 { return }
         lastBottomInsetPx = insetPx
         lastTopInsetPx = topInsetPx
+        #if !targetEnvironment(macCatalyst)
+        if deferringToSize, let last = lastFramebufferSize {
+            let scale = host.surfaceView.contentScaleFactor
+            let size = host.surfaceView.bounds.size
+            if last.width != UInt32(size.width * scale) || last.height != UInt32(size.height * scale) {
+                pendingInsets = (insetPx, topInsetPx)
+                return
+            }
+        }
+        #endif
+        pushInsets(surface: surface, bottom: insetPx, top: topInsetPx)
+    }
+
+    /// Applies insets the size push did not take, so none is ever lost.
+    private func flushPendingInsets() {
+        guard let insets = pendingInsets, let surface else { return }
+        pendingInsets = nil
+        pushInsets(surface: surface, bottom: insets.bottom, top: insets.top)
+    }
+
+    private func pushInsets(surface: ghostty_surface_t, bottom insetPx: Double, top topInsetPx: Double) {
         // An inset can change rows without changing framebuffer bounds. The
         // size cache may then skip setSize, so notify the session here too;
         // updatePTYSize deduplicates an unchanged grid. A pipe-backed surface
@@ -562,6 +597,8 @@ final class TerminalSurfaceController: NSObject {
     }
 
     func sizeDidChange(_ size: CGSize) {
+        // Any inset held for this push still lands if a gate below skips it.
+        defer { flushPendingInsets() }
         guard let surface else {
             Ghostty.logger.warning("sizeDidChange called but surface is nil")
             return
@@ -652,6 +689,7 @@ final class TerminalSurfaceController: NSObject {
             return
         }
 
+        let previousHeight = lastFramebufferSize?.height
         lastFramebufferSize = (width: framebufferWidth, height: framebufferHeight)
         lastContentScaleFactor = scale
         host.surfaceGeometryDidChange()
@@ -672,6 +710,11 @@ final class TerminalSurfaceController: NSObject {
         }
 
         let needsRestore = host.surfacePendingScrollbackRestoreForLayout
+        // Grow first, then trim, so the grid never passes through a smaller size.
+        let insets = pendingInsets.map {
+            HeldInsets(bottom: $0.bottom, top: $0.top, afterSize: framebufferHeight > (previousHeight ?? 0))
+        }
+        pendingInsets = nil
 
         if previousScale == nil || previousScale != scale {
             setContentScaleAndSize(
@@ -679,7 +722,8 @@ final class TerminalSurfaceController: NSObject {
                 scale: scale,
                 framebufferWidth: framebufferWidth,
                 framebufferHeight: framebufferHeight,
-                needsRestore: needsRestore
+                needsRestore: needsRestore,
+                insets: insets
             )
             return
         }
@@ -688,7 +732,8 @@ final class TerminalSurfaceController: NSObject {
             surface: surface,
             framebufferWidth: framebufferWidth,
             framebufferHeight: framebufferHeight,
-            needsRestore: needsRestore
+            needsRestore: needsRestore,
+            insets: insets
         )
     }
 
@@ -697,7 +742,8 @@ final class TerminalSurfaceController: NSObject {
         scale: CGFloat,
         framebufferWidth: UInt32,
         framebufferHeight: UInt32,
-        needsRestore: Bool
+        needsRestore: Bool,
+        insets: HeldInsets? = nil
     ) {
         #if targetEnvironment(macCatalyst)
         guard !host.surfaceTmuxDetachInProgressAtomic else { return }
@@ -715,7 +761,7 @@ final class TerminalSurfaceController: NSObject {
             guard self != nil else { return }
             guard hostRef.surfaceTmuxDetachInProgressAtomic != true else { return }
             ghostty_surface_set_content_scale(surfacePtr, scale, scale)
-            ghostty_surface_set_size(surfacePtr, framebufferWidth, framebufferHeight)
+            Self.setSize(surfacePtr, framebufferWidth, framebufferHeight, insets: insets)
             Task { @MainActor [weak self] in
                 self?.completeSurfaceResize(needsRestore: needsRestore)
             }
@@ -727,7 +773,8 @@ final class TerminalSurfaceController: NSObject {
         surface: ghostty_surface_t,
         framebufferWidth: UInt32,
         framebufferHeight: UInt32,
-        needsRestore: Bool
+        needsRestore: Bool,
+        insets: HeldInsets? = nil
     ) {
         #if targetEnvironment(macCatalyst)
         guard !host.surfaceTmuxDetachInProgressAtomic else { return }
@@ -743,12 +790,26 @@ final class TerminalSurfaceController: NSObject {
         Ghostty.TerminalView.ghosttyAPIQueue.async { [weak self] in
             guard self != nil else { return }
             guard hostRef.surfaceTmuxDetachInProgressAtomic != true else { return }
-            ghostty_surface_set_size(surfacePtr, framebufferWidth, framebufferHeight)
+            Self.setSize(surfacePtr, framebufferWidth, framebufferHeight, insets: insets)
             Task { @MainActor [weak self] in
                 self?.completeSurfaceResize(needsRestore: needsRestore)
             }
         }
         #endif
+    }
+
+    /// One block on the API queue: no size update is reported in between.
+    private nonisolated static func setSize(_ surface: ghostty_surface_t, _ width: UInt32, _ height: UInt32,
+                                            insets: HeldInsets?) {
+        if let insets, !insets.afterSize {
+            ghostty_surface_set_top_inset(surface, insets.top)
+            ghostty_surface_set_bottom_inset(surface, insets.bottom)
+        }
+        ghostty_surface_set_size(surface, width, height)
+        if let insets, insets.afterSize {
+            ghostty_surface_set_top_inset(surface, insets.top)
+            ghostty_surface_set_bottom_inset(surface, insets.bottom)
+        }
     }
 
     func setOcclusion(_ visible: Bool) {
