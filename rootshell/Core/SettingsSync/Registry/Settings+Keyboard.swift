@@ -10,6 +10,7 @@ import Foundation
 extension Ghostty.OptionKeyAsAlt: SettingValue {}
 extension DrawerToggleMode: SettingValue {}
 extension KeyboardToolbarStyle: SettingValue {}
+extension KeyboardToolbarGlyphColoring: SettingValue {}
 extension KeyboardToolbarSize: SettingValue {}
 extension TerminalWritingAssistanceMode: SettingValue {}
 extension KeyboardArrowJoystickButton.Mode: SettingValue {}
@@ -187,6 +188,39 @@ nonisolated extension Settings {
             "keyboardToolbarKeycaps", default: false, group: .keyboardToolbar, policy: .localByDefault,
             configKey: "keyboard-toolbar-keycaps",
             title: String(localized: "Toolbar Keycaps", comment: "Setting title"))
+        static let glyphColoring = SettingKey(
+            "keyboardToolbarGlyphColoring", default: KeyboardToolbarGlyphColoring.standard, group: .keyboardToolbar,
+            policy: .localByDefault, configKey: "keyboard-toolbar-key-colors",
+            title: String(localized: "Toolbar Key Colors", comment: "Setting title"))
+        // Hex RGB, as the other color settings store it.
+        static let glyphColor = SettingKey(
+            "keyboardToolbarGlyphColor", default: "0A84FF", group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-key-color",
+            title: String(localized: "Toolbar Key Color", comment: "Setting title"))
+        static let glyphColorModifiers = SettingKey(
+            "keyboardToolbarGlyphColorModifiers", default: "0A84FF", group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-key-color-modifiers",
+            title: String(localized: "Toolbar Modifier Key Color", comment: "Setting title"))
+        static let glyphColorNavigation = SettingKey(
+            "keyboardToolbarGlyphColorNavigation", default: "30B0C7", group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-key-color-navigation",
+            title: String(localized: "Toolbar Tab and Arrow Key Color", comment: "Setting title"))
+        static let glyphColorSymbols = SettingKey(
+            "keyboardToolbarGlyphColorSymbols", default: "FF9500", group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-key-color-symbols",
+            title: String(localized: "Toolbar Symbol Key Color", comment: "Setting title"))
+        static let glyphColorActions = SettingKey(
+            "keyboardToolbarGlyphColorActions", default: "AF52DE", group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-key-color-actions",
+            title: String(localized: "Toolbar Action Key Color", comment: "Setting title"))
+        static let glyphColorCustomKeys = SettingKey(
+            "keyboardToolbarGlyphColorCustomKeys", default: "34C759", group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-key-color-custom",
+            title: String(localized: "Toolbar Custom Key Color", comment: "Setting title"))
+        /// Colors set on single built-in keys, as JSON.
+        static let keyColors = SettingKey<Data?>(
+            "keyboardToolbarKeyColors", default: nil, group: .keyboardToolbar, policy: .localByDefault,
+            title: String(localized: "Individual Toolbar Key Colors", comment: "Setting title"))
         static let drawerToggleMode = SettingKey(
             "keyboardToolbarDrawerToggleMode", default: DrawerToggleMode.stack, group: .keyboardToolbar, policy: .localByDefault,
             configKey: "keyboard-toolbar-drawer-toggle-mode",
@@ -211,6 +245,8 @@ nonisolated extension Settings {
             config.erased, screenSharingConfig.erased, kvmConfig.erased, customKeys.erased, savedLayouts.erased,
             deviceIdiom.erased,
             drawerOpenByDefault.erased, drawerToggleMode.erased, keycaps.erased, style.erased,
+            glyphColoring.erased, glyphColor.erased, glyphColorModifiers.erased, glyphColorNavigation.erased,
+            glyphColorSymbols.erased, glyphColorActions.erased, glyphColorCustomKeys.erased, keyColors.erased,
             sizePhone.erased, sizePad.erased, sizeDuoInner.erased, sizeDuoFront.erased,
             minKeyWidthPhone.erased, minKeyWidthPad.erased, minKeyWidthDuoInner.erased, minKeyWidthDuoFront.erased,
             persistent.erased, showWithHardwareKeyboard.erased, arrowJoystickMode.erased,

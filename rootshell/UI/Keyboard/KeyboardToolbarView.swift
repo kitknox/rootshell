@@ -1140,6 +1140,7 @@ class KeyboardToolbarView: UIView {
                 display: .icon("keyboard.badge.ellipsis"), sizes: sizes)
             button.accessibilityLabel = String(localized: "Use Terminal Keyboard")
             button.delegate = self
+            button.glyphColor = manager.glyphColorHex(for: .action).flatMap { UIColor(hex: $0) }
             // It leads the row, held still with the pinned keys when there are
             // any or when the keys after it scroll.
             (layout.leadingCount > 0 || scrolls ? leadingStackView : mainRowStackView).addArrangedSubview(button)
@@ -1351,13 +1352,21 @@ class KeyboardToolbarView: UIView {
         middleScrollRow.setDetachedPlate(true, endRadius: detached || usesGlassPlate ? middleRadius : 0)
     }
 
+    /// Every row builds its keys here, so each takes its glyph color.
     private func createButtonForSlot(_ slot: KeySlot) -> UIView? {
+        let view: UIView?
         switch slot {
         case .builtIn(let keyID):
-            return createButtonForKeyID(keyID)
+            view = createButtonForKeyID(keyID)
         case .custom(let uuid):
-            return createCustomKeyButton(uuid: uuid)
+            view = createCustomKeyButton(uuid: uuid)
         }
+        let color = KeyboardToolbarManager.shared.glyphColor(for: slot)
+        (view as? KeyboardButton)?.glyphColor = color
+        #if !os(visionOS)
+        (view as? KeyboardArrowJoystickButton)?.glyphColor = color
+        #endif
+        return view
     }
 
     private func createButtonForKeyID(_ keyID: KeyID) -> UIView? {
@@ -2047,22 +2056,16 @@ class KeyboardToolbarView: UIView {
     private func populateArrowRow(_ row: DrawerRowView) {
         row.configureForCentering()
 
-        let arrows: [(icon: String, key: String)] = [
-            ("arrow.left", "\u{1B}[D"),
-            ("arrow.down", "\u{1B}[B"),
-            ("arrow.up", "\u{1B}[A"),
-            ("arrow.right", "\u{1B}[C")
-        ]
-
-        for arrow in arrows {
+        for arrow in [KeyID.arrowLeft, .arrowDown, .arrowUp, .arrowRight] {
             let button = KeyboardSymbolButton(
-                key: arrow.key,
-                display: .icon(arrow.icon),
+                key: arrow.keyValue,
+                display: .icon(arrow.iconName ?? ""),
                 isWide: true,
                 sizes: sizes
             )
             button.delegate = self
             button.shouldAutoRepeat = true
+            button.glyphColor = KeyboardToolbarManager.shared.glyphColor(for: .builtIn(arrow))
             row.stackView.addArrangedSubview(button)
         }
     }
@@ -2072,22 +2075,9 @@ class KeyboardToolbarView: UIView {
 
         guard effectiveDrawerRows.indices.contains(drawerIndex) else { return }
 
-        for slot in effectiveDrawerRows[drawerIndex] {
-            switch slot {
-            case .builtIn(let keyID):
-                if keyID.isModifier {
-                    let modButton = createModifierButton(for: keyID.keyDefinition)
-                    row.stackView.addArrangedSubview(modButton)
-                } else if keyID == .drawerToggle {
-                    // Skip drawer toggle in drawer
-                    continue
-                } else if let button = createButtonForKeyID(keyID) {
-                    row.stackView.addArrangedSubview(button)
-                }
-            case .custom(let uuid):
-                if let button = createCustomKeyButton(uuid: uuid) {
-                    row.stackView.addArrangedSubview(button)
-                }
+        for slot in effectiveDrawerRows[drawerIndex] where slot != .builtIn(.drawerToggle) {
+            if let button = createButtonForSlot(slot) {
+                row.stackView.addArrangedSubview(button)
             }
         }
     }

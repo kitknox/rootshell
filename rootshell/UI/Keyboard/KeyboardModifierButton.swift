@@ -93,7 +93,6 @@ class KeyboardModifierButton: KeyboardButton {
 
         // Create lock indicator bar (shown when locked)
         lockIndicatorBar = UIView()
-        lockIndicatorBar.backgroundColor = .label
         lockIndicatorBar.layer.cornerRadius = 1
         lockIndicatorBar.alpha = 0
         lockIndicatorBar.translatesAutoresizingMaskIntoConstraints = false
@@ -338,6 +337,10 @@ class KeyboardModifierButton: KeyboardButton {
         updateVisualState()
     }
 
+    override func applyGlyphColor() {
+        updateVisualState()
+    }
+
     private func updateVisualState() {
         // Background and icon change instantly so double-tap feels responsive
         switch modifierState {
@@ -351,8 +354,9 @@ class KeyboardModifierButton: KeyboardButton {
             backgroundColor = fill.active
             updateIconVariant(filled: true)
         }
-        label.textColor = .label
-        iconView?.tintColor = .label
+        label.textColor = glyphInk
+        iconView?.tintColor = glyphInk
+        lockIndicatorBar.backgroundColor = glyphInk
 
         // Only the lock indicator bar animates
         let targetAlpha: CGFloat = modifierState == .locked ? 1 : 0

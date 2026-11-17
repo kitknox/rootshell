@@ -140,18 +140,10 @@ struct KeyboardToolbarSettingsView: View {
 
     private var previewSection: some View {
         Section {
-            if surfaces.count > 1 {
-                Picker("Preview", selection: Binding(
-                    get: { previewSurface },
-                    set: { chosenSurface = $0 }
-                )) {
-                    ForEach(surfaces, id: \.self) { surface in
-                        Text(surface.displayName).tag(surface)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .themedRow()
-            }
+            ToolbarPreviewSurfacePicker(surfaces: surfaces, selection: Binding(
+                get: { previewSurface },
+                set: { chosenSurface = $0 }
+            ))
             ToolbarLayoutPreview(toolbar: context, surface: previewSurface, showsDrawers: true,
                                  metrics: $previewMetrics)
                 .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
@@ -234,6 +226,7 @@ struct KeyboardToolbarSettingsView: View {
             parts.append(manager.toolbarStyle.displayName)
             if manager.showsKeycaps { parts.append(String(localized: "Keycaps")) }
         }
+        if manager.glyphColoring != .standard { parts.append(manager.glyphColoring.displayName) }
         let size = KeyboardToolbarSize.current
         if size != .automatic { parts.append(size.displayName) }
         return parts.joined(separator: ", ")

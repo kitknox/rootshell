@@ -50,6 +50,7 @@ struct CustomKeyEditorView: View {
 
     @State private var label: String
     @State private var iconName: String?
+    @State private var colorHex: String?
     @State private var actionType: ActionType
     @State private var quickText: String
     @State private var quickTextReturn: Bool
@@ -64,6 +65,7 @@ struct CustomKeyEditorView: View {
         self.onDelete = onDelete
         _label = State(initialValue: existingKey?.label ?? "")
         _iconName = State(initialValue: existingKey?.iconName)
+        _colorHex = State(initialValue: existingKey?.colorHex)
         _sequence = State(initialValue: existingKey?.sequence ?? [])
 
         // Detect action type from existing key's sequence
@@ -161,6 +163,7 @@ struct CustomKeyEditorView: View {
             }
 
             iconSection
+            colorSection
             previewSection
 
             if onDelete != nil {
@@ -326,6 +329,29 @@ struct CustomKeyEditorView: View {
             Text("Icon (Optional)")
         } footer: {
             Text("Pick an SF Symbol, or leave blank for text label.")
+        }
+    }
+
+    private var colorSection: some View {
+        Section {
+            Toggle("Own Color", isOn: Binding(
+                get: { colorHex != nil },
+                // Starts from the color custom keys take by key type.
+                set: { colorHex = $0 ? SettingsStore.shared.value(Settings.KeyboardToolbar.glyphColorCustomKeys) : nil }
+            ))
+            .themedRow()
+
+            if let colorHex {
+                ColorPicker("Color", selection: Binding(
+                    get: { Color(hex: colorHex) ?? .accentColor },
+                    set: { self.colorHex = UIColor($0).hexString }
+                ), supportsOpacity: false)
+                .themedRow()
+            }
+        } header: {
+            Text("Color (Optional)")
+        } footer: {
+            Text("Colors this key's icon or label on every toolbar, in place of the toolbar's key colors.")
         }
     }
 
@@ -532,7 +558,8 @@ struct CustomKeyEditorView: View {
             id: existingKey?.id ?? UUID(),
             label: label.trimmingCharacters(in: .whitespaces),
             iconName: iconName,
-            sequence: effectiveSequence
+            sequence: effectiveSequence,
+            colorHex: colorHex
         )
         onSave(key)
         dismiss()

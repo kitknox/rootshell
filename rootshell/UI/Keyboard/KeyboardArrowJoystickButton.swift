@@ -76,6 +76,11 @@ class KeyboardArrowJoystickButton: UIView {
         }
     }
 
+    /// As on `KeyboardButton`; nil is the label color.
+    var glyphColor: UIColor? {
+        didSet { iconView.tintColor = glyphColor ?? .label }
+    }
+
     /// Keycaps sit apart; a touch in the gap goes to a neighboring key.
     var hitOutset: CGFloat = 0
     var hitBounds: CGRect { bounds.insetBy(dx: -hitOutset, dy: 0) }

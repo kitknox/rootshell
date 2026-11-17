@@ -1369,10 +1369,12 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         let manager = KeyboardToolbarManager.shared
         let toolbarLayout = manager.layout(for: toolbarContext)
         func key(for slot: KeySlot) -> Model.Key? {
+            let glyphColor = manager.glyphColorHex(for: slot)
             switch slot {
             case .custom(let id):
                 guard let custom = manager.customKey(for: id) else { return nil }
-                return Model.Key(title: custom.label, action: .custom(id), symbol: custom.iconName, accessibility: custom.label)
+                return Model.Key(title: custom.label, action: .custom(id), symbol: custom.iconName, accessibility: custom.label,
+                                 glyphColor: glyphColor)
             case .builtIn(let id):
                 guard !toolbarLayout.hiddenKeys.contains(id) else { return nil }
                 guard id.isAvailable else { return nil }
@@ -1396,7 +1398,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                     action = id.category == .symbol ? .text(id.keyValue)
                         : (id.category == .navigation ? .key(id.keyValue) : .toolbar(id.keyValue))
                 }
-                return Model.Key(title: title, action: action, symbol: id.iconName, accessibility: id.displayName)
+                return Model.Key(title: title, action: action, symbol: id.iconName, accessibility: id.displayName,
+                                 glyphColor: glyphColor)
             }
         }
         configuredDrawerToggle = key(for: .builtIn(.drawerToggle))

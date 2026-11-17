@@ -51,6 +51,24 @@ nonisolated enum ToolbarPreviewSurface: Hashable, Sendable {
     }
 }
 
+/// Chooses the surface a preview draws, for a toolbar that appears on more than one.
+struct ToolbarPreviewSurfacePicker: View {
+    let surfaces: [ToolbarPreviewSurface]
+    @Binding var selection: ToolbarPreviewSurface
+
+    var body: some View {
+        if surfaces.count > 1 {
+            Picker("Preview", selection: $selection) {
+                ForEach(surfaces, id: \.self) { surface in
+                    Text(surface.displayName).tag(surface)
+                }
+            }
+            .pickerStyle(.segmented)
+            .themedRow()
+        }
+    }
+}
+
 /// What a preview learned about the toolbar it drew.
 struct ToolbarLayoutPreviewMetrics: Equatable {
     var height: CGFloat = 44

@@ -40,7 +40,7 @@ class KeyboardToolbarManager {
     /// Contexts whose layout is optional and follows the terminal's until split off.
     static let secondaryContexts: [ToolbarContext] = [.screenSharing, .kvm]
 
-    private static let ownedKeys: Set<String> = [
+    private static let ownedKeys = Set<String>([
         Settings.KeyboardToolbar.config.name,
         Settings.KeyboardToolbar.screenSharingConfig.name,
         Settings.KeyboardToolbar.kvmConfig.name,
@@ -50,11 +50,13 @@ class KeyboardToolbarManager {
         Settings.KeyboardToolbar.drawerToggleMode.name,
         Settings.KeyboardToolbar.keycaps.name,
         Settings.KeyboardToolbar.style.name,
+        Settings.KeyboardToolbar.glyphColoring.name,
+        Settings.KeyboardToolbar.keyColors.name,
         Settings.KeyboardToolbar.minKeyWidthPhone.name,
         Settings.KeyboardToolbar.minKeyWidthPad.name,
         Settings.KeyboardToolbar.minKeyWidthDuoInner.name,
         Settings.KeyboardToolbar.minKeyWidthDuoFront.name,
-    ]
+    ]).union(glyphColorKeys.map(\.name))
 
     @ObservationIgnored private var isReloading = false
 
@@ -64,7 +66,7 @@ class KeyboardToolbarManager {
     private(set) var config: ToolbarLayoutConfig {
         didSet {
             guard !isReloading, config != oldValue else { return }
-            save(config, for: .terminal)
+            save(config, to: Settings.KeyboardToolbar.layoutKey(for: .terminal))
         }
     }
 
@@ -73,7 +75,8 @@ class KeyboardToolbarManager {
         didSet {
             guard !isReloading else { return }
             for context in Self.secondaryContexts where customLayouts[context] != oldValue[context] {
-                save(customLayouts[context], for: context)
+                // nil clears a context's own layout.
+                save(customLayouts[context], to: Settings.KeyboardToolbar.layoutKey(for: context))
             }
         }
     }
@@ -81,7 +84,7 @@ class KeyboardToolbarManager {
     private(set) var customKeys: [CustomKey] {
         didSet {
             guard !isReloading else { return }
-            saveCustomKeys()
+            save(customKeys, to: Settings.KeyboardToolbar.customKeys)
         }
     }
 
@@ -89,7 +92,16 @@ class KeyboardToolbarManager {
     private(set) var savedLayouts: [SavedToolbarLayout] {
         didSet {
             guard !isReloading, savedLayouts != oldValue else { return }
-            saveSavedLayouts()
+            save(savedLayouts.isEmpty ? nil : savedLayouts, to: Settings.KeyboardToolbar.savedLayouts)
+        }
+    }
+
+    /// Colors set on single built-in keys: `KeyID` raw value to hex RGB.
+    /// Raw keys keep a newer build's entries. Custom keys carry their own.
+    private(set) var keyColors: [String: String] {
+        didSet {
+            guard !isReloading, keyColors != oldValue else { return }
+            save(keyColors.isEmpty ? nil : keyColors, to: Settings.KeyboardToolbar.keyColors)
         }
     }
 
@@ -124,6 +136,92 @@ class KeyboardToolbarManager {
             SettingsStore.shared.set(Settings.KeyboardToolbar.style, toolbarStyle)
             notifyChange()
         }
+    }
+
+    /// How every toolbar colors its keys' glyphs.
+    var glyphColoring: KeyboardToolbarGlyphColoring {
+        didSet {
+            guard !isReloading, glyphColoring != oldValue else { return }
+            SettingsStore.shared.set(Settings.KeyboardToolbar.glyphColoring, glyphColoring)
+            notifyChange()
+        }
+    }
+
+    // MARK: - Glyph Colors
+
+    /// A key's glyph color as hex: its own, else the toolbar's. nil keeps the
+    /// surface's own ink. Every surface resolves colors here.
+    func glyphColorHex(for slot: KeySlot) -> String? {
+        ownGlyphColorHex(for: slot) ?? glyphColorHex(for: slot.glyphKind)
+    }
+
+    /// The color set on this one key, on every toolbar that places it.
+    func ownGlyphColorHex(for slot: KeySlot) -> String? {
+        switch slot {
+        case .builtIn(let id): return keyColors[id.rawValue]
+        case .custom(let id): return customKey(for: id)?.colorHex
+        }
+    }
+
+    /// nil returns the key to the toolbar's colors.
+    func setOwnGlyphColor(_ hex: String?, for slot: KeySlot) {
+        guard ownGlyphColorHex(for: slot) != hex else { return }
+        switch slot {
+        case .builtIn(let id):
+            keyColors[id.rawValue] = hex
+        case .custom(let id):
+            guard let index = customKeys.firstIndex(where: { $0.id == id }) else { return }
+            customKeys[index].colorHex = hex
+        }
+        notifyChange()
+    }
+
+    var hasOwnGlyphColors: Bool {
+        !keyColors.isEmpty || customKeys.contains { $0.colorHex != nil }
+    }
+
+    func clearOwnGlyphColors() {
+        guard hasOwnGlyphColors else { return }
+        keyColors = [:]
+        if customKeys.contains(where: { $0.colorHex != nil }) {
+            customKeys = customKeys.map { var key = $0; key.colorHex = nil; return key }
+        }
+        notifyChange()
+    }
+
+    func glyphColorHex(for kind: ToolbarGlyphKind) -> String? {
+        switch glyphColoring {
+        case .standard: return nil
+        case .single: return SettingsStore.shared.value(Settings.KeyboardToolbar.glyphColor)
+        case .byKind: return SettingsStore.shared.value(kind.colorKey)
+        }
+    }
+
+    func glyphColor(for slot: KeySlot) -> UIColor? {
+        glyphColorHex(for: slot).flatMap { UIColor(hex: $0) }
+    }
+
+    func setGlyphColor(_ color: UIColor, for key: SettingKey<String>) {
+        let hex = color.hexString
+        guard SettingsStore.shared.value(key) != hex else { return }
+        SettingsStore.shared.set(key, hex)
+        notifyChange()
+    }
+
+    /// One Color's color, then each key type's.
+    static let glyphColorKeys = [Settings.KeyboardToolbar.glyphColor] + ToolbarGlyphKind.allCases.map(\.colorKey)
+
+    /// Reads the observable setting, so a view that asks redraws when it changes.
+    func isGlyphColorChanged(_ key: SettingKey<String>) -> Bool {
+        let stored = SettingsStore.shared.box(for: key.name).value.flatMap(String.init(codableValue:))
+        return stored.map { $0 != key.defaultValue } ?? false
+    }
+
+    func resetGlyphColors(_ keys: [SettingKey<String>]) {
+        let changed = keys.filter(isGlyphColorChanged)
+        guard !changed.isEmpty else { return }
+        changed.forEach { SettingsStore.shared.reset($0) }
+        notifyChange()
     }
 
     // MARK: - Layouts
@@ -245,10 +343,12 @@ class KeyboardToolbarManager {
         customLayouts = Self.loadCustomLayouts(idiom: idiom)
         customKeys = Self.loadCustomKeys()
         savedLayouts = Self.loadSavedLayouts()
+        keyColors = Self.loadKeyColors()
         drawerOpenByDefault = SettingsStore.shared.get(Settings.KeyboardToolbar.drawerOpenByDefault)
         drawerToggleMode = SettingsStore.shared.get(Settings.KeyboardToolbar.drawerToggleMode)
         showsKeycaps = SettingsStore.shared.get(Settings.KeyboardToolbar.keycaps)
         toolbarStyle = SettingsStore.shared.get(Settings.KeyboardToolbar.style)
+        glyphColoring = SettingsStore.shared.get(Settings.KeyboardToolbar.glyphColoring)
 
         // Check if device idiom changed (e.g. restored backup from different device)
         let savedIdiom = UserDefaults.standard.string(forKey: Self.deviceIdiomKey)
@@ -285,6 +385,9 @@ class KeyboardToolbarManager {
         if keys.contains(Settings.KeyboardToolbar.savedLayouts.name) {
             savedLayouts = Self.loadSavedLayouts()
         }
+        if keys.contains(Settings.KeyboardToolbar.keyColors.name) {
+            keyColors = Self.loadKeyColors()
+        }
         if keys.contains(Settings.KeyboardToolbar.drawerOpenByDefault.name) {
             drawerOpenByDefault = SettingsStore.shared.get(Settings.KeyboardToolbar.drawerOpenByDefault)
         }
@@ -296,6 +399,9 @@ class KeyboardToolbarManager {
         }
         if keys.contains(Settings.KeyboardToolbar.style.name) {
             toolbarStyle = SettingsStore.shared.get(Settings.KeyboardToolbar.style)
+        }
+        if keys.contains(Settings.KeyboardToolbar.glyphColoring.name) {
+            glyphColoring = SettingsStore.shared.get(Settings.KeyboardToolbar.glyphColoring)
         }
         isReloading = false
         notifyChange()
@@ -628,56 +734,36 @@ class KeyboardToolbarManager {
 
     // MARK: - Persistence
 
-    /// nil clears a context's own layout.
-    private func save(_ layout: ToolbarLayoutConfig?, for context: ToolbarContext) {
+    /// nil clears the setting.
+    private func save<T: Encodable>(_ value: T?, to key: SettingKey<Data?>) {
         do {
-            let data = try layout.map { try JSONEncoder().encode($0) }
-            SettingsStore.shared.set(Settings.KeyboardToolbar.layoutKey(for: context), data)
+            SettingsStore.shared.set(key, try value.map { try JSONEncoder().encode($0) })
         } catch {
-            Self.logger.error("Failed to save toolbar config: \(error.localizedDescription)")
+            Self.logger.error("Failed to save \(key.name, privacy: .public): \(error.localizedDescription)")
         }
     }
 
-    private func saveCustomKeys() {
+    private static func load<T: Decodable>(_ type: T.Type, from key: SettingKey<Data?>) -> T? {
+        guard let data = SettingsStore.shared.get(key) else { return nil }
         do {
-            let data = try JSONEncoder().encode(customKeys)
-            SettingsStore.shared.set(Settings.KeyboardToolbar.customKeys, data)
+            return try JSONDecoder().decode(type, from: data)
         } catch {
-            Self.logger.error("Failed to save custom keys: \(error.localizedDescription)")
-        }
-    }
-
-    private func saveSavedLayouts() {
-        do {
-            let data = savedLayouts.isEmpty ? nil : try JSONEncoder().encode(savedLayouts)
-            SettingsStore.shared.set(Settings.KeyboardToolbar.savedLayouts, data)
-        } catch {
-            Self.logger.error("Failed to save saved toolbar layouts: \(error.localizedDescription)")
+            logger.error("Failed to load \(key.name, privacy: .public): \(error.localizedDescription)")
+            return nil
         }
     }
 
     private static func loadSavedLayouts() -> [SavedToolbarLayout] {
-        guard let data = SettingsStore.shared.get(Settings.KeyboardToolbar.savedLayouts) else { return [] }
-        do {
-            return try JSONDecoder().decode([SavedToolbarLayout].self, from: data)
-        } catch {
-            logger.error("Failed to load saved toolbar layouts: \(error.localizedDescription)")
-            return []
-        }
+        load([SavedToolbarLayout].self, from: Settings.KeyboardToolbar.savedLayouts) ?? []
+    }
+
+    private static func loadKeyColors() -> [String: String] {
+        load([String: String].self, from: Settings.KeyboardToolbar.keyColors) ?? [:]
     }
 
     private static func loadLayout(for context: ToolbarContext, idiom: UIUserInterfaceIdiom) -> ToolbarLayoutConfig? {
-        guard let data = SettingsStore.shared.get(Settings.KeyboardToolbar.layoutKey(for: context)) else { return nil }
-        do {
-            var config = try JSONDecoder().decode(ToolbarLayoutConfig.self, from: data)
-            if config.version < ToolbarLayoutConfig.currentVersion {
-                config = ToolbarLayoutConfig.migrate(config, idiom: idiom)
-            }
-            return config
-        } catch {
-            logger.error("Failed to load toolbar config: \(error.localizedDescription)")
-            return nil
-        }
+        load(ToolbarLayoutConfig.self, from: Settings.KeyboardToolbar.layoutKey(for: context))
+            .map { ToolbarLayoutConfig.migrate($0, idiom: idiom) }
     }
 
     private static func loadCustomLayouts(idiom: UIUserInterfaceIdiom) -> [ToolbarContext: ToolbarLayoutConfig] {
@@ -689,13 +775,7 @@ class KeyboardToolbarManager {
     }
 
     private static func loadCustomKeys() -> [CustomKey] {
-        guard let data = SettingsStore.shared.get(Settings.KeyboardToolbar.customKeys) else { return [] }
-        do {
-            return try JSONDecoder().decode([CustomKey].self, from: data)
-        } catch {
-            logger.error("Failed to load custom keys: \(error.localizedDescription)")
-            return []
-        }
+        load([CustomKey].self, from: Settings.KeyboardToolbar.customKeys) ?? []
     }
 
     private func notifyChange() {

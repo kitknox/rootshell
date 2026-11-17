@@ -416,6 +416,9 @@ nonisolated enum TerminalTouchKeyboardModel {
         var symbol: String? = nil
         var weight: Double = 1
         var accessibility: String? = nil
+        /// A toolbar key's glyph color, as hex. Part of the key, so a new
+        /// color rebuilds the caps like any other toolbar change.
+        var glyphColor: String? = nil
 
         var isText: Bool { if case .text = action { return true }; return false }
         var letter: String? {

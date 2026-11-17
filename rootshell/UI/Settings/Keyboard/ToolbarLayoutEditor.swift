@@ -12,7 +12,7 @@
 //      the context menu the same way Files/Photos do (hold = menu, move = drag).
 //    - Edit-mode reorder grip (interactive movement) when EditButton is active.
 //    - Swipe-to-hide (built-in) / remove-from-toolbar (custom).
-//    - Context menu: Move to Drawer N / Move to Main Row + Hide/Remove.
+//    - Context menu: Move to Drawer N / Move to Main Row, Key Color, Hide/Remove.
 //  Both drag paths cross sections and persist through KeyboardToolbarManager.
 //
 //  Note: the diffable data source is keyed by stable String ids (sections and
@@ -98,6 +98,11 @@ final class ToolbarLayoutEditorController: UIViewController {
     private var dataSource: UICollectionViewDiffableDataSource<String, String>!
     private var slotsByID: [String: KeySlot] = [:]
     private var lastReportedHeight: CGFloat = 0
+    /// The key the open color picker colors.
+    private var colorPickerSlot: KeySlot?
+    /// The color each item's badge was drawn in ("" for none), so only badges
+    /// whose color changed are redrawn.
+    private var badgeColors: [String: String] = [:]
 
     // MARK: Section identifiers
 
@@ -137,6 +142,8 @@ final class ToolbarLayoutEditorController: UIViewController {
         super.viewDidLoad()
         configureCollectionView()
         configureDataSource()
+        NotificationCenter.default.addObserver(self, selector: #selector(refreshChangedBadges),
+                                               name: KeyboardToolbarManager.layoutDidChangeNotification, object: nil)
         applyTheme()
         applySnapshot(animated: false)
     }
@@ -202,6 +209,7 @@ final class ToolbarLayoutEditorController: UIViewController {
             [weak self] cell, _, id in
             guard let self, let slot = self.slotsByID[id] else { return }
             cell.contentConfiguration = self.contentConfiguration(for: slot)
+            self.badgeColors[id] = self.manager.glyphColorHex(for: slot) ?? ""
             var background = UIBackgroundConfiguration.listCell()
             background.backgroundColor = self.rowBackgroundColor
             cell.backgroundConfiguration = background
@@ -284,6 +292,19 @@ final class ToolbarLayoutEditorController: UIViewController {
         snapshot.reconfigureItems(snapshot.itemIdentifiers)
         dataSource.apply(snapshot, animatingDifferences: false)
         reconfigureSupplementaries()
+    }
+
+    /// Key colors change from other screens and from sync, which leave the
+    /// item identifiers, and so the snapshot diff, unchanged.
+    @objc private func refreshChangedBadges() {
+        var snapshot = dataSource.snapshot()
+        let changed = snapshot.itemIdentifiers.filter { id in
+            guard let slot = slotsByID[id], let drawn = badgeColors[id] else { return false }
+            return (manager.glyphColorHex(for: slot) ?? "") != drawn
+        }
+        guard !changed.isEmpty else { return }
+        snapshot.reconfigureItems(changed)
+        dataSource.apply(snapshot, animatingDifferences: false)
     }
 
     private func register(_ slot: KeySlot) -> String {
@@ -514,24 +535,27 @@ final class ToolbarLayoutEditorController: UIViewController {
         }
     }
 
+    /// The badge takes the key's toolbar color, so colors read in the list too.
     private func badgeImage(for slot: KeySlot) -> UIImage? {
+        let foreground = manager.glyphColor(for: slot) ?? tintColor
         switch slot {
         case .builtIn(let keyID):
-            return chipImage(symbolName: keyID.iconName, text: keyID.iconName == nil ? keyID.keyValue : nil)
+            return chipImage(symbolName: keyID.iconName, text: keyID.iconName == nil ? keyID.keyValue : nil,
+                             foreground: foreground)
         case .custom(let uuid):
             guard let key = manager.customKey(for: uuid) else { return nil }
-            return chipImage(symbolName: key.iconName, text: key.iconName == nil ? String(key.label.prefix(2)) : nil)
+            return chipImage(symbolName: key.iconName, text: key.iconName == nil ? String(key.label.prefix(2)) : nil,
+                             foreground: foreground)
         }
     }
 
     /// Renders a 28pt rounded chip containing either a small SF Symbol or short
     /// monospaced text, tinted, on the subtle chip background — matching the
     /// SwiftUI `keyBadge` look so every key reads as a compact badge.
-    private func chipImage(symbolName: String?, text: String?) -> UIImage {
+    private func chipImage(symbolName: String?, text: String?, foreground: UIColor) -> UIImage {
         let size = CGSize(width: 28, height: 28)
         let renderer = UIGraphicsImageRenderer(size: size)
         let chipBackground = chipBackgroundColor
-        let foreground = tintColor
         return renderer.image { _ in
             let rect = CGRect(origin: .zero, size: size)
             let path = UIBezierPath(roundedRect: rect, cornerRadius: 6)
@@ -566,6 +590,55 @@ final class ToolbarLayoutEditorController: UIViewController {
                 attributed.draw(in: textRect)
             }
         }.withRenderingMode(.alwaysOriginal)
+    }
+
+    // MARK: Key colors
+
+    /// Quick picks for a key's own color; Other opens the full picker.
+    private static let presetKeyColors: [(name: String, hex: String)] = [
+        (String(localized: "Red"), "FF3B30"),
+        (String(localized: "Orange"), "FF9500"),
+        (String(localized: "Yellow"), "FFCC00"),
+        (String(localized: "Green"), "34C759"),
+        (String(localized: "Teal"), "30B0C7"),
+        (String(localized: "Blue"), "0A84FF"),
+        (String(localized: "Purple"), "AF52DE"),
+        (String(localized: "Pink"), "FF2D55"),
+    ]
+
+    private func colorMenu(for slot: KeySlot) -> UIMenu {
+        let current = manager.ownGlyphColorHex(for: slot)
+        func swatch(_ color: UIColor?) -> UIImage? {
+            color.flatMap { UIImage(systemName: "circle.fill")?.withTintColor($0, renderingMode: .alwaysOriginal) }
+        }
+        var items: [UIMenuElement] = Self.presetKeyColors.map { preset in
+            UIAction(title: preset.name, image: swatch(UIColor(hex: preset.hex)),
+                     state: current == preset.hex ? .on : .off) { [weak self] _ in
+                self?.manager.setOwnGlyphColor(preset.hex, for: slot)
+            }
+        }
+        let isOther = current.map { hex in !Self.presetKeyColors.contains { $0.hex == hex } } ?? false
+        items.append(UIAction(title: String(localized: "Other…"),
+                              image: isOther ? swatch(current.flatMap { UIColor(hex: $0) }) : UIImage(systemName: "eyedropper"),
+                              state: isOther ? .on : .off) { [weak self] _ in
+            self?.presentColorPicker(for: slot)
+        })
+        if current != nil {
+            items.append(UIAction(title: String(localized: "Use Toolbar Color"),
+                                  image: UIImage(systemName: "arrow.uturn.backward")) { [weak self] _ in
+                self?.manager.setOwnGlyphColor(nil, for: slot)
+            })
+        }
+        return UIMenu(title: String(localized: "Key Color"), image: UIImage(systemName: "paintpalette"), children: items)
+    }
+
+    private func presentColorPicker(for slot: KeySlot) {
+        let picker = UIColorPickerViewController()
+        picker.supportsAlpha = false
+        picker.selectedColor = manager.glyphColor(for: slot) ?? tintColor
+        picker.delegate = self
+        colorPickerSlot = slot
+        present(picker, animated: true)
     }
 
     // MARK: Theme
@@ -658,6 +731,8 @@ extension ToolbarLayoutEditorController: UICollectionViewDelegate {
                 move(to: .drawer(targetIndex), title: title, image: "tray.and.arrow.down")
             }
 
+            actions.append(self.colorMenu(for: slot))
+
             // Matches the old context menu: Hide is only offered for built-in keys.
             if slot.keyID != nil {
                 actions.append(UIAction(
@@ -670,6 +745,18 @@ extension ToolbarLayoutEditorController: UICollectionViewDelegate {
             }
             return UIMenu(children: actions)
         }
+    }
+}
+
+extension ToolbarLayoutEditorController: UIColorPickerViewControllerDelegate {
+    // A drag in the picker settles before the toolbars rebuild.
+    func colorPickerViewController(_ picker: UIColorPickerViewController, didSelect color: UIColor, continuously: Bool) {
+        guard !continuously, let slot = colorPickerSlot else { return }
+        manager.setOwnGlyphColor(color.hexString, for: slot)
+    }
+
+    func colorPickerViewControllerDidFinish(_ picker: UIColorPickerViewController) {
+        colorPickerSlot = nil
     }
 }
 

@@ -10,13 +10,14 @@ import SwiftUI
 
 // MARK: - Appearance
 
-/// Style, keycaps and key size. These apply to every toolbar, not only the
-/// one whose screen opened this; key size is set per display.
+/// Style, keycaps, key colors and key size. These apply to every toolbar, not
+/// only the one whose screen opened this; key size is set per display.
 struct ToolbarAppearanceSettingsView: View {
     let context: ToolbarContext
 
     @State private var manager = KeyboardToolbarManager.shared
     @State private var previewMetrics = ToolbarLayoutPreviewMetrics()
+    @State private var chosenSurface: ToolbarPreviewSurface?
     @Setting(Settings.Keyboard.touchEnabled) private var terminalKeyboard
     @Setting(Settings.ScreenSharing.floatingToolbarDefault) private var floatingBar
 
@@ -25,17 +26,27 @@ struct ToolbarAppearanceSettingsView: View {
     }
     /// Style and keycaps only show above the system keyboard.
     private var showsSystemKeyboardOptions: Bool { surfaces.contains(.systemKeyboard) }
+    /// Opens on the system keyboard, where style and keycaps show; key colors show on every surface.
+    private var previewSurface: ToolbarPreviewSurface {
+        chosenSurface.flatMap { surfaces.contains($0) ? $0 : nil }
+            ?? (showsSystemKeyboardOptions ? .systemKeyboard : surfaces[0])
+    }
 
     var body: some View {
         List {
             Section {
-                ToolbarLayoutPreview(toolbar: context, surface: showsSystemKeyboardOptions ? .systemKeyboard : nil,
-                                     metrics: $previewMetrics)
+                ToolbarPreviewSurfacePicker(surfaces: surfaces, selection: Binding(
+                    get: { previewSurface },
+                    set: { chosenSurface = $0 }
+                ))
+                ToolbarLayoutPreview(toolbar: context, surface: previewSurface, metrics: $previewMetrics)
                     .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
                     .themedRow()
             } header: {
                 Text("Preview")
             }
+
+            ToolbarKeyColorsSection(manager: manager)
 
             if showsSystemKeyboardOptions {
                 Section {
@@ -85,6 +96,91 @@ struct ToolbarAppearanceSettingsView: View {
         .themedList()
         .navigationTitle("Appearance and Size")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// How every toolbar colors its keys' symbols and labels.
+private struct ToolbarKeyColorsSection: View {
+    let manager: KeyboardToolbarManager
+
+    var body: some View {
+        Section {
+            Picker("Key Colors", selection: Binding(
+                get: { manager.glyphColoring },
+                set: { manager.glyphColoring = $0 }
+            )) {
+                ForEach(KeyboardToolbarGlyphColoring.allCases, id: \.self) { coloring in
+                    Text(coloring.displayName).tag(coloring)
+                }
+            }
+            .themedRow()
+            .settingContextMenu(Settings.KeyboardToolbar.glyphColoring)
+
+            switch manager.glyphColoring {
+            case .standard:
+                EmptyView()
+            case .single:
+                ToolbarKeyColorRow(manager: manager, title: String(localized: "Color"),
+                                   key: Settings.KeyboardToolbar.glyphColor)
+            case .byKind:
+                ForEach(ToolbarGlyphKind.allCases, id: \.self) { kind in
+                    ToolbarKeyColorRow(manager: manager, title: kind.displayName, key: kind.colorKey)
+                }
+                let kindKeys = ToolbarGlyphKind.allCases.map(\.colorKey)
+                if kindKeys.contains(where: manager.isGlyphColorChanged) {
+                    Button("Reset Key Type Colors") {
+                        manager.resetGlyphColors(kindKeys)
+                    }
+                    .themedRow()
+                }
+            }
+
+            if manager.hasOwnGlyphColors {
+                Button("Remove Individual Key Colors", role: .destructive) {
+                    manager.clearOwnGlyphColors()
+                }
+                .themedRow()
+            }
+        } header: {
+            Text("Key Colors")
+        } footer: {
+            Text("Colors the symbols and labels on toolbar keys above the system keyboard, in the terminal keyboard's toolbar row, and in the Screen Sharing and KVM toolbar. To give one key its own color, touch and hold it in the Toolbar Keys list and choose Key Color; its color wins over these. On the terminal keyboard, a selected modifier keeps its style's colors.")
+        }
+    }
+}
+
+private struct ToolbarKeyColorRow: View {
+    let manager: KeyboardToolbarManager
+    let title: String
+    let key: SettingKey<String>
+    @Setting private var hex: String
+
+    init(manager: KeyboardToolbarManager, title: String, key: SettingKey<String>) {
+        self.manager = manager
+        self.title = title
+        self.key = key
+        _hex = Setting(key)
+    }
+
+    var body: some View {
+        HStack {
+            ColorPicker(title, selection: Binding(
+                get: { Color(hex: hex) ?? .accentColor },
+                set: { manager.setGlyphColor(UIColor($0), for: key) }
+            ), supportsOpacity: false)
+            if manager.isGlyphColorChanged(key) {
+                // Borderless, so only the button takes the tap, not the whole row.
+                Button {
+                    manager.resetGlyphColors([key])
+                } label: {
+                    Image(systemName: "arrow.uturn.backward.circle")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Reset \(title) to Default")
+            }
+        }
+        .themedRow()
+        .settingContextMenu(key)
     }
 }
 

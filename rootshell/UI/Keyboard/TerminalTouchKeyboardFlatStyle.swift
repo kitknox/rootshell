@@ -72,21 +72,19 @@ final class TerminalTouchFlatKeycap: TerminalTouchKeycap {
             }
             return UIColor(white: colors.background, alpha: 1)
         }
-        let ink = UIColor { traits in
+        var ink = UIColor { traits in
             let colors = TerminalTouchKeyboardModel.keyColors(dark: traits.userInterfaceStyle == .dark,
                 character: character, pressed: pressed, selected: selected)
             return UIColor(white: colors.ink, alpha: 1)
         }
+        if let palette {
+            ink = selected ? palette.key : (toolbarKey ? palette.toolbarInk : (pressed ? palette.pressedInk : palette.ink))
+            plate.backgroundColor = selected ? palette.ink : (toolbarKey ? (pressed ? palette.toolbarInk.withAlphaComponent(0.12) : .clear) : (pressed ? palette.pressedKey : palette.key))
+        }
+        ink = legendInk(ink, selected: selected)
         label.textColor = ink
         icon.tintColor = ink
         lockIndicator.backgroundColor = ink
-        if let palette {
-            let themedInk = selected ? palette.key : (toolbarKey ? palette.toolbarInk : (pressed ? palette.pressedInk : palette.ink))
-            plate.backgroundColor = selected ? palette.ink : (toolbarKey ? (pressed ? palette.toolbarInk.withAlphaComponent(0.12) : .clear) : (pressed ? palette.pressedKey : palette.key))
-            label.textColor = themedInk
-            icon.tintColor = themedInk
-            lockIndicator.backgroundColor = themedInk
-        }
         plate.layer.shadowOpacity = toolbarKey || traitCollection.userInterfaceStyle == .dark ? 0 : 0.12
         plate.layer.borderWidth = UIAccessibility.isDarkerSystemColorsEnabled && (!toolbarKey || selected) ? 1 : 0
         plate.layer.borderColor = UIColor.label.cgColor

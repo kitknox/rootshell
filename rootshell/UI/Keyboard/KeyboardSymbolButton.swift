@@ -94,7 +94,7 @@ class KeyboardSymbolButton: KeyboardButton {
         label.text = text
         label.font = .systemFont(ofSize: sizes.button.fontSize, weight: .regular)
         label.textAlignment = .center
-        label.textColor = .label
+        label.textColor = glyphInk
         label.translatesAutoresizingMaskIntoConstraints = false
 
         addSubview(label)
@@ -117,7 +117,7 @@ class KeyboardSymbolButton: KeyboardButton {
         let config = UIImage.SymbolConfiguration(pointSize: sizes.button.symbolSize, weight: .medium)
         let imageView = UIImageView(image: UIImage(systemName: systemName, withConfiguration: config))
         imageView.contentMode = .scaleAspectFit
-        imageView.tintColor = .label
+        imageView.tintColor = glyphInk
         imageView.translatesAutoresizingMaskIntoConstraints = false
 
         addSubview(imageView)
@@ -197,7 +197,7 @@ class KeyboardSymbolButton: KeyboardButton {
         let secondaryTy: CGFloat = -sz + sz * swipeProgress
         let secondaryOpacity: CGFloat = 0.3 + 0.7 * swipeProgress
 
-        secondaryLayer.foregroundColor = UIColor.label.withAlphaComponent(secondaryOpacity).cgColor
+        secondaryLayer.foregroundColor = glyphInk.withAlphaComponent(secondaryOpacity).cgColor
         secondaryLayer.transform = CATransform3DConcat(
             CATransform3DMakeScale(secondaryScale, secondaryScale, 1),
             CATransform3DMakeTranslation(0, secondaryTy, 0)
@@ -208,7 +208,7 @@ class KeyboardSymbolButton: KeyboardButton {
         let primaryTy: CGFloat = 14 * swipeProgress
         let primaryOpacity: CGFloat = 1 - 0.5 * swipeProgress
 
-        primaryLayer.foregroundColor = UIColor.label.withAlphaComponent(primaryOpacity).cgColor
+        primaryLayer.foregroundColor = glyphInk.withAlphaComponent(primaryOpacity).cgColor
         primaryLayer.transform = CATransform3DConcat(
             CATransform3DMakeScale(primaryScale, primaryScale, 1),
             CATransform3DMakeTranslation(0, primaryTy, 0)
@@ -329,6 +329,12 @@ class KeyboardSymbolButton: KeyboardButton {
         } else {
             super.applyFill()
         }
+    }
+
+    override func applyGlyphColor() {
+        primaryLabel?.textColor = glyphInk
+        iconView?.tintColor = glyphInk
+        if case .dualText = displayType { setNeedsLayout() }
     }
 
     // MARK: - Size and Trait Updates

@@ -363,6 +363,15 @@ enum KeySlot: Codable, Hashable, Sendable {
         return nil
     }
 
+    var glyphKind: ToolbarGlyphKind {
+        guard let keyID else { return .custom }
+        switch keyID.category {
+        case .modifier: return .modifier
+        case .special, .navigation: return .navigation
+        case .symbol: return .symbol
+        case .action, .toggle: return .action
+        }
+    }
 }
 
 // MARK: - DrawerToggleMode
@@ -422,6 +431,54 @@ enum KeyboardToolbarStyle: String, CaseIterable, Sendable {
         switch self {
         case .flat: return String(localized: "Flat")
         case .glass: return String(localized: "Glass")
+        }
+    }
+}
+
+// MARK: - Glyph Colors
+
+/// How toolbar keys color their symbols and labels, on every surface a
+/// toolbar is drawn. Raw values are persisted.
+enum KeyboardToolbarGlyphColoring: String, CaseIterable, Sendable {
+    /// Each surface's own ink.
+    case standard
+    case single
+    case byKind
+
+    var displayName: String {
+        switch self {
+        case .standard: return String(localized: "Standard")
+        case .single: return String(localized: "One Color")
+        case .byKind: return String(localized: "By Key Type")
+        }
+    }
+}
+
+/// The kinds of key that By Key Type colors apart.
+nonisolated enum ToolbarGlyphKind: CaseIterable, Hashable, Sendable {
+    case modifier
+    case navigation
+    case symbol
+    case action
+    case custom
+
+    var displayName: String {
+        switch self {
+        case .modifier: return String(localized: "Modifiers")
+        case .navigation: return String(localized: "Tab and Arrows")
+        case .symbol: return String(localized: "Symbols")
+        case .action: return String(localized: "Actions")
+        case .custom: return String(localized: "Custom Keys")
+        }
+    }
+
+    var colorKey: SettingKey<String> {
+        switch self {
+        case .modifier: Settings.KeyboardToolbar.glyphColorModifiers
+        case .navigation: Settings.KeyboardToolbar.glyphColorNavigation
+        case .symbol: Settings.KeyboardToolbar.glyphColorSymbols
+        case .action: Settings.KeyboardToolbar.glyphColorActions
+        case .custom: Settings.KeyboardToolbar.glyphColorCustomKeys
         }
     }
 }
@@ -866,12 +923,16 @@ struct CustomKey: Identifiable, Codable, Hashable, Sendable {
     var label: String
     var iconName: String?
     var sequence: [SequenceStep]
+    /// Hex RGB. Wins over the toolbar's key colors.
+    var colorHex: String?
 
-    init(id: UUID = UUID(), label: String, iconName: String? = nil, sequence: [SequenceStep] = []) {
+    init(id: UUID = UUID(), label: String, iconName: String? = nil, sequence: [SequenceStep] = [],
+         colorHex: String? = nil) {
         self.id = id
         self.label = label
         self.iconName = iconName
         self.sequence = sequence
+        self.colorHex = colorHex
     }
 
     /// Concatenate all steps into a single Data payload for writing to the terminal.

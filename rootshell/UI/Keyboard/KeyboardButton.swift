@@ -165,6 +165,16 @@ class KeyboardButton: UIControl {
         backgroundColor = isHighlighted ? fill.highlight : fill.resting
     }
 
+    /// The color the key's symbol or label takes; nil is the label color.
+    var glyphColor: UIColor? {
+        didSet { applyGlyphColor() }
+    }
+
+    var glyphInk: UIColor { glyphColor ?? .label }
+
+    /// Subclasses recolor what they draw.
+    func applyGlyphColor() {}
+
     /// Keycaps sit apart; a touch in the gap goes to a neighboring key.
     var hitOutset: CGFloat = 0
 
