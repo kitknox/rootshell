@@ -10,6 +10,8 @@ import os
 
 @MainActor
 final class MultiplexerExposeFeed: MuxPreviewFrameSource {
+    enum Consumer: Hashable { case expose, panels }
+    private var consumers = Set<Consumer>()
     enum State: Equatable {
         case idle
         case detecting
@@ -33,6 +35,7 @@ final class MultiplexerExposeFeed: MuxPreviewFrameSource {
     private var adapter: (any MultiplexerExposeAdapter)?
     /// Pane the current `adapter` was built for; see `configure(_:)`.
     private var adapterPaneToken: String?
+    private var adapterTmuxSocket: TmuxSocketIdentity?
     private var frames: [String: MuxPaneFrame] = [:]
     private var loop: Task<Void, Never>?
     private var focusTask: Task<Void, Never>?
@@ -83,7 +86,9 @@ final class MultiplexerExposeFeed: MuxPreviewFrameSource {
 
     // MARK: - Identity
 
-    var sessionKey: String { "\(type?.rawValue ?? "-"):\(sessionName ?? "")" }
+    var sessionKey: String {
+        "\(type?.rawValue ?? "-"):\(sessionName ?? "")\(adapterTmuxSocket?.arguments ?? "")"
+    }
 
     var tabs: [MuxTab] { snapshot?.tabs ?? [] }
 
@@ -134,11 +139,12 @@ final class MultiplexerExposeFeed: MuxPreviewFrameSource {
     /// callers testing only whether a type is supported can leave it out.
     static func adapter(
         for type: MultiplexerType,
-        paneToken: String? = nil
+        paneToken: String? = nil,
+        tmuxSocket: TmuxSocketIdentity? = .defaultServer
     ) -> (any MultiplexerExposeAdapter)? {
         switch type {
-        case .herdr: HerdrExposeAdapter()
-        case .tmux: TmuxExposeAdapter()
+        case .herdr: HerdrExposeAdapter(includesAllWorkspaces: true)
+        case .tmux: tmuxSocket.map { TmuxExposeAdapter(socket: $0) }
         case .zellij: ZellijExposeAdapter()
         case .zmx: ZmxExposeAdapter(paneToken: paneToken)
         }
@@ -175,11 +181,13 @@ final class MultiplexerExposeFeed: MuxPreviewFrameSource {
     /// Begin (or resume) serving `terminal`'s session. Returns false when the
     /// terminal has no usable multiplexer binding and nothing to detect.
     @discardableResult
-    func start(terminal: Ghostty.TerminalView) -> Bool {
+    func start(terminal: Ghostty.TerminalView, consumer: Consumer = .expose) -> Bool {
+        consumers.insert(consumer)
         guard Self.canDetect(terminal) else {
             Self.logger.debug("not eligible for raw multiplexer exposé")
             cancelFocus()
-            stopNow()
+            consumers.remove(consumer)
+            shutDown()
             return false
         }
         let binding = Self.binding(for: terminal)
@@ -191,10 +199,11 @@ final class MultiplexerExposeFeed: MuxPreviewFrameSource {
         // stop grace period. Its terminal binding is intentionally retained
         // until a successful listing proves what happened, but a cached live
         // feed must not make the next reveal bypass that validation.
-        let requiresZmxValidation = binding?.type == .zmx
+        let requiresZmxValidation = binding?.type == .zmx && consumer == .expose
         if loop != nil, self.terminal === terminal,
            !requiresZmxValidation,
-           binding == nil || (type == binding?.type && sessionName == binding?.sessionName) {
+           binding == nil || (type == binding?.type && sessionName == binding?.sessionName
+               && (binding?.type != .tmux || adapterTmuxSocket == binding?.tmuxSocket)) {
             // Re-opened inside the stop grace: the running feed still serves
             // this session, so its tabs and frames are already current.
             Self.logger.debug("reusing live feed: \(self.tabs.count) tabs, \(self.frames.count) frames")
@@ -258,15 +267,17 @@ final class MultiplexerExposeFeed: MuxPreviewFrameSource {
         let paneToken = terminal?.uuid.uuidString
         let sameMultiplexer = type == binding.type && adapter != nil
             && adapterPaneToken == paneToken
+            && (binding.type != .tmux || adapterTmuxSocket == binding.tmuxSocket)
         type = binding.type
         sessionName = binding.sessionName
         if !sameMultiplexer {
-            adapter = Self.adapter(for: binding.type, paneToken: paneToken)
+            adapter = Self.adapter(for: binding.type, paneToken: paneToken, tmuxSocket: binding.tmuxSocket)
             adapterPaneToken = paneToken
+            adapterTmuxSocket = binding.type == .tmux ? binding.tmuxSocket : nil
         }
         interval = floorInterval
         if let terminal, let cache, cache.owner == ObjectIdentifier(terminal),
-           cache.session == "\(binding.type.rawValue):\(binding.sessionName ?? "")",
+           cache.session == sessionKey,
            CACurrentMediaTime() - cache.at < Self.cacheLifetime {
             snapshot = cache.snapshot
             frames = cache.frames
@@ -281,21 +292,29 @@ final class MultiplexerExposeFeed: MuxPreviewFrameSource {
     }
 
     /// Stop after `grace` seconds unless restarted; the picture is cached.
-    func stop(grace: TimeInterval) {
+    func stop(grace: TimeInterval, consumer: Consumer = .expose) {
+        consumers.remove(consumer)
+        guard consumers.isEmpty else { return }
         guard loop != nil else { return }
         stopTask?.cancel()
         stopTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(grace))
             guard !Task.isCancelled else { return }
-            self?.stopNow()
+            self?.shutDown()
         }
     }
 
-    func stopNow() {
+    func stopNow(consumer: Consumer = .expose) {
+        consumers.remove(consumer)
+        guard consumers.isEmpty else { return }
+        shutDown()
+    }
+
+    private func shutDown() {
         stopTask?.cancel()
         stopTask = nil
-        if let terminal, let snapshot, let type {
-            cache = (ObjectIdentifier(terminal), "\(type.rawValue):\(sessionName ?? "")", snapshot, frames, CACurrentMediaTime())
+        if let terminal, let snapshot, type != nil {
+            cache = (ObjectIdentifier(terminal), sessionKey, snapshot, frames, CACurrentMediaTime())
             scheduleCacheEviction()
         }
         teardownLoop()
@@ -392,14 +411,16 @@ final class MultiplexerExposeFeed: MuxPreviewFrameSource {
 
     /// Switch the multiplexer to `tabID`. Independent of the tick loop so it
     /// still runs while the exposé is already dismissing.
-    func focus(tabID: String) {
+    func focus(tabID: String, paneID: String? = nil) {
         guard let terminal, let adapter else { return }
+        guard let tab = snapshot?.tab(withID: tabID),
+              paneID == nil || tab.panes.contains(where: { $0.id == paneID }) else { return }
         let session = sessionName
         cancelFocus()
         let focusRun = focusGeneration
 
         // Avoid resetting terminal state when the selected tab is already active.
-        guard session != tabID else { return }
+        guard paneID != nil || session != tabID else { return }
 
         if type == .zmx, let session, !session.isEmpty {
             if replaceZmxClient(terminal: terminal, session: session, tabID: tabID) { return }
@@ -415,7 +436,16 @@ final class MultiplexerExposeFeed: MuxPreviewFrameSource {
             Self.logger.info("focus declined by the adapter; leaving the pane where it is")
             return
         }
-        let script = adapter.focusScript(session: session, tabID: tabID)
+        let script: String?
+        if type == .herdr {
+            script = nil
+        } else if let paneID {
+            guard let command = adapter.focusPaneScript(session: session, tabID: tabID, paneID: paneID) else { return }
+            script = command
+        } else {
+            script = adapter.focusScript(session: session, tabID: tabID)
+        }
+        Self.logger.info("Multiplexer focus type=\(adapter.type.rawValue, privacy: .public) tab=\(tabID, privacy: .public) pane=\(paneID ?? "active", privacy: .public)")
         prepareForPassthroughSwitch(terminal)
         focusTask = Task { [weak self, weak terminal] in
             guard let self, let terminal else { return }
@@ -423,13 +453,25 @@ final class MultiplexerExposeFeed: MuxPreviewFrameSource {
                 guard !Task.isCancelled, self.focusGeneration == focusRun,
                       self.terminal === terminal else { return }
                 do {
-                    let output = try await RemoteExecProbe.run(
-                        script, on: terminal, timeout: 4, maxResponseBytes: Self.focusMaxResponseBytes
-                    )
-                    // Trust the binding only after the adapter confirms the switch.
-                    guard adapter.parseFocusResult(output: output, session: session, tabID: tabID) else {
-                        Self.logger.warning("focus did not confirm the switch landed; leaving the current session name alone")
-                        return
+                    if let script {
+                        let output = try await RemoteExecProbe.run(
+                            script, on: terminal, timeout: 4, maxResponseBytes: Self.focusMaxResponseBytes
+                        )
+                        guard adapter.parseFocusResult(output: output, session: session, tabID: tabID) else {
+                            Self.logger.warning("focus did not confirm the switch landed; leaving the current session name alone")
+                            return
+                        }
+                    } else {
+                        let _: HerdrControl.TabResult = try await HerdrController.hostAPIRequest(
+                            "tab.focus", HerdrControl.TabTarget(tab_id: tabID), as: HerdrControl.TabResult.self,
+                            on: terminal, sessionName: session)
+                        guard !Task.isCancelled, self.focusGeneration == focusRun,
+                              self.terminal === terminal else { return }
+                        if let paneID {
+                            let _: HerdrControl.PaneResult = try await HerdrController.hostAPIRequest(
+                                "pane.focus", HerdrControl.PaneTarget(pane_id: paneID), as: HerdrControl.PaneResult.self,
+                                on: terminal, sessionName: session)
+                        }
                     }
                     guard !Task.isCancelled, self.focusGeneration == focusRun,
                           self.terminal === terminal else { return }
@@ -1093,9 +1135,9 @@ final class MultiplexerExposeFeed: MuxPreviewFrameSource {
     private func tick(generation: UInt64) async -> Outcome {
         guard let terminal, let adapter else { return .unsupported }
         let now = CACurrentMediaTime()
-        let fetch = MuxZmxBootstrap.seededFetch(
+        let fetch = consumers.contains(.expose) ? MuxZmxBootstrap.seededFetch(
             normallyComputed: fetchList(now: now), snapshot: snapshot, type: type, sessionName: sessionName
-        )
+        ) : []
         let request = MuxTickRequest(fetch: fetch, knownRevisions: frames.mapValues(\.revision))
         let nonce = Self.nonce()
         let script = adapter.tickScript(session: sessionName, request: request, nonce: nonce)
@@ -1181,7 +1223,8 @@ final class MultiplexerExposeFeed: MuxPreviewFrameSource {
 
         // First topology lands with no frames: fetch the visible set right
         // away, unless zmx's seeded first tick already covered it.
-        if tickCount == 1, MuxZmxBootstrap.needsImmediateFollowUp(type: type, snapshot: result.snapshot, frames: frames) {
+        if consumers.contains(.expose), tickCount == 1,
+           MuxZmxBootstrap.needsImmediateFollowUp(type: type, snapshot: result.snapshot, frames: frames) {
             return .immediate
         }
         if changed {

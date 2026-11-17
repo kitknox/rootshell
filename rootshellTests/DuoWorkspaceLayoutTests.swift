@@ -2,6 +2,17 @@ import SwiftUI
 import XCTest
 
 final class DuoWorkspaceLayoutTests: XCTestCase {
+    func testLandscapeCameraReclaimsOppositeEdgeInBothOrientations() {
+        for rightToLeft in [false, true] {
+            XCTAssertEqual(DuoLayoutContext.unoccludedLandscapeEdge(
+                cameraOnLeft: true, rightToLeft: rightToLeft
+            ), rightToLeft ? .leading : .trailing)
+            XCTAssertEqual(DuoLayoutContext.unoccludedLandscapeEdge(
+                cameraOnLeft: false, rightToLeft: rightToLeft
+            ), rightToLeft ? .trailing : .leading)
+        }
+    }
+
     private let bounds = CGRect(x: 40, y: 70, width: 600, height: 900)
     private let safeFrame = CGRect(x: 56, y: 90, width: 490, height: 846)
     private let camera = CGRect(x: 560, y: 104, width: 44, height: 44)

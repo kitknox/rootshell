@@ -252,7 +252,9 @@ nonisolated struct ZmxExposeAdapter: MultiplexerExposeAdapter {
                         rect: MuxCellRect(x: 0, y: 0, width: grid.cols, height: grid.rows),
                         isActive: true,
                         isPreviewable: true,
-                        title: info.command
+                        title: info.command,
+                        workingDirectory: info.cwd,
+                        programName: info.command.flatMap { ProgramNameNormalizer.normalize(name: $0) }
                     )
                 ],
                 badge: Self.badge(for: info)

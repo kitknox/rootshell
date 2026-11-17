@@ -141,7 +141,10 @@ extension MainView {
         tabExpose.tabsModel = tabsModel
         tabExpose.muxFeed = muxExposeFeed
         let controller = tabExpose
-        muxExposeFeed.onChange = { controller.muxFeedDidChange() }
+        muxExposeFeed.onChange = {
+            controller.muxFeedDidChange()
+            muxPanelRevision &+= 1
+        }
         tabExpose.multiplexerTerminal = {
             let tab = tabsModel.selectedTab
             return tab?.focusedPane?.asTerminal ?? tab?.splitTree.terminalLeaves.first

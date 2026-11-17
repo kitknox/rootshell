@@ -343,7 +343,7 @@ final class TerminalFloatingKeyboardOverlay: UIView {
     func attach(to window: UIWindow) {
         window.addSubview(self)
         guard let root = window.rootViewController else { return }
-        let host = TerminalFloatingKeyboardPresentationHost()
+        let host = TerminalKeyboardPresentationHost()
         host.view = self
         root.addChild(host)
         host.didMove(toParent: root)
@@ -372,7 +372,7 @@ final class TerminalFloatingKeyboardOverlay: UIView {
 
 /// Presents the card's menus. As the root's newest child it also becomes the one
 /// the root asks about the vertical bar, so it passes on the app content's answer.
-private final class TerminalFloatingKeyboardPresentationHost: UIViewController {
+final class TerminalKeyboardPresentationHost: UIViewController {
     @available(iOS 27.1, *)
     override var preferredVerticalBarBehavior: UIVerticalBarBehavior {
         var content = parent?.children.first { $0 !== self }

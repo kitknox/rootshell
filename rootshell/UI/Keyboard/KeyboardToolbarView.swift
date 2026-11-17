@@ -295,30 +295,31 @@ private final class KeyboardDismissButton: KeyboardSymbolButton {
 
 // MARK: - Drawer Row View
 
-/// One drawer row: a horizontally scrolling (or centered) stack of keys with a
-/// bottom hairline separator. Multiple rows stack vertically above the main row.
+/// One drawer row: a horizontally scrolling (or centered) stack of keys.
+/// Multiple rows stack vertically above the main row.
 private final class DrawerRowView: UIView {
     let scrollView = UIScrollView()
     let stackView = UIStackView()
-    private let separator = UIView()
 
     private var scrollLeadingConstraint: NSLayoutConstraint?
     private var scrollTrailingConstraint: NSLayoutConstraint?
     private var stackLeadingConstraint: NSLayoutConstraint?
     private var stackTrailingConstraint: NSLayoutConstraint?
     private var stackCenterXConstraint: NSLayoutConstraint?
-    private var stackMinimumWidthConstraint: NSLayoutConstraint?
+    private var stackWidthConstraint: NSLayoutConstraint?
+    private var scrollingButtonCount: Int?
+    private var scrollingSizes: KeyboardSizes?
+    private var scrollingBehavior: ToolbarScrollBehavior?
+    private var lastConfiguredViewportWidth: CGFloat?
+    private var lastScrollingLayout: ToolbarPageLayout?
 
     init(edgePadding: CGFloat) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         clipsToBounds = true
 
-        separator.backgroundColor = .separator.withAlphaComponent(0.5)
-        separator.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(separator)
-
         scrollView.showsHorizontalScrollIndicator = false
+        scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(scrollView)
 
@@ -335,15 +336,10 @@ private final class DrawerRowView: UIView {
         scrollTrailingConstraint = scrollTrailing
 
         NSLayoutConstraint.activate([
-            separator.leadingAnchor.constraint(equalTo: leadingAnchor),
-            separator.trailingAnchor.constraint(equalTo: trailingAnchor),
-            separator.bottomAnchor.constraint(equalTo: bottomAnchor),
-            separator.heightAnchor.constraint(equalToConstant: 0.5),
-
             scrollLeading,
             scrollTrailing,
             scrollView.topAnchor.constraint(equalTo: topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: separator.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
             stackView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
             stackView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
@@ -353,30 +349,114 @@ private final class DrawerRowView: UIView {
         stackLeadingConstraint = stackView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor)
         stackTrailingConstraint = stackView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor)
         stackCenterXConstraint = stackView.centerXAnchor.constraint(equalTo: scrollView.frameLayoutGuide.centerXAnchor)
-        stackMinimumWidthConstraint = stackView.widthAnchor.constraint(
-            greaterThanOrEqualTo: scrollView.frameLayoutGuide.widthAnchor
-        )
+        stackWidthConstraint = stackView.widthAnchor.constraint(equalToConstant: 0)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let buttonCount = scrollingButtonCount,
+              let sizes = scrollingSizes,
+              let behavior = scrollingBehavior else { return }
+        updateScrollingLayout(buttonCount: buttonCount, sizes: sizes, behavior: behavior)
+    }
+
     /// Pin the stack to the scroll content edges so overflowing keys scroll horizontally.
     func configureForScrolling() {
         scrollView.isScrollEnabled = true
+        scrollView.isPagingEnabled = false
+        scrollView.contentInset = .zero
+        scrollView.decelerationRate = .normal
+        stackView.distribution = .fillEqually
         stackCenterXConstraint?.isActive = false
         stackLeadingConstraint?.isActive = true
         stackTrailingConstraint?.isActive = true
-        stackMinimumWidthConstraint?.isActive = true
+        stackWidthConstraint?.isActive = true
+    }
+
+    func configureScrollingLayout(buttonCount: Int, sizes: KeyboardSizes, behavior: ToolbarScrollBehavior) {
+        scrollingButtonCount = buttonCount
+        scrollingSizes = sizes
+        scrollingBehavior = behavior
+        lastConfiguredViewportWidth = nil
+        lastScrollingLayout = nil
+        updateScrollingLayout(buttonCount: buttonCount, sizes: sizes, behavior: behavior)
+    }
+
+    private func updateScrollingLayout(buttonCount: Int, sizes: KeyboardSizes, behavior: ToolbarScrollBehavior) {
+        let viewportWidth = scrollView.bounds.width
+        guard abs(viewportWidth - (lastConfiguredViewportWidth ?? -1)) > 0.5 else { return }
+
+        let oldLayout = lastScrollingLayout
+        let oldOffset = scrollView.contentOffset.x
+        let firstVisibleItem = oldLayout.map {
+            Int(max(0, oldOffset) / max(1, $0.cellWidth))
+        } ?? 0
+
+        guard buttonCount > 0, viewportWidth > 0 else {
+            stackWidthConstraint?.constant = 0
+            scrollView.isScrollEnabled = false
+            scrollView.isPagingEnabled = false
+            scrollView.contentInset = .zero
+            scrollView.alwaysBounceHorizontal = false
+            lastConfiguredViewportWidth = viewportWidth
+            lastScrollingLayout = nil
+            return
+        }
+
+        let layout = ToolbarPageLayout(
+            viewportWidth: viewportWidth,
+            buttonWidth: sizes.button.height,
+            spacing: 4,
+            itemCount: buttonCount
+        )
+        let cellWidth: CGFloat
+        let trailingInset: CGFloat
+        switch behavior {
+        case .pages:
+            cellWidth = layout.cellWidth
+            let stackWidth = CGFloat(buttonCount) * cellWidth
+            trailingInset = max(0, layout.contentWidth - stackWidth)
+        case .continuous:
+            cellWidth = sizes.button.height + 4
+            trailingInset = 0
+        }
+        let stackWidth = CGFloat(buttonCount) * cellWidth
+        stackWidthConstraint?.constant = stackWidth
+        scrollView.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: 0, right: trailingInset)
+        scrollView.isScrollEnabled = true
+        scrollView.isPagingEnabled = behavior == .pages
+        scrollView.decelerationRate = behavior == .pages ? .fast : .normal
+        scrollView.alwaysBounceHorizontal = stackWidth + trailingInset > viewportWidth + 0.5
+        lastConfiguredViewportWidth = viewportWidth
+        lastScrollingLayout = layout
+
+        if oldLayout != nil, !scrollView.isDragging, !scrollView.isDecelerating {
+            let offset = behavior == .pages
+                ? layout.offset(containing: firstVisibleItem)
+                : CGFloat(firstVisibleItem) * cellWidth
+            let maxOffset = max(0, stackWidth + trailingInset - viewportWidth)
+            scrollView.setContentOffset(CGPoint(x: min(maxOffset, offset), y: 0), animated: false)
+        }
     }
 
     /// Center the stack (arrow cluster) with scrolling disabled.
     func configureForCentering() {
+        scrollingButtonCount = nil
+        scrollingSizes = nil
+        scrollingBehavior = nil
+        lastConfiguredViewportWidth = nil
+        lastScrollingLayout = nil
         scrollView.isScrollEnabled = false
+        scrollView.isPagingEnabled = false
+        scrollView.contentInset = .zero
+        stackView.distribution = .fill
         stackLeadingConstraint?.isActive = false
         stackTrailingConstraint?.isActive = false
-        stackMinimumWidthConstraint?.isActive = false
+        stackWidthConstraint?.isActive = false
         stackCenterXConstraint?.isActive = true
     }
 
@@ -387,6 +467,16 @@ private final class DrawerRowView: UIView {
 }
 
 // MARK: - KeyboardToolbarView
+
+final class KeyboardToolbarScrollView: UIScrollView {
+    var allowsPan: (() -> Bool)?
+
+    override func touchesShouldCancel(in view: UIView) -> Bool { true }
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer === panGestureRecognizer, allowsPan?() == false { return false }
+        return super.gestureRecognizerShouldBegin(gestureRecognizer)
+    }
+}
 
 class KeyboardToolbarView: UIView {
     // MARK: - Properties
@@ -469,6 +559,15 @@ class KeyboardToolbarView: UIView {
     // Main toolbar views
     private let mainToolbarContainer = UIView()
     private let mainRowStackView = UIStackView()
+    private let mainRowScrollView = KeyboardToolbarScrollView()
+    private let fixedControlsStackView = UIStackView()
+    private let leftPinnedStackView = UIStackView()
+    private let scrollContentView = UIView()
+    private var sectionPlates: [UIVisualEffectView] = []
+    private var pageLayout = ToolbarPageLayout(viewportWidth: 1, buttonWidth: 1, spacing: 0, itemCount: 0)
+    private var displayedScrollScope: ToolbarScrollScope = .primary
+    private var displayedAppearance: ToolbarAppearance = .single
+    private var displayedScrollBehavior: ToolbarScrollBehavior = .pages
     private let backgroundBlurView = ToolbarPlateView()
 
     // Drawer views
@@ -491,13 +590,13 @@ class KeyboardToolbarView: UIView {
     private weak var drawerSelectionButton: KeyboardButton?
     private var backgroundLeadingConstraint: NSLayoutConstraint?
     private var backgroundTrailingConstraint: NSLayoutConstraint?
+    private var backgroundBottomConstraint: NSLayoutConstraint?
+    private var mainToolbarTopConstraint: NSLayoutConstraint?
     private var drawerContainerLeadingConstraint: NSLayoutConstraint?
     private var drawerContainerTrailingConstraint: NSLayoutConstraint?
     private var mainToolbarLeadingConstraint: NSLayoutConstraint?
     private var mainToolbarTrailingConstraint: NSLayoutConstraint?
     private var mainToolbarHeightConstraint: NSLayoutConstraint?
-    private var mainRowLeadingConstraint: NSLayoutConstraint?
-    private var mainRowTrailingConstraint: NSLayoutConstraint?
 
     private var sizes: KeyboardSizes
 
@@ -515,6 +614,7 @@ class KeyboardToolbarView: UIView {
     private var dismissButtonShowsRestore = false
     private var dismissButtonPinned = false
     private(set) var drawerState: DrawerState = .closed
+    private var drawerManuallyClosed = false
     private var interactionMode: KeyboardToolbarInteractionMode = .accessory
 
     /// Track last known width to detect meaningful size changes
@@ -607,24 +707,45 @@ class KeyboardToolbarView: UIView {
         return true
     }
 
+    private var drawerToolbarGap: CGFloat {
+        displayedAppearance == .separate && visibleDrawerRowCount > 0 ? 2 : 0
+    }
+
     /// Embedded previews are already inset by their SwiftUI container.
     var isEmbeddedPreview = false {
         didSet { updateInsetsForCurrentTraits() }
     }
 
+    var terminalViewportInScreen: CGRect? {
+        didSet {
+            guard oldValue != terminalViewportInScreen else { return }
+            setNeedsLayout()
+        }
+    }
+
+    var isWindowHosted = false {
+        didSet {
+            guard oldValue != isWindowHosted else { return }
+            lastBuiltWidth = 0
+            if isWindowHosted { setBottomEdgeSquared(false) }
+            setNeedsLayout()
+            dismissButton?.updateIcon(dismissButtonIconName)
+        }
+    }
+
+    var followsTerminalViewport: Bool {
+        isPhone && !isEmbeddedPreview && isWindowHosted && terminalViewportInScreen != nil
+    }
+
     private func currentChromeHorizontalInsets() -> (left: CGFloat, right: CGFloat) {
         if isEmbeddedPreview || usesHostChrome { return (0, 0) }
-        guard isPhoneLandscape else { return (0, 0) }
-
-        let localLeft = safeAreaInsets.left
-        let localRight = safeAreaInsets.right
-        let windowLeft = window?.safeAreaInsets.left ?? 0
-        let windowRight = window?.safeAreaInsets.right ?? 0
-
-        return (
-            left: max(localLeft, windowLeft) + 2,
-            right: max(localRight, windowRight) + 2
-        )
+        let left = isPhoneLandscape ? max(safeAreaInsets.left, window?.safeAreaInsets.left ?? 0) + 2 : 0
+        let right = isPhoneLandscape ? max(safeAreaInsets.right, window?.safeAreaInsets.right ?? 0) + 2 : 0
+        guard followsTerminalViewport, let frame = terminalViewportInScreen, let window else {
+            return (left, right)
+        }
+        let local = convert(frame, from: window.screen.coordinateSpace)
+        return (max(0, local.minX), max(0, bounds.width - local.maxX))
     }
 
     private func setupViews() {
@@ -640,6 +761,9 @@ class KeyboardToolbarView: UIView {
         layer.masksToBounds = true
 
         // Background blur covers entire view (toolbar + drawer)
+        if #available(iOS 26.0, *), isPhone {
+            backgroundBlurView.effect = UIGlassEffect(style: .regular)
+        }
         backgroundBlurView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(backgroundBlurView)
 
@@ -661,16 +785,43 @@ class KeyboardToolbarView: UIView {
         mainToolbarContainer.translatesAutoresizingMaskIntoConstraints = false
         addSubview(mainToolbarContainer)
 
-        // Configure main row stack — single unified row, fillEqually, no scrolling
-        mainRowStackView.axis = .horizontal
-        mainRowStackView.spacing = 0
-        mainRowStackView.alignment = .center
-        mainRowStackView.distribution = .fillEqually
-        mainRowStackView.translatesAutoresizingMaskIntoConstraints = false
-        mainToolbarContainer.addSubview(mainRowStackView)
+        mainRowScrollView.accessibilityLabel = String(localized: "Toolbar Keys")
+        mainRowScrollView.showsHorizontalScrollIndicator = false
+        mainRowScrollView.alwaysBounceVertical = false
+        mainRowScrollView.isDirectionalLockEnabled = true
+        mainRowScrollView.contentInsetAdjustmentBehavior = .never
+        mainRowScrollView.delegate = self
+        mainRowScrollView.delaysContentTouches = false
+        mainRowScrollView.allowsPan = { [weak self] in
+            guard let self else { return false }
+            let sweeping = self.modifierButtons.contains { $0.isDescendant(of: self.mainToolbarContainer) && $0.isSweeping }
+            if sweeping { Ghostty.logger.debug("KeyboardToolbar: modifier sweep retains its contact") }
+            return !sweeping
+        }
+        mainToolbarContainer.addSubview(mainRowScrollView)
+        mainRowScrollView.addSubview(scrollContentView)
+        for stack in [leftPinnedStackView, mainRowStackView, fixedControlsStackView] {
+            stack.axis = .horizontal
+            stack.alignment = .center
+            stack.distribution = .fillEqually
+            stack.spacing = 0
+            mainToolbarContainer.addSubview(stack)
+        }
+        for _ in 0..<3 {
+            let plate = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
+            if #available(iOS 26.0, *) { plate.effect = UIGlassEffect(style: .regular) }
+            plate.isUserInteractionEnabled = false
+            plate.clipsToBounds = true
+            plate.layer.cornerCurve = .continuous
+            if #available(iOS 26.0, *), isPhone {
+                plate.cornerConfiguration = .capsule()
+                plate.clipsToBounds = false
+            }
+            sectionPlates.append(plate)
+            mainToolbarContainer.insertSubview(plate, at: 0)
+        }
 
         // Layout constraints
-        let edgePadding = currentEdgePadding()
         let heightConstraint = drawerContainerView.heightAnchor.constraint(equalToConstant: 0)
         drawerHeightConstraint = heightConstraint
         let backgroundLeadingConstraint = backgroundBlurView.leadingAnchor.constraint(equalTo: leadingAnchor)
@@ -679,27 +830,26 @@ class KeyboardToolbarView: UIView {
         self.backgroundTopConstraint = backgroundTopConstraint
         self.backgroundLeadingConstraint = backgroundLeadingConstraint
         self.backgroundTrailingConstraint = backgroundTrailingConstraint
+        let backgroundBottom = backgroundBlurView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        backgroundBottomConstraint = backgroundBottom
         let drawerContainerLeadingConstraint = drawerContainerView.leadingAnchor.constraint(equalTo: leadingAnchor)
         let drawerContainerTrailingConstraint = drawerContainerView.trailingAnchor.constraint(equalTo: trailingAnchor)
         self.drawerContainerLeadingConstraint = drawerContainerLeadingConstraint
         self.drawerContainerTrailingConstraint = drawerContainerTrailingConstraint
         let toolbarHeightConstraint = mainToolbarContainer.heightAnchor.constraint(equalToConstant: sizes.toolbar.height)
         mainToolbarHeightConstraint = toolbarHeightConstraint
+        let mainToolbarTop = mainToolbarContainer.topAnchor.constraint(equalTo: drawerContainerView.bottomAnchor)
+        mainToolbarTopConstraint = mainToolbarTop
         let mainToolbarLeadingConstraint = mainToolbarContainer.leadingAnchor.constraint(equalTo: leadingAnchor)
         let mainToolbarTrailingConstraint = mainToolbarContainer.trailingAnchor.constraint(equalTo: trailingAnchor)
         self.mainToolbarLeadingConstraint = mainToolbarLeadingConstraint
         self.mainToolbarTrailingConstraint = mainToolbarTrailingConstraint
-        let mainRowLeading = mainRowStackView.leadingAnchor.constraint(equalTo: mainToolbarContainer.leadingAnchor, constant: edgePadding)
-        let mainRowTrailing = mainRowStackView.trailingAnchor.constraint(equalTo: mainToolbarContainer.trailingAnchor, constant: -edgePadding)
-        mainRowLeadingConstraint = mainRowLeading
-        mainRowTrailingConstraint = mainRowTrailing
-
         let constraints: [NSLayoutConstraint] = [
             // Background blur
             backgroundLeadingConstraint,
             backgroundTrailingConstraint,
             backgroundTopConstraint,
-            backgroundBlurView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            backgroundBottom,
 
             // Drawer container (top of view)
             drawerContainerView.topAnchor.constraint(equalTo: topAnchor),
@@ -714,17 +864,12 @@ class KeyboardToolbarView: UIView {
             drawerRowsStack.bottomAnchor.constraint(equalTo: drawerContainerView.bottomAnchor),
 
             // Main toolbar container (below drawer)
-            mainToolbarContainer.topAnchor.constraint(equalTo: drawerContainerView.bottomAnchor),
+            mainToolbarTop,
             mainToolbarLeadingConstraint,
             mainToolbarTrailingConstraint,
             mainToolbarContainer.bottomAnchor.constraint(equalTo: bottomAnchor),
             toolbarHeightConstraint,
 
-            // Main row stack
-            mainRowLeading,
-            mainRowTrailing,
-            mainRowStackView.centerYAnchor.constraint(equalTo: mainToolbarContainer.centerYAnchor),
-            mainRowStackView.heightAnchor.constraint(equalToConstant: sizes.button.height),
         ]
 
         NSLayoutConstraint.activate(constraints)
@@ -744,6 +889,7 @@ class KeyboardToolbarView: UIView {
     /// plate below this view (the reserved home-indicator strip), so the plate
     /// and the skirt meet without a rounded seam.
     func setBottomEdgeSquared(_ squared: Bool) {
+        let squared = squared && !isWindowHosted
         let corners: CACornerMask = squared
             ? [.layerMinXMinYCorner, .layerMaxXMinYCorner]
             : [.layerMinXMinYCorner, .layerMaxXMinYCorner,
@@ -786,29 +932,30 @@ class KeyboardToolbarView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        updateInsetsForCurrentTraits()
         updatePlateAppearance()
-
-        let width = bounds.width
+        let insets = currentChromeHorizontalInsets()
+        let width = bounds.width - insets.left - insets.right - currentEdgePadding() * 2 - hostTrailingReserve
         guard width > 0 else { return }
 
         // Rebuild buttons when width changes meaningfully (e.g. rotation)
-        if abs(width - lastBuiltWidth) > 10 {
+        if abs(width - lastBuiltWidth) > 0.5 {
             rebuildForCurrentWidth()
         }
+        layoutKeySections(preservePosition: true)
         updateDrawerPreviewFrame()
     }
 
     private func updateInsetsForCurrentTraits() {
         let edgePadding = currentEdgePadding()
         let chromeInsets = currentChromeHorizontalInsets()
-        backgroundLeadingConstraint?.constant = chromeInsets.left
-        backgroundTrailingConstraint?.constant = -chromeInsets.right
+        let backgroundInset = displayedAppearance == .separate ? edgePadding : 0
+        backgroundLeadingConstraint?.constant = chromeInsets.left + backgroundInset
+        backgroundTrailingConstraint?.constant = -chromeInsets.right - backgroundInset
         drawerContainerLeadingConstraint?.constant = chromeInsets.left
         drawerContainerTrailingConstraint?.constant = -chromeInsets.right
         mainToolbarLeadingConstraint?.constant = chromeInsets.left
         mainToolbarTrailingConstraint?.constant = -chromeInsets.right
-        mainRowLeadingConstraint?.constant = edgePadding
-        mainRowTrailingConstraint?.constant = -(edgePadding + hostTrailingReserve)
         for row in drawerRowViews {
             row.updateEdgePadding(edgePadding)
         }
@@ -821,14 +968,15 @@ class KeyboardToolbarView: UIView {
         extraKeysToggleButton?.cancelTouchInteraction()
         let width = bounds.width
         guard width > 0 else { return }
-        lastBuiltWidth = width
 
         let manager = KeyboardToolbarManager.shared
 
         // Clear existing main row buttons (preserve modifier tracking)
-        let mainRowModifiers = Set(mainRowStackView.arrangedSubviews.compactMap { $0 as? KeyboardModifierButton })
-        modifierButtons.removeAll { mainRowModifiers.contains($0) }
-        mainRowStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        cancelTouchInteractions(in: mainToolbarContainer)
+        modifierButtons.removeAll { $0.isDescendant(of: mainToolbarContainer) }
+        for stack in [leftPinnedStackView, mainRowStackView, fixedControlsStackView] {
+            stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        }
 
         // Reset tracked references
         dismissButton = nil
@@ -840,8 +988,14 @@ class KeyboardToolbarView: UIView {
         let edgePadding = currentEdgePadding()
         let chromeInsets = currentChromeHorizontalInsets()
         let availableWidth = width - edgePadding * 2 - chromeInsets.left - chromeInsets.right - hostTrailingReserve
+        guard availableWidth > 0 else { return }
+        lastBuiltWidth = availableWidth
+        displayedScrollScope = manager.config.scrollScope
+        displayedAppearance = manager.config.appearance
+        displayedScrollBehavior = manager.config.scrollBehavior
         let layout = manager.effectiveLayout(availableWidth: availableWidth,
-            reservedMainRowSlots: onTouchKeyboardRequested == nil ? 0 : 1, sizes: sizes)
+            reservedMainRowSlots: onTouchKeyboardRequested == nil ? 0 : 1,
+            sizes: sizes, scrollsMainRow: true)
         effectiveDrawerRows = layout.drawers
         // A layout rebuild can change a row's contents. Ordinary drawer count
         // changes reuse these views and their horizontal scroll positions.
@@ -851,24 +1005,33 @@ class KeyboardToolbarView: UIView {
         modifierButtons.removeAll { cachedModifiers.contains($0) }
         cachedDrawerRows.removeAll()
         let mainSlots = layout.main
+        mainRowScrollView.isScrollEnabled = true
+        mainRowScrollView.isPagingEnabled = displayedScrollBehavior == .pages
+        mainRowScrollView.decelerationRate = displayedScrollBehavior == .pages ? .fast : .normal
+        for stack in [leftPinnedStackView, mainRowStackView, fixedControlsStackView] {
+            let scrolls = stack === mainRowStackView || displayedScrollScope == .all
+            (scrolls ? scrollContentView : mainToolbarContainer).addSubview(stack)
+        }
         if onTouchKeyboardRequested != nil {
             let button = KeyboardSymbolButton(key: "__touchKeyboard__",
                 display: .icon("keyboard.badge.ellipsis"), sizes: sizes)
             button.accessibilityLabel = String(localized: "Use Terminal Keyboard")
             button.delegate = self
-            mainRowStackView.addArrangedSubview(button)
+            addToolbarButton(button, to: mainRowStackView)
         }
-
         for slot in mainSlots {
             if let button = createButtonForSlot(slot) {
-                if let modifierButton = button as? KeyboardModifierButton {
-                    modifierButton.sweepPeers = { [weak self] in
-                        self?.mainRowStackView.arrangedSubviews.compactMap { $0 as? KeyboardModifierButton } ?? []
-                    }
-                }
-                mainRowStackView.addArrangedSubview(button)
+                addToolbarButton(button, to: mainRowStackView)
             }
         }
+        for (slots, stack) in [(layout.left, leftPinnedStackView), (layout.right, fixedControlsStackView)] {
+            for slot in slots {
+                if let button = createButtonForSlot(slot) { addToolbarButton(button, to: stack) }
+            }
+        }
+        layoutKeySections(preservePosition: true)
+        applyBottomEdgeKeyDispatchMode(in: mainToolbarContainer)
+        Ghostty.logger.debug("KeyboardToolbar: rebuilt scope \(self.displayedScrollScope.rawValue, privacy: .public), style \(self.displayedAppearance.rawValue, privacy: .public), scroll \(self.displayedScrollBehavior.rawValue, privacy: .public), primary \(mainSlots.count, privacy: .public), left \(layout.left.count, privacy: .public), right \(layout.right.count, privacy: .public), width \(availableWidth, privacy: .public)")
 
         // Clamp drawer state to the current row count (settings may have reduced it)
         let rowCount = manager.drawerRowCount
@@ -883,11 +1046,119 @@ class KeyboardToolbarView: UIView {
 
         // Open by default if setting is enabled (first drawer row only)
         if drawerState == .closed && manager.drawerOpenByDefault {
-            drawerState = manager.drawerToggleMode == .cycle ? .cycling(index: 0) : .stacked(count: 1)
+            if drawerManuallyClosed {
+                Ghostty.logger.debug("KeyboardToolbar: open-by-default suppressed after manual close")
+            } else {
+                drawerState = manager.drawerToggleMode == .cycle ? .cycling(index: 0) : .stacked(count: 1)
+                Ghostty.logger.debug("KeyboardToolbar: open-by-default applied mode \(manager.drawerToggleMode.rawValue, privacy: .public), row 1")
+            }
         }
 
         // Rebuild drawer rows (also the repopulate path after a layout change)
         applyDrawerState()
+    }
+
+    private func layoutKeySections(preservePosition: Bool) {
+        let stacks = [leftPinnedStackView, mainRowStackView, fixedControlsStackView]
+        let counts = stacks.map { $0.arrangedSubviews.count }
+        var area = mainToolbarContainer.bounds.insetBy(dx: currentEdgePadding(), dy: 0)
+        area.size.width -= hostTrailingReserve
+        guard area.width > 0, area.height > 0 else { return }
+        let diameter = sizes.button.height
+        let scrollsAll = displayedScrollScope == .all
+        let paged = displayedScrollBehavior == .pages
+        let layout = ToolbarSectionLayout(area: area, counts: counts, buttonWidth: diameter,
+            scrollsAll: scrollsAll, paged: paged)
+        let scrollFrame = layout.scrollFrame
+        let oldLayout = pageLayout
+        pageLayout = layout.pageLayout
+        let cellWidth = layout.cellWidth
+        mainRowScrollView.frame = scrollFrame
+        let clipsToScrollCapsule = displayedAppearance == .separate && !scrollsAll
+        mainRowScrollView.layer.cornerCurve = .continuous
+        mainRowScrollView.layer.cornerRadius = clipsToScrollCapsule ? area.height / 2 : 0
+        let contentWidth = layout.contentWidth
+        scrollContentView.frame = CGRect(x: 0, y: 0, width: contentWidth, height: area.height)
+        mainRowScrollView.contentSize = scrollContentView.bounds.size
+        mainRowScrollView.alwaysBounceHorizontal = contentWidth > scrollFrame.width + 0.5
+        for (stack, frame) in zip(stacks, layout.sectionFrames) {
+            stack.frame = frame
+        }
+        for stack in stacks {
+            stack.layoutIfNeeded()
+            for cell in stack.arrangedSubviews {
+                let scale = min(1, max(1, cell.bounds.width - 2) / diameter)
+                cell.subviews.first?.transform = CGAffineTransform(scaleX: scale, y: scale)
+            }
+        }
+        let maxOffset = max(0, contentWidth - scrollFrame.width)
+        if preservePosition, abs(oldLayout.viewportWidth - pageLayout.viewportWidth) > 0.5 {
+            let firstItem = Int(max(0, mainRowScrollView.contentOffset.x) / max(1, oldLayout.cellWidth))
+            let offset = paged ? pageLayout.offset(containing: firstItem) : CGFloat(firstItem) * cellWidth
+            mainRowScrollView.setContentOffset(CGPoint(x: min(maxOffset, offset), y: 0), animated: false)
+        } else if !mainRowScrollView.isDragging && !mainRowScrollView.isDecelerating {
+            let bounded = min(maxOffset, max(0, mainRowScrollView.contentOffset.x))
+            let offset = paged ? (bounded / pageLayout.viewportWidth).rounded() * pageLayout.viewportWidth : bounded
+            mainRowScrollView.setContentOffset(CGPoint(x: offset, y: 0), animated: false)
+        }
+        let separate = displayedAppearance == .separate
+        for (index, plate) in sectionPlates.enumerated() {
+            let stack = stacks[index]
+            let parent = scrollsAll ? scrollContentView : mainToolbarContainer
+            if plate.superview !== parent { parent.insertSubview(plate, at: 0) }
+            plate.isHidden = !separate || counts[index] == 0
+            guard counts[index] > 0 else { plate.frame = .zero; continue }
+            if index == 1 && !scrollsAll {
+                // The middle capsule stays in place while its keys page.
+                plate.frame = scrollFrame
+            } else {
+                plate.frame = scrollsAll ? stack.frame.insetBy(dx: 2, dy: 0) : stack.frame
+            }
+            plate.layer.cornerRadius = area.height / 2
+            plate.layer.borderWidth = 0.5
+            plate.layer.borderColor = UIColor.label.withAlphaComponent(0.18).cgColor
+            if #available(iOS 26.0, *), isPhone {
+                plate.layer.borderWidth = 0
+            }
+            plate.contentView.backgroundColor = glassTintColor(for: traitCollection)
+        }
+        backgroundBlurView.isHidden = separate && visibleDrawerRowCount == 0
+        backgroundBottomConstraint?.constant = separate ? -sizes.toolbar.height - drawerToolbarGap : 0
+        if separate { backgroundBlurView.layer.borderWidth = 0 }
+    }
+
+    private func addToolbarButton(_ button: UIView, to stack: UIStackView) {
+        if stack === mainRowStackView || stack === leftPinnedStackView || stack === fixedControlsStackView,
+           let modifierButton = button as? KeyboardModifierButton {
+            modifierButton.sweepPeers = { [weak self] in
+                guard let self else { return [] }
+                return self.modifierButtons.filter { $0.isDescendant(of: self.mainToolbarContainer) }
+            }
+        }
+        let cell = UIView()
+        let circle = UIView()
+        let diameter = sizes.button.height
+        circle.backgroundColor = UIColor { traits in
+            (traits.userInterfaceStyle == .dark ? UIColor.white : UIColor.black).withAlphaComponent(0.035)
+        }
+        circle.layer.cornerRadius = diameter / 2
+        circle.clipsToBounds = true
+        button.translatesAutoresizingMaskIntoConstraints = false
+        circle.addSubview(button)
+        cell.addSubview(circle)
+        circle.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            circle.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
+            circle.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+            cell.heightAnchor.constraint(equalToConstant: diameter),
+            circle.widthAnchor.constraint(equalToConstant: diameter),
+            circle.heightAnchor.constraint(equalToConstant: diameter),
+            button.leadingAnchor.constraint(equalTo: circle.leadingAnchor),
+            button.trailingAnchor.constraint(equalTo: circle.trailingAnchor),
+            button.topAnchor.constraint(equalTo: circle.topAnchor),
+            button.bottomAnchor.constraint(equalTo: circle.bottomAnchor),
+        ])
+        stack.addArrangedSubview(cell)
     }
 
     private func createButtonForSlot(_ slot: KeySlot) -> UIView? {
@@ -1361,9 +1632,12 @@ class KeyboardToolbarView: UIView {
             ? corners.subtracting([.layerMinXMinYCorner, .layerMaxXMinYCorner]) : corners
         layer.maskedCorners = mainCorners
         let tint = glassTintColor(for: traitCollection)
-        backgroundBlurView.configure(radius: sizes.toolbar.cornerRadius, corners: mainCorners,
-                                     showsTopEdge: !hasPreviewRows, tint: tint)
-        // configure() shows any plate that has a height.
+        let floating = followsTerminalViewport || (isEmbeddedPreview && isPhone)
+        let radius = floating ? min(bounds.height / 2, sizes.toolbar.height / 2) : sizes.toolbar.cornerRadius
+        layer.cornerRadius = radius
+        layer.masksToBounds = !floating
+        backgroundBlurView.configure(radius: radius, corners: mainCorners,
+                                     showsTopEdge: !hasPreviewRows && !floating && displayedAppearance != .separate, tint: tint)
         if usesHostChrome { backgroundBlurView.isHidden = true }
         drawerPreview?.configure(radius: sizes.toolbar.cornerRadius,
                                  corners: [.layerMinXMinYCorner, .layerMaxXMinYCorner],
@@ -1469,6 +1743,7 @@ class KeyboardToolbarView: UIView {
     private func handleExtraKeysToggle() {
         let manager = KeyboardToolbarManager.shared
         let rowCount = manager.drawerRowCount
+        let previousState = drawerState
         switch drawerState {
         case .closed, .arrows:
             drawerState = manager.drawerToggleMode == .cycle ? .cycling(index: 0) : .stacked(count: 1)
@@ -1479,12 +1754,47 @@ class KeyboardToolbarView: UIView {
             drawerState = (manager.drawerToggleMode == .cycle && index + 1 < rowCount)
                 ? .cycling(index: index + 1) : .closed
         }
+        drawerManuallyClosed = drawerState == .closed
+        logDrawerTransition(from: previousState, action: "extra-keys", mode: manager.drawerToggleMode.rawValue)
         applyDrawerState()
     }
 
     private func handleArrowsToggle() {
+        let previousState = drawerState
         drawerState = (drawerState == .arrows) ? .closed : .arrows
+        drawerManuallyClosed = drawerState == .closed
+        logDrawerTransition(from: previousState, action: "arrows", mode: "arrows")
         applyDrawerState()
+    }
+
+    private func logDrawerTransition(from previousState: DrawerState, action: String, mode: String) {
+        let selectedRow: String
+        let keyCount: Int
+        switch drawerState {
+        case .closed:
+            selectedRow = "none"
+            keyCount = 0
+        case .arrows:
+            selectedRow = "arrows"
+            keyCount = 4
+        case .stacked(let count):
+            let index = count - 1
+            selectedRow = "\(count)"
+            keyCount = effectiveDrawerRows.indices.contains(index) ? effectiveDrawerRows[index].count : 0
+        case .cycling(let index):
+            selectedRow = "\(index + 1)"
+            keyCount = effectiveDrawerRows.indices.contains(index) ? effectiveDrawerRows[index].count : 0
+        }
+        Ghostty.logger.debug("KeyboardToolbar: drawer action \(action, privacy: .public), mode \(mode, privacy: .public), from \(self.drawerStateName(previousState), privacy: .public), to \(self.drawerStateName(self.drawerState), privacy: .public), row \(selectedRow, privacy: .public), keys \(keyCount, privacy: .public)")
+    }
+
+    private func drawerStateName(_ state: DrawerState) -> String {
+        switch state {
+        case .closed: return "closed"
+        case .arrows: return "arrows"
+        case .stacked(let count): return "stacked(\(count))"
+        case .cycling(let index): return "cycling(\(index))"
+        }
     }
 
     /// Reconcile rows without recreating their scroll views or key controls.
@@ -1545,7 +1855,9 @@ class KeyboardToolbarView: UIView {
 
         let newHeight = CGFloat(visibleDrawerRowCount) * sizes.toolbar.drawerHeight
         let heightChanged = drawerHeightConstraint?.constant != newHeight
+            || mainToolbarTopConstraint?.constant != drawerToolbarGap
         drawerHeightConstraint?.constant = newHeight
+        mainToolbarTopConstraint?.constant = drawerToolbarGap
         drawerContainerView.isHidden = (drawerState == .closed)
         applyBottomEdgeKeyDispatchMode(in: self)
         setNeedsUpdateConstraints()
@@ -1583,26 +1895,18 @@ class KeyboardToolbarView: UIView {
     private func populateExtraKeysRow(_ row: DrawerRowView, drawerIndex: Int) {
         row.configureForScrolling()
 
-        guard effectiveDrawerRows.indices.contains(drawerIndex) else { return }
-
-        for slot in effectiveDrawerRows[drawerIndex] {
-            switch slot {
-            case .builtIn(let keyID):
-                if keyID.isModifier {
-                    let modButton = createModifierButton(for: keyID.keyDefinition)
-                    row.stackView.addArrangedSubview(modButton)
-                } else if keyID == .drawerToggle {
-                    // Skip drawer toggle in drawer
-                    continue
-                } else if let button = createButtonForKeyID(keyID) {
-                    row.stackView.addArrangedSubview(button)
-                }
-            case .custom(let uuid):
-                if let button = createCustomKeyButton(uuid: uuid) {
-                    row.stackView.addArrangedSubview(button)
+        if effectiveDrawerRows.indices.contains(drawerIndex) {
+            for slot in effectiveDrawerRows[drawerIndex] where slot != .builtIn(.drawerToggle) {
+                if let button = createButtonForSlot(slot) {
+                    addToolbarButton(button, to: row.stackView)
                 }
             }
         }
+        row.configureScrollingLayout(
+            buttonCount: row.stackView.arrangedSubviews.count,
+            sizes: sizes,
+            behavior: KeyboardToolbarManager.shared.config.drawerScrollBehavior
+        )
     }
 
     // MARK: - Modifier State Management
@@ -1668,7 +1972,7 @@ class KeyboardToolbarView: UIView {
             return CGSize(width: UIView.noIntrinsicMetric, height: drawerPreviewHeight)
         }
         let drawerExtra = CGFloat(visibleDrawerRowCount) * sizes.toolbar.drawerHeight
-        return CGSize(width: UIView.noIntrinsicMetric, height: sizes.toolbar.height + drawerExtra)
+        return CGSize(width: UIView.noIntrinsicMetric, height: sizes.toolbar.height + drawerExtra + drawerToolbarGap)
     }
 
     // MARK: - Public Methods
@@ -1678,14 +1982,15 @@ class KeyboardToolbarView: UIView {
         cancelTouchInteractions(in: self)
         interactionMode = mode
         applyBottomEdgeKeyDispatchMode(in: self)
+        setNeedsLayout()
     }
 
     private func applyBottomEdgeKeyDispatchMode(in view: UIView) {
         if let button = view as? KeyboardButton {
-            button.interactionMode = interactionMode
+            button.interactionMode = button.isDescendant(of: mainRowScrollView) ? .spacedBottom : interactionMode
         }
         if let button = view as? KeyboardArrowJoystickButton {
-            button.interactionMode = interactionMode
+            button.interactionMode = button.isDescendant(of: mainRowScrollView) ? .spacedBottom : interactionMode
         }
         for subview in view.subviews {
             applyBottomEdgeKeyDispatchMode(in: subview)
@@ -1703,7 +2008,7 @@ class KeyboardToolbarView: UIView {
     }
 
     private var dismissButtonIconName: String {
-        Self.dismissSymbolName(pinned: dismissButtonPinned, showsRestore: dismissButtonShowsRestore)
+        return Self.dismissSymbolName(pinned: dismissButtonPinned, showsRestore: dismissButtonShowsRestore)
     }
 
     /// Shared by the system-keyboard toolbar and the custom keyboard.
@@ -1723,14 +2028,18 @@ class KeyboardToolbarView: UIView {
 
     func updateSizes(_ newSizes: KeyboardSizes) {
         extraKeysToggleButton?.cancelTouchInteraction()
+        if sizes.toolbar.height != newSizes.toolbar.height {
+            Ghostty.logger.debug("KeyboardToolbar: row height \(self.sizes.toolbar.height, privacy: .public) -> \(newSizes.toolbar.height, privacy: .public), width class \(self.traitCollection.horizontalSizeClass.rawValue, privacy: .public), height class \(self.traitCollection.verticalSizeClass.rawValue, privacy: .public)")
+        }
         sizes = newSizes
         layer.cornerRadius = sizes.toolbar.cornerRadius
         layer.cornerCurve = .continuous
         updatePlateAppearance()
-        mainRowStackView.spacing = sizes.toolbar.spacing
         mainToolbarHeightConstraint?.constant = sizes.toolbar.height
         drawerHeightConstraint?.constant = CGFloat(visibleDrawerRowCount) * sizes.toolbar.drawerHeight
         updateSubviewSizes(in: mainRowStackView)
+        updateSubviewSizes(in: leftPinnedStackView)
+        updateSubviewSizes(in: fixedControlsStackView)
         for row in drawerRowViews {
             updateSubviewSizes(in: row.stackView)
         }
@@ -1764,12 +2073,25 @@ class KeyboardToolbarView: UIView {
     /// tinted ears beneath it.
     var plateLeadingAnchor: NSLayoutXAxisAnchor { backgroundBlurView.leadingAnchor }
     var plateTrailingAnchor: NSLayoutXAxisAnchor { backgroundBlurView.trailingAnchor }
+    var plateFrame: CGRect { backgroundBlurView.frame }
 
     /// The glass tint the accessory's bottom skirt reuses so the reserved
     /// home-indicator strip reads as part of this toolbar's plate.
     func glassTintColor(for traitCollection: UITraitCollection) -> UIColor {
+        if #available(iOS 26.0, *), isPhone { return .clear }
         let isLight = traitCollection.userInterfaceStyle != .dark
         return (isLight ? UIColor.white : UIColor.black).withAlphaComponent(0.16)
+    }
+}
+
+extension KeyboardToolbarView: UIScrollViewDelegate {
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        cancelTouchInteractions(in: scrollContentView)
+        Ghostty.logger.debug("KeyboardToolbar: key row drag began at \(scrollView.contentOffset.x, privacy: .public)")
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        Ghostty.logger.debug("KeyboardToolbar: key row scroll ended at \(scrollView.contentOffset.x, privacy: .public)")
     }
 }
 
@@ -1777,6 +2099,7 @@ class KeyboardToolbarView: UIView {
 
 extension KeyboardToolbarView: KeyboardButtonDelegate {
     func keyPressed(_ key: String, modifiers: KeyModifiers) {
+        guard !isEmbeddedPreview else { return }
         // Intercept action buttons before forwarding
         if key == "__touchKeyboard__" {
             onTouchKeyboardRequested?()
@@ -1937,7 +2260,8 @@ extension KeyboardToolbarView: KeyboardButtonDelegate {
     }
 
     func cancelScrollTouches() {
-        // Cancel scroll view pan gestures when a symbol button detects a swipe
+        // Dual-symbol selection owns the touch once it becomes a key swipe.
+        mainRowScrollView.panGestureRecognizer.dropTouches()
         for row in drawerRowViews {
             row.scrollView.panGestureRecognizer.dropTouches()
         }

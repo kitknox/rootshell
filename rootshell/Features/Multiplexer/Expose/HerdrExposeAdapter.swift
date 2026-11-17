@@ -59,6 +59,7 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
 
         let focusedWorkspace = snap.mxString("focused_workspace_id")
         let focusedTab = snap.mxString("focused_tab_id")
+        let workspaces = Self.muxWorkspaces(from: Self.decodeWorkspaceInfos(snap.mxArray("workspaces")))
         let layoutsByTab = Dictionary(
             snap.mxArray("layouts").compactMap { layout -> (String, [String: Any])? in
                 guard let id = layout.mxString("tab_id") else { return nil }
@@ -70,6 +71,14 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
             snap.mxArray("panes").compactMap { pane -> (String, [String: Any])? in
                 guard let id = pane.mxString("pane_id") else { return nil }
                 return (id, pane)
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        let agentsByPaneID = Dictionary(
+            snap.mxArray("agents").compactMap { agent -> (String, [String: Any])? in
+                guard let id = agent.mxString("pane_id") else { return nil }
+                return (id, agent)
             },
             uniquingKeysWith: { first, _ in first }
         )
@@ -92,6 +101,11 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
             for entry in layout?.mxArray("panes") ?? [] {
                 guard let paneID = entry.mxString("pane_id"), let rect = entry.mxDict("rect") else { continue }
                 let pane = panesByID[paneID]
+                let agent = agentsByPaneID[paneID].flatMap { record -> [String: Any]? in
+                    guard let terminalID = pane?.mxString("terminal_id"), record.mxString("terminal_id") == terminalID else { return nil }
+                    return record
+                }
+                let programName = agent?.mxString("agent") ?? pane?.mxDict("foreground_process")?.mxString("name")
                 if validatesCaptures, pane?.mxString("tab_id") != tabID { continue }
                 panes.append(MuxPane(
                     id: paneID,
@@ -103,7 +117,10 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
                     ),
                     isActive: entry.mxBool("focused"),
                     isPreviewable: true,
-                    title: pane?.mxString("title") ?? pane?.mxString("terminal_title_stripped")
+                    title: pane?.mxString("title") ?? pane?.mxString("terminal_title_stripped"),
+                    workingDirectory: Self.absoluteDirectory(pane?.mxString("foreground_cwd"))
+                        ?? Self.absoluteDirectory(pane?.mxString("cwd")),
+                    programName: programName.flatMap { ProgramNameNormalizer.normalize(name: $0) }
                 ))
             }
             let status = info.mxString("agent_status")?.lowercased()
@@ -112,11 +129,12 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
                 id: tabID,
                 index: tabs.count,
                 title: info.mxString("label") ?? tabID,
-                isActive: info.mxBool("focused") || tabID == focusedTab,
+                isActive: tabID == focusedTab,
                 cols: cols,
                 rows: rows,
                 panes: panes,
-                badge: badge
+                badge: badge,
+                workspaceID: info.mxString("workspace_id")
             ))
         }
         var frames: [String: MuxPaneFrame] = [:]
@@ -136,12 +154,41 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
         }
         let activeTab = focusedTab ?? tabs.first(where: \.isActive)?.id
         return MuxTickResult(
-            snapshot: MuxExposeSnapshot(tabs: tabs, activeTabID: activeTab),
+            snapshot: MuxExposeSnapshot(tabs: tabs, activeTabID: activeTab, workspaces: workspaces),
             frames: frames,
             unchanged: [],
             truncated: sections.truncated,
             paneIdentities: panesByID.compactMapValues { $0.mxString("terminal_id") }
         )
+    }
+
+    private static func decodeWorkspaceInfos(_ values: [[String: Any]]) -> [HerdrControl.WorkspaceInfo] {
+        guard let data = try? JSONSerialization.data(withJSONObject: values) else { return [] }
+        return (try? JSONDecoder().decode([HerdrControl.WorkspaceInfo].self, from: data)) ?? []
+    }
+
+    private static func muxWorkspaces(from infos: [HerdrControl.WorkspaceInfo]) -> [MuxWorkspace] {
+        let ordered = HerdrWorkspaceRules.ordered(infos)
+        let parents: [String: String] = Dictionary(
+            HerdrWorkspaceRules.groups(ordered).flatMap { group -> [(String, String)] in
+                guard let parentID = group.first?.workspace_id else { return [] }
+                return group.dropFirst().map { ($0.workspace_id, parentID) }
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return ordered.map { workspace in
+            MuxWorkspace(
+                id: workspace.workspace_id,
+                title: workspace.label,
+                parentID: parents[workspace.workspace_id]
+            )
+        }
+    }
+
+    private static func absoluteDirectory(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let path = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return path.hasPrefix("/") ? path : nil
     }
 
     /// herdr cells are u16, as `HerdrControlProtocol.Rect` enforces; bounding
@@ -154,4 +201,5 @@ nonisolated struct HerdrExposeAdapter: MultiplexerExposeAdapter {
         let nonce = "focus"
         return MuxScript.wrap("\(prelude(session: session)); hx tab focus \(MuxScript.dq(tabID))", nonce: nonce)
     }
+
 }

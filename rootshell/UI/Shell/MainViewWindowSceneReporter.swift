@@ -45,6 +45,7 @@ final class WindowSceneReportingView: UIView {
         let safeAreaInsets: UIEdgeInsets
         let isKey: Bool
         let statusBarBottom: CGFloat
+        let interfaceOrientation: Int
     }
 
     var onUpdate: ((UIWindowScene?, UIEdgeInsets, Bool, CGFloat) -> Void)?
@@ -54,6 +55,9 @@ final class WindowSceneReportingView: UIView {
     private var lastSceneSnapshot: SceneSnapshot?
     private var lastTopSafeAreaInset: CGFloat?
     private var safeAreaDebounceWorkItem: DispatchWorkItem?
+    #if !targetEnvironment(macCatalyst) && !os(visionOS)
+    private var geometryObservation: NSKeyValueObservation?
+    #endif
     #if targetEnvironment(macCatalyst)
     private var lastReportedFrame: CGRect?
     #endif
@@ -61,6 +65,11 @@ final class WindowSceneReportingView: UIView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         cachedKeyState = nil
+        #if !targetEnvironment(macCatalyst) && !os(visionOS)
+        geometryObservation = window?.windowScene?.observe(\.effectiveGeometry, options: [.new]) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.notifyScene() }
+        }
+        #endif
         registerWindowObservers()
         registerTraitChangeObservers()
         notifyScene()
@@ -133,14 +142,17 @@ final class WindowSceneReportingView: UIView {
         let insets = window?.safeAreaInsets ?? .zero
         #if targetEnvironment(macCatalyst) || os(visionOS)
         let statusBarBottom: CGFloat = 0
+        let interfaceOrientation = 0
         #else
         let statusBarBottom = scene?.statusBarManager?.statusBarFrame.maxY ?? 0
+        let interfaceOrientation = scene?.effectiveGeometry.interfaceOrientation.rawValue ?? 0
         #endif
         let snapshot = SceneSnapshot(
             sceneSessionID: sceneSessionID,
             safeAreaInsets: insets,
             isKey: isKey,
-            statusBarBottom: statusBarBottom
+            statusBarBottom: statusBarBottom,
+            interfaceOrientation: interfaceOrientation
         )
 
         guard snapshot != lastSceneSnapshot else { return }
