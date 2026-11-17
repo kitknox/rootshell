@@ -581,12 +581,18 @@ enum KeyboardToolbarSize: String, CaseIterable, Sendable {
         #if os(visionOS)
         0
         #else
-        SettingsStore.shared.value(currentMinimumKeyWidthKey)
+        normalizedMinimumKeyWidth(SettingsStore.shared.value(currentMinimumKeyWidthKey))
         #endif
     }
 
     /// What the minimum key width can be set to; its low end means automatic.
     static let minimumKeyWidthRange: ClosedRange<Double> = 40...140
+
+    /// Clamps into the range, or 0 for automatic. Stored values predating the
+    /// key's range may be huge or non-finite and would trap `Int(_:)`.
+    static func normalizedMinimumKeyWidth(_ width: Double) -> Double {
+        width > minimumKeyWidthRange.lowerBound ? min(width, minimumKeyWidthRange.upperBound) : 0
+    }
 }
 
 // MARK: - ToolbarLayoutConfig

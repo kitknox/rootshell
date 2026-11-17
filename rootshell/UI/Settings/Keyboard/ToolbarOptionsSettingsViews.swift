@@ -230,6 +230,8 @@ private struct ToolbarKeySizeSection: View {
         _minimumWidth = Setting(width)
     }
 
+    private var width: Double { KeyboardToolbarSize.normalizedMinimumKeyWidth(minimumWidth) }
+
     var body: some View {
         Section {
             Picker("Height", selection: $size) {
@@ -244,13 +246,13 @@ private struct ToolbarKeySizeSection: View {
                 HStack {
                     Text("Minimum Width")
                     Spacer()
-                    Text(minimumWidth > 0 ? String(localized: "\(Int(minimumWidth)) pt") : String(localized: "Automatic"))
+                    Text(width > 0 ? String(localized: "\(Int(width)) pt") : String(localized: "Automatic"))
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
                 // The low end of the slider is Automatic.
                 Slider(value: Binding(
-                    get: { max(minimumWidth, KeyboardToolbarSize.minimumKeyWidthRange.lowerBound) },
+                    get: { max(width, KeyboardToolbarSize.minimumKeyWidthRange.lowerBound) },
                     set: { KeyboardToolbarManager.shared.setMinimumKeyWidth($0, for: widthKey) }
                 ), in: KeyboardToolbarSize.minimumKeyWidthRange, step: 4)
                 .accessibilityLabel("Minimum Width")

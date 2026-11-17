@@ -176,22 +176,22 @@ nonisolated extension Settings {
             "keyboardToolbarSizeDuoFront", default: KeyboardToolbarSize.automatic, group: .keyboardToolbar, policy: .localByDefault,
             configKey: "keyboard-toolbar-size-duo-front",
             title: String(localized: "Toolbar Size on the Front Display", comment: "Setting title"))
-        // Points; 0 leaves the narrowest key to the toolbar.
+        // Points; 0 leaves the narrowest key to the toolbar. Range matches KeyboardToolbarSize.minimumKeyWidthRange.
         static let minKeyWidthPhone = SettingKey(
             "keyboardToolbarMinKeyWidthPhone", default: 0.0, group: .keyboardToolbar, policy: .localByDefault,
-            configKey: "keyboard-toolbar-min-key-width-iphone",
+            configKey: "keyboard-toolbar-min-key-width-iphone", range: 0...140,
             title: String(localized: "Minimum Toolbar Key Width on iPhone", comment: "Setting title"))
         static let minKeyWidthPad = SettingKey(
             "keyboardToolbarMinKeyWidthPad", default: 0.0, group: .keyboardToolbar, policy: .localByDefault,
-            configKey: "keyboard-toolbar-min-key-width-ipad",
+            configKey: "keyboard-toolbar-min-key-width-ipad", range: 0...140,
             title: String(localized: "Minimum Toolbar Key Width on iPad", comment: "Setting title"))
         static let minKeyWidthDuoInner = SettingKey(
             "keyboardToolbarMinKeyWidthDuoInner", default: 0.0, group: .keyboardToolbar, policy: .localByDefault,
-            configKey: "keyboard-toolbar-min-key-width-duo-inner",
+            configKey: "keyboard-toolbar-min-key-width-duo-inner", range: 0...140,
             title: String(localized: "Minimum Toolbar Key Width on the Inner Display", comment: "Setting title"))
         static let minKeyWidthDuoFront = SettingKey(
             "keyboardToolbarMinKeyWidthDuoFront", default: 0.0, group: .keyboardToolbar, policy: .localByDefault,
-            configKey: "keyboard-toolbar-min-key-width-duo-front",
+            configKey: "keyboard-toolbar-min-key-width-duo-front", range: 0...140,
             title: String(localized: "Minimum Toolbar Key Width on the Front Display", comment: "Setting title"))
         static let keycaps = SettingKey(
             "keyboardToolbarKeycaps", default: false, group: .keyboardToolbar, policy: .localByDefault,

@@ -492,8 +492,7 @@ class KeyboardToolbarManager {
     /// A display's minimum key width, in points. The low end of the range,
     /// or anything under it, leaves the width to the toolbar.
     func setMinimumKeyWidth(_ width: Double, for key: SettingKey<Double>) {
-        let range = KeyboardToolbarSize.minimumKeyWidthRange
-        let value = width > range.lowerBound ? min(width, range.upperBound) : 0
+        let value = KeyboardToolbarSize.normalizedMinimumKeyWidth(width)
         guard SettingsStore.shared.value(key) != value else { return }
         SettingsStore.shared.set(key, value)
         notifyChange()
