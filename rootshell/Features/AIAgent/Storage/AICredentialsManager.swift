@@ -118,13 +118,15 @@ final class AICredentialsManager {
     /// Model IDs we no longer offer, mapped to their replacement. Stored selections
     /// are rewritten on launch — an unmapped ID resolves to no provider at all.
     private nonisolated static let legacyModelMigrations: [String: String] = [
-        "gpt-5.4": "gpt-6-astra",
-        "gpt-5.4-mini-2026-03-17": "gpt-6-sol",
+        "gpt-5.4": "gpt-6.2-astra",
+        "gpt-5.4-mini-2026-03-17": "gpt-6.2-sol",
         "gpt-5.4-nano-2026-03-17": "gpt-6-luna",
-        "gpt-5.5-2026-04-23": "gpt-6-astra",
-        "gpt-5.6-sol": "gpt-6-astra",
-        "gpt-5.6-terra": "gpt-6-sol",
+        "gpt-5.5-2026-04-23": "gpt-6.2-astra",
+        "gpt-5.6-sol": "gpt-6.2-astra",
+        "gpt-5.6-terra": "gpt-6.2-sol",
         "gpt-5.6-luna": "gpt-6-luna",
+        "gpt-6-astra": "gpt-6.2-astra",
+        "gpt-6-sol": "gpt-6.2-sol",
         "claude-fable-5-1": "claude-fable-5-2",
         "claude-opus-4-8": "claude-opus-5-5",
         "claude-opus-5": "claude-opus-5-5",
@@ -519,10 +521,11 @@ final class AICredentialsManager {
     private func migrateLegacyModelSelections() {
         let defaults = UserDefaults.standard
         // Runs before `_openAIAuthMode` loads. ChatGPT sign-in discovers its own
-        // gpt-5.6 lineup, so shared selections of those IDs stay put in that mode.
+        // lineup, and GPT-6.2 rolls out per plan, so gpt-5.6 and gpt-6 selections
+        // stay put in that mode.
         let isChatGPTMode = defaults.string(forKey: openAIAuthModeKey) == OpenAIAuthMode.chatgptSignIn.rawValue
         func sharedMigration(for id: String) -> String? {
-            if isChatGPTMode, id.hasPrefix("gpt-5.6") { return nil }
+            if isChatGPTMode, id.hasPrefix("gpt-5.6") || id.hasPrefix("gpt-6-") { return nil }
             return Self.legacyModelMigrations[id]
         }
 

@@ -87,14 +87,14 @@ struct AIProviderModel: Identifiable, Codable, Sendable, Hashable {
 extension AIProviderModel {
     /// Available OpenAI models
     static let openAIModels: [AIProviderModel] = [
-        // Premium tier - GPT-6 flagship (recommended default)
+        // Premium tier - GPT-6.2 flagship (recommended default)
         .init(
-            id: "gpt-6-astra",
-            displayName: "GPT-6 Astra",
+            id: "gpt-6.2-astra",
+            displayName: "GPT-6.2 Astra",
             description: "Most intelligent, state-of-the-art (Recommended)",
             tier: .premium,
             supportsTools: true,
-            supportsTemperature: false,  // GPT-6 rejects temperature when reasoning is on
+            supportsTemperature: false,  // GPT-6.x rejects temperature when reasoning is on
             supportsThinking: false,
             source: .openAI,
             maxCompletionTokens: 128_000,
@@ -103,8 +103,8 @@ extension AIProviderModel {
 
         // Standard tier - balanced intelligence and cost
         .init(
-            id: "gpt-6-sol",
-            displayName: "GPT-6 Sol",
+            id: "gpt-6.2-sol",
+            displayName: "GPT-6.2 Sol",
             description: "Strong reasoning for coding and agentic work",
             tier: .standard,
             supportsTools: true,
@@ -131,7 +131,7 @@ extension AIProviderModel {
     ]
 
     /// Default model ID for new configurations
-    nonisolated static let defaultModelID = "gpt-6-astra"
+    nonisolated static let defaultModelID = "gpt-6.2-astra"
 
     /// Get model by ID
     static func openAIModel(id: String) -> AIProviderModel? {
