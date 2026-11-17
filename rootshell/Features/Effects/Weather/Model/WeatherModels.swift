@@ -42,8 +42,9 @@ nonisolated enum WeatherConditionKind: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// The service a snapshot's data came from.
 nonisolated enum WeatherSource: String, Codable, Sendable {
-    case nws, openMeteo, metNorway
+    case nws, openMeteo, metNorway, accuWeather
 }
 
 /// Rounded to 0.01° (about 1 km): the cache key, and all that leaves the device.
@@ -88,6 +89,77 @@ nonisolated struct WeatherSample: Codable, Equatable, Sendable {
     var convectiveCloud: Double? = nil      // reported towering cumulus 0.6, cumulonimbus 1
 }
 
+nonisolated extension WeatherSample {
+    /// A source's condition refined by its numbers: measured cover and rate
+    /// beat the condition's typical ones. Nil when neither was reported.
+    init?(date: Date, reading: WeatherConditionReading?, cloudCover cover: Double?, measuredRate: Double?,
+          thunderChance: Double? = nil) {
+        guard let kind = reading?.kind ?? cover.map(WeatherConditionKind.forCover) else { return nil }
+        self.init(date: date, kind: kind, cloudCover: cover ?? reading?.cloudCover ?? kind.typicalCloudCover,
+                  precipitationRate: measuredRate.flatMap { $0 > 0 ? $0 : nil } ?? reading?.precipitationRate,
+                  thunderChance: thunderChance ?? (reading?.thunder == true ? 0.8 : nil))
+    }
+}
+
+/// Minute-scale precipitation for the next hour or two, from radar.
+nonisolated struct WeatherNowcast: Codable, Equatable, Sendable {
+    nonisolated struct Segment: Codable, Equatable, Sendable {
+        var start: Date
+        var end: Date
+        var kind: WeatherConditionKind?         // nil while dry
+        var precipitationRate: Double? = nil    // mm/h
+    }
+
+    nonisolated enum Outlook: Equatable, Sendable {
+        case starting(WeatherConditionKind, at: Date)
+        case ending(WeatherConditionKind, at: Date)
+        case continuing(WeatherConditionKind, through: Date)
+    }
+
+    /// Ascending and contiguous.
+    var segments: [Segment]
+
+    func segment(at date: Date) -> Segment? {
+        segments.first { $0.start <= date && date < $0.end }
+    }
+
+    /// What changes next; nil when it stays dry or `date` is outside the nowcast.
+    func outlook(at date: Date) -> Outlook? {
+        guard let current = segment(at: date) else { return nil }
+        let later = segments.filter { $0.start >= current.end }
+        if let kind = current.kind {
+            if let dry = later.first(where: { $0.kind == nil }) { return .ending(kind, at: dry.start) }
+            return .continuing(kind, through: segments.last?.end ?? current.end)
+        }
+        guard let wet = later.first(where: { $0.kind != nil }), let kind = wet.kind else { return nil }
+        return .starting(kind, at: wet.start)
+    }
+
+    /// Adjacent segments with the same weather become one.
+    static func coalesced(_ segments: [Segment]) -> [Segment] {
+        segments.reduce(into: []) { result, segment in
+            if var last = result.last, last.end == segment.start, last.kind == segment.kind,
+               abs((last.precipitationRate ?? 0) - (segment.precipitationRate ?? 0)) < 0.1 {
+                last.end = segment.end
+                result[result.count - 1] = last
+            } else {
+                result.append(segment)
+            }
+        }
+    }
+
+    /// Spends a request only while something is falling, was in the last
+    /// nowcast, or the next few hours give it a real chance.
+    static func isWorthFetching(for snapshot: WeatherSnapshot, now: Date) -> Bool {
+        if snapshot.current.kind.isPrecipitation || snapshot.observation?.kind.isPrecipitation == true { return true }
+        if snapshot.nowcast?.segments.contains(where: { $0.kind != nil && $0.end > now }) == true { return true }
+        return snapshot.hourly.contains { hour in
+            hour.date > now.addingTimeInterval(-3600) && hour.date < now.addingTimeInterval(3 * 3600)
+                && (hour.precipitationChance.map { $0 >= 0.2 } ?? hour.kind.isPrecipitation)
+        }
+    }
+}
+
 nonisolated struct WeatherSnapshot: Codable, Equatable, Sendable {
     var coordinate: WeatherCoordinate
     var source: WeatherSource
@@ -97,9 +169,13 @@ nonisolated struct WeatherSnapshot: Codable, Equatable, Sendable {
     /// The source's earliest refetch time (met.no `Expires`).
     var expiresAt: Date?
     var placeName: String?
-    /// The nearest NWS station's latest report, refreshed between forecasts in the US.
+    /// The latest observed conditions, refreshed between forecasts: the nearest
+    /// NWS station in the US, or the provider's own observation.
     var observation: WeatherSample? = nil
     var observationStation: String? = nil
+    var nowcast: WeatherNowcast? = nil
+    /// The source's page for this place, when it gives one.
+    var link: URL? = nil
 }
 
 nonisolated struct WeatherCity: Codable, Hashable, Sendable {

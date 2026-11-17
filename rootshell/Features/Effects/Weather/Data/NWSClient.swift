@@ -109,16 +109,7 @@ nonisolated struct NWSClient {
         return response.properties.periods.compactMap { period -> WeatherSample? in
             guard let date = WeatherHTTP.isoDate(period.startTime), date > now.addingTimeInterval(-3600),
                   let icon = period.icon.flatMap(NWSConditionMapping.reading(iconURL:)) else { return nil }
-            var reading = icon.reading
-            let text = (period.shortForecast ?? "").lowercased()
-            if text.contains("heavy") {
-                if reading.kind == .rain { reading.kind = .heavyRain }
-                if reading.kind == .snow { reading.kind = .heavySnow }
-                reading.precipitationRate = reading.precipitationRate.map { $0 * 2.5 }
-            } else if text.contains("light") || text.contains("drizzle") {
-                if reading.kind == .rain && text.contains("drizzle") { reading.kind = .drizzle }
-                reading.precipitationRate = reading.precipitationRate.map { $0 * 0.4 }
-            }
+            let reading = icon.reading.refined(byPhrase: period.shortForecast)
             let chance = period.probabilityOfPrecipitation?.value.map { $0 / 100 } ?? icon.chance
             let temperatureUnit = period.temperature?.unitCode ?? (period.temperatureUnit == "F" ? "degF" : "degC")
             let temperature = period.temperature?.value.map { Self.celsius($0, unit: temperatureUnit) }

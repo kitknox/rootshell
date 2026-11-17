@@ -18,6 +18,7 @@ struct LiveWeatherView: View {
 
     private struct HoldKey: Hashable {
         var selection: WeatherLocationSelection
+        var provider: WeatherProviderChoice
         var fetching: Bool
     }
 
@@ -43,9 +44,9 @@ struct LiveWeatherView: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-        .task(id: HoldKey(selection: selection, fetching: fetching)) {
+        .task(id: HoldKey(selection: selection, provider: configuration.providerChoice, fetching: fetching)) {
             guard fetching else { return }
-            await store.hold(selection)
+            await store.hold(selection, provider: configuration.providerChoice)
         }
         .onChange(of: configuration.showInSidebar, initial: true) { _, show in
             if store.showsInSidebar != show { store.showsInSidebar = show }

@@ -6,13 +6,50 @@ import Foundation
 
 /// Evolves the scene between fetches: current conditions first, then the
 /// hourly forecast, interpolated so nothing jumps on the hour. A recent
-/// station report corrects what the forecast says about now.
+/// station report corrects what the forecast says about now, and a radar
+/// nowcast what is falling over the next two hours.
 nonisolated enum WeatherTimeline {
     static let currentHold: TimeInterval = 30 * 60
     static let handoff: TimeInterval = 30 * 60
     static let observationMaxAge: TimeInterval = 75 * 60
 
     static func target(at date: Date, snapshot: WeatherSnapshot) -> WeatherVisualState {
+        let observed = observedTarget(at: date, snapshot: snapshot)
+        guard let segment = snapshot.nowcast?.segment(at: date) else { return observed }
+        let sample = observedSample(at: date, snapshot: snapshot)
+        let corrected = applying(segment, to: sample)
+        return corrected == sample ? observed : .target(for: corrected)
+    }
+
+    /// The conditions to name at `date`.
+    static func sample(at date: Date, snapshot: WeatherSnapshot) -> WeatherSample {
+        let sample = observedSample(at: date, snapshot: snapshot)
+        guard let segment = snapshot.nowcast?.segment(at: date) else { return sample }
+        return applying(segment, to: sample)
+    }
+
+    /// Radar beats the forecast and the last report on what is falling.
+    static func applying(_ segment: WeatherNowcast.Segment, to sample: WeatherSample) -> WeatherSample {
+        var s = sample
+        guard let kind = segment.kind else {
+            guard sample.kind.isPrecipitation else { return sample }
+            s.kind = .forCover(sample.cloudCover)
+            s.precipitationRate = nil
+            s.precipitationChance = nil
+            s.thunderChance = nil
+            return s
+        }
+        // Radar can't see lightning; keep a storm the forecast or a report gave.
+        s.kind = sample.kind == .thunderstorm && (kind == .rain || kind == .heavyRain) ? .thunderstorm : kind
+        s.precipitationRate = segment.precipitationRate ?? (sample.kind.isPrecipitation ? sample.precipitationRate : nil)
+        s.precipitationChance = nil
+        s.cloudCover = max(sample.cloudCover, 0.8)
+        if let low = sample.cloudLow { s.cloudLow = max(low, 0.7) }
+        s.fogFraction = nil
+        return s
+    }
+
+    private static func observedTarget(at date: Date, snapshot: WeatherSnapshot) -> WeatherVisualState {
         var model = modelTarget(at: date, snapshot: snapshot)
         guard let observation = freshObservation(at: date, snapshot: snapshot) else { return model }
         let base = modelSample(at: date, snapshot: snapshot)
@@ -33,8 +70,7 @@ nonisolated enum WeatherTimeline {
         return .target(for: corrected)
     }
 
-    /// The conditions to name at `date`.
-    static func sample(at date: Date, snapshot: WeatherSnapshot) -> WeatherSample {
+    private static func observedSample(at date: Date, snapshot: WeatherSnapshot) -> WeatherSample {
         let base = modelSample(at: date, snapshot: snapshot)
         guard let observation = freshObservation(at: date, snapshot: snapshot) else { return base }
         return merged(base, with: observation)
@@ -105,7 +141,12 @@ nonisolated enum WeatherTimeline {
     }
 
     private static func freshObservation(at date: Date, snapshot: WeatherSnapshot) -> WeatherSample? {
-        guard let observation = snapshot.observation, date.timeIntervalSince(observation.date) < observationMaxAge else { return nil }
+        fresh(snapshot.observation, at: date)
+    }
+
+    /// An observation still recent enough to describe `date`.
+    static func fresh(_ observation: WeatherSample?, at date: Date) -> WeatherSample? {
+        guard let observation, date.timeIntervalSince(observation.date) < observationMaxAge else { return nil }
         return observation
     }
 

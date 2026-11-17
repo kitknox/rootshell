@@ -10,8 +10,9 @@ nonisolated struct WeatherDiskState: Codable, Equatable, Sendable {
     var sources = WeatherSourceState()
     /// The last resolved device coordinate, so a relaunch draws the right sky.
     var deviceCoordinate: WeatherCoordinate?
-    /// The coordinate the policy's schedule belongs to.
+    /// The coordinate and provider the policy's schedule belongs to.
     var policyCoordinate: WeatherCoordinate?
+    var policyProvider: WeatherProviderID?
 }
 
 /// Library/Caches/LiveWeather/state.json: device-local, never backed up.

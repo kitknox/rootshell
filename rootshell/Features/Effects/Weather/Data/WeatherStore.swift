@@ -31,11 +31,15 @@ final class WeatherStore {
     private(set) var activeSelection: WeatherLocationSelection?
     /// The Show in Tab Sidebar setting, reported by the visible view.
     var showsInSidebar = true
+    /// Why the chosen provider isn't supplying the weather, after the last fetch.
+    private(set) var providerIssue: WeatherProviderIssue?
 
     @ObservationIgnored private var state: WeatherDiskState
     @ObservationIgnored private let resolver = WeatherLocationResolver()
     @ObservationIgnored private var consumers = 0
     @ObservationIgnored private var selection = WeatherLocationSelection.device
+    /// Nil until a view first holds the store.
+    @ObservationIgnored private var choice: WeatherProviderChoice?
     @ObservationIgnored private var loop: Task<Void, Never>?
     @ObservationIgnored private var permissionWatch: Task<Void, Never>?
 
@@ -44,6 +48,7 @@ final class WeatherStore {
         snapshot = state.snapshot
         deviceCoordinate = state.deviceCoordinate
         manualRefreshAt = state.policy.manualAvailableAt(now: Date())
+        providerIssue = state.sources.issue
     }
 
     /// Where to draw the sky for a selection, without waiting for a fetch.
@@ -72,10 +77,14 @@ final class WeatherStore {
     }
 
     /// Keeps the fetch loop alive until the calling task is cancelled.
-    func hold(_ selection: WeatherLocationSelection) async {
+    func hold(_ selection: WeatherLocationSelection, provider choice: WeatherProviderChoice) async {
         consumers += 1
         if activeSelection != selection { activeSelection = selection }
-        if selection != self.selection || loop == nil {
+        let changed = choice != self.choice
+        // The first hold after launch keeps the saved schedule; run() compares the provider itself.
+        if changed, self.choice != nil { invalidateSchedule() }
+        self.choice = choice
+        if changed || selection != self.selection || loop == nil {
             self.selection = selection
             restart()
         }
@@ -105,6 +114,13 @@ final class WeatherStore {
                 }
             }
         }
+    }
+
+    /// A provider key was saved or removed: fetch with it now.
+    func credentialsChanged(for provider: WeatherProviderID) {
+        state.sources.backoff.clear(provider.rawValue)
+        invalidateSchedule()
+        if consumers > 0 { restart() }
     }
 
     func refreshNow() {
@@ -154,8 +170,10 @@ final class WeatherStore {
             } else {
                 locality = nil
             }
-            if state.policyCoordinate != coordinate {
+            let provider = choice?.provider ?? .default
+            if state.policyCoordinate != coordinate || (state.policyProvider ?? .default) != provider {
                 state.policyCoordinate = coordinate
+                state.policyProvider = provider
                 state.policy.invalidateLocation()
                 publishPolicy()
             }
@@ -165,11 +183,14 @@ final class WeatherStore {
                 await fetch(coordinate)
                 continue
             }
-            // In the US, the nearest station corrects "now" between forecasts.
-            let observationDue = snapshot?.coordinate == coordinate
-                ? WeatherSourceRouter.observationDue(coordinate, state: state.sources) : nil
+            // A station or the provider's own observation corrects "now" between forecasts.
+            let request = self.request()
+            let observationDue = snapshot.flatMap { snapshot in
+                snapshot.coordinate == coordinate
+                    ? WeatherSourceRouter.observationDue(snapshot, request: request, state: state.sources, now: now) : nil
+            }
             if let observationDue, observationDue <= now {
-                await observe(coordinate)
+                await observe(coordinate, request: request)
                 continue
             }
             if let retry = state.policy.retryAfter, retry > now { status = .retrying(retry) }
@@ -179,17 +200,34 @@ final class WeatherStore {
         }
     }
 
-    /// One station request; the forecast keeps its own schedule.
-    private func observe(_ coordinate: WeatherCoordinate) async {
+    /// The chosen provider with its key, read from the keychain per round.
+    private func request() -> WeatherProviderRequest {
+        let choice = choice ?? WeatherProviderChoice()
+        let key = choice.provider.requiresAPIKey ? WeatherCredentials.apiKey(for: choice.provider) : nil
+        return WeatherProviderRequest(choice: choice, apiKey: key)
+    }
+
+    /// A new provider, key, or User-Agent makes the old schedule meaningless.
+    private func invalidateSchedule() {
+        state.policy.invalidateLocation()
+        state.sources.issue = nil
+        providerIssue = nil
+        publishPolicy()
+    }
+
+    /// One observation round; the forecast keeps its own schedule.
+    private func observe(_ coordinate: WeatherCoordinate, request: WeatherProviderRequest) async {
+        guard let current = snapshot else { return }
         var sources = state.sources
-        let report = await WeatherSourceRouter.observe(coordinate, state: &sources, now: Date())
+        let update = await WeatherSourceRouter.observe(current, request: request, state: &sources, now: Date())
         state.sources = sources
         guard !Task.isCancelled else { return }
-        if let report, var next = snapshot, next.coordinate == coordinate, next.observation != report.sample {
-            next.observation = report.sample
-            next.observationStation = report.station
-            snapshot = next
-            state.snapshot = next
+        if let update, var next = snapshot, next.coordinate == coordinate {
+            next.apply(update)
+            if next != snapshot {
+                snapshot = next
+                state.snapshot = next
+            }
         }
         let stateToSave = state
         Task { await WeatherDiskCache.shared.save(stateToSave) }
@@ -198,11 +236,14 @@ final class WeatherStore {
     private func fetch(_ coordinate: WeatherCoordinate) async {
         let now = Date()
         let previous = snapshot
+        let request = self.request()
         var sources = state.sources
         status = .fetching
         state.policy.recordStarted(now: now)
+        defer { providerIssue = state.sources.issue }
         do {
-            let outcome = try await WeatherSourceRouter.fetch(coordinate, previous: previous, state: &sources, now: now)
+            let outcome = try await WeatherSourceRouter.fetch(coordinate, request: request, previous: previous,
+                                                              state: &sources, now: now)
             state.sources = sources
             switch outcome {
             case .updated(let next):

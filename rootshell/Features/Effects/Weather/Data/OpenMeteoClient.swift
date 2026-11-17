@@ -77,18 +77,20 @@ nonisolated struct OpenMeteoClient {
     private static func sample(at date: Date, _ v: Values, hours: Double) -> WeatherSample? {
         // Int(_:) traps on out-of-range values such as 1e20.
         let reading = v.code.flatMap { Int(exactly: $0) }.flatMap { OpenMeteoConditionMapping.reading(weatherCode: $0) }
-        let cover = v.cover.map { $0 / 100 }
-        let coverKind = cover.map { c -> WeatherConditionKind in c < 0.3 ? .clear : (c < 0.7 ? .partlyCloudy : .cloudy) }
-        guard let kind = reading?.kind ?? coverKind else { return nil }
-        let measured = v.precipitation.map { $0 / hours }
-        return WeatherSample(
-            date: date, kind: kind, cloudCover: cover ?? reading?.cloudCover ?? kind.typicalCloudCover,
-            cloudLow: v.low.map { $0 / 100 }, cloudMid: v.mid.map { $0 / 100 }, cloudHigh: v.high.map { $0 / 100 },
-            precipitationRate: measured.flatMap { $0 > 0 ? $0 : nil } ?? reading?.precipitationRate,
-            precipitationChance: v.chance.map { $0 / 100 },
-            thunderChance: reading?.thunder == true ? 0.8 : nil,
-            windSpeed: v.wind, windGust: v.gust, windFrom: v.from, visibility: v.visibility, temperature: v.temperature,
-            dewPoint: v.dewPoint, cape: v.cape)
+        guard var sample = WeatherSample(date: date, reading: reading, cloudCover: v.cover.map { $0 / 100 },
+                                         measuredRate: v.precipitation.map { $0 / hours }) else { return nil }
+        sample.cloudLow = v.low.map { $0 / 100 }
+        sample.cloudMid = v.mid.map { $0 / 100 }
+        sample.cloudHigh = v.high.map { $0 / 100 }
+        sample.precipitationChance = v.chance.map { $0 / 100 }
+        sample.windSpeed = v.wind
+        sample.windGust = v.gust
+        sample.windFrom = v.from
+        sample.visibility = v.visibility
+        sample.temperature = v.temperature
+        sample.dewPoint = v.dewPoint
+        sample.cape = v.cape
+        return sample
     }
 
     // MARK: Wire format

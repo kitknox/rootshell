@@ -7,17 +7,44 @@ import os
 
 /// Per-source bookkeeping that survives relaunch: NWS grid lookups (and
 /// points NWS does not cover), MET Norway's conditional-request headers,
-/// and when the station was last asked.
+/// AccuWeather location keys, and when "now" was last refreshed.
 nonisolated struct WeatherSourceState: Codable, Equatable, Sendable {
     var nwsPoints: [String: NWSPointInfo] = [:]
     var nwsUncovered: [String: Date] = [:]
     var metCoordinate: WeatherCoordinate?
     var metValidator: WeatherHTTPValidator?
     var observationCheckedAt: Date?
+    /// They name places, not accounts, so a new key keeps them.
+    var accuWeatherLocations: [String: AccuWeatherLocation] = [:]
+    var nowcastUncovered: [String: Date] = [:]
+    /// Why the chosen provider failed on the last forecast fetch.
+    var issue: WeatherProviderIssue?
+    var backoff = WeatherProviderBackoff()
+
+    static let nowcastRetry: TimeInterval = 86_400
+
+    init() {}
+
+    /// Missing fields keep their defaults, so adding one keeps the cache.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        nwsPoints = try c.decodeIfPresent([String: NWSPointInfo].self, forKey: .nwsPoints) ?? [:]
+        nwsUncovered = try c.decodeIfPresent([String: Date].self, forKey: .nwsUncovered) ?? [:]
+        metCoordinate = try c.decodeIfPresent(WeatherCoordinate.self, forKey: .metCoordinate)
+        metValidator = try c.decodeIfPresent(WeatherHTTPValidator.self, forKey: .metValidator)
+        observationCheckedAt = try c.decodeIfPresent(Date.self, forKey: .observationCheckedAt)
+        accuWeatherLocations = try c.decodeIfPresent([String: AccuWeatherLocation].self, forKey: .accuWeatherLocations) ?? [:]
+        nowcastUncovered = try c.decodeIfPresent([String: Date].self, forKey: .nowcastUncovered) ?? [:]
+        issue = try? c.decodeIfPresent(WeatherProviderIssue.self, forKey: .issue)
+        backoff = (try? c.decodeIfPresent(WeatherProviderBackoff.self, forKey: .backoff)) ?? WeatherProviderBackoff()
+    }
 
     mutating func prune(now: Date) {
         nwsPoints = nwsPoints.filter { now.timeIntervalSince($0.value.resolvedAt) < NWSPointInfo.lifetime }
         nwsUncovered = nwsUncovered.filter { now.timeIntervalSince($0.value) < NWSPointInfo.lifetime }
+        accuWeatherLocations = accuWeatherLocations.filter { now.timeIntervalSince($0.value.resolvedAt) < AccuWeatherLocation.lifetime }
+        nowcastUncovered = nowcastUncovered.filter { now.timeIntervalSince($0.value) < Self.nowcastRetry }
+        backoff.prune(now: now)
     }
 }
 
@@ -26,94 +53,75 @@ nonisolated enum WeatherFetchOutcome: Sendable {
     case notModified(expiresAt: Date?)
 }
 
-/// Open-Meteo for the forecast everywhere. In the US, the nearest NWS
-/// station corrects "now", and the NWS forecast stands in when Open-Meteo
-/// fails; MET Norway is the last resort. All within one refresh.
+/// The chosen provider first, then the free default if it fails or has no
+/// key, so a bad key or an outage never freezes the sky.
 nonisolated enum WeatherSourceRouter {
     static let observationInterval: TimeInterval = 15 * 60
 
-    static func fetch(_ coordinate: WeatherCoordinate, previous: WeatherSnapshot?,
+    /// Nil while a provider that needs a key has none. Only the chosen
+    /// provider gets the person's key and User-Agent.
+    static func provider(_ id: WeatherProviderID, request: WeatherProviderRequest) -> (any WeatherProvider)? {
+        let chosen = id == request.choice.provider
+        switch id {
+        case .openMeteo:
+            return OpenMeteoWeatherProvider()
+        case .accuWeather:
+            guard chosen, let key = request.apiKey else { return nil }
+            return AccuWeatherProvider(apiKey: key, userAgent: request.choice.userAgent)
+        }
+    }
+
+    static func fetch(_ coordinate: WeatherCoordinate, request: WeatherProviderRequest, previous: WeatherSnapshot?,
                       state: inout WeatherSourceState, now: Date) async throws -> WeatherFetchOutcome {
         state.prune(now: now)
-        let point = await nwsPoint(coordinate, state: &state, now: now)
-        var snapshot: WeatherSnapshot?
-        do {
-            snapshot = try await OpenMeteoClient().fetch(coordinate, now: now)
-        } catch {
-            try Task.checkCancellation()
-            Ghostty.logger.info("Live Weather: Open-Meteo unavailable (\(String(describing: error), privacy: .public))")
+        let chosen = request.choice.provider
+        var chain: [any WeatherProvider] = []
+        state.issue = nil
+        if state.backoff.waiting(chosen.rawValue, now: now) != nil {
+            state.issue = .limitReached
+        } else if let provider = provider(chosen, request: request) {
+            chain.append(provider)
+        } else {
+            state.issue = .missingKey
         }
-        if snapshot == nil, let point {
+        if chosen != .default, let fallback = provider(.default, request: request) { chain.append(fallback) }
+        var failure: Error = WeatherFetchError.unusable
+        for provider in chain {
             do {
-                // Its "now" is already the station's report.
-                snapshot = try await NWSClient().fetch(coordinate, point: point, now: now)
-                state.observationCheckedAt = now
+                let outcome = try await provider.fetch(coordinate, previous: previous, state: &state, now: now)
+                // An optional request in the round can still have hit a rate limit.
+                if provider.id == chosen, state.backoff.waiting(chosen.rawValue, now: now) != nil { state.issue = .limitReached }
+                return outcome
             } catch {
-                if case WeatherFetchError.notCovered = error {
-                    // A stale grid can also 404; drop it and remember the miss.
-                    state.nwsPoints[coordinate.key] = nil
-                    state.nwsUncovered[coordinate.key] = now
-                }
                 try Task.checkCancellation()
-                Ghostty.logger.info("Live Weather: NWS unavailable (\(String(describing: error), privacy: .public))")
+                Ghostty.logger.info("Live Weather: \(provider.id.rawValue, privacy: .public) failed (\(String(describing: error), privacy: .public))")
+                if provider.id == chosen {
+                    state.issue = WeatherProviderIssue(error)
+                    if chosen != .default { state.backoff.record(error, from: chosen.rawValue, now: now) }
+                }
+                failure = error
             }
         }
-        if let snapshot {
-            return .updated(await observed(snapshot, point: point, state: &state, now: now))
-        }
-
-        Ghostty.logger.info("Live Weather: using MET Norway")
-        let validator = state.metCoordinate == coordinate && previous?.source == .metNorway
-            && previous?.coordinate == coordinate ? state.metValidator : nil
-        switch try await METNorwayClient().fetch(coordinate, validator: validator, now: now) {
-        case .updated(let snapshot, let next):
-            state.metCoordinate = coordinate
-            state.metValidator = next
-            return .updated(await observed(snapshot, point: point, state: &state, now: now))
-        case .notModified(let next):
-            state.metValidator = next
-            return .notModified(expiresAt: next.expires)
-        }
+        // The default's own rate limit reaches the store's fetch policy instead.
+        throw failure
     }
 
-    /// The station's latest report alone, for refreshing "now" between forecasts.
-    static func observe(_ coordinate: WeatherCoordinate, state: inout WeatherSourceState,
-                        now: Date) async -> (sample: WeatherSample, station: String)? {
-        state.observationCheckedAt = now
-        guard let point = await nwsPoint(coordinate, state: &state, now: now), let station = point.stationId,
-              let sample = await NWSClient().observation(station: station, now: now) else { return nil }
-        return (sample, station)
+    /// When the snapshot's own provider next refreshes "now", never before its rate limit ends.
+    static func observationDue(_ snapshot: WeatherSnapshot, request: WeatherProviderRequest,
+                               state: WeatherSourceState, now: Date) -> Date? {
+        let id = snapshot.source.provider
+        guard let due = provider(id, request: request)?.observationDue(for: snapshot, state: state) else { return nil }
+        return max(due, state.backoff.waiting(id.rawValue, now: now) ?? due)
     }
 
-    /// When the next station report is due, or nil outside NWS coverage.
-    static func observationDue(_ coordinate: WeatherCoordinate, state: WeatherSourceState) -> Date? {
-        guard NWSCoverage.contains(coordinate), state.nwsUncovered[coordinate.key] == nil else { return nil }
-        return (state.observationCheckedAt ?? .distantPast).addingTimeInterval(observationInterval)
-    }
-
-    private static func observed(_ snapshot: WeatherSnapshot, point: NWSPointInfo?, state: inout WeatherSourceState,
-                                 now: Date) async -> WeatherSnapshot {
-        guard snapshot.source != .nws, let station = point?.stationId else { return snapshot }
-        var snapshot = snapshot
-        state.observationCheckedAt = now
-        snapshot.observation = await NWSClient().observation(station: station, now: now)
-        snapshot.observationStation = snapshot.observation == nil ? nil : station
-        return snapshot
-    }
-
-    /// The NWS grid for a US coordinate, cached for a week; nil elsewhere or
-    /// while NWS is unreachable.
-    private static func nwsPoint(_ coordinate: WeatherCoordinate, state: inout WeatherSourceState,
-                                 now: Date) async -> NWSPointInfo? {
-        let key = coordinate.key
-        guard NWSCoverage.contains(coordinate), state.nwsUncovered[key] == nil else { return nil }
-        if let cached = state.nwsPoints[key] { return cached }
+    static func observe(_ snapshot: WeatherSnapshot, request: WeatherProviderRequest, state: inout WeatherSourceState,
+                        now: Date) async -> WeatherNowUpdate? {
+        let id = snapshot.source.provider
+        guard state.backoff.waiting(id.rawValue, now: now) == nil, let provider = provider(id, request: request) else { return nil }
         do {
-            let point = try await NWSClient().point(for: coordinate, now: now)
-            state.nwsPoints[key] = point
-            return point
+            return try await provider.observe(snapshot, state: &state, now: now)
         } catch {
-            if case WeatherFetchError.notCovered = error { state.nwsUncovered[key] = now }
+            if id != .default { state.backoff.record(error, from: id.rawValue, now: now) }
             return nil
         }
     }

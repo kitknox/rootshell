@@ -17,6 +17,33 @@ nonisolated enum WeatherTuning {
     static let dailyCap = 40
 }
 
+/// Rate limits per provider (by raw value) that has a fallback, so the
+/// fallback can keep refreshing while that provider's deadline stands.
+nonisolated struct WeatherProviderBackoff: Codable, Equatable, Sendable {
+    private(set) var until: [String: Date] = [:]
+
+    /// The provider's deadline while it is still ahead.
+    func waiting(_ provider: String, now: Date) -> Date? {
+        until[provider].flatMap { $0 > now ? $0 : nil }
+    }
+
+    /// A 429 (or AccuWeather's 503) sets a deadline; anything else leaves it.
+    mutating func record(_ error: Error, from provider: String, now: Date) {
+        guard case WeatherFetchError.rateLimited(let seconds) = error else { return }
+        let delay = seconds.flatMap { $0 > 0 ? $0 : nil } ?? WeatherTuning.rateLimitFallback
+        until[provider] = now.addingTimeInterval(delay)
+    }
+
+    /// A new key brings its own allowance.
+    mutating func clear(_ provider: String) {
+        until[provider] = nil
+    }
+
+    mutating func prune(now: Date) {
+        until = until.filter { $0.value > now }
+    }
+}
+
 /// When the next request may go out. Codable so a relaunch keeps honouring
 /// server expiry, rate limits, and backoff instead of fetching immediately.
 nonisolated struct WeatherFetchPolicy: Codable, Equatable, Sendable {

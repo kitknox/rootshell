@@ -142,6 +142,16 @@ private struct WeatherDetailPopover: View {
                 }
             }
 
+            if let outlook = snapshot.nowcast?.outlook(at: now) {
+                Label {
+                    Text(verbatim: WeatherFormat.nowcast(outlook, now: now))
+                } icon: {
+                    Image(systemName: "clock")
+                }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.secondary)
+            }
+
             VStack(alignment: .leading, spacing: 5) {
                 detailRow(String(localized: "Cloud Cover", comment: "Weather detail label"),
                           sample.cloudCover.formatted(.percent.precision(.fractionLength(0))))
@@ -182,7 +192,7 @@ private struct WeatherDetailPopover: View {
                 RefreshButton(now: now)
                 Spacer()
                 // Open-Meteo's licence asks for a link wherever its data is shown.
-                Link(destination: snapshot.source.website) {
+                Link(destination: snapshot.link ?? snapshot.source.website) {
                     HStack(spacing: 3) {
                         Text(verbatim: snapshot.source.attribution)
                         Image(systemName: "arrow.up.right")

@@ -149,7 +149,8 @@ extension SettingsSearchDestination {
             Meta(section: .appearance, title: String(localized: "Background Effect"), systemImage: "sparkles",
                  keywords: ["effects", "wallpaper", "visuals", "aurora", "gradient", "theme gradient", "backdrop", "solar graph", "fireflies", "butterflies",
                             "jellyfish", "photo", "video", "ken burns", "theme tint", "intensity", "speed"]
-                    + (SearchBuild.isChinaBuild ? [String]() : ["weather", "live weather", "rain", "snow", "clouds", "storm", "sky", "stars"]))
+                    + (SearchBuild.isChinaBuild ? [String]() : ["weather", "live weather", "rain", "snow", "clouds", "storm", "sky", "stars",
+                                                                 "weather provider", "accuweather", "open-meteo"]))
         case .customShaders:
             Meta(section: .appearance, title: String(localized: "Custom Shaders"), systemImage: "cpu",
                  keywords: ["shader", "graphics", "metal"])

@@ -62,10 +62,17 @@ nonisolated struct LiveWeatherConfiguration: Equatable, Sendable {
     var lightningFlashes = true
     var showInSidebar = true
     var demo = false
+    var provider: WeatherProviderID = .default
+    /// For providers that allow one; missing sends that provider's default.
+    var userAgents: [WeatherProviderID: String] = [:]
 
     var selection: WeatherLocationSelection {
         if locationSource == .city, let city { return .city(city) }
         return .device
+    }
+
+    var providerChoice: WeatherProviderChoice {
+        WeatherProviderChoice(provider: provider, userAgent: userAgents[provider])
     }
 
     static func finite(_ value: Double, _ range: ClosedRange<Double>, fallback: Double) -> Double {
@@ -83,6 +90,9 @@ nonisolated struct LiveWeatherConfiguration: Equatable, Sendable {
                 c.city = nil
             }
         }
+        c.userAgents = c.userAgents
+            .filter { $0.key.allowsCustomUserAgent }
+            .compactMapValues { WeatherHTTP.sanitizedUserAgent($0) }
         return c
     }
 
@@ -92,8 +102,12 @@ nonisolated struct LiveWeatherConfiguration: Equatable, Sendable {
             "version": 1, "intensity": c.intensity, "readingProtection": c.readingProtection,
             "quality": c.quality.rawValue, "locationSource": c.locationSource.rawValue,
             "showStars": c.showStars, "showSunAndMoon": c.showSunAndMoon,
-            "lightningFlashes": c.lightningFlashes, "showInSidebar": c.showInSidebar, "demo": c.demo
+            "lightningFlashes": c.lightningFlashes, "showInSidebar": c.showInSidebar, "demo": c.demo,
+            "provider": c.provider.rawValue
         ]
+        if !c.userAgents.isEmpty {
+            dictionary["userAgents"] = Dictionary(uniqueKeysWithValues: c.userAgents.map { ($0.key.rawValue, $0.value) })
+        }
         if let city = c.city {
             dictionary["cityName"] = city.name
             dictionary["cityLatitude"] = city.latitude
@@ -121,6 +135,12 @@ nonisolated struct LiveWeatherConfiguration: Equatable, Sendable {
         c.lightningFlashes = data["lightningFlashes"] as? Bool ?? c.lightningFlashes
         c.showInSidebar = data["showInSidebar"] as? Bool ?? c.showInSidebar
         c.demo = data["demo"] as? Bool ?? c.demo
+        if let raw = data["provider"] as? String, let provider = WeatherProviderID(rawValue: raw) { c.provider = provider }
+        if let agents = data["userAgents"] as? [String: Any] {
+            c.userAgents = Dictionary(uniqueKeysWithValues: agents.compactMap { key, value in
+                WeatherProviderID(rawValue: key).flatMap { id in (value as? String).map { (id, $0) } }
+            })
+        }
         return c.sanitized()
     }
 }

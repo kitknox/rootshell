@@ -52,22 +52,21 @@ nonisolated struct METNorwayClient {
         let summary = entry.data.next_1_hours ?? entry.data.next_6_hours
         let hours: Double = entry.data.next_1_hours == nil ? 6 : 1
         let reading = summary?.summary?.symbol_code.flatMap(METNorwayConditionMapping.reading(symbolCode:))
-        let cover = d.cloud_area_fraction.map { $0 / 100 }
-        let coverKind = cover.map { c -> WeatherConditionKind in c < 0.3 ? .clear : (c < 0.7 ? .partlyCloudy : .cloudy) }
-        guard let kind = reading?.kind ?? coverKind else { return nil }
-        let amount = summary?.details?.precipitation_amount.map { $0 / hours }
-        let rate = amount.flatMap { $0 > 0 ? $0 : nil } ?? reading?.precipitationRate
-        return WeatherSample(
-            date: date, kind: kind, cloudCover: cover ?? reading?.cloudCover ?? kind.typicalCloudCover,
-            cloudLow: d.cloud_area_fraction_low.map { $0 / 100 },
-            cloudMid: d.cloud_area_fraction_medium.map { $0 / 100 },
-            cloudHigh: d.cloud_area_fraction_high.map { $0 / 100 },
-            precipitationRate: rate,
-            precipitationChance: summary?.details?.probability_of_precipitation.map { $0 / 100 },
-            thunderChance: summary?.details?.probability_of_thunder.map { $0 / 100 } ?? (reading?.thunder == true ? 0.8 : nil),
-            windSpeed: d.wind_speed, windGust: d.wind_speed_of_gust, windFrom: d.wind_from_direction,
-            fogFraction: d.fog_area_fraction.map { $0 / 100 }, temperature: d.air_temperature,
-            dewPoint: d.dew_point_temperature)
+        guard var sample = WeatherSample(
+            date: date, reading: reading, cloudCover: d.cloud_area_fraction.map { $0 / 100 },
+            measuredRate: summary?.details?.precipitation_amount.map { $0 / hours },
+            thunderChance: summary?.details?.probability_of_thunder.map { $0 / 100 }) else { return nil }
+        sample.cloudLow = d.cloud_area_fraction_low.map { $0 / 100 }
+        sample.cloudMid = d.cloud_area_fraction_medium.map { $0 / 100 }
+        sample.cloudHigh = d.cloud_area_fraction_high.map { $0 / 100 }
+        sample.precipitationChance = summary?.details?.probability_of_precipitation.map { $0 / 100 }
+        sample.windSpeed = d.wind_speed
+        sample.windGust = d.wind_speed_of_gust
+        sample.windFrom = d.wind_from_direction
+        sample.fogFraction = d.fog_area_fraction.map { $0 / 100 }
+        sample.temperature = d.air_temperature
+        sample.dewPoint = d.dew_point_temperature
+        return sample
     }
 
     // MARK: Wire format

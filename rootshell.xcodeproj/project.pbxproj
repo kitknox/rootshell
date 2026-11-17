@@ -145,6 +145,7 @@
 		47AC7E57000000000000F7AA /* rootshell/Features/Effects/Weather/Data/NWSClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000F7BA /* rootshell/Features/Effects/Weather/Data/NWSClient.swift */; };
 		47AC7E57000000000000F7AB /* rootshell/Features/Effects/Weather/Data/METNorwayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000F7BB /* rootshell/Features/Effects/Weather/Data/METNorwayClient.swift */; };
 		47AC7E57000000000000F7AC /* rootshell/Features/Effects/Weather/Data/OpenMeteoClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000F7BC /* rootshell/Features/Effects/Weather/Data/OpenMeteoClient.swift */; };
+		47AC7E57000000000000F7AD /* rootshell/Features/Effects/Weather/Data/AccuWeatherClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000F7BD /* rootshell/Features/Effects/Weather/Data/AccuWeatherClient.swift */; };
 		47AC7E57000000000000F8A1 /* rootshell/Features/SSH/HostTrust/SSHFPRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000F8B1 /* rootshell/Features/SSH/HostTrust/SSHFPRecord.swift */; };
 		47AE8FBE2F4BBBAA0032A651 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 47AE8FBD2F4BBBAA0032A651 /* Localizable.xcstrings */; };
 		47AEC0010000000000000001 /* rootshell/Core/Persistence/LocalMultiplexerAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AEC0010000000000000010 /* rootshell/Core/Persistence/LocalMultiplexerAttachment.swift */; };
@@ -681,6 +682,7 @@
 		47AC7E57000000000000F7BA /* rootshell/Features/Effects/Weather/Data/NWSClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/Effects/Weather/Data/NWSClient.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E57000000000000F7BB /* rootshell/Features/Effects/Weather/Data/METNorwayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/Effects/Weather/Data/METNorwayClient.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E57000000000000F7BC /* rootshell/Features/Effects/Weather/Data/OpenMeteoClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/Effects/Weather/Data/OpenMeteoClient.swift; sourceTree = SOURCE_ROOT; };
+		47AC7E57000000000000F7BD /* rootshell/Features/Effects/Weather/Data/AccuWeatherClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/Effects/Weather/Data/AccuWeatherClient.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E57000000000000F8B1 /* rootshell/Features/SSH/HostTrust/SSHFPRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/SSH/HostTrust/SSHFPRecord.swift; sourceTree = SOURCE_ROOT; };
 		47AE8FBD2F4BBBAA0032A651 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		47AEC0010000000000000010 /* rootshell/Core/Persistence/LocalMultiplexerAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Persistence/LocalMultiplexerAttachment.swift; sourceTree = SOURCE_ROOT; };
@@ -1373,6 +1375,7 @@
 				47AC7E57000000000000F7BA /* rootshell/Features/Effects/Weather/Data/NWSClient.swift */,
 				47AC7E57000000000000F7BB /* rootshell/Features/Effects/Weather/Data/METNorwayClient.swift */,
 				47AC7E57000000000000F7BC /* rootshell/Features/Effects/Weather/Data/OpenMeteoClient.swift */,
+				47AC7E57000000000000F7BD /* rootshell/Features/Effects/Weather/Data/AccuWeatherClient.swift */,
 				47AC7E57000000000000E6B1 /* rootshell/Features/SSH/Config/ProxyJumpSpec.swift */,
 				47AC7E57000000000000E6B2 /* rootshell/Features/SSH/Config/OpenSSHHostResolution.swift */,
 				47AC7E57000000000000E6B3 /* rootshell/Features/SSH/Config/OpenSSHConfigParser.swift */,
@@ -2435,6 +2438,7 @@
 				47AC7E57000000000000F7AA /* rootshell/Features/Effects/Weather/Data/NWSClient.swift in Sources */,
 				47AC7E57000000000000F7AB /* rootshell/Features/Effects/Weather/Data/METNorwayClient.swift in Sources */,
 				47AC7E57000000000000F7AC /* rootshell/Features/Effects/Weather/Data/OpenMeteoClient.swift in Sources */,
+				47AC7E57000000000000F7AD /* rootshell/Features/Effects/Weather/Data/AccuWeatherClient.swift in Sources */,
 				47AC7E57000000000000E6A1 /* rootshell/Features/SSH/Config/ProxyJumpSpec.swift in Sources */,
 				47AC7E57000000000000E6A2 /* rootshell/Features/SSH/Config/OpenSSHHostResolution.swift in Sources */,
 				47AC7E57000000000000E6A3 /* rootshell/Features/SSH/Config/OpenSSHConfigParser.swift in Sources */,

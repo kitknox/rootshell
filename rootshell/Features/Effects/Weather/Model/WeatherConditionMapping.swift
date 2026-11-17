@@ -1,7 +1,8 @@
 // WeatherConditionMapping.swift
 // rootshell
-// Maps NWS icon codes, METAR phenomena, MET Norway symbol codes, and WMO codes onto
-// WeatherConditionKind. Pure, so the tables are unit tested without a network.
+// Maps NWS icon codes, METAR phenomena, MET Norway symbol codes, WMO codes, and
+// AccuWeather icons onto WeatherConditionKind. Pure, so the tables are unit
+// tested without a network.
 
 #if !CHINA_BUILD
 import Foundation
@@ -12,6 +13,21 @@ nonisolated struct WeatherConditionReading: Equatable, Sendable {
     /// Typical rate for the reported intensity, when the source gives none.
     var precipitationRate: Double?
     var thunder: Bool = false
+
+    /// Forecast wording sharpens a condition: "Heavy Rain", "Light Snow", "Drizzle".
+    func refined(byPhrase phrase: String?) -> Self {
+        guard let text = phrase?.lowercased(), !text.isEmpty else { return self }
+        var reading = self
+        if text.contains("heavy") {
+            if reading.kind == .rain { reading.kind = .heavyRain }
+            if reading.kind == .snow { reading.kind = .heavySnow }
+            reading.precipitationRate = reading.precipitationRate.map { $0 * 2.5 }
+        } else if text.contains("light") || text.contains("drizzle") {
+            if reading.kind == .rain && text.contains("drizzle") { reading.kind = .drizzle }
+            reading.precipitationRate = reading.precipitationRate.map { $0 * 0.4 }
+        }
+        return reading
+    }
 }
 
 // MARK: - National Weather Service
@@ -267,6 +283,118 @@ nonisolated enum OpenMeteoConditionMapping {
         case 97: return .init(kind: .thunderstorm, cloudCover: 1, precipitationRate: 10, thunder: true)
         default: return nil
         }
+    }
+}
+
+// MARK: - AccuWeather
+
+nonisolated enum AccuWeatherConditionMapping {
+    /// AccuWeather's numbered icons, 1-44; 9, 10, 27, and 28 are unused.
+    static func reading(icon: Int) -> WeatherConditionReading? {
+        switch icon {
+        case 1, 30, 31, 33: return .init(kind: .clear, cloudCover: 0)
+        case 2, 34: return .init(kind: .clear, cloudCover: 0.2)
+        case 3, 35: return .init(kind: .partlyCloudy, cloudCover: 0.4)
+        case 4, 36: return .init(kind: .partlyCloudy, cloudCover: 0.55)
+        case 5, 37: return .init(kind: .haze, cloudCover: 0.2)
+        case 6, 38: return .init(kind: .cloudy, cloudCover: 0.75)
+        case 7: return .init(kind: .cloudy, cloudCover: 0.95)
+        case 8: return .init(kind: .cloudy, cloudCover: 1)
+        case 11: return .init(kind: .fog, cloudCover: 0.9)
+        case 12: return .init(kind: .rain, cloudCover: 0.85, precipitationRate: 2.5)
+        case 13, 40: return .init(kind: .rain, cloudCover: 0.75, precipitationRate: 1.5)
+        case 14, 39: return .init(kind: .rain, cloudCover: 0.55, precipitationRate: 1.2)
+        case 15: return .init(kind: .thunderstorm, cloudCover: 0.95, precipitationRate: 6, thunder: true)
+        case 16, 42: return .init(kind: .thunderstorm, cloudCover: 0.8, precipitationRate: 4, thunder: true)
+        case 17, 41: return .init(kind: .thunderstorm, cloudCover: 0.6, precipitationRate: 3, thunder: true)
+        case 18: return .init(kind: .rain, cloudCover: 1, precipitationRate: 2.5)
+        case 19: return .init(kind: .snow, cloudCover: 0.9, precipitationRate: 0.3)
+        case 20, 43: return .init(kind: .snow, cloudCover: 0.8, precipitationRate: 0.3)
+        case 21: return .init(kind: .snow, cloudCover: 0.6, precipitationRate: 0.2)
+        case 22: return .init(kind: .snow, cloudCover: 1, precipitationRate: 1.2)
+        case 23, 44: return .init(kind: .snow, cloudCover: 0.85, precipitationRate: 1)
+        case 24, 25, 29: return .init(kind: .sleet, cloudCover: 1, precipitationRate: 1.5)
+        case 26: return .init(kind: .freezingRain, cloudCover: 1, precipitationRate: 1.5)
+        case 32: return .init(kind: .windy, cloudCover: 0.3)
+        default: return nil
+        }
+    }
+
+    /// An icon refined by what comes with it: English text (the client asks
+    /// for en-us), `HasPrecipitation`, its type (Rain, Snow, Ice, Mixed), and
+    /// intensity (Light, Moderate, Heavy).
+    static func reading(icon: Int?, phrase: String?, hasPrecipitation: Bool?, type: String?,
+                        intensity: String?) -> WeatherConditionReading? {
+        var reading = icon.flatMap { reading(icon: $0) }
+        let text = phrase?.lowercased() ?? ""
+        if hasPrecipitation == true, reading?.kind.isPrecipitation != true,
+           let falling = precipitation(type: type, freezing: text.contains("freezing")) {
+            // Light rain under a cloudy icon, for instance.
+            reading = .init(kind: falling.kind, cloudCover: max(falling.cloudCover, reading?.cloudCover ?? 0),
+                            precipitationRate: falling.precipitationRate)
+        } else if reading?.kind.isPrecipitation != true, let obscured = obscuration(text) {
+            reading = obscured
+        }
+        if var freezing = reading, text.contains("freezing"),
+           freezing.kind == .rain || freezing.kind == .drizzle || freezing.kind == .sleet {
+            freezing.kind = .freezingRain
+            reading = freezing
+        }
+        return reading?.refined(byPhrase: [intensity, phrase].compactMap { $0 }.joined(separator: " "))
+    }
+
+    /// Showers come from heaped cloud, thunderstorms from cumulonimbus.
+    static func convectiveCloud(icon: Int?) -> Double? {
+        switch icon {
+        case 15, 16, 17, 41, 42: return 1
+        case 12, 13, 14, 39, 40: return 0.6
+        default: return nil
+        }
+    }
+
+    /// MinuteCast's type, as a name (Rain, Snow, Ice, Mix) or its numeric id,
+    /// at a radar-derived rate when there is one.
+    static func nowcastReading(type: String?, typeID: Int?, rate: Double?) -> WeatherConditionReading? {
+        // A null type with id 0 is a dry stretch.
+        guard let name = type ?? typeID.flatMap({ [1: "rain", 2: "snow", 3: "ice", 4: "mix"][$0] }),
+              var reading = precipitation(type: name, freezing: false) else { return nil }
+        if let rate {
+            reading.precipitationRate = rate
+            if reading.kind == .rain && rate >= 8 { reading.kind = .heavyRain }
+            if reading.kind == .snow && rate >= 2.5 { reading.kind = .heavySnow }
+        }
+        return reading
+    }
+
+    /// Radar reflectivity as a liquid-equivalent rate: Marshall-Palmer
+    /// (Z = 200 R^1.6) for rain, Z = 2000 R^2 for snow and ice.
+    static func precipitationRate(dbz: Double, frozen: Bool) -> Double? {
+        guard dbz.isFinite, dbz > 5 else { return nil }
+        let z = pow(10, dbz / 10)
+        return frozen ? (z / 2_000).squareRoot() : pow(z / 200, 1 / 1.6)
+    }
+
+    static func isFrozen(type: String?) -> Bool {
+        guard let type = type?.lowercased() else { return false }
+        return type.contains("snow") || type.contains("ice") || type.contains("mix")
+    }
+
+    private static func precipitation(type: String?, freezing: Bool) -> WeatherConditionReading? {
+        switch type?.lowercased() ?? "rain" {
+        case "rain": return .init(kind: .rain, cloudCover: 0.95, precipitationRate: 2.5)
+        case "snow": return .init(kind: .snow, cloudCover: 0.95, precipitationRate: 1.2)
+        case "ice": return .init(kind: freezing ? .freezingRain : .sleet, cloudCover: 1, precipitationRate: 1.5)
+        case "mix", "mixed": return .init(kind: .sleet, cloudCover: 1, precipitationRate: 1.5)
+        default: return nil
+        }
+    }
+
+    private static func obscuration(_ text: String) -> WeatherConditionReading? {
+        if text.contains("smoke") { return .init(kind: .smoke, cloudCover: 0.2) }
+        if text.contains("dust") || text.contains("sand") { return .init(kind: .dust, cloudCover: 0.1) }
+        if text.contains("fog") { return .init(kind: .fog, cloudCover: 0.9) }
+        if text.contains("haze") || text.contains("hazy") { return .init(kind: .haze, cloudCover: 0.2) }
+        return nil
     }
 }
 

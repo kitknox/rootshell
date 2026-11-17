@@ -38,6 +38,7 @@ struct LiveWeatherSettingsSection: View {
 
     var body: some View {
         locationSection
+        WeatherProviderSettingsSection(effect: effect)
         conditionsSection
         lookSection
         demoSection
@@ -202,7 +203,7 @@ struct LiveWeatherSettingsSection: View {
         }
         .themedRow()
         // Open-Meteo's licence asks for a link wherever its data is shown.
-        Link(destination: snapshot.source.website) {
+        Link(destination: snapshot.link ?? snapshot.source.website) {
             HStack {
                 Text("Source").foregroundStyle(.primary)
                 Spacer()
@@ -211,12 +212,27 @@ struct LiveWeatherSettingsSection: View {
             }
         }
         .themedRow()
-        if let observation = snapshot.observation, let station = snapshot.observationStation,
-           now.timeIntervalSince(observation.date) < WeatherTimeline.observationMaxAge {
+        if let observation = snapshot.observation, now.timeIntervalSince(observation.date) < WeatherTimeline.observationMaxAge {
             HStack {
-                Text("Station")
+                if let station = snapshot.observationStation {
+                    Text("Station")
+                    Spacer()
+                    Text(verbatim: "\(station), \(relative(observation.date))").foregroundStyle(.secondary)
+                } else {
+                    Text("Observed")
+                    Spacer()
+                    Text(verbatim: relative(observation.date)).foregroundStyle(.secondary)
+                }
+            }
+            .themedRow()
+        }
+        if let outlook = snapshot.nowcast?.outlook(at: now) {
+            HStack {
+                Text("Next Two Hours")
                 Spacer()
-                Text(verbatim: "\(station), \(relative(observation.date))").foregroundStyle(.secondary)
+                Text(verbatim: WeatherFormat.nowcast(outlook, now: now))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
             }
             .themedRow()
         }
@@ -303,19 +319,14 @@ struct LiveWeatherSettingsSection: View {
     // MARK: Attribution
 
     private var dataSection: some View {
-        Section {
-            Link(destination: WeatherSource.nws.website) {
-                Label("NOAA National Weather Service", systemImage: "arrow.up.right.square")
+        let provider = effect.configuration.provider
+        return Section {
+            ForEach(provider.sources, id: \.self) { source in
+                Link(destination: source.website) {
+                    Label(source.creditTitle, systemImage: "arrow.up.right.square")
+                }
+                .themedRow()
             }
-            .themedRow()
-            Link(destination: WeatherSource.openMeteo.website) {
-                Label("Weather data by Open-Meteo.com", systemImage: "arrow.up.right.square")
-            }
-            .themedRow()
-            Link(destination: WeatherSource.metNorway.website) {
-                Label("MET Norway", systemImage: "arrow.up.right.square")
-            }
-            .themedRow()
             Link(destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!) {
                 Label("CC BY 4.0 License", systemImage: "arrow.up.right.square")
             }
@@ -323,7 +334,7 @@ struct LiveWeatherSettingsSection: View {
         } header: {
             Text("Weather Data")
         } footer: {
-            Text("Forecasts come from Open-Meteo, with MET Norway as a backup. In the US, the nearest National Weather Service station corrects the current conditions every 15 minutes, and the Weather Service forecast stands in when Open-Meteo can't be reached. Open-Meteo and MET Norway data are licensed under CC BY 4.0, adapted and visualised by rootshell.")
+            Text(provider.dataNote)
         }
     }
 }

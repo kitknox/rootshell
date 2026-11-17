@@ -546,6 +546,256 @@ final class LiveWeatherLogicTests: XCTestCase {
         XCTAssertEqual(WeatherSkyGeometry.sunTransmittance(direction: WeatherSkyGeometry.direction(azimuth: 180, altitude: -10), height: 0), .zero)
     }
 
+    // MARK: Providers
+
+    func testSampleBuilderPrefersMeasuredValues() {
+        let rain = WeatherConditionReading(kind: .rain, cloudCover: 0.9, precipitationRate: 2.5)
+        let measured = WeatherSample(date: t0, reading: rain, cloudCover: 0.6, measuredRate: 4)
+        XCTAssertEqual(measured?.precipitationRate, 4)
+        XCTAssertEqual(measured?.cloudCover, 0.6)
+        let typical = WeatherSample(date: t0, reading: rain, cloudCover: nil, measuredRate: 0)
+        XCTAssertEqual(typical?.precipitationRate, 2.5)
+        XCTAssertEqual(typical?.cloudCover, 0.9)
+        XCTAssertEqual(WeatherSample(date: t0, reading: nil, cloudCover: 0.5, measuredRate: nil)?.kind, .partlyCloudy)
+        XCTAssertNil(WeatherSample(date: t0, reading: nil, cloudCover: nil, measuredRate: 1))
+        let storm = WeatherConditionReading(kind: .thunderstorm, cloudCover: 1, thunder: true)
+        XCTAssertEqual(WeatherSample(date: t0, reading: storm, cloudCover: nil, measuredRate: nil)?.thunderChance, 0.8)
+        XCTAssertEqual(WeatherSample(date: t0, reading: storm, cloudCover: nil, measuredRate: nil, thunderChance: 0.3)?.thunderChance, 0.3)
+    }
+
+    func testCustomUserAgentIsPrintableASCII() {
+        XCTAssertEqual(WeatherHTTP.sanitizedUserAgent("  Example Client/1.0\r\nX-Injected: 1 "), "Example Client/1.0X-Injected: 1")
+        XCTAssertEqual(WeatherHTTP.sanitizedUserAgent("Example/2 ☁️"), "Example/2")
+        XCTAssertNil(WeatherHTTP.sanitizedUserAgent(" \n "))
+        XCTAssertNil(WeatherHTTP.sanitizedUserAgent(nil))
+        XCTAssertEqual(WeatherHTTP.sanitizedUserAgent(String(repeating: "a", count: 400))?.count, 256)
+    }
+
+    func testAccuWeatherIcons() {
+        XCTAssertEqual(AccuWeatherConditionMapping.reading(icon: 33)?.kind, .clear)
+        XCTAssertEqual(AccuWeatherConditionMapping.reading(icon: 6)?.kind, .cloudy)
+        XCTAssertEqual(AccuWeatherConditionMapping.reading(icon: 16)?.thunder, true)
+        XCTAssertEqual(AccuWeatherConditionMapping.reading(icon: 29)?.kind, .sleet)
+        XCTAssertNil(AccuWeatherConditionMapping.reading(icon: 9))
+        XCTAssertEqual(AccuWeatherConditionMapping.convectiveCloud(icon: 15), 1)
+        XCTAssertEqual(AccuWeatherConditionMapping.convectiveCloud(icon: 40), 0.6)
+        XCTAssertNil(AccuWeatherConditionMapping.convectiveCloud(icon: 7))
+
+        func reading(_ icon: Int, _ phrase: String, falling: Bool = false, type: String? = nil, intensity: String? = nil) -> WeatherConditionReading? {
+            AccuWeatherConditionMapping.reading(icon: icon, phrase: phrase, hasPrecipitation: falling, type: type, intensity: intensity)
+        }
+        // Light rain under a cloudy icon.
+        let light = reading(7, "Light rain", falling: true, type: "Rain", intensity: "Light")
+        XCTAssertEqual(light?.kind, .rain)
+        XCTAssertEqual(light?.precipitationRate ?? 0, 1, accuracy: 1e-9)
+        XCTAssertEqual(reading(12, "Heavy showers", falling: true, type: "Rain", intensity: "Heavy")?.kind, .heavyRain)
+        XCTAssertEqual(reading(18, "Drizzle", falling: true, type: "Rain")?.kind, .drizzle)
+        XCTAssertEqual(reading(24, "Freezing rain", falling: true, type: "Ice")?.kind, .freezingRain)
+        XCTAssertEqual(reading(7, "Snow", falling: true, type: "Snow")?.kind, .snow)
+        XCTAssertEqual(reading(5, "Smoke")?.kind, .smoke)
+        XCTAssertEqual(reading(5, "Hazy sunshine")?.kind, .haze)
+        XCTAssertEqual(reading(3, "Partly sunny")?.kind, .partlyCloudy)
+    }
+
+    func testAccuWeatherCurrentConditionsParsing() throws {
+        let json = """
+        [{"LocalObservationDateTime":"2026-11-16T21:57:00-06:00","EpochTime":1794887820,"WeatherText":"Light rain","WeatherIcon":12,
+          "HasPrecipitation":true,"PrecipitationType":"Rain","IsDayTime":false,
+          "Temperature":{"Metric":{"Value":12.5,"Unit":"C","UnitType":17},"Imperial":{"Value":54.0,"Unit":"F","UnitType":18}},
+          "DewPoint":{"Metric":{"Value":11.0,"Unit":"C","UnitType":17}},
+          "Wind":{"Direction":{"Degrees":225,"Localized":"SW","English":"SW"},"Speed":{"Metric":{"Value":18.0,"Unit":"km/h","UnitType":7}}},
+          "WindGust":{"Speed":{"Metric":{"Value":36.0,"Unit":"km/h","UnitType":7}}},
+          "Visibility":{"Metric":{"Value":8.0,"Unit":"km","UnitType":6}},"ObstructionsToVisibility":"",
+          "CloudCover":100,"Ceiling":{"Metric":{"Value":900.0,"Unit":"m","UnitType":5}},
+          "Precip1hr":{"Metric":{"Value":1.5,"Unit":"mm","UnitType":3}},
+          "MobileLink":"http://www.accuweather.com/en/us/columbia-tn/38401/current-weather/331083?lang=en-us"}]
+        """
+        let conditions = try AccuWeatherClient.currentConditions(from: Data(json.utf8))
+        let s = conditions.sample
+        XCTAssertEqual(s.date, Date(timeIntervalSince1970: 1_794_887_820))
+        XCTAssertEqual(s.kind, .rain)
+        // Measured beats the "light" typical rate.
+        XCTAssertEqual(s.precipitationRate, 1.5)
+        XCTAssertEqual(s.cloudCover, 1)
+        XCTAssertEqual(s.windSpeed ?? 0, 5, accuracy: 1e-9)
+        XCTAssertEqual(s.windGust ?? 0, 10, accuracy: 1e-9)
+        XCTAssertEqual(s.windFrom, 225)
+        XCTAssertEqual(s.visibility, 8_000)
+        XCTAssertEqual(s.temperature, 12.5)
+        XCTAssertEqual(s.dewPoint, 11)
+        XCTAssertEqual(s.cloudBase, 900)
+        XCTAssertEqual(s.convectiveCloud, 0.6)
+        XCTAssertNil(s.thunderChance)
+        XCTAssertEqual(conditions.link?.scheme, "https")
+        XCTAssertEqual(conditions.link?.host, "www.accuweather.com")
+
+        // A clear night reports a ceiling of about 10 km, which is no cloud base.
+        let clear = """
+        [{"EpochTime":1794887820,"WeatherText":"Clear","WeatherIcon":33,"HasPrecipitation":false,"PrecipitationType":null,
+          "Temperature":{"Metric":{"Value":2.5,"Unit":"C","UnitType":17}},"CloudCover":0,
+          "Ceiling":{"Metric":{"Value":10180.0,"Unit":"m","UnitType":5}},"Precip1hr":{"Metric":{"Value":0.0,"Unit":"mm","UnitType":3}}}]
+        """
+        let night = try AccuWeatherClient.currentConditions(from: Data(clear.utf8)).sample
+        XCTAssertEqual(night.kind, .clear)
+        XCTAssertNil(night.cloudBase)
+        XCTAssertNil(night.precipitationRate)
+        XCTAssertThrowsError(try AccuWeatherClient.currentConditions(from: Data("[]".utf8)))
+    }
+
+    func testAccuWeatherHourlyParsing() throws {
+        let json = """
+        [{"DateTime":"2026-11-16T23:00:00-06:00","EpochDateTime":1794891600,"WeatherIcon":33,"IconPhrase":"Clear","HasPrecipitation":false,
+          "IsDaylight":false,"Temperature":{"Value":1.5,"Unit":"C","UnitType":17},"DewPoint":{"Value":0.6,"Unit":"C","UnitType":17},
+          "Wind":{"Speed":{"Value":3.6,"Unit":"km/h","UnitType":7},"Direction":{"Degrees":77,"Localized":"ENE","English":"ENE"}},
+          "WindGust":{"Speed":{"Value":7.2,"Unit":"km/h","UnitType":7}},"Visibility":{"Value":16.1,"Unit":"km","UnitType":6},
+          "Ceiling":{"Value":9144.0,"Unit":"m","UnitType":5},"PrecipitationProbability":0,"ThunderstormProbability":0,
+          "TotalLiquid":{"Value":0.0,"Unit":"mm","UnitType":3},"CloudCover":0},
+         {"EpochDateTime":1794895200,"WeatherIcon":15,"IconPhrase":"Thunderstorms","HasPrecipitation":true,"PrecipitationType":"Rain",
+          "PrecipitationIntensity":"Heavy","Temperature":{"Value":57.2,"Unit":"F"},"Ceiling":{"Value":1200.0,"Unit":"m"},
+          "PrecipitationProbability":80,"ThunderstormProbability":60,"TotalLiquid":{"Value":9.0,"Unit":"mm"},"CloudCover":100}]
+        """
+        let hours = try AccuWeatherClient.hourly(from: Data(json.utf8), now: Date(timeIntervalSince1970: 1_794_888_000))
+        XCTAssertEqual(hours.map(\.kind), [.clear, .thunderstorm])
+        XCTAssertEqual(hours[0].windSpeed ?? 0, 1, accuracy: 1e-9)
+        XCTAssertEqual(hours[0].windGust ?? 0, 2, accuracy: 1e-9)
+        XCTAssertEqual(hours[0].windFrom, 77)
+        XCTAssertEqual(hours[0].visibility ?? 0, 16_100, accuracy: 1e-6)
+        XCTAssertEqual(hours[0].thunderChance, 0)
+        XCTAssertNil(hours[0].cloudBase)
+        XCTAssertNil(hours[0].precipitationRate)
+        XCTAssertEqual(hours[1].precipitationRate, 9)
+        XCTAssertEqual(hours[1].precipitationChance, 0.8)
+        XCTAssertEqual(hours[1].thunderChance, 0.6)
+        XCTAssertEqual(hours[1].cloudBase, 1_200)
+        XCTAssertEqual(hours[1].convectiveCloud, 1)
+        XCTAssertEqual(hours[1].temperature ?? 0, 14, accuracy: 1e-9)
+    }
+
+    func testAccuWeatherLocationKeysAndLinks() throws {
+        XCTAssertEqual(try AccuWeatherClient.locationKey(from: Data(#"{"Key":"38431_PC","LocalizedName":"La Jolla"}"#.utf8)), "38431_PC")
+        XCTAssertThrowsError(try AccuWeatherClient.locationKey(from: Data(#"{"Key":"../331083"}"#.utf8)))
+        XCTAssertThrowsError(try AccuWeatherClient.locationKey(from: Data(#"{"Code":"Unauthorized"}"#.utf8)))
+        XCTAssertEqual(AccuWeatherClient.link("http://m.accuweather.com/en/us/x")?.absoluteString, "https://m.accuweather.com/en/us/x")
+        XCTAssertNil(AccuWeatherClient.link("http://example.com/accuweather.com"))
+    }
+
+    func testAccuWeatherNowcastFromSummaries() throws {
+        let now = Date(timeIntervalSince1970: 1_794_888_030)
+        let base = Date(timeIntervalSince1970: 1_794_888_000)
+        let dry = """
+        {"Summary":{"Phrase":"No precipitation for at least 120 min","Type":null,"TypeId":0},
+         "Summaries":[{"StartMinute":0,"EndMinute":119,"CountMinute":120,"MinuteText":"No precipitation for at least %MINUTE_VALUE min","Type":null,"TypeId":0}]}
+        """
+        let still = try AccuWeatherClient.nowcast(from: Data(dry.utf8), now: now)
+        XCTAssertEqual(still.segments, [.init(start: base, end: base.addingTimeInterval(7_200), kind: nil)])
+        XCTAssertNil(still.outlook(at: now))
+
+        let showers = """
+        {"Summaries":[{"StartMinute":0,"EndMinute":14,"MinuteText":"No precipitation for %MINUTE_VALUE min","Type":null,"TypeId":0},
+          {"StartMinute":15,"EndMinute":59,"MinuteText":"Light rain for %MINUTE_VALUE min","Type":"RAIN","TypeId":1},
+          {"StartMinute":60,"EndMinute":119,"MinuteText":"No precipitation for %MINUTE_VALUE min","Type":null,"TypeId":0}]}
+        """
+        let nowcast = try AccuWeatherClient.nowcast(from: Data(showers.utf8), now: now)
+        XCTAssertEqual(nowcast.segments.map(\.kind), [nil, .rain, nil])
+        XCTAssertEqual(nowcast.segments[1].precipitationRate ?? 0, 1, accuracy: 1e-9)
+        XCTAssertEqual(nowcast.outlook(at: now), .starting(.rain, at: base.addingTimeInterval(900)))
+        XCTAssertEqual(nowcast.outlook(at: base.addingTimeInterval(1_200)), .ending(.rain, at: base.addingTimeInterval(3_600)))
+        XCTAssertNil(nowcast.outlook(at: base.addingTimeInterval(4_000)))
+    }
+
+    func testAccuWeatherNowcastFromRadarIntervals() throws {
+        let base = Date(timeIntervalSince1970: 1_794_888_000)
+        let json = """
+        {"Summaries":[{"StartMinute":0,"EndMinute":119,"Type":"RAIN","TypeId":1}],
+         "Intervals":[{"StartEpochDateTime":1794888000,"Minute":0,"Dbz":0.0,"PrecipitationType":"Rain"},
+          {"StartEpochDateTime":1794888060,"Minute":1,"Dbz":40.0,"PrecipitationType":"Rain"},
+          {"StartEpochDateTime":1794888120,"Minute":2,"Dbz":40.0,"PrecipitationType":"Rain"},
+          {"StartEpochDateTime":1794888180,"Minute":3,"Dbz":25.0,"PrecipitationType":"Snow"}]}
+        """
+        let nowcast = try AccuWeatherClient.nowcast(from: Data(json.utf8), now: base)
+        XCTAssertEqual(nowcast.segments.map(\.kind), [nil, .heavyRain, .snow])
+        XCTAssertEqual(nowcast.segments[1].end, base.addingTimeInterval(180))
+        // 40 dBZ is about 11.5 mm/h of rain.
+        XCTAssertEqual(nowcast.segments[1].precipitationRate ?? 0, 11.53, accuracy: 0.01)
+        XCTAssertEqual(nowcast.segments[2].end, base.addingTimeInterval(240))
+        XCTAssertEqual(nowcast.outlook(at: base), .starting(.heavyRain, at: base.addingTimeInterval(60)))
+        XCTAssertEqual(nowcast.outlook(at: base.addingTimeInterval(90)), .continuing(.heavyRain, through: base.addingTimeInterval(240)))
+    }
+
+    func testNowcastCorrectsTheTimeline() {
+        var rain = sample(.rain, at: 0, cover: 0.95)
+        rain.precipitationRate = 2
+        var snapshot = WeatherSnapshot(coordinate: WeatherCoordinate(latitude: 1, longitude: 1), source: .accuWeather,
+                                       current: rain, hourly: [], fetchedAt: t0, expiresAt: nil, placeName: nil)
+        snapshot.nowcast = WeatherNowcast(segments: [
+            .init(start: t0, end: t0.addingTimeInterval(600), kind: nil),
+            .init(start: t0.addingTimeInterval(600), end: t0.addingTimeInterval(1_800), kind: .heavyRain, precipitationRate: 9)
+        ])
+        // Radar sees nothing falling yet, whatever the report said.
+        let pause = WeatherTimeline.sample(at: t0.addingTimeInterval(60), snapshot: snapshot)
+        XCTAssertEqual(pause.kind, .cloudy)
+        XCTAssertNil(pause.precipitationRate)
+        let heavy = WeatherTimeline.sample(at: t0.addingTimeInterval(900), snapshot: snapshot)
+        XCTAssertEqual(heavy.kind, .heavyRain)
+        XCTAssertEqual(heavy.precipitationRate, 9)
+        XCTAssertEqual(WeatherTimeline.target(at: t0.addingTimeInterval(900), snapshot: snapshot), .target(for: heavy))
+        // Past the nowcast, the report and forecast are back.
+        XCTAssertEqual(WeatherTimeline.sample(at: t0.addingTimeInterval(1_900), snapshot: snapshot), rain)
+
+        var storm = rain
+        storm.kind = .thunderstorm
+        let radarRain = WeatherNowcast.Segment(start: t0, end: t0.addingTimeInterval(60), kind: .rain, precipitationRate: 3)
+        XCTAssertEqual(WeatherTimeline.applying(radarRain, to: storm).kind, .thunderstorm)
+        let fog = sample(.fog, at: 0, cover: 0.9)
+        XCTAssertEqual(WeatherTimeline.applying(.init(start: t0, end: t0.addingTimeInterval(60), kind: nil), to: fog), fog)
+    }
+
+    func testStaleObservationsAreNotNow() {
+        let report = sample(.rain, at: 0, cover: 1)
+        XCTAssertEqual(WeatherTimeline.fresh(report, at: t0.addingTimeInterval(60 * 60)), report)
+        XCTAssertNil(WeatherTimeline.fresh(report, at: t0.addingTimeInterval(WeatherTimeline.observationMaxAge)))
+        XCTAssertNil(WeatherTimeline.fresh(nil, at: t0))
+    }
+
+    func testProviderBackoffHoldsUntilItsDeadline() {
+        var backoff = WeatherProviderBackoff()
+        backoff.record(WeatherFetchError.unauthorized, from: "accuWeather", now: t0)
+        XCTAssertNil(backoff.waiting("accuWeather", now: t0))
+
+        backoff.record(WeatherFetchError.rateLimited(600), from: "accuWeather", now: t0)
+        XCTAssertEqual(backoff.waiting("accuWeather", now: t0.addingTimeInterval(599)), t0.addingTimeInterval(600))
+        XCTAssertNil(backoff.waiting("accuWeather", now: t0.addingTimeInterval(600)))
+        XCTAssertNil(backoff.waiting("openMeteo", now: t0))
+
+        // No Retry-After (AccuWeather's 503) waits the fallback interval.
+        backoff.record(WeatherFetchError.rateLimited(nil), from: "accuWeather", now: t0)
+        XCTAssertEqual(backoff.waiting("accuWeather", now: t0), t0.addingTimeInterval(WeatherTuning.rateLimitFallback))
+
+        backoff.prune(now: t0.addingTimeInterval(WeatherTuning.rateLimitFallback + 1))
+        XCTAssertEqual(backoff, WeatherProviderBackoff())
+        backoff.record(WeatherFetchError.rateLimited(60), from: "accuWeather", now: t0)
+        backoff.clear("accuWeather")
+        XCTAssertNil(backoff.waiting("accuWeather", now: t0))
+    }
+
+    func testNowcastIsFetchedOnlyWhenPrecipitationIsAbout() {
+        var snapshot = WeatherSnapshot(coordinate: WeatherCoordinate(latitude: 1, longitude: 1), source: .accuWeather,
+                                       current: sample(.clear, at: 0, cover: 0), hourly: [sample(.partlyCloudy, at: 3600, cover: 0.4)],
+                                       fetchedAt: t0, expiresAt: nil, placeName: nil)
+        XCTAssertFalse(WeatherNowcast.isWorthFetching(for: snapshot, now: t0))
+        var unlikely = sample(.rain, at: 7200, cover: 0.8)
+        unlikely.precipitationChance = 0.1
+        snapshot.hourly.append(unlikely)
+        XCTAssertFalse(WeatherNowcast.isWorthFetching(for: snapshot, now: t0))
+        snapshot.hourly[1].precipitationChance = 0.4
+        XCTAssertTrue(WeatherNowcast.isWorthFetching(for: snapshot, now: t0))
+        // Rain beyond three hours doesn't count.
+        XCTAssertFalse(WeatherNowcast.isWorthFetching(for: snapshot, now: t0.addingTimeInterval(-4 * 3600)))
+        snapshot.hourly.removeLast()
+        snapshot.observation = sample(.drizzle, at: 0, cover: 1)
+        XCTAssertTrue(WeatherNowcast.isWorthFetching(for: snapshot, now: t0))
+    }
+
     func testPreviewTimesFindNoonAndSunset() {
         // A synthetic day: altitude peaks at t0 + 3 h.
         let altitude: (Date) -> Double = { 50 * cos(($0.timeIntervalSince(self.t0) - 3 * 3600) / 86_400 * 2 * .pi) }
