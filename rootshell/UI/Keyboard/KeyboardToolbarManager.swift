@@ -50,6 +50,10 @@ class KeyboardToolbarManager {
         Settings.KeyboardToolbar.drawerToggleMode.name,
         Settings.KeyboardToolbar.keycaps.name,
         Settings.KeyboardToolbar.style.name,
+        Settings.KeyboardToolbar.minKeyWidthPhone.name,
+        Settings.KeyboardToolbar.minKeyWidthPad.name,
+        Settings.KeyboardToolbar.minKeyWidthDuoInner.name,
+        Settings.KeyboardToolbar.minKeyWidthDuoFront.name,
     ]
 
     @ObservationIgnored private var isReloading = false
@@ -259,6 +263,10 @@ class KeyboardToolbarManager {
         SettingsRefreshHub.shared.register(keys: Self.ownedKeys) { [weak self] keys in
             self?.reload(keys: keys)
         }
+        // The minimum key width is per display, so moving between a Duo's displays refits the row.
+        NotificationCenter.default.addObserver(forName: .duoDisplayDidChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.notifyChange() }
+        }
     }
 
     /// Re-reads externally applied values without writing them back.
@@ -357,10 +365,18 @@ class KeyboardToolbarManager {
         update(context) { $0.mainRowScrolls = scrolls }
     }
 
-    /// Points; 0 or anything below the range leaves the width to the toolbar.
-    func setMinimumKeyWidth(_ width: Double, in context: ToolbarContext) {
-        let range = ToolbarLayoutConfig.minimumKeyWidthRange
-        update(context) { $0.minimumKeyWidth = width > range.lowerBound ? min(width, range.upperBound) : 0 }
+    func setScrollingModifierSwipes(_ swipes: Bool, in context: ToolbarContext) {
+        update(context) { $0.scrollingModifierSwipes = swipes }
+    }
+
+    /// A display's minimum key width, in points. The low end of the range,
+    /// or anything under it, leaves the width to the toolbar.
+    func setMinimumKeyWidth(_ width: Double, for key: SettingKey<Double>) {
+        let range = KeyboardToolbarSize.minimumKeyWidthRange
+        let value = width > range.lowerBound ? min(width, range.upperBound) : 0
+        guard SettingsStore.shared.value(key) != value else { return }
+        SettingsStore.shared.set(key, value)
+        notifyChange()
     }
 
     func isPinnedGroupOn(_ group: PinnedGroup, in context: ToolbarContext) -> Bool {
@@ -555,9 +571,10 @@ class KeyboardToolbarManager {
         return KeyboardToolbarOverflow.capacity(
             usual: mainRowCapacity(availableWidth: availableWidth, sizes: sizes),
             widened: mainRowCapacity(availableWidth: availableWidth, sizes: sizes,
-                                     minimumKeyWidth: layout.minimumKeyWidth),
+                                     minimumKeyWidth: KeyboardToolbarSize.currentMinimumKeyWidth),
             pinned: pinned.count, reservedSlots: reservedMainRowSlots,
-            drawerToggle: !layout.hiddenKeys.contains(.drawerToggle) && !pinned.contains(.builtIn(.drawerToggle)))
+            drawerToggle: !layout.hiddenKeys.contains(.drawerToggle) && !pinned.contains(.builtIn(.drawerToggle)),
+            scrolls: layout.mainRowScrolls)
     }
 
     /// Main row and drawers must share the same capacity and reservation. A

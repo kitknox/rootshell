@@ -166,6 +166,23 @@ nonisolated extension Settings {
             "keyboardToolbarSizeDuoFront", default: KeyboardToolbarSize.automatic, group: .keyboardToolbar, policy: .localByDefault,
             configKey: "keyboard-toolbar-size-duo-front",
             title: String(localized: "Toolbar Size on the Front Display", comment: "Setting title"))
+        // Points; 0 leaves the narrowest key to the toolbar.
+        static let minKeyWidthPhone = SettingKey(
+            "keyboardToolbarMinKeyWidthPhone", default: 0.0, group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-min-key-width-iphone",
+            title: String(localized: "Minimum Toolbar Key Width on iPhone", comment: "Setting title"))
+        static let minKeyWidthPad = SettingKey(
+            "keyboardToolbarMinKeyWidthPad", default: 0.0, group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-min-key-width-ipad",
+            title: String(localized: "Minimum Toolbar Key Width on iPad", comment: "Setting title"))
+        static let minKeyWidthDuoInner = SettingKey(
+            "keyboardToolbarMinKeyWidthDuoInner", default: 0.0, group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-min-key-width-duo-inner",
+            title: String(localized: "Minimum Toolbar Key Width on the Inner Display", comment: "Setting title"))
+        static let minKeyWidthDuoFront = SettingKey(
+            "keyboardToolbarMinKeyWidthDuoFront", default: 0.0, group: .keyboardToolbar, policy: .localByDefault,
+            configKey: "keyboard-toolbar-min-key-width-duo-front",
+            title: String(localized: "Minimum Toolbar Key Width on the Front Display", comment: "Setting title"))
         static let keycaps = SettingKey(
             "keyboardToolbarKeycaps", default: false, group: .keyboardToolbar, policy: .localByDefault,
             configKey: "keyboard-toolbar-keycaps",
@@ -195,6 +212,7 @@ nonisolated extension Settings {
             deviceIdiom.erased,
             drawerOpenByDefault.erased, drawerToggleMode.erased, keycaps.erased, style.erased,
             sizePhone.erased, sizePad.erased, sizeDuoInner.erased, sizeDuoFront.erased,
+            minKeyWidthPhone.erased, minKeyWidthPad.erased, minKeyWidthDuoInner.erased, minKeyWidthDuoFront.erased,
             persistent.erased, showWithHardwareKeyboard.erased, arrowJoystickMode.erased,
             remoteScreenStripExpanded.erased,
         ]

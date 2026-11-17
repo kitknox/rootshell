@@ -339,8 +339,9 @@ final class ToolbarLayoutPreviewHostView: UIView {
         let layout = KeyboardToolbarManager.shared.layout(for: context)
         let pinned = (layout.pinnedLeading ?? []) + (layout.pinnedTrailing ?? [])
         let capacity = TerminalTouchKeyboardModel.toolbarCapacity(
-            width: width, minimumKeyWidth: layout.minimumKeyWidth, pinned: pinned.count,
-            drawerToggle: !layout.hiddenKeys.contains(.drawerToggle) && !pinned.contains(.builtIn(.drawerToggle)))
+            width: width, minimumKeyWidth: KeyboardToolbarSize.currentMinimumKeyWidth, pinned: pinned.count,
+            drawerToggle: !layout.hiddenKeys.contains(.drawerToggle) && !pinned.contains(.builtIn(.drawerToggle)),
+            scrolls: layout.mainRowScrolls)
         return (CGSize(width: width, height: height), capacity)
         #else
         return (.zero, 1)

@@ -82,6 +82,8 @@ class TerminalTouchRepeatingButton: UIButton {
     var repeatAction: (() -> Void)?
     private var repeatTask: Task<Void, Never>?
     var interactionMode: KeyboardToolbarInteractionMode = .accessory
+    /// A modifier's touch may leave its key sideways, to sweep onto its neighbors.
+    var allowsHorizontalTravel = false
     private var touchMode: KeyboardToolbarInteractionMode = .accessory
     private var trackedTouch: UITouch?
     private var repeatGesture: UILongPressGestureRecognizer?
@@ -94,6 +96,7 @@ class TerminalTouchRepeatingButton: UIButton {
               window.windowScene?.activationState == .foregroundActive else { return false }
         guard touchMode == .spacedBottom else { return true }
         let point = touch.location(in: window)
+        if allowsHorizontalTravel { return abs(point.y - touchOrigin.y) <= 10 }
         return bounds.contains(touch.location(in: self))
             && hypot(point.x - touchOrigin.x, point.y - touchOrigin.y) <= 10
     }
@@ -179,27 +182,51 @@ class TerminalTouchRepeatingButton: UIButton {
 }
 
 /// The toolbar row's scrolling middle. Keys take a touch at once, so a held
-/// modifier chords with the next key; a drag takes the touch back from any
-/// key but a modifier or the joystick, which then never sends.
+/// modifier chords with the next key, and a drag takes the touch back to
+/// scroll: from any key but the joystick, and from a modifier unless it is
+/// held or the drag is a sweep onto its neighbor.
 private final class TerminalToolbarScrollRow: UIScrollView {
+    /// Whether a drag that began on this modifier may scroll the row.
+    var scrollMayBegin: ((TerminalTouchDrawerButton, _ movingRight: Bool) -> Bool)?
+    /// Whether this modifier's touch is a hold or a sweep by now.
+    var holdsTouch: ((TerminalTouchDrawerButton) -> Bool)?
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         delaysContentTouches = false
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    override func touchesShouldCancel(in view: UIView) -> Bool {
-        var current: UIView? = view
+    private func button(containing view: UIView?) -> TerminalTouchDrawerButton? {
+        var current = view
         while let candidate = current, candidate !== self {
-            if let button = candidate as? TerminalTouchDrawerButton {
-                switch button.keycap.key.action {
-                case .modifier, .joystick: return false
-                default: return true
-                }
-            }
+            if let button = candidate as? TerminalTouchDrawerButton { return button }
             current = candidate.superview
         }
-        return true
+        return nil
+    }
+
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer === panGestureRecognizer {
+            // The key the drag began on, not the one it has reached.
+            let moved = panGestureRecognizer.translation(in: self)
+            let location = gestureRecognizer.location(in: self)
+            let start = hitTest(CGPoint(x: location.x - moved.x, y: location.y - moved.y), with: nil)
+            if let button = button(containing: start), case .modifier = button.keycap.key.action,
+               scrollMayBegin?(button, moved.x > 0) == false {
+                return false
+            }
+        }
+        return super.gestureRecognizerShouldBegin(gestureRecognizer)
+    }
+
+    override func touchesShouldCancel(in view: UIView) -> Bool {
+        guard let button = button(containing: view) else { return true }
+        switch button.keycap.key.action {
+        case .joystick: return false
+        case .modifier: return holdsTouch?(button) != true
+        default: return true
+        }
     }
 }
 
@@ -526,12 +553,18 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     /// A main row too long for its width scrolls between the pinned keys.
     private var configuredMainScrolls = false
     private var configuredMinimumKeyWidth = 0.0
+    private var configuredScrollSwipes = false
     /// The scrolling middle of the toolbar row, built like a drawer row.
     private var toolbarMiddleRow: UIScrollView?
     private var toolbarMiddleButtons: [TerminalTouchDrawerButton] = []
     private var toolbarMiddleKeys: [Model.Key] = []
-    /// Modifiers a finger is holding down in the scrolling middle.
-    private var toolbarHeldModifiers: Set<Model.Modifier> = []
+    /// One finger on the scrolling middle's modifiers, and the keys it has crossed.
+    private struct MiddleSweep {
+        var sweep: Model.ModifierSweep<TerminalTouchDrawerButton>
+        var holdTask: Task<Void, Never>?
+    }
+    /// Each finger's sweep, by the key it went down on, so two held modifiers both count.
+    private var middleSweeps: [ObjectIdentifier: MiddleSweep] = [:]
     /// One key's width while the row scrolls, which the drawers match.
     private var toolbarScrollUnit: CGFloat?
     private var allToolbarRowButtons: [TerminalTouchDrawerButton] {
@@ -1371,7 +1404,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         configuredMain = toolbarLayout.mainRow.compactMap(key)
         configuredTrailing = (toolbarLayout.pinnedTrailing ?? []).compactMap(key)
         configuredMainScrolls = toolbarLayout.mainRowScrolls
-        configuredMinimumKeyWidth = toolbarLayout.minimumKeyWidth
+        configuredMinimumKeyWidth = KeyboardToolbarSize.currentMinimumKeyWidth
+        configuredScrollSwipes = toolbarLayout.scrollingModifierSwipes
         configuredDrawers = toolbarLayout.drawerRows.map { $0.compactMap(key) }
         if manager.drawerOpenByDefault && !toolbarDrawerOpenByDefault && toolbarDrawerState == .closed {
             toolbarDrawerState = .closed.toggled(rowCount: configuredDrawers.count, cycle: manager.drawerToggleMode == .cycle)
@@ -1384,7 +1418,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         let pinned = configuredLeading + configuredTrailing
         return Model.toolbarCapacity(
             width: toolbarWidth(width), minimumKeyWidth: configuredMinimumKeyWidth, pinned: pinned.count,
-            drawerToggle: configuredDrawerToggle.map { !pinned.contains($0) } ?? false)
+            drawerToggle: configuredDrawerToggle.map { !pinned.contains($0) } ?? false,
+            scrolls: configuredMainScrolls)
     }
 
     /// The one fitting of the configured rows. Building the keys and checking
@@ -1434,6 +1469,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         row.showsHorizontalScrollIndicator = false
         row.alwaysBounceHorizontal = false
         row.delegate = self
+        row.holdsTouch = { [weak self] in self?.middleModifierHoldsTouch($0) ?? false }
+        row.scrollMayBegin = { [weak self] in self?.middleScrollMayBegin(on: $0, movingRight: $1) ?? true }
         addSubview(row)
         toolbarMiddleButtons = makeToolbarRowButtons(keys, in: row, mainRow: true)
         toolbarMiddleRow = row
@@ -2239,6 +2276,10 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                   let locks = modifierState.heldSweepLocks(sweep.modifiers) else { continue }
             for modifier in sweep.modifiers { heldLocks[modifier] = locks }
         }
+        for state in middleSweeps.values {
+            guard state.sweep.held, let locks = modifierState.heldSweepLocks(state.sweep.modifiers) else { continue }
+            for modifier in state.sweep.modifiers { heldLocks[modifier] = locks }
+        }
         for cap in controls + rows.flatMap({ $0 }) + allToolbarRowButtons.map(\.keycap) {
             if cap.key.action == .drawer { cap.selected = toolbarDrawerState != .closed }
             switch cap.key.action {
@@ -2868,7 +2909,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                     self.publishModifiers()
                 } else { self.perform(key) }
             }
-            if let heldModifier { trackHeldModifier(heldModifier, on: button) }
+            if heldModifier != nil { trackToolbarModifier(on: button) }
             if mainRow { addHoldAction(for: key, to: button) }
             button.interactionMode = toolbarInteractionMode
             if key.action == .joystick {
@@ -2909,23 +2950,114 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         }
     }
 
-    /// Holds a modifier from touch-down to release, so a key typed meanwhile
-    /// chords with it; a plain tap still latches, and a second locks.
-    private func trackHeldModifier(_ modifier: Model.Modifier, on button: TerminalTouchDrawerButton) {
-        button.addAction(UIAction { [weak self] _ in
-            guard let self, self.canSendReclaimingFocus,
-                  self.toolbarHeldModifiers.insert(modifier).inserted else { return }
-            self.modifierState.begin(modifier)
-            self.publishModifiers()
-        }, for: .touchDown)
-        let release: (Bool) -> Void = { [weak self] cancelled in
-            guard let self, self.toolbarHeldModifiers.remove(modifier) != nil else { return }
-            self.modifierState.end(modifier, at: ProcessInfo.processInfo.systemUptime, cancelled: cancelled)
-            self.publishModifiers()
+    /// A main-row modifier in the scrolling middle behaves as a fixed one does:
+    /// down from first contact so a key typed meanwhile chords, a tap latches,
+    /// a rest locks, and a drag across neighboring modifiers takes them all.
+    private func trackToolbarModifier(on button: TerminalTouchDrawerButton) {
+        button.allowsHorizontalTravel = true
+        button.addTarget(self, action: #selector(middleModifierDown(_:event:)), for: .touchDown)
+        button.addTarget(self, action: #selector(middleModifierMoved(_:event:)),
+                         for: [.touchDragInside, .touchDragOutside])
+        button.addTarget(self, action: #selector(middleModifierUp(_:event:)),
+                         for: [.touchUpInside, .touchUpOutside])
+        let cancel = { [weak self, weak button] in
+            guard let self, let button else { return }
+            self.endMiddleSweep(from: button, cancelled: true)
         }
-        button.addAction(UIAction { _ in release(false) }, for: .touchUpInside)
-        button.addAction(UIAction { _ in release(true) }, for: [.touchUpOutside, .touchCancel])
-        button.onInteractionCancelled = { release(true) }
+        button.addAction(UIAction { _ in cancel() }, for: .touchCancel)
+        button.onInteractionCancelled = cancel
+    }
+
+    @objc private func middleModifierDown(_ button: TerminalTouchDrawerButton, event: UIEvent) {
+        // A key another finger's sweep already took stays that finger's.
+        guard canSendReclaimingFocus, case .modifier(let modifier) = button.keycap.key.action,
+              !middleSweeps.values.contains(where: { $0.sweep.keys.contains(button) }) else { return }
+        let time = event.touches(for: button)?.first?.timestamp ?? ProcessInfo.processInfo.systemUptime
+        modifierState.begin(modifier)
+        middleSweeps[ObjectIdentifier(button)] = MiddleSweep(sweep: Model.ModifierSweep(button, modifier: modifier, at: time))
+        publishModifiers()
+        restartMiddleSweepHold(from: button)
+    }
+
+    @objc private func middleModifierMoved(_ button: TerminalTouchDrawerButton, event: UIEvent) {
+        let id = ObjectIdentifier(button)
+        guard var sweep = middleSweeps[id]?.sweep, let row = toolbarMiddleRow,
+              let touch = event.touches(for: button)?.first else { return }
+        // In the row's content coordinates, as the keys' frames are.
+        let point = touch.location(in: row)
+        var hovered: (button: TerminalTouchDrawerButton, modifier: Model.Modifier)?
+        if point.y >= -10, point.y <= row.bounds.height + 10,
+           let next = toolbarMiddleButtons.first(where: { point.x >= $0.frame.minX && point.x < $0.frame.maxX }),
+           case .modifier(let modifier) = next.keycap.key.action, row.bounds.intersects(next.frame),
+           configuredScrollSwipes || next === button,
+           !middleSweeps.contains(where: { $0.key != id && $0.value.sweep.keys.contains(next) }) {
+            hovered = (next, modifier)
+        }
+        let joined = sweep.keys.count
+        let restarted = sweep.hover(hovered?.button, modifier: hovered?.modifier, at: touch.timestamp)
+        middleSweeps[id]?.sweep = sweep
+        if let hovered, sweep.keys.count > joined {
+            modifierState.begin(hovered.modifier)
+            publishModifiers()
+            feedback()
+            if clickSoundEnabled { TerminalTouchKeyClick.shared.play(keyboardStyle.clickProfile) }
+        }
+        if restarted { restartMiddleSweepHold(from: button) }
+    }
+
+    @objc private func middleModifierUp(_ button: TerminalTouchDrawerButton, event: UIEvent) {
+        let touch = event.touches(for: button)?.first
+        endMiddleSweep(from: button, cancelled: false, at: touch?.timestamp,
+                       point: toolbarMiddleRow.flatMap { touch?.location(in: $0) })
+    }
+
+    private func endMiddleSweep(from button: TerminalTouchDrawerButton, cancelled: Bool,
+                                at time: TimeInterval? = nil, point: CGPoint? = nil) {
+        guard let state = middleSweeps.removeValue(forKey: ObjectIdentifier(button)) else { return }
+        state.holdTask?.cancel()
+        let time = time ?? ProcessInfo.processInfo.systemUptime
+        let sweep = state.sweep
+        let holding = sweep.holding(at: time)
+        // Lifted off every key it crossed, the sweep is dropped.
+        let onKey = point.map { point in sweep.keys.contains { $0.frame.insetBy(dx: -8, dy: -12).contains(point) } } ?? true
+        let dropped = cancelled || !onKey
+        let doublePress = dropped ? nil : modifierState.heldSweepDoublePress(sweep.modifiers, holding: holding)
+        modifierState.endSweep(sweep.modifiers, at: time, holding: holding, cancelled: dropped)
+        publishModifiers()
+        if let doublePress { onModifierDoublePress?(KeyModifiers(rawValue: doublePress.rawValue)) }
+    }
+
+    /// Marks the sweep as held once the finger rests on its last key.
+    private func restartMiddleSweepHold(from button: TerminalTouchDrawerButton) {
+        let id = ObjectIdentifier(button)
+        middleSweeps[id]?.holdTask?.cancel()
+        middleSweeps[id]?.holdTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(Model.Modifiers.sweepHold))
+            guard !Task.isCancelled, let self, self.canSend, let sweep = self.middleSweeps[id]?.sweep,
+                  self.modifierState.heldSweepLocks(sweep.modifiers) != nil,
+                  self.middleSweeps[id]?.sweep.commitHold(at: ProcessInfo.processInfo.systemUptime) == true else { return }
+            self.feedback()
+            self.updateModifierAppearance()
+        }
+    }
+
+    /// Whether a modifier's touch has become a hold or a sweep, which a scroll may not take.
+    private func middleModifierHoldsTouch(_ button: TerminalTouchDrawerButton) -> Bool {
+        guard let sweep = middleSweeps[ObjectIdentifier(button)]?.sweep else { return false }
+        return sweep.held || sweep.keys.count > 1
+    }
+
+    /// A drag that began on a modifier scrolls the row unless the modifier is
+    /// held. Where sweeps are on, one heading onto a neighboring modifier is a sweep.
+    private func middleScrollMayBegin(on button: TerminalTouchDrawerButton, movingRight: Bool) -> Bool {
+        guard !middleModifierHoldsTouch(button) else { return false }
+        guard configuredScrollSwipes else { return true }
+        guard let row = toolbarMiddleRow, let index = toolbarMiddleButtons.firstIndex(of: button) else { return true }
+        let neighborIndex = movingRight ? index + 1 : index - 1
+        guard toolbarMiddleButtons.indices.contains(neighborIndex) else { return true }
+        let neighbor = toolbarMiddleButtons[neighborIndex]
+        guard case .modifier = neighbor.keycap.key.action else { return true }
+        return !row.bounds.intersects(neighbor.frame)
     }
 
     /// Reuse rows during a toggle; configuration and appearance changes rebuild
@@ -3069,9 +3201,9 @@ extension TerminalTouchKeyboardView: UIScrollViewDelegate {
     func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint,
                                    targetContentOffset: UnsafeMutablePointer<CGPoint>) {
         guard scrollView === toolbarMiddleRow, let unit = toolbarScrollUnit, unit > 0 else { return }
-        let furthest = max(0, scrollView.contentSize.width - scrollView.bounds.width)
-        let snapped = (targetContentOffset.pointee.x / unit).rounded() * unit
-        targetContentOffset.pointee.x = min(furthest, max(0, snapped))
+        targetContentOffset.pointee.x = Model.snappedScrollOffset(
+            target: targetContentOffset.pointee.x, velocity: velocity.x, unit: unit,
+            furthest: scrollView.contentSize.width - scrollView.bounds.width)
     }
 }
 #endif

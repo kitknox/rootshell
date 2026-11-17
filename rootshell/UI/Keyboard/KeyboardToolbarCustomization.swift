@@ -486,6 +486,30 @@ enum KeyboardToolbarSize: String, CaseIterable, Sendable {
         SettingsStore.shared.value(currentKey)
         #endif
     }
+
+    /// The narrowest a main-row key may get on the display the app is on, in
+    /// points. Keys fill the row and narrow as more are added, so a wider
+    /// floor scrolls or overflows the row sooner. Set per display like the size.
+    static var currentMinimumKeyWidthKey: SettingKey<Double> {
+        if DuoHingeEvents.hasHinge {
+            return DuoHingeEvents.isFrontDisplay
+                ? Settings.KeyboardToolbar.minKeyWidthDuoFront : Settings.KeyboardToolbar.minKeyWidthDuoInner
+        }
+        return UIDevice.current.userInterfaceIdiom == .pad
+            ? Settings.KeyboardToolbar.minKeyWidthPad : Settings.KeyboardToolbar.minKeyWidthPhone
+    }
+
+    /// 0 leaves the width to the toolbar.
+    static var currentMinimumKeyWidth: Double {
+        #if os(visionOS)
+        0
+        #else
+        SettingsStore.shared.value(currentMinimumKeyWidthKey)
+        #endif
+    }
+
+    /// What the minimum key width can be set to; its low end means automatic.
+    static let minimumKeyWidthRange: ClosedRange<Double> = 40...140
 }
 
 // MARK: - ToolbarLayoutConfig
@@ -507,11 +531,9 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
     /// A main row too long for its width scrolls between the pinned sections
     /// rather than spilling into the drawer.
     var mainRowScrolls = false
-    /// The narrowest a main-row key may get, in points; 0 leaves it to the
-    /// toolbar. Keys fill the row and narrow as more are added, so a wider
-    /// floor scrolls or overflows the row sooner.
-    var minimumKeyWidth: Double = 0
-    static let minimumKeyWidthRange: ClosedRange<Double> = 40...140
+    /// Lets a drag cross neighboring modifiers in the scrolling keys, as it
+    /// does on a fixed row. Off, every drag there scrolls.
+    var scrollingModifierSwipes = false
 
     /// Every placed slot, in display order.
     var placedSlots: [KeySlot] {
@@ -777,8 +799,7 @@ extension ToolbarLayoutConfig: Codable {
         case pinnedTrailing
         case drawerMatchesMainRow
         case mainRowScrolls
-        // Points. An earlier name held a preset, which this never reads.
-        case minimumKeyWidth = "minimumKeyWidthPoints"
+        case scrollingModifierSwipes
     }
 
     // `mainRow` is stored with the pinned groups folded in, so a build that
@@ -797,7 +818,7 @@ extension ToolbarLayoutConfig: Codable {
         mainRow = storedMainRow.filter { leading?.contains($0) != true && trailing?.contains($0) != true }
         drawerMatchesMainRow = try container.decodeIfPresent(Bool.self, forKey: .drawerMatchesMainRow) ?? false
         mainRowScrolls = try container.decodeIfPresent(Bool.self, forKey: .mainRowScrolls) ?? false
-        minimumKeyWidth = (try? container.decodeIfPresent(Double.self, forKey: .minimumKeyWidth)) ?? 0
+        scrollingModifierSwipes = try container.decodeIfPresent(Bool.self, forKey: .scrollingModifierSwipes) ?? false
         hiddenKeys = try container.decode(Set<KeyID>.self, forKey: .hiddenKeys)
         if let rows = try container.decodeIfPresent([[KeySlot]].self, forKey: .drawerRows) {
             drawerRows = rows.isEmpty ? [[]] : rows
@@ -817,7 +838,7 @@ extension ToolbarLayoutConfig: Codable {
         try container.encodeIfPresent(pinnedTrailing, forKey: .pinnedTrailing)
         if drawerMatchesMainRow { try container.encode(true, forKey: .drawerMatchesMainRow) }
         if mainRowScrolls { try container.encode(true, forKey: .mainRowScrolls) }
-        if minimumKeyWidth > 0 { try container.encode(minimumKeyWidth, forKey: .minimumKeyWidth) }
+        if scrollingModifierSwipes { try container.encode(true, forKey: .scrollingModifierSwipes) }
     }
 }
 

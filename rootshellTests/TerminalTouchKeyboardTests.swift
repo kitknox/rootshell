@@ -718,9 +718,26 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         XCTAssertEqual(scrolling?.middle, ["Tab", "Paste", "Compose", "Alt", "Command"])
         XCTAssertEqual(scrolling?.trailing, ["Dismiss", "More"])
         XCTAssertEqual(scrolling?.drawers, drawers)
-        // Pinned keys that fill the row leave nothing to scroll in.
+        // Pinned keys that fill the row leave nothing to scroll in, and one
+        // slot is too few: its key could be one that keeps drags to itself.
         XCTAssertNil(layout(3))
-        XCTAssertNil(layout(4, reserved: 1))
+        XCTAssertNil(layout(4))
+        XCTAssertNil(layout(5, reserved: 1))
+    }
+
+    func testScrollingRowSnapsToAKeyInTheDirectionOfAFlick() {
+        func snap(_ target: Double, _ velocity: Double) -> Double {
+            TerminalTouchKeyboardModel.snappedScrollOffset(target: target, velocity: velocity, unit: 100, furthest: 450)
+        }
+        // A short flick still moves on a key rather than springing back.
+        XCTAssertEqual(snap(20, 1), 100)
+        XCTAssertEqual(snap(180, -1), 100)
+        // Let go at rest, it settles on the nearest key.
+        XCTAssertEqual(snap(140, 0), 100)
+        XCTAssertEqual(snap(160, 0), 200)
+        // The end of the row need not be a whole key.
+        XCTAssertEqual(snap(430, 1), 450)
+        XCTAssertEqual(snap(-30, -1), 0)
     }
 
     func testMinimumKeyWidthFitsFewerToolbarKeys() {
@@ -740,6 +757,9 @@ final class TerminalTouchKeyboardTests: XCTestCase {
         XCTAssertEqual(KeyboardToolbarOverflow.capacity(usual: 4, widened: 2, pinned: 5, drawerToggle: true), 4)
         XCTAssertEqual(KeyboardToolbarOverflow.capacity(usual: 10, widened: 3, pinned: 0, reservedSlots: 3,
                                                         drawerToggle: false), 4)
+        // A scrolling row keeps two keys between the pinned ones.
+        XCTAssertEqual(KeyboardToolbarOverflow.capacity(usual: 10, widened: 4, pinned: 3, drawerToggle: true,
+                                                        scrolls: true), 6)
     }
 
     func testPinnedToolbarSectionsStandApart() {

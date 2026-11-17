@@ -187,7 +187,7 @@ struct KeyboardToolbarSettingsView: View {
             NavigationLink {
                 ToolbarAppearanceSettingsView(context: context)
             } label: {
-                optionRow("Appearance", systemImage: "paintbrush", value: appearanceSummary)
+                optionRow("Appearance and Size", systemImage: "paintbrush", value: appearanceSummary)
             }
             .themedRow()
 
@@ -229,10 +229,14 @@ struct KeyboardToolbarSettingsView: View {
     }
 
     private var appearanceSummary: String {
-        guard surfaces.contains(.systemKeyboard) else { return KeyboardToolbarSize.current.displayName }
-        return manager.showsKeycaps
-            ? String(localized: "\(manager.toolbarStyle.displayName), Keycaps")
-            : manager.toolbarStyle.displayName
+        var parts: [String] = []
+        if surfaces.contains(.systemKeyboard) {
+            parts.append(manager.toolbarStyle.displayName)
+            if manager.showsKeycaps { parts.append(String(localized: "Keycaps")) }
+        }
+        let size = KeyboardToolbarSize.current
+        if size != .automatic { parts.append(size.displayName) }
+        return parts.joined(separator: ", ")
     }
 
     private var arrangementSummary: String {

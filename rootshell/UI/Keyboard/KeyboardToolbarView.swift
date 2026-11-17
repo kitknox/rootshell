@@ -351,6 +351,8 @@ private final class KeyRowScrollView: UIScrollView {
     var yieldsToKeyDrags = false {
         didSet { delaysContentTouches = !yieldsToKeyDrags }
     }
+    /// The layout's opt-in: a drag onto a neighboring modifier sweeps rather than scrolls.
+    var allowsModifierSwipes = false
 
     private func tracksOwnDrag(_ view: UIView?) -> Bool {
         var current = view
@@ -364,23 +366,49 @@ private final class KeyRowScrollView: UIScrollView {
         return false
     }
 
+    private func key(containing view: UIView?) -> KeyboardButton? {
+        var current = view
+        while let candidate = current, candidate !== self {
+            if let key = candidate as? KeyboardButton { return key }
+            current = candidate.superview
+        }
+        return nil
+    }
+
+    /// A drag that began on a modifier scrolls unless the modifier is held.
+    /// Where sweeps are on, one heading onto a neighboring modifier is a sweep.
+    private func scrollMayBegin(on modifier: KeyboardModifierButton, movingRight: Bool) -> Bool {
+        guard !modifier.holdsTouch else { return false }
+        guard allowsModifierSwipes else { return true }
+        guard let keys = (modifier.superview as? UIStackView)?.arrangedSubviews,
+              let index = keys.firstIndex(of: modifier) else { return true }
+        let neighborIndex = movingRight ? index + 1 : index - 1
+        guard keys.indices.contains(neighborIndex),
+              let neighbor = keys[neighborIndex] as? KeyboardModifierButton, neighbor.modifier != nil else { return true }
+        return !bounds.intersects(neighbor.convert(neighbor.bounds, to: self))
+    }
+
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        if yieldsToKeyDrags, gestureRecognizer === panGestureRecognizer,
-           tracksOwnDrag(hitTest(gestureRecognizer.location(in: self), with: nil)) {
-            return false
+        if yieldsToKeyDrags, gestureRecognizer === panGestureRecognizer {
+            // The key the drag began on, not the one it has reached.
+            let moved = panGestureRecognizer.translation(in: self)
+            let location = gestureRecognizer.location(in: self)
+            let start = hitTest(CGPoint(x: location.x - moved.x, y: location.y - moved.y), with: nil)
+            if tracksOwnDrag(start) { return false }
+            if let modifier = key(containing: start) as? KeyboardModifierButton, modifier.modifier != nil,
+               !scrollMayBegin(on: modifier, movingRight: moved.x > 0) {
+                return false
+            }
         }
         return super.gestureRecognizerShouldBegin(gestureRecognizer)
     }
 
     override func touchesShouldCancel(in view: UIView) -> Bool {
         guard yieldsToKeyDrags else { return super.touchesShouldCancel(in: view) }
-        var current: UIView? = view
-        while let candidate = current, candidate !== self {
-            // Modifiers and keys with drags of their own keep the touch.
-            if let key = candidate as? KeyboardButton { return key.yieldsToScrolling }
-            current = candidate.superview
-        }
-        return super.touchesShouldCancel(in: view)
+        guard let key = key(containing: view) else { return super.touchesShouldCancel(in: view) }
+        // A modifier gives its touch to a scroll that was allowed to begin.
+        if let modifier = key as? KeyboardModifierButton, modifier.modifier != nil { return !modifier.holdsTouch }
+        return key.yieldsToScrolling
     }
 }
 
@@ -683,7 +711,9 @@ class KeyboardToolbarView: UIView {
     /// Every main-row key a modifier sweep can cross: the pinned ends and
     /// whatever the scrolling middle shows now.
     private var sweepableModifiers: [KeyboardModifierButton] {
-        mainRowStacks.flatMap(\.arrangedSubviews).compactMap { $0 as? KeyboardModifierButton }.filter(isOnScreen)
+        let stacks = middleScrollRow.scrollView.allowsModifierSwipes
+            ? mainRowStacks : mainRowStacks.filter { $0 !== middleScrollRow.stackView }
+        return stacks.flatMap(\.arrangedSubviews).compactMap { $0 as? KeyboardModifierButton }.filter(isOnScreen)
     }
     private var hasPinnedSections: Bool {
         !leadingStackView.arrangedSubviews.isEmpty || !trailingStackView.arrangedSubviews.isEmpty
@@ -1104,6 +1134,7 @@ class KeyboardToolbarView: UIView {
         scrollingVisibleKeys = layout.visibleKeys
         let scrolls = layout.visibleKeys != nil
         middleScrollRow.isHidden = !scrolls
+        middleScrollRow.scrollView.allowsModifierSwipes = manager.layout(for: context).scrollingModifierSwipes
         if onTouchKeyboardRequested != nil {
             let button = KeyboardSymbolButton(key: "__touchKeyboard__",
                 display: .icon("keyboard.badge.ellipsis"), sizes: sizes)
@@ -1121,9 +1152,15 @@ class KeyboardToolbarView: UIView {
             let stack = index < layout.leadingCount ? leadingStackView
                 : index >= trailingStart ? trailingStackView
                 : scrolls ? middleScrollRow.stackView : mainRowStackView
-            if let modifierButton = button as? KeyboardModifierButton {
-                // A modifier keeps its touch even in the scrolling middle, so it can still sweep.
-                modifierButton.sweepPeers = { [weak self] in self?.sweepableModifiers ?? [] }
+            if let modifierButton = button as? KeyboardModifierButton, modifierButton.modifier != nil {
+                // A scrolling modifier sweeps only where the layout asks for it; it
+                // is its own peer otherwise, which keeps its hold and nothing more.
+                let scrolling = stack === middleScrollRow.stackView
+                modifierButton.sweepPeers = { [weak self, weak modifierButton] in
+                    guard let self, let modifierButton else { return [] }
+                    return scrolling && !self.middleScrollRow.scrollView.allowsModifierSwipes
+                        ? [modifierButton] : self.sweepableModifiers
+                }
             } else if stack === middleScrollRow.stackView, let key = button as? KeyboardButton,
                       !(key is DrawerToggleButton) {
                 key.yieldsToScrolling = true
@@ -2449,9 +2486,8 @@ extension KeyboardToolbarView: UIScrollViewDelegate {
                                    targetContentOffset: UnsafeMutablePointer<CGPoint>) {
         guard scrollView === middleScrollRow.scrollView else { return }
         let step = mainRowKeyWidth + middleScrollRow.stackView.spacing
-        guard step > 0 else { return }
-        let furthest = max(0, scrollView.contentSize.width - scrollView.bounds.width)
-        let snapped = (targetContentOffset.pointee.x / step).rounded() * step
-        targetContentOffset.pointee.x = min(furthest, max(0, snapped))
+        targetContentOffset.pointee.x = TerminalTouchKeyboardModel.snappedScrollOffset(
+            target: targetContentOffset.pointee.x, velocity: velocity.x, unit: step,
+            furthest: scrollView.contentSize.width - scrollView.bounds.width)
     }
 }

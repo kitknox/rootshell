@@ -10,8 +10,8 @@ import SwiftUI
 
 // MARK: - Appearance
 
-/// Style, keycaps and size. These apply to every toolbar, not only the one
-/// whose screen opened this.
+/// Style, keycaps and key size. These apply to every toolbar, not only the
+/// one whose screen opened this; key size is set per display.
 struct ToolbarAppearanceSettingsView: View {
     let context: ToolbarContext
 
@@ -68,46 +68,79 @@ struct ToolbarAppearanceSettingsView: View {
             }
 
             #if !os(visionOS)
-            Section {
-                if DuoHingeEvents.hasHinge {
-                    ToolbarSizePicker("Inner Display", key: Settings.KeyboardToolbar.sizeDuoInner)
-                    ToolbarSizePicker("Front Display", key: Settings.KeyboardToolbar.sizeDuoFront)
-                } else {
-                    ToolbarSizePicker("Toolbar Size", key: KeyboardToolbarSize.currentKey)
-                }
-            } header: {
-                Text("Size")
-            } footer: {
-                Text("Automatic keeps the system keyboard's toolbar at its usual size and sizes the terminal keyboard's toolbar with the keyboard. A chosen size holds whether the keyboard is docked or detached.")
+            if DuoHingeEvents.hasHinge {
+                ToolbarKeySizeSection(title: "Key Size on the Inner Display",
+                                      size: Settings.KeyboardToolbar.sizeDuoInner,
+                                      width: Settings.KeyboardToolbar.minKeyWidthDuoInner)
+                ToolbarKeySizeSection(title: "Key Size on the Front Display", showsFooter: true,
+                                      size: Settings.KeyboardToolbar.sizeDuoFront,
+                                      width: Settings.KeyboardToolbar.minKeyWidthDuoFront)
+            } else {
+                ToolbarKeySizeSection(title: "Key Size", showsFooter: true,
+                                      size: KeyboardToolbarSize.currentKey,
+                                      width: KeyboardToolbarSize.currentMinimumKeyWidthKey)
             }
             #endif
         }
         .themedList()
-        .navigationTitle("Appearance")
+        .navigationTitle("Appearance and Size")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
 
-/// One display's toolbar size.
-private struct ToolbarSizePicker: View {
+/// One display's key size: how tall the keys are, and how narrow they may get.
+private struct ToolbarKeySizeSection: View {
     private let title: LocalizedStringKey
-    private let key: SettingKey<KeyboardToolbarSize>
+    private let showsFooter: Bool
+    private let sizeKey: SettingKey<KeyboardToolbarSize>
+    private let widthKey: SettingKey<Double>
     @Setting private var size: KeyboardToolbarSize
+    @Setting private var minimumWidth: Double
 
-    init(_ title: LocalizedStringKey, key: SettingKey<KeyboardToolbarSize>) {
+    init(title: LocalizedStringKey, showsFooter: Bool = false,
+         size: SettingKey<KeyboardToolbarSize>, width: SettingKey<Double>) {
         self.title = title
-        self.key = key
-        _size = Setting(key)
+        self.showsFooter = showsFooter
+        sizeKey = size
+        widthKey = width
+        _size = Setting(size)
+        _minimumWidth = Setting(width)
     }
 
     var body: some View {
-        Picker(title, selection: $size) {
-            ForEach(KeyboardToolbarSize.allCases, id: \.self) { size in
-                Text(size.displayName).tag(size)
+        Section {
+            Picker("Height", selection: $size) {
+                ForEach(KeyboardToolbarSize.allCases, id: \.self) { size in
+                    Text(size.displayName).tag(size)
+                }
+            }
+            .themedRow()
+            .settingContextMenu(sizeKey)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Minimum Width")
+                    Spacer()
+                    Text(minimumWidth > 0 ? String(localized: "\(Int(minimumWidth)) pt") : String(localized: "Automatic"))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                // The low end of the slider is Automatic.
+                Slider(value: Binding(
+                    get: { max(minimumWidth, KeyboardToolbarSize.minimumKeyWidthRange.lowerBound) },
+                    set: { KeyboardToolbarManager.shared.setMinimumKeyWidth($0, for: widthKey) }
+                ), in: KeyboardToolbarSize.minimumKeyWidthRange, step: 4)
+                .accessibilityLabel("Minimum Width")
+            }
+            .themedRow()
+            .settingContextMenu(widthKey)
+        } header: {
+            Text(title)
+        } footer: {
+            if showsFooter {
+                Text("Height also scales the keys' symbols. Automatic keeps the system keyboard's toolbar at its usual height and sizes the terminal keyboard's toolbar with the keyboard. Keys share the main row's width and narrow as you add more; a minimum width keeps them from narrowing past it, so the row scrolls or moves keys to the drawer sooner.")
             }
         }
-        .themedRow()
-        .settingContextMenu(key)
     }
 }
 
@@ -135,7 +168,6 @@ struct ToolbarArrangementSettingsView: View {
                 Text("Preview")
             }
             sectionsSection
-            keySizeSection
             drawerSection
         }
         .themedList()
@@ -154,6 +186,13 @@ struct ToolbarArrangementSettingsView: View {
                 set: { manager.setMainRowScrolls($0, in: editedContext) }
             ))
             .themedRow()
+            if layout.mainRowScrolls {
+                Toggle("Swipe Across Scrolling Modifiers", isOn: Binding(
+                    get: { layout.scrollingModifierSwipes },
+                    set: { manager.setScrollingModifierSwipes($0, in: editedContext) }
+                ))
+                .themedRow()
+            }
         } header: {
             Text("Main Row")
         } footer: {
@@ -161,43 +200,17 @@ struct ToolbarArrangementSettingsView: View {
         }
     }
 
-    private var keySizeSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Minimum Key Width")
-                    Spacer()
-                    Text(layout.minimumKeyWidth > 0
-                         ? String(localized: "\(Int(layout.minimumKeyWidth)) pt")
-                         : String(localized: "Automatic"))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-                // The low end of the slider is Automatic.
-                Slider(value: Binding(
-                    get: { max(layout.minimumKeyWidth, ToolbarLayoutConfig.minimumKeyWidthRange.lowerBound) },
-                    set: { manager.setMinimumKeyWidth($0, in: editedContext) }
-                ), in: ToolbarLayoutConfig.minimumKeyWidthRange, step: 4)
-                .accessibilityLabel("Minimum Key Width")
-            }
-            .themedRow()
-
-            Toggle("Same Key Size in Drawer", isOn: Binding(
-                get: { layout.drawerMatchesMainRow },
-                set: { manager.setDrawerMatchesMainRow($0, in: editedContext) }
-            ))
-            .themedRow()
-        } header: {
-            Text("Key Size")
-        } footer: {
-            Text("Main row keys fill the row and narrow as you add more. A minimum width keeps them from narrowing past it, so the row scrolls or moves keys to the drawer sooner. With the same key size, drawer keys line up under the main row's; the terminal keyboard's toolbar always does this.")
-        }
+    private var sectionsFooter: String {
+        guard layout.mainRowScrolls else { return fixedRowFooter }
+        let scrolling = String(localized: "A pinned section stands apart at its end of the main row and stays put. When the row is full, the keys between scroll sideways, and the ••• key stays at the right end. Add keys to a pinned section in the key list.")
+        let swipes = layout.scrollingModifierSwipes
+            ? String(localized: "A drag from a scrolling modifier onto the modifier beside it selects both and does not scroll, so start a scroll on another key or drag away from the group.")
+            : String(localized: "Any drag on the scrolling keys scrolls, so swiping across modifiers to select several works only in a pinned section.")
+        return scrolling + " " + swipes
     }
 
-    private var sectionsFooter: String {
-        layout.mainRowScrolls
-            ? String(localized: "A pinned section stands apart at its end of the main row and stays put. When the row is full, the keys between scroll sideways, and the ••• key stays at the right end. Add keys to a pinned section in the key list.")
-            : String(localized: "A pinned section stands apart at its end of the main row and keeps its keys there when the row is full; the keys between move to the drawer first. Add keys to a pinned section in the key list.")
+    private var fixedRowFooter: String {
+        String(localized: "A pinned section stands apart at its end of the main row and keeps its keys there when the row is full; the keys between move to the drawer first. Add keys to a pinned section in the key list.")
     }
 
     private func pinnedGroupBinding(_ group: KeyboardToolbarManager.PinnedGroup) -> Binding<Bool> {
@@ -220,6 +233,12 @@ struct ToolbarArrangementSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .themedRow()
+
+            Toggle("Same Key Width as Main Row", isOn: Binding(
+                get: { layout.drawerMatchesMainRow },
+                set: { manager.setDrawerMatchesMainRow($0, in: editedContext) }
+            ))
             .themedRow()
 
             if drawerRowCount > 1 {
@@ -253,14 +272,15 @@ struct ToolbarArrangementSettingsView: View {
     }
 
     private var drawerFooter: String {
+        let keyWidth = String(localized: "With the same key width, drawer keys line up under the main row's; the terminal keyboard's toolbar always does this.")
         guard drawerRowCount > 1 else {
-            return String(localized: "When enabled, the drawer starts open each time the keyboard appears.")
+            return keyWidth + " " + String(localized: "When enabled, the drawer starts open each time the keyboard appears.")
         }
         switch manager.drawerToggleMode {
         case .stack:
-            return String(localized: "Each press of the ••• button reveals one more drawer row; when all are open, the next press closes them. \"Open Drawer by Default\" opens the first row when the keyboard appears.")
+            return keyWidth + " " + String(localized: "Each press of the ••• button reveals one more drawer row; when all are open, the next press closes them. \"Open Drawer by Default\" opens the first row when the keyboard appears.")
         case .cycle:
-            return String(localized: "Each press of the ••• button swaps the drawer row's contents to the next set of keys, then closes. \"Open Drawer by Default\" opens the first row when the keyboard appears.")
+            return keyWidth + " " + String(localized: "Each press of the ••• button swaps the drawer row's contents to the next set of keys, then closes. \"Open Drawer by Default\" opens the first row when the keyboard appears.")
         }
     }
 }

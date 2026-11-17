@@ -42,6 +42,12 @@ class KeyboardModifierButton: KeyboardButton {
     private var sweepUnlocks = false
     private var sweepCommitted = false
     private var sweepAppliedOnTouchDown = false
+    /// The state and tap time a touch-down replaced, to put back if a scroll takes the touch.
+    private var sweepRestore: (state: ModifierState, tap: CFAbsoluteTime)?
+
+    /// True once a touch is a hold or a sweep across modifiers. A scrolling
+    /// row may take a touch back only before that.
+    var holdsTouch: Bool { sweepTouch != nil && (sweepCommitted || sweepButtons.count > 1) }
 
     /// Three-state modifier: inactive → oneShot → locked → inactive
     var modifierState: ModifierState = .inactive {
@@ -158,7 +164,9 @@ class KeyboardModifierButton: KeyboardButton {
         // Accessory mode activates on touch-down so a chord with another key sees it.
         sweepAppliedOnTouchDown = interactionMode == .accessory
         isHighlighted = true
+        sweepRestore = nil
         if sweepAppliedOnTouchDown {
+            sweepRestore = (modifierState, lastTapTimestamp)
             sendKey()
             playHaptic()
         }
@@ -219,6 +227,12 @@ class KeyboardModifierButton: KeyboardButton {
     // Also reached from touchesCancelled and window removal.
     override func cancelTouchInteraction() {
         super.cancelTouchInteraction()
+        // A touch a scroll took back never pressed the key.
+        if sweepTouch != nil, !holdsTouch, let restore = sweepRestore, restore.state != modifierState {
+            modifierState = restore.state
+            lastTapTimestamp = restore.tap
+            onStateChange?(restore.state)
+        }
         endSweep()
     }
 
@@ -261,6 +275,7 @@ class KeyboardModifierButton: KeyboardButton {
         sweepTimer?.invalidate()
         sweepTimer = nil
         sweepTouch = nil
+        sweepRestore = nil
         sweepHoveredButton = nil
         for button in sweepButtons { button.isHighlighted = false }
         sweepButtons.removeAll()
