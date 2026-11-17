@@ -61,8 +61,7 @@ struct SidebarSearchField: UIViewRepresentable {
     /// Reports the field's first-responder transitions (begin/end editing) so
     /// the sidebar can show the keyboard-cursor highlight ONLY while the sidebar
     /// actually owns the keyboard. The closure is expected to defer its `@State`
-    /// write off the current runloop (these callbacks can fire synchronously
-    /// from `becomeFirstResponder()` inside `updateUIView`).
+    /// write off the current runloop (resigns can fire mid-update of another view).
     var onFocusChange: (Bool) -> Void
 
     // Optional command chords, declared as first-responder UIKeyCommands so
@@ -169,12 +168,29 @@ struct SidebarSearchField: UIViewRepresentable {
         /// applied exactly once per bump (idempotent across repeated
         /// `updateUIView`/`didMoveToWindow` calls).
         private var lastAppliedFocusRequestID = 0
+        private var focusHopPending = false
 
         init(_ parent: SidebarSearchField) {
             self.parent = parent
         }
 
+        /// `updateUIView` and `didMoveToWindow` can run inside a SwiftUI graph
+        /// update, where taking first responder re-enters the graph and can spin
+        /// past the scene-update watchdog. The grab runs one main-actor hop later.
         func applyFocusIfNeeded(_ field: SidebarSearchTextField) {
+            guard parent.focusRequestID > 0,
+                  parent.focusRequestID != lastAppliedFocusRequestID,
+                  !focusHopPending else { return }
+            focusHopPending = true
+            Task { [weak self, weak field] in
+                guard let self else { return }
+                self.focusHopPending = false
+                guard let field else { return }
+                self.claimFocus(field)
+            }
+        }
+
+        private func claimFocus(_ field: SidebarSearchTextField) {
             let request = parent.focusRequestID
             guard request > 0, request != lastAppliedFocusRequestID else { return }
             // Panel dismissed (or dismissing): the hosting view stays mounted
