@@ -61,6 +61,9 @@ nonisolated struct AgentUsageWindow: Equatable, Sendable, Codable {
         case weekly
         /// Claude per-model weekly window, labelled by model display name.
         case weeklyModel(String)
+        /// A per-model five-hour window (Antigravity's Claude pool), labelled
+        /// by model family.
+        case sessionModel(String)
         /// Copilot's headline calendar-month quota. The label names the
         /// unit, which GitHub has changed once already: "Premium requests"
         /// through May 2026, "Credits" since the June 2026 billing change.
@@ -79,7 +82,7 @@ nonisolated struct AgentUsageWindow: Equatable, Sendable, Codable {
         var isScoped: Bool {
             switch self {
             case .session, .weekly, .monthly, .labelled: return false
-            case .weeklyModel, .monthlyScoped: return true
+            case .weeklyModel, .sessionModel, .monthlyScoped: return true
             }
         }
     }
@@ -124,6 +127,7 @@ nonisolated struct AgentUsageWindow: Equatable, Sendable, Codable {
         case .weekly:
             return String(localized: "7d", comment: "Compact agent usage window: seven days")
         case .weeklyModel(let model): return model
+        case .sessionModel(let model): return model
         case .monthly:
             return String(localized: "mo", comment: "Compact agent usage window: month")
         case .monthlyScoped(let label): return label
@@ -238,6 +242,10 @@ nonisolated enum AgentUsageBrand: Equatable, Hashable, Sendable, Codable {
         }
     }
 
+    /// The native Antigravity lane's brand. Shares oh-my-pi's provider id so
+    /// an omp-reported Antigravity account dedupes against it.
+    static let antigravity = AgentUsageBrand.other(id: "google-antigravity", label: "Antigravity")
+
     /// oh-my-pi provider id -> brand. Its ids come from
     /// `packages/ai/src/usage/*`; anything unrecognized keeps its id so a
     /// provider added upstream still renders rather than disappearing.
@@ -323,6 +331,7 @@ nonisolated struct AgentUsageSnapshot: Equatable, Sendable, Codable {
         // snapshot is built with an explicit brand, since the whole point of
         // that lane is that one probe yields several.
         case .omp: return .other(id: "omp", label: "oh-my-pi")
+        case .antigravity: return .antigravity
         }
     }
 
@@ -396,6 +405,18 @@ nonisolated enum AgentUsageUnavailableReason: Equatable, Sendable {
     func detail(for provider: AgentUsageProvider) -> String {
         switch self {
         case .keychainLocked:
+            if provider == .antigravity {
+                return String(
+                    localized: """
+                        macOS will not release Antigravity's saved sign-in to a \
+                        shell it did not start, so this connection cannot read \
+                        it. Start tmux on that Mac once from its own desktop \
+                        session and usage is read through the tmux server, or \
+                        keep the Antigravity app open there, which answers \
+                        directly.
+                        """,
+                    comment: "Agent usage help when a remote Mac will not release Antigravity credentials")
+            }
             if provider == .copilot {
                 return String(
                     localized: """
@@ -425,6 +446,16 @@ nonisolated enum AgentUsageUnavailableReason: Equatable, Sendable {
                 localized: "The agent's saved sign-in could not be read on that host.",
                 comment: "Agent usage unavailable detail")
         case .signInExpired:
+            if provider == .antigravity {
+                return String(
+                    localized: """
+                        Google refused the saved sign-in. rootshell asks agy on \
+                        that host to renew it in the background, at most every \
+                        30 minutes, and usage reappears once it has. If it stays \
+                        expired, sign in to agy again there, then Refresh.
+                        """,
+                    comment: "Agent usage help when an Antigravity sign-in has expired")
+            }
             if provider == .copilot {
                 return String(
                     localized: """

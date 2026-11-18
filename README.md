@@ -235,7 +235,7 @@ To start capturing:
 - **Agent Messages** - Notifications from coding-agent hooks collect in an inbox panel (⌃⌘I) with Needs You, Working, Done, Failed, and Archived sections; select one to open its pane. The Live Activity can show an unread count or unread statuses
 - **Project Grouping** - Group the inbox by project to see each project's agents side by side, each card naming its git branch
 - **Long-Running Commands** - Builds, test runs, deployments, file transfers, and password or confirmation prompts like sudo appear as cards too: badged while running, marked unread when they finish unseen, notifying when one blocks on input. Programs reporting OSC 9;4 progress feed the same cards. Off by default under Settings → Agents & Commands
-- **Subscription Usage** - Claude, Codex, and GitHub Copilot plan usage shown per provider with reset countdowns, per-model breakdowns, and a pace mark. Sign-ins never leave memory; only usage figures and plan labels persist
+- **Subscription Usage** - Claude, Codex, GitHub Copilot, and Antigravity plan usage shown per provider with reset countdowns, per-model breakdowns, and a pace mark. Sign-ins never leave memory, and Antigravity's never leave the host; only usage figures and plan labels persist
 
 ### Push Notifications & Agent Hooks
 

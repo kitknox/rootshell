@@ -188,7 +188,7 @@ nonisolated enum AgentUsageOMPReport {
         // which is the one thing that never lost the answer.
         let label: String
         switch lead.kind {
-        case .weeklyModel(let text), .monthlyScoped(let text): label = text
+        case .weeklyModel(let text), .sessionModel(let text), .monthlyScoped(let text): label = text
         case .session, .weekly, .monthly, .labelled: return snapshot
         }
         let promotedKind: AgentUsageWindow.Kind

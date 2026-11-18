@@ -551,11 +551,31 @@ private struct UsageWindowDetail: View {
     let now: Date
 
     private var title: String {
+        // Antigravity's session and weekly windows are its Gemini pool, shown
+        // beside its Claude pool, so they say which pool they are.
+        if provider == .antigravity {
+            switch window.kind {
+            case .session:
+                return String(
+                    localized: "Session (Gemini)",
+                    comment: "Antigravity usage window title: Gemini five-hour pool")
+            case .weekly:
+                return String(
+                    localized: "Week (Gemini)",
+                    comment: "Antigravity usage window title: Gemini weekly pool")
+            default:
+                break
+            }
+        }
         switch window.kind {
         case .session:
             return String(
                 localized: "Session (5h)",
                 comment: "Agent usage window title: five-hour session")
+        case .sessionModel(let model):
+            return String(
+                localized: "Session (\(model))",
+                comment: "Agent usage window title for a specific model's five-hour window")
         case .weekly:
             return provider == .claude
                 ? String(

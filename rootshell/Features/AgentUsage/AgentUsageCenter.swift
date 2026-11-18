@@ -134,6 +134,7 @@ final class AgentUsageCenter {
             heldTokens.removeAll()
             credentialStates.removeAll()
             probesRerunPending.removeAll()
+            antigravityStates.removeAll()
             // Nothing will land to settle these, so they cannot be left
             // spinning behind a closed feature.
             refreshingProviders.removeAll()
@@ -156,7 +157,15 @@ final class AgentUsageCenter {
 
         // The report lane is paced by its own clock, not by credential
         // state, so a deliberate refresh has to clear that instead.
-        if provider.yieldsUsageReport {
+        if provider == .antigravity {
+            for key in presence.hostProviders where key.provider == provider {
+                // A fresh read, and a backoff forgiven. The renewal clock stays:
+                // repeated clicks must not start another slow `agy models`.
+                antigravityStates.removeValue(forKey: key.hostKey)
+                antigravityProbeHealth[key.hostKey]?.recordSuccess()
+                antigravitySkipLocalUntil.removeValue(forKey: key.hostKey)
+            }
+        } else if provider.yieldsUsageReport {
             for key in presence.hostProviders where key.provider == provider {
                 ompProbeStates.removeValue(forKey: key.hostKey)
             }
@@ -230,7 +239,9 @@ final class AgentUsageCenter {
         for provider in refreshingProviders {
             let liveHosts = presence.hostProviders
                 .filter { $0.provider == provider }
-            let probing = liveHosts.contains { probesInFlight.contains($0.hostKey) }
+            let probing = liveHosts.contains {
+                probesInFlight.contains($0.hostKey) || antigravityProbesInFlight.contains($0.hostKey)
+            }
             let fetching = liveHosts.contains { key in
                 guard let accountKey = credentialStates[key]?.accountKey else { return false }
                 return fetchesInFlight.contains(accountKey)
@@ -364,6 +375,165 @@ final class AgentUsageCenter {
     }
     @ObservationIgnored private var ompProbeStates: [String: OMPProbeState] = [:]
 
+    // MARK: - Antigravity rows
+
+    /// Antigravity's last answer per host. A report lane like omp: the host
+    /// makes the quota calls, so no credential is held here.
+    @ObservationIgnored private var antigravitySnapshots: [String: AgentUsageSnapshot] = [:]
+
+    private struct AntigravityProbeState {
+        enum Status: Equatable {
+            case ok
+            /// No Antigravity sign-in on the host.
+            case absent
+            /// The host could not reach either source; keeps the last numbers.
+            case failed
+            case keychainLocked
+            /// Google refused the token; `renewing` when the probe started a
+            /// background `agy models`, so the next look comes sooner.
+            case signInExpired(renewing: Bool)
+        }
+        var checkedAt: Date
+        var status: Status
+
+        var interval: TimeInterval {
+            switch status {
+            case .ok: return AgentUsageTuning.antigravityFetchFloor
+            case .absent: return AgentUsageTuning.absentCredentialTTL
+            case .failed: return AgentUsageTuning.staleCredentialRetry
+            case .keychainLocked: return AgentUsageTuning.unreadableRetry
+            case .signInExpired(let renewing):
+                return renewing
+                    ? AgentUsageTuning.antigravityRenewalRecheck
+                    : AgentUsageTuning.staleCredentialRetry
+            }
+        }
+
+        var unavailableReason: AgentUsageUnavailableReason? {
+            switch status {
+            case .keychainLocked: return .keychainLocked
+            case .signInExpired: return .signInExpired
+            case .ok, .absent, .failed: return nil
+            }
+        }
+    }
+    @ObservationIgnored private var antigravityStates: [String: AntigravityProbeState] = [:]
+    /// When each host last started a background `agy models`.
+    @ObservationIgnored private var antigravityRenewals: [String: Date] = [:]
+    @ObservationIgnored private var antigravityProbesInFlight: Set<String> = []
+    @ObservationIgnored private var antigravityProbeHealth: [String: AgentRepositoryHostProbeHealth] = [:]
+    /// Hosts whose desktop app answered with nothing usable: until then, the
+    /// probe goes straight to Google.
+    @ObservationIgnored private var antigravitySkipLocalUntil: [String: Date] = [:]
+    /// Hosts whose probe found the transport busy, and when to try again.
+    @ObservationIgnored private var probeDeferredUntil: [String: Date] = [:]
+
+    private func liveAntigravityHosts(_ presence: Presence) -> [String] {
+        presence.hostProviders.filter { $0.provider == .antigravity }.map(\.hostKey).sorted()
+    }
+
+    /// One snapshot per account across live hosts, freshest first on ties.
+    private func antigravityAccounts(presence: Presence) -> [AgentUsageSnapshot] {
+        var best: [String: AgentUsageSnapshot] = [:]
+        for hostKey in liveAntigravityHosts(presence) {
+            guard let snapshot = antigravitySnapshots[hostKey] else { continue }
+            if let current = best[snapshot.accountKey], current.fetchedAt >= snapshot.fetchedAt {
+                continue
+            }
+            best[snapshot.accountKey] = snapshot
+        }
+        return best.keys.sorted().compactMap { best[$0] }
+    }
+
+    private func antigravityRow(_ snapshot: AgentUsageSnapshot, now: Date, others: Int) -> Row {
+        Row(
+            provider: .antigravity,
+            brand: .antigravity,
+            content: .usage(snapshot),
+            isStale: now.timeIntervalSince(snapshot.fetchedAt)
+                > AgentUsageTuning.antigravityFetchFloor * 2,
+            otherAccountCount: others)
+    }
+
+    private func antigravityRows(presence: Presence, now: Date) -> [Row] {
+        let accounts = antigravityAccounts(presence: presence)
+        if let lead = accounts.max(by: {
+            ($0.mostConstrained?.usedPercent ?? 0) < ($1.mostConstrained?.usedPercent ?? 0)
+        }) {
+            return [antigravityRow(lead, now: now, others: accounts.count - 1)]
+        }
+        let reasons = liveAntigravityHosts(presence)
+            .compactMap { antigravityStates[$0]?.unavailableReason }
+        let reason: AgentUsageUnavailableReason? =
+            reasons.contains(.keychainLocked) ? .keychainLocked : reasons.first
+        guard let reason else { return [] }
+        return [Row(
+            provider: .antigravity,
+            brand: .antigravity,
+            content: .unavailable(reason),
+            isStale: false,
+            otherAccountCount: 0)]
+    }
+
+    private func antigravityRenewalAllowed(hostKey: String, now: Date) -> Bool {
+        guard let last = antigravityRenewals[hostKey] else { return true }
+        return now.timeIntervalSince(last) >= AgentUsageTuning.antigravityRenewalCooldown
+    }
+
+    private func applyAntigravityReadout(
+        _ readout: AgentUsageCredentialReadout?,
+        renewed: Bool,
+        skippedLocal: Bool,
+        hostKey: String,
+        now: Date
+    ) -> Bool {
+        let status: AntigravityProbeState.Status
+        switch readout {
+        case .payload(let payload):
+            switch AgentUsageAntigravityReport.parse(payload, hostKey: hostKey, now: now) {
+            case .snapshot(let snapshot):
+                antigravitySnapshots[hostKey] = snapshot
+                status = .ok
+            case .localUnusable:
+                // The desktop answered but nothing in it parsed. Ask Google
+                // next, now: no state stamped, so the next pass probes again.
+                antigravitySkipLocalUntil[hostKey] = now.addingTimeInterval(
+                    AgentUsageTuning.antigravitySkipLocalDuration)
+                antigravityStates.removeValue(forKey: hostKey)
+                revision &+= 1
+                return true
+            case .malformed:
+                status = .failed
+            }
+        case .absent:
+            antigravitySnapshots.removeValue(forKey: hostKey)
+            status = .absent
+        case .unreadable(keychainLocked: true):
+            status = .keychainLocked
+        case .unreadable(keychainLocked: false):
+            status = .failed
+        case .signInExpired:
+            status = .signInExpired(renewing: renewed)
+        case .none:
+            // Truncated section: the host's probe health owns the retry.
+            return false
+        }
+        antigravityStates[hostKey] = AntigravityProbeState(checkedAt: now, status: status)
+        // Google had nothing either: the desktop is the only source left, so
+        // it is asked again next time rather than skipped for half an hour.
+        if skippedLocal, status != .ok {
+            antigravitySkipLocalUntil.removeValue(forKey: hostKey)
+        }
+        Self.logger.debug(
+            """
+            antigravity host=\(Self.tag(hostKey), privacy: .public) \
+            status=\(String(describing: status), privacy: .public) \
+            renewed=\(renewed, privacy: .public)
+            """)
+        revision &+= 1
+        return true
+    }
+
     private func adoptOMPSnapshots(
         _ snapshots: [AgentUsageSnapshot],
         hostKey: String,
@@ -436,14 +606,27 @@ final class AgentUsageCenter {
     /// labelled and equal, or omp unlabelled (nothing to tell them apart,
     /// and a second row for one subscription is the worse error): the omp
     /// snapshot is redundant.
-    private func nativeRowCovers(_ snapshot: AgentUsageSnapshot, in rows: [Row]) -> Bool {
-        rows.contains { row in
-            guard row.provider != .omp,
-                  row.brand.dedupeID == snapshot.brand.dedupeID,
-                  let native = row.snapshot else { return false }
+    private func nativeRowCovers(
+        _ snapshot: AgentUsageSnapshot,
+        in rows: [Row],
+        presence: Presence
+    ) -> Bool {
+        func covers(_ native: AgentUsageSnapshot) -> Bool {
             guard let ompLabel = snapshot.accountLabel else { return true }
             guard let nativeLabel = native.accountLabel else { return false }
             return nativeLabel.caseInsensitiveCompare(ompLabel) == .orderedSame
+        }
+        // Antigravity's footer row carries only its lead account, so every
+        // live one is checked, not just the row.
+        if snapshot.brand.dedupeID == AgentUsageBrand.antigravity.dedupeID,
+           antigravityAccounts(presence: presence).contains(where: covers) {
+            return true
+        }
+        return rows.contains { row in
+            guard row.provider != .omp,
+                  row.brand.dedupeID == snapshot.brand.dedupeID,
+                  let native = row.snapshot else { return false }
+            return covers(native)
         }
     }
 
@@ -473,6 +656,9 @@ final class AgentUsageCenter {
                     otherAccountCount: 0))
             }
         }
+        // Antigravity counts as native for dedupe: an omp-reported Antigravity
+        // account defers to the lane that asked the host itself.
+        rows.append(contentsOf: antigravityRows(presence: presence, now: now))
         return rows
     }
 
@@ -484,7 +670,7 @@ final class AgentUsageCenter {
     private func visibleOMPAccounts(presence: Presence, now: Date) -> [AgentUsageSnapshot] {
         let native = nativeRows(presence: presence, now: now)
         return ompAccounts(presence: presence)
-            .filter { !nativeRowCovers($0, in: native) }
+            .filter { !nativeRowCovers($0, in: native, presence: presence) }
     }
 
     private func ompRows(
@@ -499,7 +685,7 @@ final class AgentUsageCenter {
         // were demonstrably distinct from the native row.
         var byBrand: [String: [AgentUsageSnapshot]] = [:]
         for snapshot in ompAccounts(presence: presence)
-        where !nativeRowCovers(snapshot, in: existing) {
+        where !nativeRowCovers(snapshot, in: existing, presence: presence) {
             byBrand[snapshot.brand.dedupeID, default: []].append(snapshot)
         }
 
@@ -552,9 +738,15 @@ final class AgentUsageCenter {
         now: Date = Date()
     ) -> [Row] {
         let presence = livePresence()
-        let rows = provider.yieldsUsageReport
-            ? ompAccountRows(presence: presence, now: now)
-            : liveAccountRows(provider: provider, presence: presence, now: now)
+        let rows: [Row]
+        if provider == .antigravity {
+            rows = antigravityAccounts(presence: presence)
+                .map { antigravityRow($0, now: now, others: 0) }
+        } else if provider.yieldsUsageReport {
+            rows = ompAccountRows(presence: presence, now: now)
+        } else {
+            rows = liveAccountRows(provider: provider, presence: presence, now: now)
+        }
         return rows
             .filter { brand == nil || $0.brand == brand }
             .sorted {
@@ -581,7 +773,12 @@ final class AgentUsageCenter {
     /// Hosts whose credentials sit behind a locked keychain, named so the
     /// popover can point at the machine that needs attention.
     func keychainLockedHosts(provider: AgentUsageProvider) -> [String] {
-        credentialStates.compactMap { key, state in
+        if provider == .antigravity {
+            return antigravityStates.compactMap { hostKey, state in
+                state.status == .keychainLocked ? hostKey : nil
+            }.sorted()
+        }
+        return credentialStates.compactMap { key, state in
             guard key.provider == provider,
                   case .unreadable(keychainLocked: true, _) = state else { return nil }
             return key.hostKey
@@ -659,9 +856,20 @@ final class AgentUsageCenter {
         }
         for (hostKey, providers) in probeTargets {
             guard let owner = presence.owners[hostKey] else { continue }
-            if hostProbeHealth[hostKey]?.canStart(now: now) == false { continue }
-            dispatchProbe(hostKey: hostKey, providers: providers.sorted { $0.rawValue < $1.rawValue },
-                          owner: owner, now: now)
+            if probeDeferred(hostKey: hostKey, now: now) { continue }
+            // Antigravity probes alone: its section makes slow network calls,
+            // and a timeout must not cost the batch its answers. The two
+            // never overlap on a host, since tssh allows one probe per session.
+            let batch = providers.filter { $0 != .antigravity }
+            if !batch.isEmpty, !antigravityProbesInFlight.contains(hostKey),
+               hostProbeHealth[hostKey]?.canStart(now: now) != false {
+                dispatchProbe(hostKey: hostKey, providers: batch.sorted { $0.rawValue < $1.rawValue },
+                              owner: owner, now: now)
+            }
+            if providers.contains(.antigravity), !probesInFlight.contains(hostKey),
+               antigravityProbeHealth[hostKey]?.canStart(now: now) != false {
+                dispatchAntigravityProbe(hostKey: hostKey, owner: owner, now: now)
+            }
         }
 
         dispatchDueFetches(presence: presence, now: now)
@@ -691,7 +899,12 @@ final class AgentUsageCenter {
             // snapshot, so keying the guard on snapshots alone returned
             // early and stranded that clock for its full 30-minute TTL.
             .union(ompProbeStates.keys.filter { !liveOMPHosts.contains($0) })
-        guard !departed.isEmpty || !departedOMP.isEmpty else { return }
+        let liveAntigravity = Set(liveAntigravityHosts(presence))
+        let departedAntigravity = Set(antigravitySnapshots.keys)
+            .union(antigravityStates.keys)
+            .filter { !liveAntigravity.contains($0) }
+        guard !departed.isEmpty || !departedOMP.isEmpty || !departedAntigravity.isEmpty
+        else { return }
         for key in departed {
             credentialStates.removeValue(forKey: key)
             heldTokens.removeValue(forKey: key)
@@ -705,6 +918,12 @@ final class AgentUsageCenter {
             ompSnapshots.removeValue(forKey: hostKey)
             ompProbeStates.removeValue(forKey: hostKey)
         }
+        // Same for Antigravity. Renewal times are kept, so a pane reopened
+        // inside the cooldown cannot start another `agy models`.
+        for hostKey in departedAntigravity {
+            antigravitySnapshots.removeValue(forKey: hostKey)
+            antigravityStates.removeValue(forKey: hostKey)
+        }
         revision &+= 1
     }
 
@@ -715,6 +934,10 @@ final class AgentUsageCenter {
         // completion, so that is not a slow poll but a continuous loop: one
         // remote exec channel per host, back to back, for as long as an
         // oh-my-pi session is open. Its own clock gates it instead.
+        if key.provider == .antigravity {
+            guard let state = antigravityStates[key.hostKey] else { return true }
+            return now.timeIntervalSince(state.checkedAt) >= state.interval
+        }
         if key.provider.yieldsUsageReport {
             guard let state = ompProbeStates[key.hostKey] else { return true }
             let interval = state.absent
@@ -774,9 +997,12 @@ final class AgentUsageCenter {
 
         Task { @MainActor [weak self] in
             var result: AgentUsageProbeResult?
+            var busy = false
             do {
                 let output = try await RemoteExecProbe.run(command, on: owner)
                 result = AgentUsageProbeCommand.parse(output: output, nonce: nonce)
+            } catch RemoteExecProbe.ProbeError.busy {
+                busy = true
             } catch {
                 Self.logger.error(
                     """
@@ -799,10 +1025,101 @@ final class AgentUsageCenter {
                 if self.canWork { self.refresh() }
                 return
             }
+            if busy {
+                self.deferProbes(hostKey: hostKey)
+                return
+            }
             self.applyProbeResult(result, hostKey: hostKey, providers: providers, now: Date())
             // A full pass covers both the fetches this probe unlocked and
             // any host that gained work mid-flight; failed hosts are held
             // back by their probe health, so this cannot loop.
+            self.refresh()
+        }
+    }
+
+    /// tssh's single probe slot was still held, usually by an Antigravity call
+    /// that outlived its caller's deadline. Not a host failure: nothing ran.
+    /// Both probes wait a short beat and try again, with no backoff.
+    private func deferProbes(hostKey: String) {
+        probeDeferredUntil[hostKey] = Date().addingTimeInterval(AgentUsageTuning.probeBusyRetry)
+        refresh()
+    }
+
+    private func probeDeferred(hostKey: String, now: Date) -> Bool {
+        guard let until = probeDeferredUntil[hostKey] else { return false }
+        if until <= now { probeDeferredUntil.removeValue(forKey: hostKey) }
+        return until > now
+    }
+
+    /// Antigravity's own probe: its own deadline, output cap and backoff, so a
+    /// slow host or Google outage never touches the other providers' probes.
+    private func dispatchAntigravityProbe(
+        hostKey: String,
+        owner: Ghostty.TerminalView,
+        now: Date
+    ) {
+        guard antigravityProbesInFlight.insert(hostKey).inserted else { return }
+        var health = antigravityProbeHealth[hostKey] ?? AgentRepositoryHostProbeHealth()
+        health.recordStarted(now: now)
+        antigravityProbeHealth[hostKey] = health
+
+        let skipLocal = antigravitySkipLocalUntil[hostKey].map { $0 > now } ?? false
+        let (command, nonce) = AgentUsageProbeCommand.command(
+            providers: [.antigravity], pathPrefix: SSHConfig.remoteExecPathPrefix,
+            antigravityRenewal: antigravityRenewalAllowed(hostKey: hostKey, now: now),
+            antigravitySkipLocal: skipLocal)
+        let dispatchedEpoch = epoch
+        let hostTag = Self.tag(hostKey)
+
+        Task { @MainActor [weak self] in
+            var result: AgentUsageProbeResult?
+            var busy = false
+            do {
+                let output = try await RemoteExecProbe.run(
+                    command, on: owner,
+                    timeout: AgentUsageTuning.antigravityProbeTimeout,
+                    maxResponseBytes: AgentUsageTuning.antigravityProbeMaxBytes)
+                result = AgentUsageProbeCommand.parse(output: output, nonce: nonce)
+            } catch RemoteExecProbe.ProbeError.busy {
+                busy = true
+            } catch {
+                Self.logger.error(
+                    """
+                    antigravity probe failed host=\(hostTag, privacy: .public): \
+                    \(error.localizedDescription, privacy: .public)
+                    """)
+            }
+            guard let self else { return }
+            self.antigravityProbesInFlight.remove(hostKey)
+            // A launched `agy models` happened whatever becomes of this answer,
+            // so its cooldown is recorded ahead of the publish guard.
+            if result?.antigravityRenewed == true {
+                self.antigravityRenewals[hostKey] = Date()
+            }
+            guard self.epoch == dispatchedEpoch, self.canWork else {
+                if self.canWork { self.refresh() }
+                return
+            }
+            if busy {
+                self.deferProbes(hostKey: hostKey)
+                return
+            }
+            let now = Date()
+            let complete = self.applyAntigravityReadout(
+                result?.readouts[.antigravity],
+                renewed: result?.antigravityRenewed ?? false,
+                skippedLocal: skipLocal,
+                hostKey: hostKey, now: now)
+            var health = self.antigravityProbeHealth[hostKey] ?? AgentRepositoryHostProbeHealth()
+            if complete {
+                health.recordSuccess()
+            } else {
+                health.recordFailure(
+                    now: now,
+                    baseDelay: AgentUsageTuning.probeBackoffBase,
+                    maximumDelay: AgentUsageTuning.probeBackoffMax)
+            }
+            self.antigravityProbeHealth[hostKey] = health
             self.refresh()
         }
     }
@@ -829,6 +1146,7 @@ final class AgentUsageCenter {
                 case .absent: return "absent"
                 case .unreadable(keychainLocked: true): return "keychain-locked"
                 case .unreadable(keychainLocked: false): return "unreadable"
+                case .signInExpired: return "sign-in-expired"
                 case .none: return "missing"
                 }
             }()
@@ -928,6 +1246,11 @@ final class AgentUsageCenter {
                 credentialStates[key] = .unreadable(
                     keychainLocked: keychainLocked, checkedAt: now)
                 heldTokens[key] = nil
+            case .signInExpired:
+                // Only the Antigravity section emits this, and it never
+                // reaches here; treated as a failed read if it ever does.
+                credentialStates[key] = .unreadable(keychainLocked: false, checkedAt: now)
+                heldTokens[key] = nil
             case .none:
                 transportComplete = false
             }
@@ -998,7 +1321,7 @@ final class AgentUsageCenter {
             accountKey = AgentUsageAccountKey.copilot(credentials, hostKey: key.hostKey)
             usable = true
             token = .copilot(credentials)
-        case .omp:
+        case .omp, .antigravity:
             // Unreachable by construction: applyProbeResult routes any lane
             // whose section returns a usage report to adoptOMPSnapshots
             // before reaching here, and that lane has no credential to adopt.
@@ -1282,15 +1605,31 @@ final class AgentUsageCenter {
                 fetchEligibleAt = account.nextEligibleAt(
                     floor: AgentUsageTuning.fetchFloor(key.provider)) ?? now
             }
-            let omp = ompProbeStates[key.hostKey]
+            var reportCheckedAt: Date?
+            var reportInterval = AgentUsageTuning.ompFetchFloor
+            if key.provider == .antigravity, let agy = antigravityStates[key.hostKey] {
+                reportCheckedAt = agy.checkedAt
+                reportInterval = agy.interval
+            } else if key.provider == .omp, let omp = ompProbeStates[key.hostKey] {
+                reportCheckedAt = omp.checkedAt
+                reportInterval = omp.absent
+                    ? AgentUsageTuning.absentCredentialTTL : AgentUsageTuning.ompFetchFloor
+            }
             return AgentUsageSchedule.Lane(
                 provider: key.provider,
                 canProbe: presence.owners[key.hostKey] != nil,
-                probeInFlight: probesInFlight.contains(key.hostKey),
+                // Either probe holds the host: neither dispatches while the other runs.
+                probeInFlight: probesInFlight.contains(key.hostKey)
+                    || antigravityProbesInFlight.contains(key.hostKey),
                 credential: state,
-                hostRetryAfter: hostProbeHealth[key.hostKey]?.retryAfter,
-                ompCheckedAt: omp?.checkedAt,
-                ompAbsent: omp?.absent ?? false,
+                hostRetryAfter: [
+                    key.provider == .antigravity
+                        ? antigravityProbeHealth[key.hostKey]?.retryAfter
+                        : hostProbeHealth[key.hostKey]?.retryAfter,
+                    probeDeferredUntil[key.hostKey],
+                ].compactMap { $0 }.max(),
+                reportCheckedAt: reportCheckedAt,
+                reportInterval: reportInterval,
                 holdsToken: heldTokens[key] != nil,
                 fetchEligibleAt: fetchEligibleAt)
         }

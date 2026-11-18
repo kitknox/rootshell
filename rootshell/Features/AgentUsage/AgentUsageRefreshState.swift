@@ -251,12 +251,31 @@ nonisolated enum AgentUsageTuning {
     /// slower would leave ours staler than the CLI's own display.
     static let ompFetchFloor: TimeInterval = 5 * 60
 
+    /// Antigravity's quota is asked on the host each probe, so the probe
+    /// cadence is the fetch cadence.
+    static let antigravityFetchFloor: TimeInterval = 5 * 60
+    /// Between background `agy models` renewals on one host. It is slow, and
+    /// a renewed sign-in lasts about an hour.
+    static let antigravityRenewalCooldown: TimeInterval = 30 * 60
+    /// Re-probe after a renewal was started, to pick up the new token.
+    static let antigravityRenewalRecheck: TimeInterval = 90
+    /// Antigravity probes run on their own: several HTTPS calls on the host,
+    /// which stops calling after 24 s, plus slack for reads and the link.
+    static let antigravityProbeTimeout: TimeInterval = 40
+    static let antigravityProbeMaxBytes = 1024 * 1024
+    /// After the desktop app answered with nothing usable, how long the probe
+    /// asks Google directly before trying the app again.
+    static let antigravitySkipLocalDuration: TimeInterval = 30 * 60
+    /// Wait before retrying a probe that found tssh's probe slot occupied.
+    static let probeBusyRetry: TimeInterval = 10
+
     static func fetchFloor(_ provider: AgentUsageProvider) -> TimeInterval {
         switch provider {
         case .claude: return claudeFetchFloor
         case .codex: return codexFetchFloor
         case .copilot: return copilotFetchFloor
         case .omp: return ompFetchFloor
+        case .antigravity: return antigravityFetchFloor
         }
     }
 }
@@ -283,25 +302,26 @@ nonisolated enum AgentUsageSchedule {
         var probeInFlight: Bool
         var credential: AgentUsageCredentialState?
         var hostRetryAfter: Date?
-        /// Report lane only: when it last answered, and whether that answer
-        /// was "nothing here".
-        var ompCheckedAt: Date?
-        var ompAbsent: Bool = false
+        /// Report lanes only: when the host last answered, and how long that
+        /// answer stands before the next probe.
+        var reportCheckedAt: Date?
+        var reportInterval: TimeInterval = AgentUsageTuning.ompFetchFloor
         /// A fetch needs a token, not a probe-capable session.
         var holdsToken: Bool = false
         var fetchEligibleAt: Date?
 
         init(provider: AgentUsageProvider, canProbe: Bool, probeInFlight: Bool = false,
              credential: AgentUsageCredentialState? = nil, hostRetryAfter: Date? = nil,
-             ompCheckedAt: Date? = nil, ompAbsent: Bool = false,
+             reportCheckedAt: Date? = nil,
+             reportInterval: TimeInterval = AgentUsageTuning.ompFetchFloor,
              holdsToken: Bool = false, fetchEligibleAt: Date? = nil) {
             self.provider = provider
             self.canProbe = canProbe
             self.probeInFlight = probeInFlight
             self.credential = credential
             self.hostRetryAfter = hostRetryAfter
-            self.ompCheckedAt = ompCheckedAt
-            self.ompAbsent = ompAbsent
+            self.reportCheckedAt = reportCheckedAt
+            self.reportInterval = reportInterval
             self.holdsToken = holdsToken
             self.fetchEligibleAt = fetchEligibleAt
         }
@@ -324,16 +344,13 @@ nonisolated enum AgentUsageSchedule {
             if lane.probeInFlight { continue }
 
             if lane.provider.yieldsUsageReport {
-                guard let checkedAt = lane.ompCheckedAt else {
+                guard let checkedAt = lane.reportCheckedAt else {
                     if lane.canProbe, let retry = lane.hostRetryAfter {
                         result.deadlines.append(retry)
                     }
                     continue
                 }
-                let interval = lane.ompAbsent
-                    ? AgentUsageTuning.absentCredentialTTL
-                    : AgentUsageTuning.ompFetchFloor
-                let due = checkedAt.addingTimeInterval(interval)
+                let due = checkedAt.addingTimeInterval(lane.reportInterval)
                 if lane.canProbe {
                     // Whichever boundary is later: a failed probe keeps the
                     // old checkedAt, so `due` is already past and only the
