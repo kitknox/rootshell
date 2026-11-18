@@ -386752,7 +386752,328 @@
         }
       }
     },
+    "If a key already exists in %@ on YubiKey %@, it will be permanently replaced. The private key will move from software storage to your YubiKey hardware." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "إذا كان هناك مفتاح موجود بالفعل في %1$@ على YubiKey %2$@، فسيتم استبداله نهائيًا. سينتقل المفتاح الخاص من التخزين البرمجي إلى جهاز YubiKey الخاص بك."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si ja existeix una clau a %1$@ de la YubiKey %2$@, serà reemplaçada permanentment. La clau privada es traslladarà de l'emmagatzematge de programari al vostre maquinari YubiKey."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pokud klíč v %1$@ na YubiKey %2$@ již existuje, bude trvale nahrazen. Soukromý klíč bude přesunut ze softwarového úložiště na váš YubiKey."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hvis der allerede findes en nøgle i %1$@ på YubiKey %2$@, vil den blive permanent erstattet. Den private nøgle flyttes fra softwareopbevaring til din YubiKey-hardware."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenn in %1$@ auf YubiKey %2$@ bereits ein Schlüssel existiert, wird er dauerhaft ersetzt. Der private Schlüssel wird vom Software-Speicher auf Ihre YubiKey-Hardware verschoben."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "If a key already exists in %1$@ on YubiKey %2$@, it will be permanently replaced. The private key will move from software storage to your YubiKey hardware."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si ya existe una clave en %1$@ de la YubiKey %2$@, será reemplazada permanentemente. La clave privada se moverá del almacenamiento de software a su hardware YubiKey."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jos YubiKeyn %2$@ kohteessa %1$@ on jo avain, se korvataan pysyvästi. Yksityinen avain siirtyy ohjelmistomuistista YubiKey-laitteistollesi."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si une clé existe déjà dans %1$@ sur le YubiKey %2$@, elle sera définitivement remplacée. La clé privée sera transférée du stockage logiciel vers votre YubiKey."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "אם מפתח כבר קיים ב-%1$@ ב-YubiKey %2$@, הוא יוחלף לצמיתות. המפתח הפרטי יעבור מאחסון תוכנה לחומרת ה-YubiKey שלך."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ha a(z) %2$@ YubiKey %1$@ helyén már létezik kulcs, az véglegesen lecserélődik. A privát kulcs a szoftveres tárolóból a YubiKey hardverre kerül át."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se una chiave esiste già in %1$@ sulla YubiKey %2$@, verrà sostituita permanentemente. La chiave privata verrà spostata dall'archivio software al Suo hardware YubiKey."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YubiKey %2$@ の%1$@にキーが既に存在する場合、完全に置き換えられます。秘密鍵はソフトウェアストレージからYubiKeyハードウェアに移動します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YubiKey %2$@의 %1$@에 키가 이미 존재하는 경우 영구적으로 교체됩니다. 개인 키가 소프트웨어 저장소에서 YubiKey 하드웨어로 이동합니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hvis det allerede finnes en nøkkel i %1$@ på YubiKey %2$@, vil den bli permanent erstattet. Den private nøkkelen flyttes fra programvarelagring til YubiKey-maskinvaren din."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als er al een sleutel bestaat in %1$@ op YubiKey %2$@, wordt deze permanent vervangen. De privésleutel wordt verplaatst van softwareopslag naar uw YubiKey-hardware."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jeśli klucz już istnieje w %1$@ na kluczu YubiKey %2$@, zostanie trwale zastąpiony. Klucz prywatny zostanie przeniesiony z pamięci programowej na sprzęt YubiKey."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se uma chave já existir em %1$@ no YubiKey %2$@, ela será substituída permanentemente. A chave privada será movida do armazenamento de software para o hardware do seu YubiKey."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se já existir uma chave em %1$@ no YubiKey %2$@, será permanentemente substituída. A chave privada será movida do armazenamento de software para o seu hardware YubiKey."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dacă o cheie există deja în %1$@ pe YubiKey %2$@, aceasta va fi înlocuită permanent. Cheia privată va fi mutată din stocarea software pe dispozitivul YubiKey."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Če ključ že obstaja v %1$@ na YubiKey %2$@, bo trajno zamenjan. Zasebni ključ bo premaknjen iz programske shrambe na vašo YubiKey strojno opremo."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Om en nyckel redan finns i %1$@ på YubiKey %2$@ kommer den att ersättas permanent. Den privata nyckeln flyttas från mjukvarulagring till din YubiKey-hårdvara."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Якщо ключ вже існує в %1$@ на YubiKey %2$@, він буде остаточно замінений. Закритий ключ буде переміщено з програмного сховища на ваш YubiKey."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nếu đã tồn tại khóa trong %1$@ trên YubiKey %2$@, khóa đó sẽ bị thay thế vĩnh viễn. Khóa riêng tư sẽ được chuyển từ bộ nhớ phần mềm sang phần cứng YubiKey của bạn."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果 YubiKey %2$@ 的 %1$@ 中已存在密钥，它将被永久替换。私钥将从软件存储转移到 YubiKey 硬件。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果 YubiKey %2$@ 的 %1$@ 中已存在金鑰，它將被永久取代。私密金鑰將從軟體儲存移轉到您的 YubiKey 硬體。"
+          }
+        }
+      }
+    },
+    "If a key already exists in %@ on YubiKey %@, it will be permanently replaced. This cannot be undone." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "إذا كان هناك مفتاح موجود بالفعل في %1$@ على YubiKey %2$@، فسيتم استبداله نهائيًا. لا يمكن التراجع عن هذا الإجراء."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si ja existeix una clau a %1$@ de la YubiKey %2$@, serà reemplaçada permanentment. Aquesta acció no es pot desfer."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pokud klíč v %1$@ na YubiKey %2$@ již existuje, bude trvale nahrazen. Tuto akci nelze vrátit zpět."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hvis der allerede findes en nøgle i %1$@ på YubiKey %2$@, vil den blive permanent erstattet. Dette kan ikke fortrydes."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenn in %1$@ auf YubiKey %2$@ bereits ein Schlüssel existiert, wird er dauerhaft ersetzt. Dies kann nicht rückgängig gemacht werden."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "If a key already exists in %1$@ on YubiKey %2$@, it will be permanently replaced. This cannot be undone."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si ya existe una clave en %1$@ de la YubiKey %2$@, será reemplazada permanentemente. Esta acción no se puede deshacer."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jos YubiKeyn %2$@ kohteessa %1$@ on jo avain, se korvataan pysyvästi. Tätä ei voi perua."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si une clé existe déjà dans %1$@ sur le YubiKey %2$@, elle sera définitivement remplacée. Cette opération est irréversible."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "אם מפתח כבר קיים ב-%1$@ ב-YubiKey %2$@, הוא יוחלף לצמיתות. לא ניתן לבטל פעולה זו."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ha a(z) %2$@ YubiKey %1$@ helyén már létezik kulcs, az véglegesen lecserélődik. Ez nem vonható vissza."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se una chiave esiste già in %1$@ sulla YubiKey %2$@, verrà sostituita permanentemente. Questa operazione non può essere annullata."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YubiKey %2$@ の%1$@にキーが既に存在する場合、完全に置き換えられます。この操作は元に戻せません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YubiKey %2$@의 %1$@에 키가 이미 존재하는 경우 영구적으로 교체됩니다. 이 작업은 되돌릴 수 없습니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hvis det allerede finnes en nøkkel i %1$@ på YubiKey %2$@, vil den bli permanent erstattet. Dette kan ikke angres."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als er al een sleutel bestaat in %1$@ op YubiKey %2$@, wordt deze permanent vervangen. Dit kan niet ongedaan worden gemaakt."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jeśli klucz już istnieje w %1$@ na kluczu YubiKey %2$@, zostanie trwale zastąpiony. Tej operacji nie można cofnąć."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se uma chave já existir em %1$@ no YubiKey %2$@, ela será substituída permanentemente. Isso não pode ser desfeito."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se já existir uma chave em %1$@ no YubiKey %2$@, será permanentemente substituída. Esta ação não pode ser desfeita."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dacă o cheie există deja în %1$@ pe YubiKey %2$@, aceasta va fi înlocuită permanent. Această operațiune nu poate fi anulată."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Če ključ že obstaja v %1$@ na YubiKey %2$@, bo trajno zamenjan. Tega ni mogoče razveljaviti."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Om en nyckel redan finns i %1$@ på YubiKey %2$@ kommer den att ersättas permanent. Detta kan inte ångras."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Якщо ключ вже існує в %1$@ на YubiKey %2$@, він буде остаточно замінений. Цю дію не можна скасувати."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nếu đã tồn tại khóa trong %1$@ trên YubiKey %2$@, khóa đó sẽ bị thay thế vĩnh viễn. Thao tác này không thể hoàn tác."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果 YubiKey %2$@ 的 %1$@ 中已存在密钥，它将被永久替换。此操作无法撤销。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果 YubiKey %2$@ 的 %1$@ 中已存在金鑰，它將被永久取代。此操作無法復原。"
+          }
+        }
+      }
+    },
     "If a key already exists in %@, it will be permanently replaced. The private key will move from software storage to your YubiKey hardware." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -386907,6 +387228,7 @@
       }
     },
     "If a key already exists in %@, it will be permanently replaced. This cannot be undone." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -598056,6 +598378,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "私鑰永遠不會離開此裝置。僅限 P-256。"
+          }
+        }
+      }
+    },
+    "Private keys can't be imported over NFC, where the transfer isn't encrypted. Connect this YubiKey with USB-C to import." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لا يمكن استيراد المفاتيح الخاصة عبر NFC لأن النقل غير مشفّر. وصّل YubiKey هذا عبر USB-C للاستيراد."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les claus privades no es poden importar per NFC, on la transferència no està xifrada. Connecta aquesta YubiKey per USB-C per importar."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Soukromé klíče nelze importovat přes NFC, kde přenos není šifrovaný. Chcete-li klíč importovat, připojte tento YubiKey přes USB-C."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Private nøgler kan ikke importeres via NFC, hvor overførslen ikke er krypteret. Tilslut denne YubiKey med USB-C for at importere."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Private Schlüssel können nicht über NFC importiert werden, da die Übertragung dort nicht verschlüsselt ist. Verbinden Sie diesen YubiKey über USB-C, um zu importieren."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las claves privadas no se pueden importar por NFC, donde la transferencia no está cifrada. Conecta esta YubiKey por USB-C para importar."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yksityisiä avaimia ei voi tuoda NFC:n kautta, koska siirto ei ole salattu. Tuo avain yhdistämällä tämä YubiKey USB-C:llä."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les clés privées ne peuvent pas être importées en NFC, car le transfert n'y est pas chiffré. Connectez ce YubiKey en USB-C pour importer."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "לא ניתן לייבא מפתחות פרטיים דרך NFC, שבו ההעברה אינה מוצפנת. חבר את ה-YubiKey הזה באמצעות USB-C כדי לייבא."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Privát kulcsok nem importálhatók NFC-n keresztül, mert ott az átvitel nem titkosított. Az importáláshoz csatlakoztassa ezt a YubiKey-t USB-C-vel."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le chiavi private non possono essere importate tramite NFC, dove il trasferimento non è cifrato. Collega questa YubiKey tramite USB-C per importare."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NFCでは転送が暗号化されないため、秘密鍵をインポートできません。インポートするには、このYubiKeyをUSB-Cで接続してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NFC에서는 전송이 암호화되지 않으므로 개인 키를 가져올 수 없습니다. 가져오려면 이 YubiKey를 USB-C로 연결하세요."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Private nøkler kan ikke importeres over NFC, der overføringen ikke er kryptert. Koble denne YubiKey-en til med USB-C for å importere."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Privésleutels kunnen niet via NFC worden geïmporteerd, omdat de overdracht daar niet versleuteld is. Sluit deze YubiKey aan via USB-C om te importeren."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kluczy prywatnych nie można importować przez NFC, ponieważ transfer nie jest szyfrowany. Aby zaimportować klucz, podłącz ten YubiKey przez USB-C."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chaves privadas não podem ser importadas via NFC, onde a transferência não é criptografada. Conecte este YubiKey via USB-C para importar."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "As chaves privadas não podem ser importadas por NFC, onde a transferência não é encriptada. Ligue este YubiKey por USB-C para importar."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cheile private nu pot fi importate prin NFC, unde transferul nu este criptat. Conectează acest YubiKey prin USB-C pentru a importa."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zasebnih ključev ni mogoče uvoziti prek NFC, kjer prenos ni šifriran. Za uvoz ta YubiKey priključite prek USB-C."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Privata nycklar kan inte importeras via NFC, där överföringen inte är krypterad. Anslut den här YubiKey med USB-C för att importera."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Закриті ключі не можна імпортувати через NFC, оскільки передавання не шифрується. Щоб імпортувати, підключіть цей YubiKey через USB-C."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không thể nhập khóa riêng tư qua NFC vì quá trình truyền không được mã hóa. Hãy kết nối YubiKey này qua USB-C để nhập."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法通过 NFC 导入私钥，因为 NFC 传输未加密。请通过 USB-C 连接此 YubiKey 以导入。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法透過 NFC 匯入私密金鑰，因為 NFC 傳輸未加密。請透過 USB-C 連接此 YubiKey 以匯入。"
           }
         }
       }
