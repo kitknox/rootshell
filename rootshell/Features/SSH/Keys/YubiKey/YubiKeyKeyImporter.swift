@@ -133,10 +133,26 @@ final class YubiKeyKeyImporter {
         let fingerprint: String
     }
 
+    /// PIV sends an imported private key in the clear, and NFC can be overheard
+    /// from nearby, so import is refused there.
+    private static let nfcImportRefusal =
+        "Private keys can't be imported over NFC, where the transfer isn't encrypted. Connect the YubiKey with USB-C instead."
+
+    /// The wired transport to connect with for an import; throws if the next
+    /// connection would be NFC. Connect with the returned transport so the
+    /// choice isn't made again and an import never opens an NFC session.
+    func requireWiredTransport() async throws -> YubiKeyConnectionMethod {
+        guard let method = await connectionManager.wiredTransportForNextConnection() else {
+            throw YubiKeyError.importFailed(Self.nfcImportRefusal)
+        }
+        return method
+    }
+
     /// Import a software key to YubiKey PIV slot
     /// - Parameters:
     ///   - keyID: ID of the software key to import
-    ///   - slot: Target PIV slot
+    ///   - target: YubiKey and slot the user confirmed; any other key is
+    ///     refused before private key material is read or sent
     ///   - pinPolicy: PIN policy for the imported key
     ///   - touchPolicy: Touch policy for the imported key
     ///   - managementKey: Optional custom management key (uses default if nil)
@@ -144,12 +160,13 @@ final class YubiKeyKeyImporter {
     /// - Returns: ImportResult with the new YubiKey-backed SSHKey
     func importKey(
         keyID: UUID,
-        slot: PIVSlot,
+        target: YubiKeyWriteTarget,
         pinPolicy: PIV.PinPolicy = .defaultPolicy,
         touchPolicy: PIV.TouchPolicy = .defaultPolicy,
         managementKey: Data? = nil,
         deleteFromKeychain: Bool = false
     ) async throws -> ImportResult {
+        let slot = target.slot
         Self.logger.info("Starting import of key \(keyID.uuidString) to slot \(slot.rawValue)")
 
         // 1. Validate the key can be imported
@@ -161,6 +178,15 @@ final class YubiKeyKeyImporter {
         guard validation.canImport else {
             throw YubiKeyError.importFailed(validation.reason ?? "Key cannot be imported")
         }
+
+        // Only the confirmed YubiKey, and only wired, before the private key
+        // leaves the Keychain. The session is tied to the connection that was
+        // checked, so everything below reaches that key or fails.
+        let (session, _, _) = try await connectionManager.verifiedPIVSession(
+            serial: target.serial,
+            nfcRefusal: .importFailed(Self.nfcImportRefusal)
+        )
+        let serial = target.serial
 
         // 2. Load key data from Keychain
         let keyData = try keychainManager.loadPrivateKey(identifier: keyID.uuidString)
@@ -182,8 +208,7 @@ final class YubiKeyKeyImporter {
             )
         }
 
-        // 4. Get PIV session and authenticate
-        let session = try await connectionManager.getPIVSession()
+        // 4. Authenticate
         try await authenticateManagement(session: session, customKey: managementKey)
 
         // 5. Check Ed25519 support if needed
@@ -198,12 +223,7 @@ final class YubiKeyKeyImporter {
             }
         }
 
-        // 6. Get serial number for YubiKey info
-        guard case .connected(let serial, _) = connectionManager.connectionState else {
-            throw YubiKeyError.notConnected
-        }
-
-        // 7. Import the key based on type
+        // 6. Import the key based on type
         let publicKeyData: Data
         let algorithm: YubiKeyAlgorithm
         var mldsaPublicKey: YubiKit.MLDSA.PublicKey?
@@ -281,7 +301,7 @@ final class YubiKeyKeyImporter {
             throw YubiKeyError.unsupportedKeyTypeForImport(parsedKey.keyType.rawValue)
         }
 
-        // 8. Generate and store certificate
+        // 7. Generate and store certificate
         if let mldsaPublicKey {
             let der = YubiKeyKeyConverter.mldsaSlotCertificate(for: mldsaPublicKey, commonName: sshKey.name)
             try await session.putCertificate(X509Cert(der: der), in: slot.toYubiKitSlot, compressed: false)
@@ -295,7 +315,7 @@ final class YubiKeyKeyImporter {
             )
         }
 
-        // 9. Create new SSHKey with YubiKey reference
+        // 8. Create new SSHKey with YubiKey reference
         let fingerprint = generateFingerprint(publicKeyData)
 
         let yubiKeyInfo = YubiKeyInfo(
@@ -334,10 +354,10 @@ final class YubiKeyKeyImporter {
             keyType: .yubiKeyPIV
         )
 
-        // 10. Save the new YubiKey reference (allows duplicate fingerprint with different key type)
+        // 9. Save the new YubiKey reference (allows duplicate fingerprint with different key type)
         try keyManager.saveYubiKeyReference(newSSHKey, allowDuplicateFingerprint: true)
 
-        // 11. Optionally delete the original software key
+        // 10. Optionally delete the original software key
         if deleteFromKeychain {
             Self.logger.info("Deleting original software key from Keychain")
             try? keyManager.deleteKey(id: keyID)

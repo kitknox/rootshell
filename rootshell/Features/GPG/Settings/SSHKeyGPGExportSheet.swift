@@ -153,13 +153,17 @@ struct SSHKeyGPGExportSheet: View {
             }
             .sheet(isPresented: $showingPINPrompt) {
                 if let request = yubiKeyConnectionManager.pendingPINRequest {
+                    // Completions carry the displayed request's ID and the view is keyed
+                    // by it, so a sheet left over from a withdrawn request can neither
+                    // answer nor hide the prompt of the request that replaced it.
                     YubiKeyPINPromptView(request: request) { pin in
-                        yubiKeyConnectionManager.completePINRequest(with: pin)
-                        showingPINPrompt = false
+                        yubiKeyConnectionManager.completePINRequest(id: request.id, with: pin)
+                        showingPINPrompt = yubiKeyConnectionManager.pendingPINRequest != nil
                     } onCancel: {
-                        yubiKeyConnectionManager.completePINRequest(with: nil)
-                        showingPINPrompt = false
+                        yubiKeyConnectionManager.completePINRequest(id: request.id, with: nil)
+                        showingPINPrompt = yubiKeyConnectionManager.pendingPINRequest != nil
                     }
+                    .id(request.id)
                     .themedSubSheet(sheetThemeColors)
                 }
             }

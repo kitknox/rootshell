@@ -58,33 +58,21 @@ final class YubiKeySlotManager {
     ///     other key is refused before anything is changed
     ///   - managementKey: Optional custom management key (uses default if nil)
     /// - Throws: YubiKeyError on failure
-    func deleteKey(in slot: PIVSlot, expectedSerial: UInt32? = nil, managementKey: Data? = nil) async throws {
+    func deleteKey(in slot: PIVSlot, expectedSerial: UInt32, managementKey: Data? = nil) async throws {
         Self.logger.info("Deleting key from slot \(slot.rawValue)")
+
+        // Held from connect to the NFC close, so no other operation shares or
+        // ends this session.
+        guard await connectionManager.beginExclusiveUse(preemptingPendingConnect: true) else {
+            throw CancellationError()
+        }
+        defer { connectionManager.endExclusiveUse() }
 
         try await connectionManager.connect()
 
         // Over NFC the next tap can be a different YubiKey than the one listed.
-        if let expectedSerial, case .connected(let serial, let method) = connectionManager.connectionState,
-           serial != expectedSerial {
-            #if os(iOS) && !os(visionOS)
-            if method == .nfc {
-                await connectionManager.closeNFCSession(withError: "Different YubiKey")
-            }
-            #endif
-            throw YubiKeyError.keyDeletionFailed(
-                "This is YubiKey \(serial), but the key was listed from YubiKey \(expectedSerial). Use that YubiKey to delete it."
-            )
-        }
-
-        // Save connection method for cleanup
-        let connectionMethod: YubiKeyConnectionMethod?
-        if case .connected(_, let method) = connectionManager.connectionState {
-            connectionMethod = method
-        } else {
-            connectionMethod = nil
-        }
-
-        let session = try await connectionManager.getPIVSession()
+        // The session is tied to the connection that was checked.
+        let (session, connectionMethod, _) = try await connectionManager.verifiedPIVSession(serial: expectedSerial)
 
         do {
             // Authenticate with management key (required for key deletion)

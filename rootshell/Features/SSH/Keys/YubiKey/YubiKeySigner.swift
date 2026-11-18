@@ -28,14 +28,9 @@ final class YubiKeySigner {
 
     private let connectionManager: YubiKeyConnectionManager
 
-    /// Shared signer instance for serializing operations across all tabs
-    static let shared = YubiKeySigner()
-
-    /// Queue of pending signing operations
-    private var operationQueue: [CheckedContinuation<Void, Never>] = []
-
-    /// Whether a signing operation is currently in progress
-    private var isOperationInProgress = false
+    /// Shared signer instance for serializing operations across all tabs. The
+    /// only instance: a second one would have its own PIN cache.
+    static let shared = YubiKeySigner(connectionManager: .shared)
 
     /// Whether PIN has been verified in the current session
     /// For wired connections: reset when connection is lost
@@ -47,12 +42,15 @@ final class YubiKeySigner {
     /// We cache it here to avoid prompting user for each operation
     private var cachedPINForSession: String?
 
-    /// Whether PIN was verified in the current NFC session
-    /// Within a single NFC session, YubiKey caches PIN verification
-    /// Reset when NFC session closes
-    private var pinVerifiedInCurrentNFCSession = false
+    /// The NFC connection the PIN was verified on, if any. The YubiKey holds
+    /// that verification only for that connection, so a new tap, even of the
+    /// same key, never matches and verifies the cached PIN again.
+    private var pinVerifiedNFCConnection: Int?
 
-    init(connectionManager: YubiKeyConnectionManager) {
+    /// Serial of the YubiKey the cached PIN and verified flags belong to.
+    private var pinStateSerial: UInt32?
+
+    private init(connectionManager: YubiKeyConnectionManager) {
         self.connectionManager = connectionManager
 
         // Listen for WIRED disconnection to reset PIN state
@@ -74,34 +72,78 @@ final class YubiKeySigner {
         }
     }
 
-    /// Convenience initializer using the shared connection manager
-    @MainActor
-    convenience init() {
-        self.init(connectionManager: .shared)
-    }
-
-    /// Acquire exclusive access to the YubiKey for signing
-    private func acquireSigningLock() async {
-        if isOperationInProgress {
-            Self.logger.info("Waiting for previous YubiKey operation to complete")
-            await withCheckedContinuation { continuation in
-                operationQueue.append(continuation)
-            }
+    /// Acquire exclusive access to the YubiKey for signing. The queue lives in
+    /// the connection manager so Settings actions wait in it too.
+    private func acquireSigningLock(serial: UInt32) async throws {
+        guard await connectionManager.beginExclusiveUse(reusingNFCSessionOf: serial) else {
+            // Cancelled before its turn, for example by its SSH request timing out.
+            throw CancellationError()
         }
-        isOperationInProgress = true
     }
 
-    /// Whether there are more operations waiting in the queue
+    /// Whether the operation queued next is another signing operation for the
+    /// YubiKey this NFC session is connected to, which reuses the session and
+    /// ends it. Anything else opens its own.
     private var hasQueuedOperations: Bool {
-        !operationQueue.isEmpty
+        connectionManager.nextOperationReusesNFCSession
     }
 
     /// Release the signing lock and allow next queued operation
     private func releaseSigningLock() {
-        isOperationInProgress = false
-        if let next = operationQueue.first {
-            operationQueue.removeFirst()
-            next.resume()
+        connectionManager.endExclusiveUse()
+    }
+
+    // MARK: - Device Binding
+
+    /// Drop cached PIN state that belongs to another YubiKey. A serial of 0
+    /// means none was reported; that identifies no key to hold a PIN for.
+    private func scopePINState(to serial: UInt32) throws {
+        guard serial != 0 else {
+            clearPINState()
+            pinStateSerial = nil
+            throw YubiKeyError.unverifiedDevice
+        }
+        guard pinStateSerial != serial else { return }
+        clearPINState()
+        pinStateSerial = serial
+    }
+
+    private func clearPINState() {
+        cachedPINForSession = nil
+        pinVerifiedForSession = false
+        pinVerifiedNFCConnection = nil
+    }
+
+    /// Stop if the caller has gone away because its request timed out or was
+    /// cancelled, so a result nobody is waiting for doesn't prompt for a PIN
+    /// or use the key. Checked on getting the queue, before connecting, before
+    /// a PIN is sent, and before each sign, decrypt or key agreement. An NFC
+    /// session left open is ended when the queue is released.
+    private func checkStillWanted() throws {
+        try Task.checkCancellation()
+    }
+
+    /// End an NFC session inherited from the previous signature before the
+    /// app's PIN prompt, which the system NFC sheet would cover. The tap after
+    /// entry opens a new session.
+    private func endInheritedNFCSession() async {
+        #if os(iOS) && !os(visionOS)
+        await connectionManager.closeNFCSessionImmediately()
+        pinVerifiedNFCConnection = nil
+        #endif
+    }
+
+    /// PIV session on the YubiKey the key reference names. Identity and session
+    /// come from one captured connection, so a PIN can't reach another key.
+    private func verifiedSession(
+        serial: UInt32
+    ) async throws -> (session: PIVSession, method: YubiKeyConnectionMethod, connectionID: Int) {
+        do {
+            return try await connectionManager.verifiedPIVSession(serial: serial)
+        } catch {
+            // A refusal ends the NFC session.
+            pinVerifiedNFCConnection = nil
+            throw error
         }
     }
 
@@ -109,14 +151,16 @@ final class YubiKeySigner {
 
     /// Sign data using a PIV slot
     func signWithPIV(
+        serialNumber: UInt32,
         slot: PIVSlot,
         algorithm: YubiKeyAlgorithm,
         data: Data,
         flags: UInt32
     ) async throws -> ByteBuffer {
         // Serialize operations
-        await acquireSigningLock()
+        try await acquireSigningLock(serial: serialNumber)
         defer { releaseSigningLock() }
+        try checkStillWanted()
 
         // Surface the hardware-key overlay for this SSH/agent signing op. The
         // overlay only becomes visible if we end up waiting on the key (insert
@@ -130,28 +174,26 @@ final class YubiKeySigner {
         let willUseNFC = await connectionManager.willUseNFC()
 
         // Determine if we need to prompt for PIN
+        try scopePINState(to: serialNumber)
         let needsPINPrompt = slot.requiresPIN && cachedPINForSession == nil && !pinVerifiedForSession
 
         if willUseNFC && needsPINPrompt {
+            await endInheritedNFCSession()
             Self.logger.info("NFC mode: collecting PIN before starting NFC session")
             cachedPINForSession = try await connectionManager.requestPIN(for: "YubiKey")
         }
 
         // Ensure connected
+        try checkStillWanted()
         try await connectionManager.connect()
 
-        // Save connection method immediately after connect
-        let connectionMethod: YubiKeyConnectionMethod?
-        if case .connected(_, let method) = connectionManager.connectionState {
-            connectionMethod = method
-            Self.logger.info("Saved connection method for cleanup: \(method.rawValue)")
-        } else {
-            connectionMethod = nil
-            Self.logger.warning("Could not determine connection method for cleanup")
-        }
-
-        // Get a fresh PIV session
-        let session = try await connectionManager.getPIVSession()
+        // Fresh PIV session on the referenced YubiKey; any other key is refused
+        // before a PIN is submitted to it.
+        let verified = try await verifiedSession(serial: serialNumber)
+        let session = verified.session
+        let connectionID = verified.connectionID
+        let connectionMethod: YubiKeyConnectionMethod? = verified.method
+        try checkStillWanted()
         let pivSlot = slot.toYubiKitSlot
 
         // Verify PIN if required
@@ -159,11 +201,11 @@ final class YubiKeySigner {
             do {
                 if connectionMethod == .nfc {
                     // NFC: verify once per NFC session
-                    if !pinVerifiedInCurrentNFCSession {
+                    if pinVerifiedNFCConnection != connectionID {
                         if let pin = cachedPINForSession {
                             Self.logger.info("NFC mode: verifying PIN with YubiKey using cached value")
                             try await verifyPINWithValue(session: session, pin: pin)
-                            pinVerifiedInCurrentNFCSession = true
+                            pinVerifiedNFCConnection = connectionID
                         } else {
                             Self.logger.error("NFC mode: no cached PIN available")
                             throw YubiKeyError.pinRequired
@@ -186,14 +228,14 @@ final class YubiKeySigner {
                     Self.logger.warning("PIN verification failed - clearing cached PIN")
                     cachedPINForSession = nil
                     pinVerifiedForSession = false
-                    pinVerifiedInCurrentNFCSession = false
+                    pinVerifiedNFCConnection = nil
                 }
                 // Close NFC session if needed
                 #if os(iOS) && !os(visionOS)
                 if connectionMethod == .nfc {
                     await connectionManager.closeNFCSession(withError: "PIN verification failed")
                     connectionManager.updateState(.disconnected)
-                    pinVerifiedInCurrentNFCSession = false
+                    pinVerifiedNFCConnection = nil
                 } else if let method = connectionMethod {
                     // Wired: restore .connected so the next attempt reuses this
                     // still-open connection instead of opening a second SDK
@@ -243,7 +285,8 @@ final class YubiKeySigner {
                 algorithm: algorithm,
                 data: data,
                 flags: flags,
-                connectionMethod: connectionMethod
+                connectionMethod: connectionMethod,
+                connectionID: connectionID
             )
             Self.logger.info("PIV signing successful for slot \(slot.rawValue)")
         } catch {
@@ -269,14 +312,13 @@ final class YubiKeySigner {
             #if os(iOS) && !os(visionOS)
             if method == .nfc {
                 if hasQueuedOperations {
-                    let queueCount = operationQueue.count
-                    Self.logger.info("NFC signing complete, keeping session open for \(queueCount) more operation(s)")
+                    Self.logger.info("NFC signing complete, keeping session open for the next signing operation")
                     restoreConnectedState(method: method)
                 } else {
                     Self.logger.info("NFC signing complete, no more operations - closing session")
                     await connectionManager.closeNFCSessionImmediately()
                     connectionManager.updateState(.disconnected)
-                    pinVerifiedInCurrentNFCSession = false
+                    pinVerifiedNFCConnection = nil
                 }
             } else {
                 restoreConnectedState(method: method)
@@ -306,39 +348,41 @@ final class YubiKeySigner {
     /// established SSH-agent path. If a bug surfaces in one, fix it
     /// in both.
     func signWithPIVPrehashed(
+        serialNumber: UInt32,
         slot: PIVSlot,
         algorithm: YubiKeyAlgorithm,
         digest: Data,
         hashAlgorithm: GPGHashAlgorithm
     ) async throws -> Data {
-        await acquireSigningLock()
+        try await acquireSigningLock(serial: serialNumber)
         defer { releaseSigningLock() }
+        try checkStillWanted()
 
         let willUseNFC = await connectionManager.willUseNFC()
+        try scopePINState(to: serialNumber)
         let needsPINPrompt = slot.requiresPIN && cachedPINForSession == nil && !pinVerifiedForSession
         if willUseNFC && needsPINPrompt {
+            await endInheritedNFCSession()
             cachedPINForSession = try await connectionManager.requestPIN(for: "YubiKey")
         }
 
+        try checkStillWanted()
         try await connectionManager.connect()
 
-        let connectionMethod: YubiKeyConnectionMethod?
-        if case .connected(_, let method) = connectionManager.connectionState {
-            connectionMethod = method
-        } else {
-            connectionMethod = nil
-        }
-
-        let session = try await connectionManager.getPIVSession()
+        let verified = try await verifiedSession(serial: serialNumber)
+        let session = verified.session
+        let connectionID = verified.connectionID
+        let connectionMethod: YubiKeyConnectionMethod? = verified.method
+        try checkStillWanted()
         let pivSlot = slot.toYubiKitSlot
 
         if slot.requiresPIN {
             do {
                 if connectionMethod == .nfc {
-                    if !pinVerifiedInCurrentNFCSession {
+                    if pinVerifiedNFCConnection != connectionID {
                         if let pin = cachedPINForSession {
                             try await verifyPINWithValue(session: session, pin: pin)
-                            pinVerifiedInCurrentNFCSession = true
+                            pinVerifiedNFCConnection = connectionID
                         } else {
                             throw YubiKeyError.pinRequired
                         }
@@ -355,13 +399,13 @@ final class YubiKeySigner {
                 if (error as? YubiKeyError)?.isSecurityError == true {
                     cachedPINForSession = nil
                     pinVerifiedForSession = false
-                    pinVerifiedInCurrentNFCSession = false
+                    pinVerifiedNFCConnection = nil
                 }
                 #if os(iOS) && !os(visionOS)
                 if connectionMethod == .nfc {
                     await connectionManager.closeNFCSession(withError: "PIN verification failed")
                     connectionManager.updateState(.disconnected)
-                    pinVerifiedInCurrentNFCSession = false
+                    pinVerifiedNFCConnection = nil
                 } else if let method = connectionMethod {
                     // Wired: restore .connected so the next attempt reuses this
                     // still-open connection instead of opening a second SDK
@@ -392,7 +436,8 @@ final class YubiKeySigner {
                 algorithm: algorithm,
                 digest: digest,
                 hashAlgorithm: hashAlgorithm,
-                connectionMethod: connectionMethod
+                connectionMethod: connectionMethod,
+                connectionID: connectionID
             )
         } catch {
             if let method = connectionMethod {
@@ -418,7 +463,7 @@ final class YubiKeySigner {
                 } else {
                     await connectionManager.closeNFCSessionImmediately()
                     connectionManager.updateState(.disconnected)
-                    pinVerifiedInCurrentNFCSession = false
+                    pinVerifiedNFCConnection = nil
                 }
             } else {
                 restoreConnectedState(method: method)
@@ -440,38 +485,40 @@ final class YubiKeySigner {
     /// PKCS#1 v1.5 EME padding; the returned bytes are the OpenPGP
     /// session-key wrapping that gpg consumes on the client side.
     func decryptWithPIV(
+        serialNumber: UInt32,
         slot: PIVSlot,
         algorithm: YubiKeyAlgorithm,
         ciphertext: Data
     ) async throws -> Data {
-        await acquireSigningLock()
+        try await acquireSigningLock(serial: serialNumber)
         defer { releaseSigningLock() }
+        try checkStillWanted()
 
         let willUseNFC = await connectionManager.willUseNFC()
+        try scopePINState(to: serialNumber)
         let needsPINPrompt = slot.requiresPIN && cachedPINForSession == nil && !pinVerifiedForSession
         if willUseNFC && needsPINPrompt {
+            await endInheritedNFCSession()
             cachedPINForSession = try await connectionManager.requestPIN(for: "YubiKey")
         }
 
+        try checkStillWanted()
         try await connectionManager.connect()
 
-        let connectionMethod: YubiKeyConnectionMethod?
-        if case .connected(_, let method) = connectionManager.connectionState {
-            connectionMethod = method
-        } else {
-            connectionMethod = nil
-        }
-
-        let session = try await connectionManager.getPIVSession()
+        let verified = try await verifiedSession(serial: serialNumber)
+        let session = verified.session
+        let connectionID = verified.connectionID
+        let connectionMethod: YubiKeyConnectionMethod? = verified.method
+        try checkStillWanted()
         let pivSlot = slot.toYubiKitSlot
 
         if slot.requiresPIN {
             do {
                 if connectionMethod == .nfc {
-                    if !pinVerifiedInCurrentNFCSession {
+                    if pinVerifiedNFCConnection != connectionID {
                         if let pin = cachedPINForSession {
                             try await verifyPINWithValue(session: session, pin: pin)
-                            pinVerifiedInCurrentNFCSession = true
+                            pinVerifiedNFCConnection = connectionID
                         } else {
                             throw YubiKeyError.pinRequired
                         }
@@ -488,13 +535,13 @@ final class YubiKeySigner {
                 if (error as? YubiKeyError)?.isSecurityError == true {
                     cachedPINForSession = nil
                     pinVerifiedForSession = false
-                    pinVerifiedInCurrentNFCSession = false
+                    pinVerifiedNFCConnection = nil
                 }
                 #if os(iOS) && !os(visionOS)
                 if connectionMethod == .nfc {
                     await connectionManager.closeNFCSession(withError: "PIN verification failed")
                     connectionManager.updateState(.disconnected)
-                    pinVerifiedInCurrentNFCSession = false
+                    pinVerifiedNFCConnection = nil
                 } else if let method = connectionMethod {
                     // Wired: restore .connected so the next attempt reuses this
                     // still-open connection instead of opening a second SDK
@@ -518,6 +565,7 @@ final class YubiKeySigner {
 
         let plaintext: Data
         do {
+            try checkStillWanted()
             switch algorithm {
             case .rsa2048, .rsa4096:
                 plaintext = try await session.decrypt(
@@ -552,7 +600,7 @@ final class YubiKeySigner {
                 } else {
                     await connectionManager.closeNFCSessionImmediately()
                     connectionManager.updateState(.disconnected)
-                    pinVerifiedInCurrentNFCSession = false
+                    pinVerifiedNFCConnection = nil
                 }
             } else {
                 restoreConnectedState(method: method)
@@ -570,38 +618,40 @@ final class YubiKeySigner {
     /// its X coordinate. Caller applies the OpenPGP ECDH KDF + AES
     /// Key Unwrap to recover the session key.
     func deriveSharedSecretWithPIV(
+        serialNumber: UInt32,
         slot: PIVSlot,
         algorithm: YubiKeyAlgorithm,
         peerPublicKey: Data
     ) async throws -> Data {
-        await acquireSigningLock()
+        try await acquireSigningLock(serial: serialNumber)
         defer { releaseSigningLock() }
+        try checkStillWanted()
 
         let willUseNFC = await connectionManager.willUseNFC()
+        try scopePINState(to: serialNumber)
         let needsPINPrompt = slot.requiresPIN && cachedPINForSession == nil && !pinVerifiedForSession
         if willUseNFC && needsPINPrompt {
+            await endInheritedNFCSession()
             cachedPINForSession = try await connectionManager.requestPIN(for: "YubiKey")
         }
 
+        try checkStillWanted()
         try await connectionManager.connect()
 
-        let connectionMethod: YubiKeyConnectionMethod?
-        if case .connected(_, let method) = connectionManager.connectionState {
-            connectionMethod = method
-        } else {
-            connectionMethod = nil
-        }
-
-        let session = try await connectionManager.getPIVSession()
+        let verified = try await verifiedSession(serial: serialNumber)
+        let session = verified.session
+        let connectionID = verified.connectionID
+        let connectionMethod: YubiKeyConnectionMethod? = verified.method
+        try checkStillWanted()
         let pivSlot = slot.toYubiKitSlot
 
         if slot.requiresPIN {
             do {
                 if connectionMethod == .nfc {
-                    if !pinVerifiedInCurrentNFCSession {
+                    if pinVerifiedNFCConnection != connectionID {
                         if let pin = cachedPINForSession {
                             try await verifyPINWithValue(session: session, pin: pin)
-                            pinVerifiedInCurrentNFCSession = true
+                            pinVerifiedNFCConnection = connectionID
                         } else {
                             throw YubiKeyError.pinRequired
                         }
@@ -618,13 +668,13 @@ final class YubiKeySigner {
                 if (error as? YubiKeyError)?.isSecurityError == true {
                     cachedPINForSession = nil
                     pinVerifiedForSession = false
-                    pinVerifiedInCurrentNFCSession = false
+                    pinVerifiedNFCConnection = nil
                 }
                 #if os(iOS) && !os(visionOS)
                 if connectionMethod == .nfc {
                     await connectionManager.closeNFCSession(withError: "PIN verification failed")
                     connectionManager.updateState(.disconnected)
-                    pinVerifiedInCurrentNFCSession = false
+                    pinVerifiedNFCConnection = nil
                 } else if let method = connectionMethod {
                     // Wired: restore .connected so the next attempt reuses this
                     // still-open connection instead of opening a second SDK
@@ -648,6 +698,7 @@ final class YubiKeySigner {
 
         let shared: Data
         do {
+            try checkStillWanted()
             switch algorithm {
             case .ecdsaP256:
                 guard let pub = EC.PublicKey(x963: peerPublicKey, curve: .secp256r1) else {
@@ -686,7 +737,7 @@ final class YubiKeySigner {
                 } else {
                     await connectionManager.closeNFCSessionImmediately()
                     connectionManager.updateState(.disconnected)
-                    pinVerifiedInCurrentNFCSession = false
+                    pinVerifiedNFCConnection = nil
                 }
             } else {
                 restoreConnectedState(method: method)
@@ -706,7 +757,8 @@ final class YubiKeySigner {
         algorithm: YubiKeyAlgorithm,
         digest: Data,
         hashAlgorithm: GPGHashAlgorithm,
-        connectionMethod: YubiKeyConnectionMethod?
+        connectionMethod: YubiKeyConnectionMethod?,
+        connectionID: Int
     ) async throws -> Data {
         do {
             return try await performPrehashedSigning(
@@ -715,12 +767,12 @@ final class YubiKeySigner {
             )
         } catch let error as YubiKeyError where error.isSecurityError {
             pinVerifiedForSession = false
-            pinVerifiedInCurrentNFCSession = false
+            pinVerifiedNFCConnection = nil
             if slot.requiresPIN {
                 if connectionMethod == .nfc {
                     if let pin = cachedPINForSession {
                         try await verifyPINWithValue(session: session, pin: pin)
-                        pinVerifiedInCurrentNFCSession = true
+                        pinVerifiedNFCConnection = connectionID
                     } else {
                         throw YubiKeyError.pinRequired
                     }
@@ -763,6 +815,9 @@ final class YubiKeySigner {
         digest: Data,
         hashAlgorithm: GPGHashAlgorithm
     ) async throws -> Data {
+        // Covers the first attempt and the retry.
+        try checkStillWanted()
+
         // Build any pre-padded data outside the typed-throws block so
         // the catch only sees PIVSessionError (the only error
         // YubiKeyError.from can downcast).
@@ -890,7 +945,8 @@ final class YubiKeySigner {
         algorithm: YubiKeyAlgorithm,
         data: Data,
         flags: UInt32,
-        connectionMethod: YubiKeyConnectionMethod?
+        connectionMethod: YubiKeyConnectionMethod?,
+        connectionID: Int
     ) async throws -> Data {
         do {
             return try await performSigning(session: session, slot: pivSlot, algorithm: algorithm, data: data, flags: flags)
@@ -901,14 +957,14 @@ final class YubiKeySigner {
 
             // Reset PIN state
             pinVerifiedForSession = false
-            pinVerifiedInCurrentNFCSession = false
+            pinVerifiedNFCConnection = nil
 
             // Re-verify PIN
             if slot.requiresPIN {
                 if connectionMethod == .nfc {
                     if let pin = cachedPINForSession {
                         try await verifyPINWithValue(session: session, pin: pin)
-                        pinVerifiedInCurrentNFCSession = true
+                        pinVerifiedNFCConnection = connectionID
                     } else {
                         Self.logger.error("NFC mode: no cached PIN available for retry")
                         throw YubiKeyError.pinRequired
@@ -938,6 +994,8 @@ final class YubiKeySigner {
         data: Data,
         flags: UInt32
     ) async throws -> Data {
+        // Covers the first attempt and the retry. Kept outside the typed-throws block.
+        try checkStillWanted()
         do {
             switch algorithm {
             case .rsa2048:
@@ -967,10 +1025,7 @@ final class YubiKeySigner {
     }
 
     private func restoreConnectedState(method: YubiKeyConnectionMethod) {
-        if let serial = connectionManager.connectedSerial {
-            let serial32 = UInt32(truncatingIfNeeded: serial)
-            connectionManager.updateState(.connected(serial: serial32, method: method))
-        }
+        connectionManager.restoreConnectedState(for: method)
     }
 
     // MARK: - PIN Handling
@@ -979,6 +1034,7 @@ final class YubiKeySigner {
         connectionManager.updateState(.authenticating)
 
         let pin = try await connectionManager.requestPIN(for: slot.displayName)
+        try checkStillWanted()
 
         // Cache PIN for subsequent operations
         cachedPINForSession = pin
@@ -987,6 +1043,8 @@ final class YubiKeySigner {
     }
 
     private func verifyPINWithValue(session: PIVSession, pin: String) async throws {
+        // Last point before the PIN leaves the app.
+        try checkStillWanted()
         connectionManager.updateState(.authenticating)
 
         // PIV PINs are 1-8 bytes; the SDK traps on longer values. Clear the
@@ -994,7 +1052,7 @@ final class YubiKeySigner {
         guard (1...8).contains(pin.utf8.count) else {
             cachedPINForSession = nil
             pinVerifiedForSession = false
-            pinVerifiedInCurrentNFCSession = false
+            pinVerifiedNFCConnection = nil
             throw YubiKeyError.yubiKitError("PIN must be 6-8 digits")
         }
 
@@ -1016,21 +1074,23 @@ final class YubiKeySigner {
     // MARK: - PIN Management
 
     /// Change the YubiKey PIV PIN
-    func changePIN(oldPIN: String, newPIN: String) async throws {
+    func changePIN(oldPIN: String, newPIN: String, expectedSerial: UInt32) async throws {
+        // Queued with signing: both drive the same connection and PIN cache, and
+        // a sign in flight must not have its connection taken or PIN state reset.
+        // Like other Settings actions, a sign still waiting for a key gives way.
+        guard await connectionManager.beginExclusiveUse(preemptingPendingConnect: true) else {
+            throw CancellationError()
+        }
+        defer { releaseSigningLock() }
+        try checkStillWanted()
+
         Self.logger.info("Initiating PIN change operation")
 
         // Connect to YubiKey
         try await connectionManager.connect()
 
-        // Save connection method for cleanup
-        let connectionMethod: YubiKeyConnectionMethod?
-        if case .connected(_, let method) = connectionManager.connectionState {
-            connectionMethod = method
-        } else {
-            connectionMethod = nil
-        }
-
-        let session = try await connectionManager.getPIVSession()
+        // The old PIN must only go to the YubiKey the user was shown.
+        let (session, connectionMethod, _) = try await connectionManager.verifiedPIVSession(serial: expectedSerial)
 
         do {
             try await session.changePin(from: oldPIN, to: newPIN)
@@ -1040,7 +1100,7 @@ final class YubiKeySigner {
             // Clear cached PIN since it changed
             cachedPINForSession = nil
             pinVerifiedForSession = false
-            pinVerifiedInCurrentNFCSession = false
+            pinVerifiedNFCConnection = nil
 
             // Handle NFC session closure with success message
             #if os(iOS) && !os(visionOS)
@@ -1057,7 +1117,7 @@ final class YubiKeySigner {
             // Clear cached PIN on failure
             cachedPINForSession = nil
             pinVerifiedForSession = false
-            pinVerifiedInCurrentNFCSession = false
+            pinVerifiedNFCConnection = nil
 
             // Handle NFC session closure with error
             #if os(iOS) && !os(visionOS)

@@ -471,13 +471,17 @@ extension MainView {
             }
             .sheet(isPresented: $showYubiKeyPINPrompt) {
                 if let request = yubiKeyConnectionManager.pendingPINRequest {
+                    // Completions carry the displayed request's ID and the view is keyed
+                    // by it, so a sheet left over from a withdrawn request can neither
+                    // answer nor hide the prompt of the request that replaced it.
                     YubiKeyPINPromptView(request: request) { pin in
-                        yubiKeyConnectionManager.completePINRequest(with: pin)
-                        showYubiKeyPINPrompt = false
+                        yubiKeyConnectionManager.completePINRequest(id: request.id, with: pin)
+                        showYubiKeyPINPrompt = yubiKeyConnectionManager.pendingPINRequest != nil
                     } onCancel: {
-                        yubiKeyConnectionManager.completePINRequest(with: nil)
-                        showYubiKeyPINPrompt = false
+                        yubiKeyConnectionManager.completePINRequest(id: request.id, with: nil)
+                        showYubiKeyPINPrompt = yubiKeyConnectionManager.pendingPINRequest != nil
                     }
+                    .id(request.id)
                     .themedSheet(themeColors: sheetTheme.themeColors, accentColor: sheetTheme.accentColor, colorScheme: sheetTheme.colorScheme)
                 }
             }

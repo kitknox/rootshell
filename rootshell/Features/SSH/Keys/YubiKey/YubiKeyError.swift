@@ -96,6 +96,15 @@ enum YubiKeyError: LocalizedError, Sendable {
     /// Slot already contains a key (for overwrite confirmation)
     case slotOccupied(PIVSlot)
 
+    /// The connected YubiKey is not the one the action was confirmed or stored for
+    case wrongDevice(expected: UInt32, connected: UInt32)
+
+    /// The YubiKey or the stored key has no serial number to confirm its identity with
+    case unverifiedDevice
+
+    /// Another operation is using the YubiKey
+    case operationInProgress
+
     var errorDescription: String? {
         switch self {
         case .notConnected:
@@ -163,6 +172,12 @@ enum YubiKeyError: LocalizedError, Sendable {
             return "Key import failed: \(reason)"
         case .slotOccupied(let slot):
             return "The \(slot.displayName) slot already contains a key. Importing will overwrite it."
+        case .wrongDevice(let expected, let connected):
+            return "This is YubiKey \(connected), not YubiKey \(expected). Connect YubiKey \(expected) and try again."
+        case .unverifiedDevice:
+            return "The YubiKey's serial number isn't available, so this can't be confirmed as the right key."
+        case .operationInProgress:
+            return "Another YubiKey operation is in progress. Wait for it to finish, then try again."
         }
     }
 

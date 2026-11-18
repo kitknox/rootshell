@@ -25,6 +25,11 @@ struct ImportKeyToYubiKeyView: View {
     @State private var errorMessage: String?
     @State private var showingError = false
     @State private var showingOverwriteWarning = false
+    /// YubiKey and slot named by the overwrite confirmation.
+    @State private var confirmedTarget: YubiKeyWriteTarget?
+    /// The import in flight, cancelled when the sheet goes away so one still
+    /// waiting for the key never writes after the sheet is dismissed.
+    @State private var importTask: Task<Void, Never>?
     @State private var validation: YubiKeyKeyImporter.ImportValidation?
 
     private let importer = YubiKeyKeyImporter()
@@ -161,6 +166,8 @@ struct ImportKeyToYubiKeyView: View {
                 } footer: {
                     if !canReachKey {
                         Text("Connect your YubiKey before importing.")
+                    } else if readOverNFCOnly {
+                        Text("Private keys can't be imported over NFC, where the transfer isn't encrypted. Connect this YubiKey with USB-C to import.")
                     }
                 }
 
@@ -202,7 +209,7 @@ struct ImportKeyToYubiKeyView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Import") {
-                        showingOverwriteWarning = true
+                        confirmImport()
                     }
                     .disabled(!canImport)
                 }
@@ -214,13 +221,13 @@ struct ImportKeyToYubiKeyView: View {
                     validation = nil
                 }
             }
-            .alert("Overwrite Existing Key?", isPresented: $showingOverwriteWarning) {
+            .alert("Overwrite Existing Key?", isPresented: $showingOverwriteWarning, presenting: confirmedTarget) { target in
                 Button("Cancel", role: .cancel) {}
                 Button("Import", role: .destructive) {
-                    performImport()
+                    performImport(to: target)
                 }
-            } message: {
-                Text("If a key already exists in \(selectedSlot.displayName), it will be permanently replaced. The private key will move from software storage to your YubiKey hardware.")
+            } message: { target in
+                Text("If a key already exists in \(target.slot.displayName) on YubiKey \(String(target.serial)), it will be permanently replaced. The private key will move from software storage to your YubiKey hardware.")
             }
             .alert("Import Error", isPresented: $showingError) {
                 Button("OK", role: .cancel) {}
@@ -246,6 +253,9 @@ struct ImportKeyToYubiKeyView: View {
                 }
             }
         }
+        .onDisappear {
+            importTask?.cancel()
+        }
     }
 
     private var connectionStatusText: String {
@@ -267,9 +277,14 @@ struct ImportKeyToYubiKeyView: View {
         }
     }
 
-    /// Connected now, or read earlier over NFC (import reconnects on demand).
+    /// Connected now, or read earlier. Import reconnects on demand, wired only.
     private var canReachKey: Bool {
         connectionManager.connectionState.isConnected || connectionManager.lastReadDevice != nil
+    }
+
+    /// The key was read over NFC and no wired connection is up.
+    private var readOverNFCOnly: Bool {
+        !connectionManager.connectionState.isConnected && connectionManager.lastReadDevice?.method == .nfc
     }
 
     private var canImport: Bool {
@@ -279,40 +294,67 @@ struct ImportKeyToYubiKeyView: View {
         !isImporting
     }
 
-    private func performImport() {
+    /// Name the YubiKey and slot in the overwrite confirmation; the import is
+    /// then bound to both.
+    private func confirmImport() {
+        do {
+            confirmedTarget = YubiKeyWriteTarget(
+                serial: try connectionManager.confirmableSerial(),
+                slot: selectedSlot
+            )
+            showingOverwriteWarning = true
+        } catch {
+            errorMessage = error.localizedDescription
+            showingError = true
+        }
+    }
+
+    private func performImport(to target: YubiKeyWriteTarget) {
         guard let keyID = selectedKeyID else { return }
 
         isImporting = true
 
-        Task {
-            do {
-                try await connectionManager.connect()
-                let result = try await importer.importKey(
-                    keyID: keyID,
-                    slot: selectedSlot,
-                    deleteFromKeychain: deleteAfterImport
-                )
+        importTask = Task {
+            // Held for the whole import, so no other operation shares the connection.
+            guard await connectionManager.beginExclusiveUse(preemptingPendingConnect: true) else {
+                // The sheet was dismissed while this was queued.
+                isImporting = false
+                return
+            }
+            defer { connectionManager.endExclusiveUse() }
 
-                // Close NFC session if applicable
-                #if os(iOS) && !os(visionOS)
-                if case .connected(_, .nfc) = connectionManager.connectionState {
-                    await connectionManager.closeNFCSession(withMessage: "Key imported successfully")
-                }
-                #endif
+            do {
+                try Task.checkCancellation()
+                // Connect with the wired transport chosen here, so an import
+                // never opens an NFC session. Any NFC session that is up belongs
+                // to another operation and is left alone.
+                let transport = try await importer.requireWiredTransport()
+                try await connectionManager.connect(preferredMethod: transport)
+
+                // Last point where a dismissed sheet stops the import: nothing
+                // has been written or deleted yet.
+                try Task.checkCancellation()
+
+                // The write itself runs in its own task, which dismissal does not
+                // cancel: stopping midway could leave the slot holding a key
+                // without its certificate.
+                let deleteSoftwareCopy = deleteAfterImport
+                let result = try await Task {
+                    try await importer.importKey(
+                        keyID: keyID,
+                        target: target,
+                        deleteFromKeychain: deleteSoftwareCopy
+                    )
+                }.value
 
                 isImporting = false
                 onImported(result)
                 dismiss()
 
             } catch {
-                // Close NFC session with error
-                #if os(iOS) && !os(visionOS)
-                if case .connected(_, .nfc) = connectionManager.connectionState {
-                    await connectionManager.closeNFCSession(withError: error.localizedDescription)
-                }
-                #endif
-
                 isImporting = false
+                // No alert for an import the user dismissed.
+                guard !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
                 showingError = true
             }

@@ -761,6 +761,7 @@ nonisolated enum SSHKeyGPGBridge {
             let ciphertext = leftPadLocal(cipherBytes, toCount: modulusByteLen)
             do {
                 return try await YubiKeySigner.shared.decryptWithPIV(
+                    serialNumber: reference.serialNumber,
                     slot: slot,
                     algorithm: reference.algorithm,
                     ciphertext: ciphertext
@@ -791,6 +792,7 @@ nonisolated enum SSHKeyGPGBridge {
             let shared: Data
             do {
                 shared = try await YubiKeySigner.shared.deriveSharedSecretWithPIV(
+                    serialNumber: reference.serialNumber,
                     slot: slot,
                     algorithm: reference.algorithm,
                     peerPublicKey: ephemeral
@@ -852,6 +854,7 @@ nonisolated enum SSHKeyGPGBridge {
             throw GPGSignError.malformedKey
         }
         let raw = try await YubiKeySigner.shared.signWithPIVPrehashed(
+            serialNumber: reference.serialNumber,
             slot: slot,
             algorithm: reference.algorithm,
             digest: hash,
