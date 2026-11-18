@@ -3,6 +3,42 @@
 All notable changes to the rootshell app for iPhone, iPad, Vision Pro, and Mac, newest first.
 Versions are listed as `release-build`, matching the version shown in Settings, About.
 
+## 1.0.16-179 - November 18, 2026
+
+### Keyboard Toolbars
+
+- **Terminal, Screen Sharing, and KVM** now have separate toolbar layouts. Remote toolbars follow the Terminal layout until customized. Copy, save, and restore layouts with their custom keys. Saved layouts survive resets.
+- **Toolbar layout** lets you pin keys on either side, scroll the main row, or move overflow into drawers. Set the toolbar height and minimum key width per display, including each Duo screen. Set and preview colors for all keys, by key type, or for individual keys.
+- **Glass Bar** is now the default on iOS and iPadOS 26 and later, with saved styles retained. Scrollback moves beneath Glass Bar and, where supported, the keyboard, while the prompt stays above. Use with Terminal Keyboard adds glass styling, and Theme Keys on Glass uses theme colors. Flat and Glass styles offer optional keycaps.
+
+### Live Weather
+
+- **AccuWeather** adds current observations, up to two hours of MinuteCast where available, and rain start and end times. It requires your own AccuWeather enterprise API key, stored in iCloud Keychain. Open-Meteo works without a key and supplies fallback weather when keys are missing or rejected, requests are rate-limited, or AccuWeather is unavailable.
+
+### YubiKey NFC and Post-Quantum Keys
+
+- **YubiKey operations** verify the intended device's serial number for PIV signing, OpenPGP, PIN changes, key generation, import, and deletion. Overwrite confirmations identify the key and slot. Operations reject other or unidentified devices, PIN caches are specific to each key, and Settings and signing take turns accessing the device.
+- **Signing cancellation** withdraws PIN prompts when signing is canceled or times out. Closing Generate or Import before writing cancels the pending operation. A write already in progress can finish.
+- **Private-key import** now requires a wired connection because NFC import transfers are unencrypted. RSA-4096 generation also requires USB-C. Added help for enabling USB PIV when a plugged-in key goes undetected.
+- **NFC device details and keys** stay visible between scans. Supported actions reconnect on demand.
+- **PIV support for ML-DSA-44, ML-DSA-65, and ML-DSA-87** includes key generation, import, discovery, and SSH signing. It requires YubiKey firmware 6.0 or later and a compatible `ssh-mldsa` server. Hardware with firmware 6.0 is currently in beta and has yet to reach general sale. Importing a hybrid ML-DSA-44 and Ed25519 key into a single PIV slot is unsupported.
+
+### Screen Sharing and KVM
+
+- **High Performance video** now works in cases where NAT or firewalls previously left it blank. On disconnect, Match Client releases the remote Mac's virtual display to help restore its physical display. On iPhone, iPad, and visionOS, Standard Match Client releases the display after about eight seconds in the background and reconnects on return. Quick app switches stay connected.
+- **Dictation corrections** replace the previous text. Software-keyboard selection, deletion, and composed input also work more reliably.
+- **Session controls** group Display and Keyboard options and consistently use Type Password. Commands follow Mac or Windows/Linux shortcuts. KVM adds a Computer Type setting that defaults to Mac.
+- **Captured Shift** in standalone macOS sessions no longer switches the local input method. Control-Option-Space continues to be forwarded as before.
+- **Wake Display Automatically** is on by default for GL.iNet Comet KVM. If video is missing when connecting or returning to the app, it nudges the pointer and holds Control to wake the display. Key presses, clicks, scrolling, or pasting stop the wake attempt. Fixed crashes caused by oversized video dimensions, replies, and lockout times.
+
+### Other Changes
+
+- **OpenAI API-key model choices** now use GPT-6.2 Astra and Sol. Saved GPT-6 choices migrate, and ChatGPT sign-in continues to use the account-specific lineup.
+- **Duo Settings search** uses the side rail on iOS 27.1 and later, preserving the query and Settings scroll position across folds. Duo toolbar keys stay compact.
+- **Save to Files** no longer crashes in file previews, including previews involving broken links. Remote previews copy the file contents.
+- **iPad search** no longer hangs when gaining focus during layout.
+- **Connection-type choices** remain clickable on macOS 27 after working around a system bug.
+
 ## 1.0.16-178 - November 14, 2026
 
 ### Terminal, Tailscale and Shortcuts
