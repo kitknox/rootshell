@@ -22,7 +22,9 @@ enum FileManagerPreviewCache {
     /// A file URL for `entry`: the file itself when local, else a fresh download.
     static func localURL(for entry: RFEntry, fs: FileSystemEndpoint) async throws -> URL {
         if case .local(let resolver) = fs.backend {
-            return URL(fileURLWithPath: resolver.resolve(entry.path))
+            let url = URL(fileURLWithPath: resolver.resolve(entry.path))
+            guard isExistingFile(url) else { throw FileManagerPreviewError.unavailable }
+            return url
         }
         guard entry.size <= maxPreviewBytes else {
             throw FileManagerPreviewError.tooLarge
@@ -31,15 +33,34 @@ enum FileManagerPreviewCache {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let destination = folder.appendingPathComponent(entry.name)
         let local = FileSystemEndpoint(backend: .local(.identity))
-        try await FileTreeCopier.copyTree(entry.path, to: destination.path, from: fs, to: local)
+        do {
+            // Bytes only: a copied link could dangle or point at an unrelated local file.
+            try await FileTreeCopier.copySingleFile(entry.path, to: destination.path, from: fs, to: local)
+        } catch {
+            try? FileManager.default.removeItem(at: folder)
+            throw error
+        }
         return destination
+    }
+
+    /// Quick Look's Save to Files asserts on a URL that isn't an existing file,
+    /// such as a broken link, so those never reach it.
+    private static func isExistingFile(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && !isDirectory.boolValue
     }
 }
 
 enum FileManagerPreviewError: LocalizedError {
     case tooLarge
+    case unavailable
 
     var errorDescription: String? {
-        String(localized: "This file is too large to preview.", comment: "File manager preview error")
+        switch self {
+        case .tooLarge:
+            String(localized: "This file is too large to preview.", comment: "File manager preview error")
+        case .unavailable:
+            String(localized: "This file can't be previewed. It may be a broken link.", comment: "File manager preview error")
+        }
     }
 }
