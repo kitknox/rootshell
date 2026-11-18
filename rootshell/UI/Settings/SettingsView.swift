@@ -166,10 +166,12 @@ struct SettingsFloatingSearchChrome: View {
     @FocusState private var isSearchFieldFocused: Bool
 
     @Binding var reservedHeight: CGFloat
+    // Owned by the presenter so an open search survives a Duo fold that
+    // swaps this pill for the rail's search.
+    @Binding var isPresented: Bool
+    @Binding var searchText: String
     let onSelect: (SettingsSearchEntry) -> Void
 
-    @State private var isPresented = false
-    @State private var searchText = ""
     @State private var collapsedPillHeight: CGFloat = 0
 
     private var displayedEntries: [SettingsSearchEntry] {
@@ -241,6 +243,12 @@ struct SettingsFloatingSearchChrome: View {
         // Terminal keyboard dismissal must not move the collapsed bar. Once
         // search opens, its panel follows the search field's keyboard normally.
         .ignoresSafeArea(isPresented ? [] : .keyboard, edges: .bottom)
+        .onAppear {
+            guard isPresented else { return }
+            DispatchQueue.main.async {
+                isSearchFieldFocused = true
+            }
+        }
         .onChange(of: isPresented) { _, newValue in
             if newValue {
                 DispatchQueue.main.async {
@@ -352,27 +360,10 @@ struct SettingsFloatingSearchChrome: View {
                             Button {
                                 select(entry)
                             } label: {
-                                HStack(spacing: 12) {
-                                    SettingsIcon(systemName: entry.systemImage)
-
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(entry.title)
-                                            .foregroundStyle(.primary)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                                        Text(entry.subtitle)
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundStyle(.tertiary)
-                                }
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 12)
-                                .background(fieldBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                SettingsSearchEntryLabel(entry: entry)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 12)
+                                    .background(fieldBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
@@ -392,7 +383,9 @@ struct SettingsFloatingSearchChrome: View {
     }
 
     private func dismissSearch() {
+        // Clear here too: a fold can remove this view before onChange runs.
         isPresented = false
+        searchText = ""
     }
 
     private func collapsedPillWidth(for containerWidth: CGFloat) -> CGFloat {
@@ -438,6 +431,145 @@ private struct SettingsFloatingSearchBarHeightPreferenceKey: PreferenceKey {
     }
 }
 
+private struct SettingsSearchEntryLabel: View {
+    let entry: SettingsSearchEntry
+    var showsChevron = true
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SettingsIcon(systemName: entry.systemImage)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(entry.title)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(entry.subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+}
+
+/// The iPhone settings root. Where the stack draws its bar as Duo's vertical
+/// rail, search is a rail button like system Settings; elsewhere the floating
+/// pill owns search and `usesRailSearch` stays false.
+private struct SettingsRootContent: View {
+    @Binding var showDebugSettings: Bool
+    @Binding var usesRailSearch: Bool
+    @Binding var isSearchPresented: Bool
+    @Binding var searchText: String
+    let onSubmit: (SettingsSearchEntry) -> Void
+
+    var body: some View {
+        #if !targetEnvironment(macCatalyst) && !os(visionOS)
+        if #available(iOS 27.1, *) {
+            SettingsRailSearchRoot(
+                showDebugSettings: $showDebugSettings,
+                usesRailSearch: $usesRailSearch,
+                isSearchPresented: $isSearchPresented,
+                searchText: $searchText,
+                onSubmit: onSubmit
+            )
+        } else {
+            SettingsHomeList(showDebugSettings: $showDebugSettings)
+        }
+        #else
+        SettingsHomeList(showDebugSettings: $showDebugSettings)
+        #endif
+    }
+}
+
+#if !targetEnvironment(macCatalyst) && !os(visionOS)
+@available(iOS 27.1, *)
+private struct SettingsRailSearchRoot: View {
+    // Read inside the stack: it describes this sheet's bar, not MainView's.
+    @Environment(\.toolbarVerticalEdge) private var verticalEdge
+    @Binding var showDebugSettings: Bool
+    @Binding var usesRailSearch: Bool
+    @Binding var isSearchPresented: Bool
+    @Binding var searchText: String
+    let onSubmit: (SettingsSearchEntry) -> Void
+
+    private var showsResults: Bool { verticalEdge != nil && isSearchPresented }
+
+    var body: some View {
+        // The home list never changes structural identity, so opening search
+        // or folding between rail and pill keeps its scroll position.
+        SettingsHomeList(showDebugSettings: $showDebugSettings)
+            // Before the overlay, so only the covered rows leave VoiceOver.
+            .accessibilityHidden(showsResults)
+            .overlay {
+                if verticalEdge != nil {
+                    Group {
+                        if isSearchPresented {
+                            results
+                        } else {
+                            Color.clear.allowsHitTesting(false)
+                        }
+                    }
+                    .searchable(text: $searchText, isPresented: $isSearchPresented, prompt: Text("Search Settings"))
+                    .searchToolbarBehavior(.minimize)
+                    .onSubmit(of: .search) {
+                        // Same push as a row tap; search stays active.
+                        if let first = SettingsSearchEntry.filtered(for: searchText).first {
+                            onSubmit(first)
+                        }
+                    }
+                    .toolbar {
+                        DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                    }
+                }
+            }
+            // Search state carries across the fold; the pill reopens with it.
+            .onChange(of: verticalEdge != nil, initial: true) { _, inRail in
+                usesRailSearch = inRail
+            }
+    }
+
+    private var results: some View {
+        let entries = SettingsSearchEntry.filtered(for: searchText)
+        let isQueryEmpty = searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return List {
+            if entries.isEmpty {
+                ContentUnavailableView.search(text: searchText)
+                    .listRowBackground(Color.clear)
+            } else {
+                Section {
+                    // Push with search still active, like system Settings: a
+                    // push racing search's dismissal is dropped by the stack.
+                    ForEach(entries) { entry in
+                        switch entry.action {
+                        case .section(let section):
+                            NavigationLink(value: section) {
+                                SettingsSearchEntryLabel(entry: entry, showsChevron: false)
+                            }
+                            .themedRow()
+                        case .destination(let destination):
+                            NavigationLink(value: destination) {
+                                SettingsSearchEntryLabel(entry: entry, showsChevron: false)
+                            }
+                            .themedRow()
+                        }
+                    }
+                } header: {
+                    isQueryEmpty ? Text("Suggested") : Text("Results")
+                }
+            }
+        }
+        .themedList()
+    }
+}
+#endif
+
 struct SettingsView: View {
     var initialDestination: SettingsDestination? = nil
 
@@ -447,15 +579,24 @@ struct SettingsView: View {
 
     @State private var showDebugSettings = false
     @State private var searchReservedHeight: CGFloat = 88
+    @State private var usesRailSearch = false
+    @State private var isSearchPresented = false
+    @State private var searchText = ""
 
     private var showsRootSearch: Bool {
-        navigationPath.isEmpty
+        navigationPath.isEmpty && !usesRailSearch
     }
 
     var body: some View {
         ZStack(alignment: .bottom) {
             NavigationStack(path: $navigationPath) {
-                SettingsHomeList(showDebugSettings: $showDebugSettings)
+                SettingsRootContent(
+                    showDebugSettings: $showDebugSettings,
+                    usesRailSearch: $usesRailSearch,
+                    isSearchPresented: $isSearchPresented,
+                    searchText: $searchText,
+                    onSubmit: handleSearchSelection
+                )
                     .safeAreaInset(edge: .bottom) {
                         if showsRootSearch {
                             Color.clear.frame(height: searchReservedHeight)
@@ -496,6 +637,8 @@ struct SettingsView: View {
             if showsRootSearch {
                 SettingsFloatingSearchChrome(
                     reservedHeight: $searchReservedHeight,
+                    isPresented: $isSearchPresented,
+                    searchText: $searchText,
                     onSelect: handleSearchSelection
                 )
             }

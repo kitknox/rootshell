@@ -18,6 +18,8 @@ struct SettingsSplitView: View {
 
     @State private var showDebugSettings = false
     @State private var searchReservedHeight: CGFloat = 88
+    @State private var isSearchPresented = false
+    @State private var searchText = ""
 
     private var showsRootSearch: Bool {
         navigationPath.isEmpty
@@ -71,6 +73,8 @@ struct SettingsSplitView: View {
             if showsRootSearch {
                 SettingsFloatingSearchChrome(
                     reservedHeight: $searchReservedHeight,
+                    isPresented: $isSearchPresented,
+                    searchText: $searchText,
                     onSelect: handleSearchSelection
                 )
             }
