@@ -51,22 +51,26 @@ final class YubiKeyKeyGenerator {
 
     /// Generate a new key pair on the YubiKey
     /// - Parameters:
-    ///   - slot: PIV slot to generate key in
+    ///   - target: YubiKey and slot the user confirmed; any other key is
+    ///     refused before the slot is touched
     ///   - algorithm: Algorithm for the key (ECDSA P-256/P-384, RSA 2048/4096, Ed25519 on 5.7+)
     ///   - name: User-specified name for the key (appears in public key comment)
     ///   - managementKey: PIV management key (uses default if nil)
     ///   - pin: PIN for slots that require it
     /// - Returns: Generated key info including public key in SSH format
     func generateKey(
-        in slot: PIVSlot,
+        on target: YubiKeyWriteTarget,
         algorithm: YubiKeyAlgorithm,
         name: String,
         managementKey: Data? = nil,
         pin: String? = nil
     ) async throws -> GeneratedYubiKeyKey {
+        let slot = target.slot
         Self.logger.info("Generating \(algorithm.rawValue) key in slot \(slot.rawValue)")
 
-        let session = try await connectionManager.getPIVSession()
+        // A re-tap or re-plug can bring up another YubiKey than the one confirmed.
+        // The session is tied to the connection that was checked.
+        let (session, method, _) = try await connectionManager.verifiedPIVSession(serial: target.serial)
         let pivSlot = slot.toYubiKitSlot
 
         // Check Ed25519 support (requires YubiKey 5.7+)
@@ -82,7 +86,7 @@ final class YubiKeyKeyGenerator {
         }
         // On NFC power the key never answers an RSA-4096 generate; the session
         // ends in a tag response error instead.
-        if algorithm == .rsa4096, case .connected(_, .nfc) = connectionManager.connectionState {
+        if algorithm == .rsa4096, method == .nfc {
             throw YubiKeyError.unsupportedFeature("RSA-4096 keys can't be generated over NFC. Connect the YubiKey with USB-C instead.")
         }
 

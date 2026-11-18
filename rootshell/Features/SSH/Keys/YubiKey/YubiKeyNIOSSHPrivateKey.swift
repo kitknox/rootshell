@@ -685,7 +685,7 @@ private func performSigning<D: DataProtocol>(
     let semaphore = DispatchSemaphore(value: 0)
     var signatureResult: Result<ByteBuffer, Error>?
 
-    Task.detached(priority: .high) {
+    let task = Task.detached(priority: .high) {
         do {
             let signer = await YubiKeySigner.shared
             let dataArray = Array(data)
@@ -698,6 +698,7 @@ private func performSigning<D: DataProtocol>(
 
             yubiKeyNIOSSHLogger.info("Signing with PIV slot: \(pivSlot.rawValue), algorithm: \(reference.algorithm.rawValue)")
             let signature = try await signer.signWithPIV(
+                serialNumber: reference.serialNumber,
                 slot: pivSlot,
                 algorithm: reference.algorithm,
                 data: Data(dataArray),
@@ -716,6 +717,9 @@ private func performSigning<D: DataProtocol>(
 
     guard timeoutResult == .success else {
         yubiKeyNIOSSHLogger.error("YubiKey signing timed out after \(timeout) seconds")
+        // SSH reports failure now. Cancel the request so it doesn't prompt for
+        // a PIN or sign later, when its turn for the key comes.
+        task.cancel()
         throw YubiKeyError.signingFailed("Signing operation timed out")
     }
 

@@ -361,7 +361,9 @@ class SSHAgentSigner {
         data: Data,
         flags: UInt32
     ) async throws -> ByteBuffer {
-        let signer = YubiKeySigner()
+        // The shared signer: its queue and PIN prompt serialise agent requests
+        // with direct SSH signing.
+        let signer = YubiKeySigner.shared
 
         // YubiKey PIV signing only - FIDO2 is handled via Apple AuthenticationServices
         guard let slot = reference.pivSlot else {
@@ -370,6 +372,7 @@ class SSHAgentSigner {
 
         Self.logger.info("Signing with YubiKey PIV slot \(slot.rawValue)")
         return try await signer.signWithPIV(
+            serialNumber: reference.serialNumber,
             slot: slot,
             algorithm: reference.algorithm,
             data: data,

@@ -28,6 +28,8 @@ struct YubiKeyManagementView: View {
     @State private var showingGeneratedKeySheet = false
     @State private var showingPINChangeSheet = false
     @State private var isChangingPIN = false
+    /// YubiKey shown when Change PIV PIN was opened.
+    @State private var pinChangeSerial: UInt32?
     @State private var showingDeleteConfirmation = false
     @State private var keyToDelete: DiscoveredYubiKeyKey?
     @State private var isDeletingKey = false
@@ -35,6 +37,9 @@ struct YubiKeyManagementView: View {
     @State private var importResult: YubiKeyKeyImporter.ImportResult?
     @State private var showingImportResultSheet = false
     @State private var discoverTask: Task<Void, Never>?
+    /// Bumped per discovery run, so a superseded run that finishes late
+    /// doesn't clear the spinner of the one that replaced it.
+    @State private var discoverRun = 0
 
     var body: some View {
         List {
@@ -125,7 +130,13 @@ struct YubiKeyManagementView: View {
                     .themedRow()
 
                     Button {
-                        showingPINChangeSheet = true
+                        do {
+                            pinChangeSerial = try connectionManager.confirmableSerial()
+                            showingPINChangeSheet = true
+                        } catch {
+                            errorMessage = error.localizedDescription
+                            showingError = true
+                        }
                     } label: {
                         Label("Change PIV PIN", systemImage: "lock.rotation")
                     }
@@ -190,13 +201,17 @@ struct YubiKeyManagementView: View {
         }
         .sheet(isPresented: $showingPINPrompt) {
             if let request = connectionManager.pendingPINRequest {
+                // Completions carry the displayed request's ID and the view is keyed
+                // by it, so a sheet left over from a withdrawn request can neither
+                // answer nor hide the prompt of the request that replaced it.
                 YubiKeyPINPromptView(request: request) { pin in
-                    connectionManager.completePINRequest(with: pin)
-                    showingPINPrompt = false
+                    connectionManager.completePINRequest(id: request.id, with: pin)
+                    showingPINPrompt = connectionManager.pendingPINRequest != nil
                 } onCancel: {
-                    connectionManager.completePINRequest(with: nil)
-                    showingPINPrompt = false
+                    connectionManager.completePINRequest(id: request.id, with: nil)
+                    showingPINPrompt = connectionManager.pendingPINRequest != nil
                 }
+                .id(request.id)
                 .themedSubSheet(sheetThemeColors)
             }
         }
@@ -421,10 +436,18 @@ struct YubiKeyManagementView: View {
 
         isDiscovering = true
         discoveredKeys = []
+        discoverRun += 1
+        let run = discoverRun
 
         discoverTask = Task {
-            defer { isDiscovering = false }
+            defer { if run == discoverRun { isDiscovering = false } }
+            // Held from connect to the NFC close, so no other operation shares
+            // or ends this session. A previous attempt still waiting for a
+            // wired key gives way.
+            guard await connectionManager.beginExclusiveUse(preemptingPendingConnect: true) else { return }
+            defer { connectionManager.endExclusiveUse() }
             do {
+                try Task.checkCancellation()
                 try await connectionManager.connect(preferredMethod: preferredMethod)
                 try Task.checkCancellation()
                 try await discoverKeysAsync()
@@ -472,9 +495,14 @@ struct YubiKeyManagementView: View {
 
     private func discoverKeys() {
         isDiscovering = true
+        discoverRun += 1
+        let run = discoverRun
 
         Task {
-            defer { isDiscovering = false }
+            defer { if run == discoverRun { isDiscovering = false } }
+            // Waits behind an operation that is using the connection.
+            guard await connectionManager.beginExclusiveUse() else { return }
+            defer { connectionManager.endExclusiveUse() }
             do {
                 try await discoverKeysAsync()
             } catch {
@@ -527,6 +555,11 @@ struct YubiKeyManagementView: View {
     }
 
     private func changePIN(oldPIN: String, newPIN: String) {
+        guard let serial = pinChangeSerial else {
+            errorMessage = YubiKeyError.notConnected.localizedDescription
+            showingError = true
+            return
+        }
         isChangingPIN = true
 
         Task {
@@ -534,8 +567,10 @@ struct YubiKeyManagementView: View {
 
             do {
                 let signer = YubiKeySigner.shared
-                try await signer.changePIN(oldPIN: oldPIN, newPIN: newPIN)
+                try await signer.changePIN(oldPIN: oldPIN, newPIN: newPIN, expectedSerial: serial)
                 // PIN changed successfully - no need to show additional UI
+            } catch YubiKeyError.userCancelled {
+                // Dismissing the NFC sheet needs no alert.
             } catch {
                 errorMessage = error.localizedDescription
                 showingError = true
@@ -742,6 +777,11 @@ struct GenerateYubiKeyKeyView: View {
     @State private var errorMessage: String?
     @State private var showingError = false
     @State private var showingOverwriteWarning = false
+    /// YubiKey and slot named by the overwrite confirmation.
+    @State private var confirmedTarget: YubiKeyWriteTarget?
+    /// The generation in flight, cancelled when the sheet goes away so one
+    /// still waiting for the key never overwrites a slot after dismissal.
+    @State private var generateTask: Task<Void, Never>?
     /// Generation will reach the key over NFC, where RSA-4096 never completes.
     @State private var willUseNFC = false
 
@@ -838,18 +878,18 @@ struct GenerateYubiKeyKeyView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Generate") {
-                        showingOverwriteWarning = true
+                        confirmGenerate()
                     }
                     .disabled(keyName.isEmpty || isGenerating)
                 }
             }
-            .alert("Overwrite Existing Key?", isPresented: $showingOverwriteWarning) {
+            .alert("Overwrite Existing Key?", isPresented: $showingOverwriteWarning, presenting: confirmedTarget) { target in
                 Button("Cancel", role: .cancel) {}
                 Button("Generate", role: .destructive) {
-                    generateKey()
+                    generateKey(on: target)
                 }
-            } message: {
-                Text("If a key already exists in \(selectedSlot.displayName), it will be permanently replaced. This cannot be undone.")
+            } message: { target in
+                Text("If a key already exists in \(target.slot.displayName) on YubiKey \(String(target.serial)), it will be permanently replaced. This cannot be undone.")
             }
             .alert("Error", isPresented: $showingError) {
                 Button("OK", role: .cancel) {}
@@ -875,27 +915,60 @@ struct GenerateYubiKeyKeyView: View {
                 }
             }
         }
+        .onDisappear {
+            generateTask?.cancel()
+        }
     }
 
-    private func generateKey() {
+    /// Name the YubiKey and slot in the overwrite confirmation; generation is
+    /// then bound to both.
+    private func confirmGenerate() {
+        do {
+            confirmedTarget = YubiKeyWriteTarget(
+                serial: try connectionManager.confirmableSerial(),
+                slot: selectedSlot
+            )
+            showingOverwriteWarning = true
+        } catch {
+            errorMessage = error.localizedDescription
+            showingError = true
+        }
+    }
+
+    private func generateKey(on target: YubiKeyWriteTarget) {
         isGenerating = true
 
-        Task {
+        generateTask = Task {
+            // Held from connect to the NFC close, so no other operation shares
+            // or ends this session.
+            guard await connectionManager.beginExclusiveUse(preemptingPendingConnect: true) else {
+                // The sheet was dismissed while this was queued.
+                isGenerating = false
+                return
+            }
+            defer { connectionManager.endExclusiveUse() }
+
             do {
-                // NFC sessions end after each operation; reconnect on demand.
+                try Task.checkCancellation()
+                // NFC sessions end after each operation; reconnect on demand. The
+                // generator refuses any YubiKey but the confirmed one.
                 try await connectionManager.connect()
-                guard case .connected(let serial, _) = connectionManager.connectionState else {
-                    throw YubiKeyError.notConnected
-                }
+
+                // Last point where a dismissed sheet stops the generation: the
+                // slot has not been touched yet.
+                try Task.checkCancellation()
 
                 let generator = YubiKeyKeyGenerator()
+                let algorithm = selectedAlgorithm
+                let name = keyName
                 let generated: GeneratedYubiKeyKey
                 do {
-                    generated = try await generator.generateKey(
-                        in: selectedSlot,
-                        algorithm: selectedAlgorithm,
-                        name: keyName
-                    )
+                    // The write itself runs in its own task, which dismissal does
+                    // not cancel: stopping midway could leave the slot holding a
+                    // key without its certificate.
+                    generated = try await Task {
+                        try await generator.generateKey(on: target, algorithm: algorithm, name: name)
+                    }.value
                 } catch {
                     #if os(iOS) && !os(visionOS)
                     if case .connected(_, .nfc) = connectionManager.connectionState {
@@ -913,19 +986,22 @@ struct GenerateYubiKeyKeyView: View {
                 // Import the key automatically
                 let discovery = YubiKeyKeyDiscovery()
                 let discoveredKey = DiscoveredYubiKeyKey(
-                    yubiKeySerial: serial,
-                    slot: selectedSlot,
-                    algorithm: selectedAlgorithm,
+                    yubiKeySerial: target.serial,
+                    slot: target.slot,
+                    algorithm: algorithm,
                     publicKeyData: generated.publicKeyData,
                     fingerprint: generated.fingerprint,
-                    requiresPIN: selectedSlot.requiresPIN
+                    requiresPIN: target.slot.requiresPIN
                 )
-                _ = try discovery.importKey(discoveredKey, name: keyName, yubiKeySerial: serial)
+                _ = try discovery.importKey(discoveredKey, name: name, yubiKeySerial: target.serial)
 
                 onGenerated(generated, discoveredKey)
             } catch {
-                errorMessage = error.localizedDescription
-                showingError = true
+                // No alert for a generation the user dismissed.
+                if !Task.isCancelled {
+                    errorMessage = error.localizedDescription
+                    showingError = true
+                }
             }
             isGenerating = false
         }

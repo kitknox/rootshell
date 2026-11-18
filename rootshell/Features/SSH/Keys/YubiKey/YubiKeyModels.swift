@@ -215,6 +215,15 @@ struct YubiKeyDeviceSnapshot: Equatable, Sendable {
     }
 }
 
+// MARK: - Write Target
+
+/// The YubiKey and slot an overwrite confirmation named. The write that follows
+/// is bound to both, so a different key that answers the reconnect is refused.
+struct YubiKeyWriteTarget: Equatable, Sendable {
+    let serial: UInt32
+    let slot: PIVSlot
+}
+
 // MARK: - YubiKey Info
 
 /// Metadata about a PIV key stored on a YubiKey
@@ -325,13 +334,20 @@ enum YubiKeyConnectionState: Equatable, Sendable {
 
 /// Model for PIN entry requests shown to the user
 struct YubiKeyPINRequest: Identifiable, Equatable, Sendable {
-    let id = UUID()
+    /// Names this request to the prompt that shows it; a completion must quote it.
+    let id: UUID
     let keyName: String
     let attemptsRemaining: Int?
     let completion: @Sendable (String?) -> Void  // nil = cancelled
 
     // Sendable conformance requires nonisolated init
-    nonisolated init(keyName: String, attemptsRemaining: Int?, completion: @escaping @Sendable (String?) -> Void) {
+    nonisolated init(
+        id: UUID = UUID(),
+        keyName: String,
+        attemptsRemaining: Int?,
+        completion: @escaping @Sendable (String?) -> Void
+    ) {
+        self.id = id
         self.keyName = keyName
         self.attemptsRemaining = attemptsRemaining
         self.completion = completion

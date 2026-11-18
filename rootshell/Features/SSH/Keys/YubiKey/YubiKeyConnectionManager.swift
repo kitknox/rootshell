@@ -10,7 +10,7 @@
 
 import Foundation
 import Combine
-import os.log
+import os
 import YubiKit
 #if os(iOS) && !os(visionOS)
 import CoreNFC
@@ -50,21 +50,23 @@ final class YubiKeyConnectionManager {
 
     // MARK: - Connection Storage (internal, not observed)
 
-    /// Current active Lightning connection
-    #if os(iOS) && !DISABLE_MFI_LIGHTNING
-    @ObservationIgnored private var lightningConnection: LightningSmartCardConnection?
-    #endif
+    /// A live connection with the transport it runs on and the serial that was
+    /// read over it when it opened. One record, so the three can't drift apart.
+    private struct LiveConnection {
+        /// The connect attempt that opened it.
+        let id: Int
+        let connection: any SmartCardConnection
+        let method: YubiKeyConnectionMethod
+        let serial: UInt32
+    }
 
-    /// Current active NFC connection
-    #if os(iOS) && !os(visionOS)
-    @ObservationIgnored private var nfcConnection: NFCSmartCardConnection?
-    #endif
+    /// The one connection in use, if any.
+    @ObservationIgnored private var live: LiveConnection?
 
-    /// Current active USB-C connection
-    @ObservationIgnored private var usbConnection: USBSmartCardConnection?
-
-    /// Serial number of the connected YubiKey (cached for display purposes only)
-    private(set) var connectedSerial: UInt?
+    /// Bumped by every connect() and disconnect(). An attempt publishes its
+    /// connection only while its number is still current, so a tap or insert
+    /// that lands after a newer attempt began is closed instead of going live.
+    @ObservationIgnored private var connectAttempt = 0
 
     /// Firmware version of the connected YubiKey (e.g., "5.7.0")
     private(set) var connectedFirmwareVersion: String?
@@ -76,15 +78,13 @@ final class YubiKeyConnectionManager {
     /// still show it and offer actions that reconnect on demand.
     private(set) var lastReadDevice: YubiKeyDeviceSnapshot?
 
-    /// Current connection method
-    @ObservationIgnored private var currentConnectionMethod: YubiKeyConnectionMethod?
-
     /// Whether an NFC session is currently active
     @ObservationIgnored private var isNFCSessionActive = false
 
-    /// In-flight wired-transport connect task (USB-C or Lightning). NFC is excluded
-    /// because the system NFC sheet provides its own cancel affordance.
-    @ObservationIgnored private var pendingConnectTask: Task<Void, Error>?
+    /// The in-flight connect attempt on any transport. A later connect() joins
+    /// it (NFC to NFC) or cancels and drains it before opening its own, so the
+    /// SDK never sees two opens at once.
+    @ObservationIgnored private var pendingConnect: (task: Task<Void, Error>, method: YubiKeyConnectionMethod, attempt: Int)?
 
     /// Bumped whenever we deliberately close connections. Disconnection
     /// monitors capture the value they were spawned under; a monitor whose
@@ -92,6 +92,40 @@ final class YubiKeyConnectionManager {
     /// tear down state belonging to a newer one (the SDK connections are
     /// structs, so there's no reference identity to compare instead).
     @ObservationIgnored private var connectionGeneration = 0
+
+    /// Whether an operation currently has exclusive use of the YubiKey.
+    @ObservationIgnored private var isInUse = false
+
+    /// An operation queued for exclusive use, with what it asked for on arrival.
+    /// Whether a queued operation's task has been cancelled. Set from the
+    /// task's cancellation handler on whatever thread cancels it, so the
+    /// preemption check sees it at once instead of after a hop to the main actor.
+    private nonisolated final class WaiterCancellation: Sendable {
+        private let flag = OSAllocatedUnfairLock(initialState: false)
+
+        var isCancelled: Bool {
+            flag.withLock { $0 }
+        }
+
+        func cancel() {
+            flag.withLock { $0 = true }
+        }
+    }
+
+    private struct UseWaiter {
+        /// Resumed with whether the waiter now owns exclusive use.
+        let continuation: CheckedContinuation<Bool, Never>
+        /// The operation ahead of it should stop waiting for a key, unless
+        /// this waiter's task has since been cancelled.
+        let preempts: Bool
+        let cancellation: WaiterCancellation
+        /// Serial of the YubiKey whose live NFC session it can take over and
+        /// will end itself; nil if it opens its own.
+        let nfcSessionSerial: UInt32?
+    }
+
+    /// Operations waiting for exclusive use, oldest first.
+    @ObservationIgnored private var useWaiters: [UseWaiter] = []
 
     /// Outer safety bound for a wired connect. The real gate is the user's
     /// Cancel in the hardware-key overlay (wait-until-cancel UX); this large
@@ -130,6 +164,116 @@ final class YubiKeyConnectionManager {
         Self.logger.info("Available YubiKey transports: \(transports.map { $0.rawValue }.joined(separator: ", "))")
     }
 
+    // MARK: - Exclusive Use
+
+    /// Wait for exclusive use of the YubiKey. Every operation that connects,
+    /// talks to the key or ends an NFC session holds this for its whole run, so
+    /// one can't close or reuse a session another is still working on.
+    /// - Returns: Whether the caller now owns exclusive use. False if its task
+    ///   was cancelled before or while it queued: it then left the queue at
+    ///   once, owns nothing, and must not call `endExclusiveUse()`. On true,
+    ///   pair with `endExclusiveUse()` in a defer.
+    /// - Parameters:
+    ///   - preemptingPendingConnect: Settings actions pass true. The operation
+    ///     ahead then gives way instead of waiting for a key: a wired wait
+    ///     already running is cancelled, and one not yet started is refused
+    ///     in connect(). Signing passes false and simply queues.
+    ///   - serial: Signing passes the serial its key lives on: it can take
+    ///     over an NFC session to that YubiKey left open by the operation
+    ///     ahead, and ends it itself.
+    func beginExclusiveUse(
+        preemptingPendingConnect: Bool = false,
+        reusingNFCSessionOf serial: UInt32? = nil
+    ) async -> Bool {
+        // A caller that has already given up neither queues nor preempts.
+        guard !Task.isCancelled else { return false }
+        guard isInUse else {
+            isInUse = true
+            return true
+        }
+        let preempts = preemptingPendingConnect
+        if preempts {
+            cancelPendingConnection()
+        }
+        Self.logger.info("Waiting for the current YubiKey operation to finish")
+        let cancellation = WaiterCancellation()
+        // The queue entry is also the record of the preemption request: the
+        // operation ahead checks it before it starts waiting for a key.
+        // Resumed with true by handOffExclusiveUse(), isInUse still set, or
+        // with false by abandonWait() once its task is cancelled.
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                useWaiters.append(UseWaiter(
+                    continuation: continuation,
+                    preempts: preempts,
+                    cancellation: cancellation,
+                    nfcSessionSerial: serial
+                ))
+            }
+        } onCancel: {
+            // The caller gave up while queued. From this instant it no longer
+            // makes the operation ahead give way; it leaves the queue on the
+            // next main-actor turn rather than holding its place and its data
+            // until every operation ahead has finished.
+            cancellation.cancel()
+            Task { @MainActor in
+                self.abandonWait(cancellation)
+            }
+        }
+    }
+
+    /// Take a cancelled waiter out of the queue and tell it that it owns
+    /// nothing. No-op if it was handed exclusive use first.
+    private func abandonWait(_ cancellation: WaiterCancellation) {
+        guard let index = useWaiters.firstIndex(where: { $0.cancellation === cancellation }) else { return }
+        useWaiters.remove(at: index).continuation.resume(returning: false)
+    }
+
+    /// Give up exclusive use. An NFC session still open is ended first unless
+    /// the next operation takes it over, so the sheet never outlives the
+    /// operations that use it.
+    func endExclusiveUse() {
+        #if os(iOS) && !os(visionOS)
+        if live?.method == .nfc, !nextOperationReusesNFCSession {
+            Task {
+                // Still held during the close, so nothing starts on this session.
+                await closeNFCSessionImmediately()
+                handOffExclusiveUse()
+            }
+            return
+        }
+        #endif
+        handOffExclusiveUse()
+    }
+
+    /// Hand exclusive use straight to the next waiter. The flag clears only
+    /// when nobody is queued: clearing it first would let a new arrival run
+    /// alongside the resumed waiter.
+    private func handOffExclusiveUse() {
+        guard !useWaiters.isEmpty else {
+            isInUse = false
+            return
+        }
+        useWaiters.removeFirst().continuation.resume(returning: true)
+    }
+
+    /// Whether the operation queued next takes over the live NFC session and
+    /// ends it itself: it must be for the YubiKey that session is connected
+    /// to. Only then may the current operation leave the session open.
+    var nextOperationReusesNFCSession: Bool {
+        guard let live, live.method == .nfc, live.serial != 0,
+              let next = useWaiters.first, !next.cancellation.isCancelled,
+              let serial = next.nfcSessionSerial else {
+            return false
+        }
+        return serial == live.serial
+    }
+
+    /// A queued operation asked the current one to stop waiting for a key.
+    private var isPreempted: Bool {
+        useWaiters.contains { $0.preempts && !$0.cancellation.isCancelled }
+    }
+
     // MARK: - Connection Methods
 
     /// Connect to YubiKey using the best available method
@@ -137,24 +281,59 @@ final class YubiKeyConnectionManager {
     /// - Throws: YubiKeyError if connection fails
     func connect(preferredMethod: YubiKeyConnectionMethod? = nil) async throws {
         // If already connected, return
-        if case .connected = connectionState, activeSmartCardConnection != nil {
+        if case .connected = connectionState, live != nil {
             Self.logger.info("Already connected to YubiKey")
             return
         }
 
-        // If a previous wired attempt is still polling for a key, cancel it
-        // so the user can switch transports without waiting for the timeout.
-        if let prior = pendingConnectTask {
-            prior.cancel()
-            _ = try? await prior.value
-            pendingConnectTask = nil
+        // Requests are ordered by when they arrive, not by when their
+        // transport query returns.
+        let generationAtEntry = connectAttempt
+
+        let method: YubiKeyConnectionMethod
+        if let preferredMethod {
+            method = preferredMethod
+        } else {
+            method = await selectBestTransport()
+            // An attempt that was pending may have gone live meanwhile.
+            if case .connected = connectionState, live != nil {
+                Self.logger.info("Already connected to YubiKey")
+                return
+            }
+            // A newer connect() or a disconnect arrived during the query. This
+            // older request must not cancel it or start over it.
+            guard connectAttempt == generationAtEntry else { throw YubiKeyError.userCancelled }
+        }
+
+        // One NFC scan runs at a time, and it belongs to the operation that
+        // started it. A second request neither shares the session, where one
+        // caller could close it under the other, nor discards the pending tap.
+        if method == .nfc, let pending = pendingConnect, pending.method == .nfc, !pending.task.isCancelled {
+            throw YubiKeyError.operationInProgress
+        }
+
+        // Supersede every earlier attempt: one still waiting on a tap or
+        // insert must not publish its connection later.
+        connectAttempt += 1
+        let attempt = connectAttempt
+
+        // If a previous attempt is still waiting for a key, cancel it and wait
+        // for it to unwind, so the user can switch transports without waiting
+        // for the timeout and the SDK never has two opens in flight.
+        if let prior = pendingConnect {
+            prior.task.cancel()
+            _ = try? await prior.task.value
+            guard attempt == connectAttempt else { throw YubiKeyError.userCancelled }
+            if pendingConnect?.attempt == prior.attempt {
+                pendingConnect = nil
+            }
         }
 
         // Self-heal: a connection left behind by a failed operation (state no
         // longer .connected) still occupies the SDK's per-transport slot, so
         // opening a new one would fail with "another connection in progress".
         // Close it before reconnecting — unless a live operation owns it.
-        if activeSmartCardConnection != nil {
+        if live != nil {
             switch connectionState {
             case .connected:
                 // The drained connect attempt above finished successfully
@@ -171,83 +350,129 @@ final class YubiKeyConnectionManager {
             }
         }
 
-        let method: YubiKeyConnectionMethod
-        if let preferredMethod {
-            method = preferredMethod
-        } else {
-            method = await selectBestTransport()
-        }
-        currentConnectionMethod = method
+        // A newer connect() or a disconnect arrived during the awaits above.
+        guard attempt == connectAttempt else { throw YubiKeyError.userCancelled }
+        // A queued Settings action asked this operation to give way, possibly
+        // before it had a pending connect to cancel. Don't start a wait for a
+        // key that the action would be stuck behind.
+        guard !isPreempted else { throw YubiKeyError.userCancelled }
         setState(.connecting(method: method))
 
         let task = Task { [weak self] in
             guard let self else { return }
-            try await self.performConnect(method: method)
+            try await self.performConnect(method: method, attempt: attempt)
         }
-        if method != .nfc {
-            pendingConnectTask = task
-        }
+        pendingConnect = (task, method, attempt)
         defer {
-            if pendingConnectTask == task {
-                pendingConnectTask = nil
+            if pendingConnect?.attempt == attempt {
+                pendingConnect = nil
             }
         }
 
         do {
-            try await task.value
+            try await Self.waitForConnect(task)
+        } catch {
+            // Cancelled through its caller, the attempt has nobody else to
+            // reset the state it left at connecting.
+            if attempt == connectAttempt, connectionState.connectingTransport != nil {
+                setState(.disconnected)
+            }
+            throw error
+        }
+    }
+
+    /// Await a connect attempt, reporting cancellation as userCancelled. If the
+    /// caller is cancelled, so is the attempt, and this still waits for it to
+    /// unwind: the wait for a key ends, and the caller releases the queue only
+    /// once the SDK connection is gone.
+    private static func waitForConnect(_ task: Task<Void, Error>) async throws {
+        do {
+            try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
         } catch is CancellationError {
             // Cancelled by cancelPendingConnection() or a subsequent connect call.
             // State has already been reset by the canceller; surface as userCancelled.
             throw YubiKeyError.userCancelled
-        } catch {
-            throw error
         }
     }
 
     /// Perform the actual connect work. Split out from connect() so the outer
     /// function can wrap it in a cancellable Task.
-    private func performConnect(method: YubiKeyConnectionMethod) async throws {
+    private func performConnect(method: YubiKeyConnectionMethod, attempt: Int) async throws {
+        // Held here, not in `live`, until its identity is read and the attempt
+        // is confirmed current.
+        var opened: (any SmartCardConnection)?
         do {
+            let connection: any SmartCardConnection
             switch method {
             case .nfc:
                 #if os(iOS) && !os(visionOS)
-                try await connectNFC()
+                connection = try await connectNFC()
                 #else
                 throw YubiKeyError.nfcNotAvailable
                 #endif
             case .lightning:
                 #if os(iOS) && !DISABLE_MFI_LIGHTNING
-                try await connectLightning()
+                connection = try await connectLightning(attempt: attempt)
                 #else
                 throw YubiKeyError.unsupportedFeature("Lightning disabled (MFI approval pending)")
                 #endif
             case .usbc:
-                try await connectUSBC()
+                connection = try await connectUSBC(attempt: attempt)
             }
+            opened = connection
 
-            // Get device info to confirm connection
-            let serial = try await getSerialNumber()
-            connectedSerial = serial
-            setState(.connected(serial: UInt32(truncatingIfNeeded: serial), method: method))
-            Self.logger.info("Connected to YubiKey (SN: \(serial)) via \(method.rawValue)")
+            // Read the identity over this connection itself, so the serial
+            // can't come from another one that opened in the meantime.
+            let deviceInfo = try await readDeviceInfo(over: connection)
+
+            // Superseded or cancelled while waiting on the tap, insert or
+            // device info: this connection must not go live.
+            guard attempt == connectAttempt, !Task.isCancelled else { throw CancellationError() }
+
+            let record = LiveConnection(
+                id: attempt,
+                connection: connection,
+                method: method,
+                serial: UInt32(truncatingIfNeeded: deviceInfo.serialNumber)
+            )
+            publish(record, deviceInfo: deviceInfo)
+            opened = nil
+            Self.logger.info("Connected to YubiKey (SN: \(record.serial)) via \(method.rawValue)")
 
             // Start monitoring for disconnection
-            monitorConnection(method: method)
+            monitorConnection(record)
 
-        } catch is CancellationError {
-            // Caller will translate this into userCancelled. Don't overwrite
-            // state here — cancelPendingConnection() already set it.
-            throw CancellationError()
-        } catch YubiKeyError.userCancelled {
-            // A cancelled wired wait surfaces from the SDK as
-            // SmartCardConnectionError.cancelled, already mapped to
-            // userCancelled. Settle on .disconnected like the
-            // CancellationError path — never .error.
-            setState(.disconnected)
-            throw YubiKeyError.userCancelled
         } catch {
+            // Never published, so nothing else will close it; left open it
+            // would hold the SDK's transport slot.
+            if let opened {
+                await opened.close(error: attempt == connectAttempt ? error : nil)
+            }
+            // Checked after the awaited close, right before shared state is
+            // touched: a newer attempt may have begun while this one closed.
+            let superseded = attempt != connectAttempt
+            if method == .nfc {
+                isNFCSessionActive = live?.method == .nfc
+            }
+            // A superseded attempt must not touch state that now belongs to a
+            // newer one. connect() reports cancellation as userCancelled.
+            if superseded || error is CancellationError || Task.isCancelled {
+                // Don't overwrite state here: cancelPendingConnection() or the
+                // superseding connect() already set it.
+                throw CancellationError()
+            }
+            if let yubiKeyError = error as? YubiKeyError, case .userCancelled = yubiKeyError {
+                // A cancelled wired wait surfaces from the SDK as
+                // SmartCardConnectionError.cancelled, already mapped to
+                // userCancelled. Settle on .disconnected, never .error.
+                setState(.disconnected)
+                throw YubiKeyError.userCancelled
+            }
             setState(.error(error.localizedDescription))
-            isNFCSessionActive = false
             if let yubiKeyError = error as? YubiKeyError {
                 throw yubiKeyError
             }
@@ -255,19 +480,42 @@ final class YubiKeyConnectionManager {
         }
     }
 
+    /// Make a connection live: the record, the values the UI shows, and the
+    /// state, in one step with no await in between.
+    private func publish(_ record: LiveConnection, deviceInfo: DeviceInfo) {
+        live = record
+        connectedFormFactor = deviceInfo.formFactor
+        connectedFirmwareVersion = deviceInfo.version.description
+        lastReadDevice = YubiKeyDeviceSnapshot(
+            serial: record.serial,
+            firmwareVersion: deviceInfo.version.description,
+            formFactor: deviceInfo.formFactor,
+            method: record.method
+        )
+        setState(.connected(serial: record.serial, method: record.method))
+    }
+
+    /// Drop the live record and the values shown for it.
+    private func clearLive() {
+        if live?.method == .nfc {
+            isNFCSessionActive = false
+        }
+        live = nil
+        connectedFormFactor = nil
+        connectedFirmwareVersion = nil
+    }
+
     #if os(iOS) && !os(visionOS)
     /// Connect via NFC
-    private func connectNFC() async throws {
+    private func connectNFC() async throws -> NFCSmartCardConnection {
         Self.logger.info("Starting NFC connection")
         isNFCSessionActive = true
 
         do {
-            let conn = try await NFCSmartCardConnection(
+            return try await NFCSmartCardConnection(
                 alertMessage: "Hold YubiKey against the top of your iPhone"
             )
-            nfcConnection = conn
         } catch {
-            isNFCSessionActive = false
             // SDK uses typed throws(SmartCardConnectionError)
             throw YubiKeyError.from(error)
         }
@@ -276,14 +524,16 @@ final class YubiKeyConnectionManager {
 
     #if os(iOS) && !DISABLE_MFI_LIGHTNING
     /// Connect via Lightning port
-    private func connectLightning() async throws {
+    private func connectLightning(attempt: Int) async throws -> LightningSmartCardConnection {
         Self.logger.info("Starting Lightning connection")
         // Surface the indefinite "Insert your YubiKey" prompt while the SDK
         // blocks waiting for a key on the port (wait-until-cancel).
-        setState(.waitingForDevice(transport: .lightning))
+        if attempt == connectAttempt {
+            setState(.waitingForDevice(transport: .lightning))
+        }
 
         do {
-            lightningConnection = try await openWiredConnection(transport: .lightning) {
+            return try await openWiredConnection(transport: .lightning) {
                 try await LightningSmartCardConnection()
             }
         } catch let error as YubiKeyError {
@@ -299,11 +549,13 @@ final class YubiKeyConnectionManager {
     #endif
 
     /// Connect via USB-C
-    private func connectUSBC() async throws {
+    private func connectUSBC(attempt: Int) async throws -> USBSmartCardConnection {
         Self.logger.info("Starting USB-C connection")
         // Surface the indefinite "Insert your YubiKey" prompt while the SDK
         // blocks waiting for a key on the port (wait-until-cancel).
-        setState(.waitingForDevice(transport: .usbc))
+        if attempt == connectAttempt {
+            setState(.waitingForDevice(transport: .usbc))
+        }
 
         // A key whose USB smart card (CCID) interface is off never appears as a
         // slot, so record everything iOS reports for diagnosis.
@@ -311,7 +563,7 @@ final class YubiKeyConnectionManager {
         Self.logger.info("USB smart card slots: [\(slots.map(\.name).joined(separator: ", "), privacy: .public)]")
 
         do {
-            usbConnection = try await openWiredConnection(transport: .usbc) {
+            return try await openWiredConnection(transport: .usbc) {
                 try await USBSmartCardConnection()
             }
         } catch let error as YubiKeyError {
@@ -392,56 +644,32 @@ final class YubiKeyConnectionManager {
     }
 
     /// Monitor connection for disconnection events
-    private func monitorConnection(method: YubiKeyConnectionMethod) {
+    private func monitorConnection(_ record: LiveConnection) {
         let generation = connectionGeneration
         Task {
-            let error: Error?
-
-            switch method {
-            case .nfc:
-                #if os(iOS) && !os(visionOS)
-                error = await nfcConnection?.waitUntilClosed()
-                #else
-                error = nil
-                #endif
-            case .lightning:
-                #if os(iOS) && !DISABLE_MFI_LIGHTNING
-                error = await lightningConnection?.waitUntilClosed()
-                #else
-                error = nil
-                #endif
-            case .usbc:
-                error = await usbConnection?.waitUntilClosed()
-            }
-
-            await MainActor.run {
-                self.handleDisconnection(method: method, generation: generation, error: error)
-            }
+            let error = await record.connection.waitUntilClosed()
+            self.handleDisconnection(of: record, generation: generation, error: error)
         }
     }
 
     /// Get the current active SmartCard connection
     var activeSmartCardConnection: (any SmartCardConnection)? {
-        #if os(iOS) && !os(visionOS)
-        if let nfc = nfcConnection { return nfc }
-        #endif
-        #if os(iOS) && !DISABLE_MFI_LIGHTNING
-        if let lightning = lightningConnection { return lightning }
-        #endif
-        return usbConnection
+        live?.connection
     }
 
     /// Cancel an in-flight wired connect attempt (USB-C / Lightning).
     /// Does nothing if no attempt is pending or if a connection has already
     /// succeeded — use disconnect() to tear down a successful connection.
     func cancelPendingConnection() {
-        guard let task = pendingConnectTask else { return }
+        // An NFC scan is cancelled from its own system sheet.
+        guard let pending = pendingConnect, pending.method != .nfc else { return }
+        let task = pending.task
         Self.logger.info("Cancelling pending YubiKey connect attempt")
         // Request cancellation but KEEP the task tracked. `cancel()` only
         // signals — the SDK connection keeps unwinding asynchronously. If we
-        // cleared `pendingConnectTask` here, a quick retry's `connect()` would
-        // skip its drain (`if let prior = pendingConnectTask { await
-        // prior.value }`) and open a SECOND SDK connection while this one is
+        // cleared `pendingConnect` here, a quick retry's `connect()` would
+        // skip its drain (`if let prior = pendingConnect { await
+        // prior.task.value }`) and open a SECOND SDK connection while this one is
         // still tearing down → "another connection is in progress". The next
         // connect() drains it; if no retry comes, this connect()'s own defer
         // clears it once it finishes unwinding.
@@ -453,7 +681,6 @@ final class YubiKeyConnectionManager {
         switch connectionState {
         case .connecting, .waitingForDevice:
             setState(.disconnected)
-            currentConnectionMethod = nil
         default:
             break
         }
@@ -480,65 +707,42 @@ final class YubiKeyConnectionManager {
     func disconnect() {
         Self.logger.info("Disconnecting YubiKey")
 
+        // An attempt still waiting on a tap or insert must not go live afterwards.
+        connectAttempt += 1
+
         Task {
             await closeAllConnections()
 
             isNFCSessionActive = false
             lastReadDevice = nil
-            connectedSerial = nil
             connectedFormFactor = nil
             connectedFirmwareVersion = nil
-            currentConnectionMethod = nil
             setState(.disconnected)
         }
     }
 
-    /// Close every held SDK connection and drop the references. Releasing the
+    /// Close the held SDK connection and drop the record. Releasing the
     /// connection is what frees the SDK's per-transport slot for the next
     /// connect; the slot stays occupied until close() (or key removal).
     private func closeAllConnections() async {
-        // Invalidate any monitors watching the connections we're about to
-        // close so their callbacks can't stomp on a subsequent reconnect.
+        // Invalidate the monitor watching the connection we're about to
+        // close so its callback can't stomp on a subsequent reconnect.
         connectionGeneration += 1
 
-        var closedMethods: [YubiKeyConnectionMethod] = []
-        #if os(iOS) && !os(visionOS)
-        if nfcConnection != nil {
-            await nfcConnection?.close(error: nil)
-            nfcConnection = nil
-            closedMethods.append(.nfc)
-        }
-        #endif
-        #if os(iOS) && !DISABLE_MFI_LIGHTNING
-        if lightningConnection != nil {
-            await lightningConnection?.close(error: nil)
-            lightningConnection = nil
-            closedMethods.append(.lightning)
-        }
-        #endif
-        if usbConnection != nil {
-            await usbConnection?.close(error: nil)
-            usbConnection = nil
-            closedMethods.append(.usbc)
-        }
+        guard let record = live else { return }
+        await record.connection.close(error: nil)
 
-        guard !closedMethods.isEmpty else { return }
+        // Tear down only the record that was closed.
+        guard live?.id == record.id else { return }
+        clearLive()
 
-        isNFCSessionActive = false
-        connectedSerial = nil
-        connectedFormFactor = nil
-        connectedFirmwareVersion = nil
-        currentConnectionMethod = nil
-
-        // The superseded monitors would have posted these; YubiKeySigner
+        // The superseded monitor would have posted this; YubiKeySigner
         // relies on the wired one to drop its cached PIN.
-        for method in closedMethods {
-            NotificationCenter.default.post(
-                name: .yubiKeyDidDisconnect,
-                object: nil,
-                userInfo: ["method": method.rawValue]
-            )
-        }
+        NotificationCenter.default.post(
+            name: .yubiKeyDidDisconnect,
+            object: nil,
+            userInfo: ["method": record.method.rawValue]
+        )
     }
 
     // MARK: - NFC Session Management
@@ -546,52 +750,53 @@ final class YubiKeyConnectionManager {
     #if os(iOS) && !os(visionOS)
     /// Close NFC session immediately without showing a message (fastest dismissal)
     func closeNFCSessionImmediately() async {
-        guard let connection = nfcConnection else { return }
-        Self.logger.info("Closing NFC session immediately (no message)")
-        connectionGeneration += 1
-        await connection.close(error: nil)
-        finishDeliberateNFCClose()
+        await closeLiveNFC(.silently)
     }
 
     /// Close NFC session with success message
     func closeNFCSession(withMessage message: String) async {
-        guard let connection = nfcConnection else { return }
-        Self.logger.info("Closing NFC session with message: \(message)")
-        connectionGeneration += 1
-        await connection.close(message: message)
-        finishDeliberateNFCClose()
+        await closeLiveNFC(.message(message))
     }
 
     /// Close NFC session with error message
     func closeNFCSession(withError message: String) async {
-        guard let connection = nfcConnection else { return }
-        Self.logger.info("Closing NFC session with error: \(message)")
-        connectionGeneration += 1
-        await connection.close(error: YubiKeyError.nfcSessionInvalidated(message))
-        finishDeliberateNFCClose()
+        await closeLiveNFC(.error(message))
     }
 
-    /// Cleanup shared by the deliberate NFC close paths above. Mirrors what
-    /// the session's disconnection monitor would have done; the generation
-    /// bump supersedes that monitor so its late callback can't tear down a
-    /// newer session's state. The bump happens before the awaited close (and
-    /// only when we actually hold an NFC connection, to leave wired monitors
-    /// alone).
-    private func finishDeliberateNFCClose() {
-        nfcConnection = nil
-        isNFCSessionActive = false
-        connectedSerial = nil
-        connectedFormFactor = nil
-        connectedFirmwareVersion = nil
-        currentConnectionMethod = nil
-        if activeSmartCardConnection == nil {
-            setState(.disconnected)
-            NotificationCenter.default.post(
-                name: .yubiKeyDidDisconnect,
-                object: nil,
-                userInfo: ["method": YubiKeyConnectionMethod.nfc.rawValue]
-            )
+    private enum NFCClose {
+        case silently
+        case message(String)
+        case error(String)
+    }
+
+    /// Deliberately close the live NFC session and do the cleanup its
+    /// disconnection monitor would have done. The generation bump supersedes
+    /// that monitor, and happens only when the live connection is NFC, to
+    /// leave a wired monitor alone.
+    private func closeLiveNFC(_ style: NFCClose) async {
+        guard let record = live, let connection = record.connection as? NFCSmartCardConnection else { return }
+        connectionGeneration += 1
+        switch style {
+        case .silently:
+            Self.logger.info("Closing NFC session immediately (no message)")
+            await connection.close(error: nil)
+        case .message(let message):
+            Self.logger.info("Closing NFC session with message: \(message)")
+            await connection.close(message: message)
+        case .error(let message):
+            Self.logger.info("Closing NFC session with error: \(message)")
+            await connection.close(error: YubiKeyError.nfcSessionInvalidated(message))
         }
+
+        // Tear down only the record that was closed.
+        guard live?.id == record.id else { return }
+        clearLive()
+        setState(.disconnected)
+        NotificationCenter.default.post(
+            name: .yubiKeyDidDisconnect,
+            object: nil,
+            userInfo: ["method": YubiKeyConnectionMethod.nfc.rawValue]
+        )
     }
     #endif
 
@@ -603,11 +808,97 @@ final class YubiKeyConnectionManager {
     /// Check if the next connection will use NFC
     func willUseNFC() async -> Bool {
         // If already connected, check current method
-        if case .connected(_, let method) = connectionState {
-            return method == .nfc
+        if case .connected = connectionState, let live {
+            return live.method == .nfc
         }
         // Otherwise check what selectBestTransport would return
         return await selectBestTransport() == .nfc
+    }
+
+    // MARK: - Device Identity
+
+    /// Serial of the key the UI is showing (the live connection, else the last
+    /// key read), for an action that will be bound to it. Throws when no key is
+    /// shown or the key reported no serial to bind to.
+    func confirmableSerial() throws -> UInt32 {
+        let serial: UInt32?
+        if case .connected = connectionState, let live {
+            serial = live.serial
+        } else {
+            serial = lastReadDevice?.serial
+        }
+        guard let serial else { throw YubiKeyError.notConnected }
+        guard serial != 0 else { throw YubiKeyError.unverifiedDevice }
+        return serial
+    }
+
+    /// Open a PIV session on the YubiKey with serial `expected`. The connection,
+    /// its transport and the serial read over it when it opened come from one
+    /// record, and the session runs on that connection, so a key that connects
+    /// afterwards can never receive the session's commands. Ends an NFC
+    /// session on a serial refusal or if the PIV session can't be opened; a
+    /// wired key stays connected.
+    /// - Parameter nfcRefusal: For wired-only callers: thrown when the live
+    ///   connection is NFC. That session belongs to another operation, so it
+    ///   is left open.
+    /// - Returns: The session, its transport, and an ID unique to the
+    ///   connection it runs on, for state that must not outlive that connection.
+    func verifiedPIVSession(
+        serial expected: UInt32,
+        nfcRefusal: YubiKeyError? = nil
+    ) async throws -> (session: PIVSession, method: YubiKeyConnectionMethod, connectionID: Int) {
+        guard case .connected = connectionState, let active = live else {
+            throw YubiKeyError.notConnected
+        }
+        if let nfcRefusal, active.method == .nfc {
+            throw nfcRefusal
+        }
+        let serial = active.serial
+
+        // YubiKit reports a missing serial as 0, which identifies no key.
+        let refusal: (error: YubiKeyError, nfcMessage: String)?
+        if expected == 0 || serial == 0 {
+            refusal = (YubiKeyError.unverifiedDevice, "Unidentified YubiKey")
+        } else if serial != expected {
+            refusal = (YubiKeyError.wrongDevice(expected: expected, connected: serial), "Different YubiKey")
+        } else {
+            refusal = nil
+        }
+        if let refusal {
+            Self.logger.warning("Refusing PIV session: \(refusal.nfcMessage, privacy: .public)")
+            #if os(iOS) && !os(visionOS)
+            if active.method == .nfc {
+                await closeNFCSession(withError: refusal.nfcMessage)
+            }
+            #endif
+            throw refusal.error
+        }
+
+        do {
+            let session = try await PIVSession.makeSession(connection: active.connection)
+            return (session, active.method, active.id)
+        } catch {
+            // No caller holds a session yet, so nothing else would end this scan.
+            #if os(iOS) && !os(visionOS)
+            if active.method == .nfc, live?.id == active.id {
+                await closeNFCSession(withError: "Couldn't open PIV")
+            }
+            #endif
+            throw YubiKeyError.from(error)
+        }
+    }
+
+    /// The wired transport the next connection would use, or nil when it
+    /// would be NFC. Pass the result to `connect(preferredMethod:)` so the
+    /// transport isn't chosen a second time.
+    func wiredTransportForNextConnection() async -> YubiKeyConnectionMethod? {
+        let method: YubiKeyConnectionMethod
+        if case .connected = connectionState, let live {
+            method = live.method
+        } else {
+            method = await selectBestTransport()
+        }
+        return method == .nfc ? nil : method
     }
 
     // MARK: - Session Access
@@ -628,50 +919,24 @@ final class YubiKeyConnectionManager {
         }
     }
 
-    /// Get a fresh Management session for device info
-    func getManagementSession() async throws -> Management.Session {
-        guard let connection = activeSmartCardConnection else {
-            throw YubiKeyError.notConnected
-        }
+    // MARK: - Device Info
 
-        Self.logger.info("Requesting fresh Management session")
+    /// Read device info over `connection` itself, never over whichever one is
+    /// live, so the serial vouches for exactly this connection.
+    private func readDeviceInfo(over connection: any SmartCardConnection) async throws -> DeviceInfo {
+        Self.logger.info("Getting device info")
 
+        let session: Management.Session
         do {
-            return try await Management.Session.makeSession(connection: connection)
+            session = try await Management.Session.makeSession(connection: connection)
         } catch {
             // SDK uses typed throws(ManagementSessionError)
             throw YubiKeyError.yubiKitError(String(describing: error))
         }
-    }
-
-    // MARK: - Device Info
-
-    /// Get serial number of connected YubiKey and cache device info
-    private func getSerialNumber() async throws -> UInt {
-        if let serial = connectedSerial {
-            return serial
-        }
-
-        Self.logger.info("Getting device info")
-
-        let session = try await getManagementSession()
         let deviceInfo = try await session.getDeviceInfo()
-        let serial = deviceInfo.serialNumber
-
-        self.connectedSerial = serial
-        self.connectedFormFactor = deviceInfo.formFactor
-        self.connectedFirmwareVersion = deviceInfo.version.description
-        if let method = currentConnectionMethod {
-            self.lastReadDevice = YubiKeyDeviceSnapshot(
-                serial: UInt32(truncatingIfNeeded: serial),
-                firmwareVersion: deviceInfo.version.description,
-                formFactor: deviceInfo.formFactor,
-                method: method
-            )
-        }
         Self.logger.info("Device info: formFactor=\(String(describing: deviceInfo.formFactor)), firmware=\(deviceInfo.version.description)")
 
-        return serial
+        return deviceInfo
     }
 
     // MARK: - Transport Selection
@@ -725,27 +990,41 @@ final class YubiKeyConnectionManager {
 
     // MARK: - PIN Management
 
-    /// Request PIN from user via published pendingPINRequest
+    /// Request PIN from user via published pendingPINRequest. If the
+    /// requesting task is cancelled, the prompt is taken down and this throws,
+    /// so a request that has already failed doesn't keep collecting a PIN.
     func requestPIN(for keyName: String, attemptsRemaining: Int? = nil) async throws -> String {
-        return try await withCheckedThrowingContinuation { continuation in
-            let request = YubiKeyPINRequest(
-                keyName: keyName,
-                attemptsRemaining: attemptsRemaining
-            ) { pin in
-                if let pin = pin {
-                    continuation.resume(returning: pin)
-                } else {
-                    continuation.resume(throwing: YubiKeyError.userCancelled)
+        try Task.checkCancellation()
+        let id = UUID()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let request = YubiKeyPINRequest(
+                    id: id,
+                    keyName: keyName,
+                    attemptsRemaining: attemptsRemaining
+                ) { pin in
+                    if let pin = pin {
+                        continuation.resume(returning: pin)
+                    } else {
+                        continuation.resume(throwing: YubiKeyError.userCancelled)
+                    }
                 }
-            }
 
-            pendingPINRequest = request
+                pendingPINRequest = request
+            }
+        } onCancel: {
+            // Withdraw this request's prompt, if it is still the one shown.
+            Task { @MainActor in
+                self.completePINRequest(id: id, with: nil)
+            }
         }
     }
 
-    /// Complete a pending PIN request (called by UI)
-    func completePINRequest(with pin: String?) {
-        guard let request = pendingPINRequest else { return }
+    /// Complete the pending PIN request (called by UI). `id` is the request
+    /// the caller displayed: a sheet still showing a withdrawn request must
+    /// not answer the one that replaced it.
+    func completePINRequest(id: UUID, with pin: String?) {
+        guard let request = pendingPINRequest, request.id == id else { return }
         pendingPINRequest = nil
         request.completion(pin)
     }
@@ -757,6 +1036,13 @@ final class YubiKeyConnectionManager {
         setState(state)
     }
 
+    /// Return to `.connected` after an operation, from the live record. No-op
+    /// if that connection is gone or one on another transport replaced it.
+    func restoreConnectedState(for method: YubiKeyConnectionMethod) {
+        guard let live, live.method == method else { return }
+        setState(.connected(serial: live.serial, method: live.method))
+    }
+
     /// Single funnel for connection-state changes. Mirrors every change into
     /// `HardwareKeyActivityCoordinator` so the terminal overlay can reflect the
     /// current phase. All mutations of `connectionState` go through here.
@@ -765,47 +1051,24 @@ final class YubiKeyConnectionManager {
         HardwareKeyActivityCoordinator.shared.connectionStateChanged(newState, isNFCActive: isNFCSessionActive)
     }
 
-    private func handleDisconnection(method: YubiKeyConnectionMethod, generation: Int, error: Error?) {
+    private func handleDisconnection(of record: LiveConnection, generation: Int, error: Error?) {
         // A deliberate close (disconnect/self-heal) bumped the generation and
         // handles its own cleanup; this callback is about a connection that no
         // longer matters and may run after a NEW connection was established.
-        guard generation == connectionGeneration else {
-            Self.logger.info("Ignoring disconnection of superseded \(method.rawValue) connection")
+        guard generation == connectionGeneration, live?.id == record.id else {
+            Self.logger.info("Ignoring disconnection of superseded \(record.method.rawValue) connection")
             return
         }
-        Self.logger.info("Handling YubiKey disconnection for \(method.rawValue)")
+        Self.logger.info("Handling YubiKey disconnection for \(record.method.rawValue)")
 
-        // Clear the specific connection reference
-        switch method {
-        case .lightning:
-            #if os(iOS) && !DISABLE_MFI_LIGHTNING
-            lightningConnection = nil
-            #endif
-        case .nfc:
-            #if os(iOS) && !os(visionOS)
-            nfcConnection = nil
-            #endif
-            isNFCSessionActive = false
-        case .usbc:
-            usbConnection = nil
-        }
+        clearLive()
+        setState(.disconnected)
 
-        // Clear cached device info
-        connectedSerial = nil
-        connectedFormFactor = nil
-        connectedFirmwareVersion = nil
-        currentConnectionMethod = nil
-
-        // Update state only if this was our active connection
-        if activeSmartCardConnection == nil {
-            setState(.disconnected)
-
-            // Notify listeners that YubiKey was disconnected
-            NotificationCenter.default.post(
-                name: .yubiKeyDidDisconnect,
-                object: nil,
-                userInfo: ["method": method.rawValue]
-            )
-        }
+        // Notify listeners that YubiKey was disconnected
+        NotificationCenter.default.post(
+            name: .yubiKeyDidDisconnect,
+            object: nil,
+            userInfo: ["method": record.method.rawValue]
+        )
     }
 }
