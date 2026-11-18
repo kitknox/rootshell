@@ -145,7 +145,7 @@ nonisolated extension Settings {
             "keyboardToolbarSavedLayouts", default: nil, group: .keyboardToolbar, policy: .localByDefault,
             title: String(localized: "Saved Toolbar Layouts", comment: "Setting title"))
         static let style = SettingKey(
-            "keyboardToolbarStyle", default: KeyboardToolbarStyle.flat, group: .keyboardToolbar, policy: .localByDefault,
+            "keyboardToolbarStyle", default: KeyboardToolbarStyle.defaultStyle, group: .keyboardToolbar, policy: .localByDefault,
             configKey: "keyboard-toolbar-style",
             title: String(localized: "Toolbar Style", comment: "Setting title"))
         /// The docked terminal keyboard shows the glass bar instead of its own toolbar row.

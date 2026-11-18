@@ -437,6 +437,17 @@ nonisolated enum KeyboardToolbarStyle: String, CaseIterable, Sendable {
         }
     }
 
+    /// Glass Bar on iOS 26, where it draws real glass. Before 26 it falls back to a
+    /// blur, and Catalyst and visionOS resolve it to glass, so those stay flat.
+    static var defaultStyle: KeyboardToolbarStyle {
+        #if os(visionOS) || targetEnvironment(macCatalyst)
+        return .flat
+        #else
+        if #available(iOS 26.0, *) { return .glassBar }
+        return .flat
+        #endif
+    }
+
     /// The glass bar needs the iPhone and iPad keyboard; elsewhere it reads as glass.
     static var selectableCases: [KeyboardToolbarStyle] {
         #if os(visionOS) || targetEnvironment(macCatalyst)
