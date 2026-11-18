@@ -252,8 +252,10 @@ final class TerminalKeyboardAccessoryController: NSObject {
     /// incoming terminal can take it over without a blank frame.
     func releaseTouchKeyboardState() {
         boundTouchKeyboardState = nil
-        // Focus can move between panes without the keyboard hiding.
-        reclaimFoldToolbar()
+        // Focus can move between panes without the keyboard hiding. A repeat
+        // claim by the focused terminal is not a focus loss.
+        let keepsFocus = host?.keyboardIsFirstResponder == true && host?.keyboardHostView.window != nil
+        if !keepsFocus { reclaimFoldToolbar() }
         guard let scope = ownedTouchKeyboardScope else { return }
         scope.keyboard.cancelInteraction(preservingModifiers: true)
         scope.toolbarInput.isActive = false
@@ -752,6 +754,10 @@ final class TerminalKeyboardAccessoryController: NSObject {
     private var foldToolbarMounted = false
     private lazy var foldToolbarHost = UIView()
     private var foldToolbarUpdateScheduled = false
+    /// UIKit's last accessory query got nil because the fold hosts the row.
+    private var accessoryWithheldForFold = false
+    /// Set by teardown; a retired view can linger as first responder.
+    private var foldToolbarRetired = false
     #endif
 
     var shouldShowKeyboardToolbar = false
@@ -1086,6 +1092,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
         let isVisible = accessoryIsVisible
         updateBottomEdgeHomeGestureProtection(accessoryIsVisible: isVisible)
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        accessoryWithheldForFold = false
         scheduleFoldToolbarUpdate()
         #endif
         if usesFullTouchKeyboard {
@@ -1107,7 +1114,10 @@ final class TerminalKeyboardAccessoryController: NSObject {
         // floating keyboard's oversized frame.
         guard !toolbarOnlyMode || !toolbarOnlyUsesPrimaryInputView else { return nil }
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
-        if isVisible && foldToolbarFrame != nil { return nil }
+        if isVisible && foldToolbarFrame != nil {
+            accessoryWithheldForFold = true
+            return nil
+        }
         reclaimFoldToolbar()
         #endif
         return isVisible ? keyboardAccessory : nil
@@ -1181,7 +1191,8 @@ final class TerminalKeyboardAccessoryController: NSObject {
     /// in the host window. nil where UIKit's placement stays in charge.
     private var foldToolbarFrame: CGRect? {
         let tracker = KeyboardTracker.shared
-        guard let host, host.keyboardIsFirstResponder, !usesTouchKeyboard, !toolbarOnlyMode,
+        guard !foldToolbarRetired,
+              let host, host.keyboardIsFirstResponder, !usesTouchKeyboard, !toolbarOnlyMode,
               tracker.isSoftwareKeyboardVisible, !tracker.isHardwareKeyboard,
               let accessory = keyboardAccessory,
               let window = host.keyboardHostView.window,
@@ -1199,7 +1210,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
     /// UIKit releases a withdrawn accessory during the input-view reload, so
     /// mounting waits until that reload has returned.
     private func scheduleFoldToolbarUpdate() {
-        guard !foldToolbarUpdateScheduled else { return }
+        guard !foldToolbarRetired, !foldToolbarUpdateScheduled else { return }
         foldToolbarUpdateScheduled = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -1213,6 +1224,12 @@ final class TerminalKeyboardAccessoryController: NSObject {
               let accessory = keyboardAccessory,
               let window = host?.keyboardHostView.window else {
             reclaimFoldToolbar()
+            // The query that withheld the accessory lost the race; ask for it again.
+            if accessoryWithheldForFold, host?.keyboardIsFirstResponder == true,
+               KeyboardTracker.shared.isSoftwareKeyboardVisible {
+                accessoryWithheldForFold = false
+                host?.keyboardReloadInputViews()
+            }
             return
         }
         let container = foldToolbarHost
@@ -1624,6 +1641,12 @@ final class TerminalKeyboardAccessoryController: NSObject {
     func tearDown() {
         dismissFloatingTouchKeyboard()
         releaseTouchKeyboardState()
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        // An already queued update then finds no fold frame and only reclaims.
+        foldToolbarRetired = true
+        accessoryWithheldForFold = false
+        reclaimFoldToolbar()
+        #endif
         keyboardStateDebounceTimer?.invalidate()
         keyboardStateDebounceTimer = nil
         keyboardStateTask?.cancel()
