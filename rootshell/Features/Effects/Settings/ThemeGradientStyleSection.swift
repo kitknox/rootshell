@@ -128,7 +128,7 @@ struct ThemeGradientStyleSection: View {
     }
 
     private func seedColors(from style: ThemeGradientStyle) -> [SIMD3<Double>] {
-        ThemeGradientPalette.styleColors(themeColors: effect.themeColors, style: style).map(Self.quantized)
+        ThemeGradientPalette.styleColors(themeColors: effect.themeColors, style: style).map { Self.quantized($0) }
     }
 
     /// Previews share the draft's adjustments; Custom shows what it would start from.

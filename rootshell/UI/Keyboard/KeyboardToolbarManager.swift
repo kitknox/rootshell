@@ -423,7 +423,7 @@ class KeyboardToolbarManager {
 
     // MARK: - Layout Mutations
 
-    enum ToolbarSection: Equatable, Sendable {
+    nonisolated enum ToolbarSection: Equatable, Sendable {
         case pinnedLeading
         case mainRow
         case pinnedTrailing

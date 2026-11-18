@@ -13,7 +13,7 @@ import UIKit
 // MARK: - KeyID
 
 /// Identifies a built-in toolbar key. Raw values are stable — never rename or remove a shipped case.
-enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
+nonisolated enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
     // Modifiers (5)
     case esc
     case ctrl
@@ -349,7 +349,7 @@ enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
 // MARK: - KeySlot
 
 /// A slot in the toolbar layout — either a built-in key or a reference to a custom key.
-enum KeySlot: Codable, Hashable, Sendable {
+nonisolated enum KeySlot: Codable, Hashable, Sendable {
     case builtIn(KeyID)
     case custom(UUID)
 

@@ -37,7 +37,7 @@ struct ThemeGradientLook: Equatable {
             self.style = style
         }
         if let hexes = data["customColors"] as? [String] {
-            let colors = hexes.compactMap(ThemeGradientPalette.rgb(hex:))
+            let colors = hexes.compactMap { ThemeGradientPalette.rgb(hex: $0) }
             if colors.count == 3 { customColors = colors }
         }
         if let vibrance = data["vibrance"] as? Double {
@@ -50,7 +50,7 @@ struct ThemeGradientLook: Equatable {
 
     func encode(into data: inout [String: Any]) {
         data["style"] = style.rawValue
-        if let customColors { data["customColors"] = customColors.map(ThemeGradientPalette.hex) }
+        if let customColors { data["customColors"] = customColors.map { ThemeGradientPalette.hex($0) } }
         data["vibrance"] = vibrance
         data["brightness"] = brightness
     }

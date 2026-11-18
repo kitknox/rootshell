@@ -15,14 +15,10 @@
 //    - Context menu: Move to Drawer N / Move to Main Row, Key Color, Hide/Remove.
 //  Both drag paths cross sections and persist through KeyboardToolbarManager.
 //
-//  Note: the diffable data source is keyed by stable String ids (sections and
-//  items) rather than KeySlot directly. Under the project's default MainActor
-//  isolation, KeySlot's (associated-value) Hashable conformance is
-//  main-actor-isolated and cannot satisfy the data source's Sendable
-//  identifier requirement. String is a stdlib (nonisolated) Hashable &
-//  Sendable, so it sidesteps that entirely. Sections are "pinned-leading",
-//  "main", "pinned-trailing" and "drawer-<index>"; a pinned section exists only
-//  while its group is on.
+//  The diffable data source is keyed by String ids (sections and items), with
+//  `slotsByID` mapping items back to their KeySlot. Sections are
+//  "pinned-leading", "main", "pinned-trailing" and "drawer-<index>"; a pinned
+//  section exists only while its group is on.
 //
 
 import SwiftUI
@@ -692,7 +688,7 @@ extension ToolbarLayoutEditorController: UICollectionViewDelegate {
             guard let self else { return nil }
             var actions: [UIMenuElement] = []
             let layout = self.layout
-            func reposition(toStart: Bool, title: String, image: String) {
+            @MainActor func reposition(toStart: Bool, title: String, image: String) {
                 actions.append(UIAction(title: title, image: UIImage(systemName: image)) { [weak self] _ in
                     guard let self else { return }
                     self.manager.moveKey(slot, toStart: toStart, in: self.context)
@@ -706,7 +702,7 @@ extension ToolbarLayoutEditorController: UICollectionViewDelegate {
             if position < rowCount - 1 {
                 reposition(toStart: false, title: String(localized: "Move to Bottom"), image: "arrow.down.to.line")
             }
-            func move(to target: KeyboardToolbarManager.ToolbarSection, title: String, image: String) {
+            @MainActor func move(to target: KeyboardToolbarManager.ToolbarSection, title: String, image: String) {
                 guard target != source else { return }
                 actions.append(UIAction(title: title, image: UIImage(systemName: image)) { [weak self] _ in
                     guard let self else { return }

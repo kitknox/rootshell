@@ -104,7 +104,7 @@ nonisolated enum RemotePortScanParser {
                 continue
             }
             let fields = line.split(whereSeparator: \.isWhitespace)
-            guard fields.first.map { String($0) } == "L", let address = fields.last else { continue }
+            guard fields.first.map(String.init) == "L", let address = fields.last else { continue }
             guard let port = parseAddress(String(address)) else { continue }
             if let existing = byPort[port.number], existing.bind.reach >= port.bind.reach {
                 continue
