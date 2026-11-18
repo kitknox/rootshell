@@ -3182,6 +3182,7 @@ extension Ghostty.TerminalView {
             restoredWasTmuxGateway = false
             tmuxResumeRequested = false
             tmuxResumeCancelRequested = false
+            outputPipeline.protocolObserver?.leaveTmuxControl()
             // Unfreeze the detach-time size flow and force a resync past the dedups.
             // ROOTSHELL-TMUX (id=tmux-detach-size-resync)
             tmuxDetachInProgressAtomic = false
@@ -3261,6 +3262,7 @@ extension Ghostty.TerminalView {
                         "RESUME",
                         "ARM TIMEOUT; sending resume_abort gw=\(shortID)")
                     ghostty_surface_tmux_resume_abort(surface)
+                    self.outputPipeline.protocolObserver?.leaveTmuxControl()
                     self.tmuxResumeWatchdog?.cancel()
                     self.tmuxResumeWatchdog = nil
                     self.removeAwaitingTmuxPlaceholders()
@@ -3288,6 +3290,7 @@ extension Ghostty.TerminalView {
             TmuxDebugLogger.shared.event("RESUME", "deferred cancel executing gw=\(uuid.uuidString.prefix(8))")
             ghostty_surface_tmux_resume(surface)
             ghostty_surface_tmux_resume_abort(surface)
+            outputPipeline.protocolObserver?.leaveTmuxControl()
             tmuxResumeWatchdog?.cancel()
             tmuxResumeWatchdog = nil
             tmuxResumeCancelRequested = false
@@ -3330,6 +3333,7 @@ extension Ghostty.TerminalView {
             Ghostty.logger.warning("tmux resume timed out; reverting gateway \(shortID) to a plain shell")
             TmuxDebugLogger.shared.event("RESUME", "TIMEOUT ~12s; sending resume_abort gw=\(shortID)")
             ghostty_surface_tmux_resume_abort(surface)
+            self.outputPipeline.protocolObserver?.leaveTmuxControl()
             self.removeAwaitingTmuxPlaceholders()
             TmuxDebugLogger.shared.marker("RESUME ABORT gw=\(shortID)")
             self.restoredWasTmuxGateway = false
@@ -3370,6 +3374,7 @@ extension Ghostty.TerminalView {
         if tmuxResumeRequested, let surface {
             TmuxDebugLogger.shared.event("RESUME", "cancelled by user gw=\(uuid.uuidString.prefix(8))")
             ghostty_surface_tmux_resume_abort(surface)
+            outputPipeline.protocolObserver?.leaveTmuxControl()
             tmuxResumeCancelRequested = false
             removeAwaitingTmuxPlaceholders()
         } else {

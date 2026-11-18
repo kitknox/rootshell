@@ -232,4 +232,89 @@ final class TerminalProtocolStateTests: XCTestCase {
         XCTAssertTrue(String(decoding: recorder.contents, as: UTF8.self).contains("connecting"))
         XCTAssertTrue(String(decoding: recorder.contents, as: UTF8.self).contains("remote update"))
     }
+
+    // tmux sends command replies unescaped: a `capture-pane -e` reply carries
+    // OSC 8 links ended by ST, plus any CAN/SUB or `%exit` text in the pane.
+    private let tmuxAttach = "\u{1b}P1000p%begin 1 1 0\r\n%end 1 1 0\r\n%session-changed $0 main\r\n"
+        + "%begin 2 5 1\r\n\u{1b}[1mls\u{1b}[0m \u{1b}]8;id=a;file:///tmp/x\u{1b}\\x\u{1b}]8;;\u{1b}\\\r\n"
+        + "\u{18}\u{1a}\r\n%exit\r\n\u{1b}\\\r\n%end 2 5 1\r\n"
+        + "%begin 3 6 1\r\n@0 %0\r\n%error 3 6 1\r\n%output %0 hi\\015\\012\r\n"
+    private let tmuxDetach = "%exit\r\n\u{1b}\\"
+
+    func testTmuxControlStreamIsNeverFencedAtAnySplit() {
+        let stream = Data((tmuxAttach + tmuxDetach).utf8)
+        // Split 0 would fence the empty first write, before tmux started.
+        for split in 1...stream.count {
+            let observer = TerminalProtocolObserver()
+            var written = Data()
+            observer.write(Data(stream.prefix(split))) { written += $0 }
+            _ = observer.consumeResponses(Data("typed".utf8))
+            observer.write(Data(stream.dropFirst(split))) { written += $0 }
+            XCTAssertEqual(written.prefix(stream.count), stream, "split \(split)")
+            // tmux's closing ST returns to ground, so the shell is fenced again.
+            XCTAssertTrue(written.dropFirst(stream.count).starts(with: Data("\u{1b}[?".utf8)), "split \(split)")
+        }
+    }
+
+    func testReattachKeepsTmuxControlButFreshPTYDoesNot() {
+        // Reconnect inside the `ESC P 1000 p` header, then inside control mode.
+        let observer = TerminalProtocolObserver()
+        var written = Data()
+        observer.write(Data("\u{1b}P100".utf8)) { written += $0 }
+        observer.reset(state: nil, keepingTmuxControl: true)
+        observer.write(Data("0p%begin 1 1 0\r\n%end 1 1 0\r\n".utf8)) { written += $0 }
+        observer.reset(state: nil, keepingTmuxControl: true)
+        observer.write(Data("%output %0 more\r\n".utf8)) { written += $0 }
+        XCTAssertEqual(written, Data("\u{1b}P1000p%begin 1 1 0\r\n%end 1 1 0\r\n%output %0 more\r\n".utf8))
+        observer.reset(state: nil)
+        written = Data()
+        observer.write(Data("$ ".utf8)) { written += $0 }
+        XCTAssertGreaterThan(written.count, 2)
+    }
+
+    func testReattachDoesNotKeepAnUnterminatedOSC() {
+        // A resumed stream can drop the terminator; ordinary output must not
+        // stay hidden inside the old string.
+        let observer = TerminalProtocolObserver()
+        observer.write(Data("\u{1b}]0;tit".utf8)) { _ in }
+        observer.reset(state: nil, keepingTmuxControl: true)
+        var written = Data()
+        observer.write(Data("$ ".utf8)) { written += $0 }
+        XCTAssertGreaterThan(written.count, 2)
+    }
+
+    func testRestoredGatewayLeavesControlModeOnlyWhenTheAppDoes() {
+        let observer = TerminalProtocolObserver()
+        observer.enterTmuxControl()
+        // Joined inside a capture reply, any `%exit` and ST may be payload,
+        // guard-like pane text included.
+        let resumed = Data(("%exit\r\n\u{1b}\\\r\npane text\r\n%begin 1 1 0\r\n%end 1 1 0\r\n%exit\r\n\u{1b}\\\r\n"
+            + "%end 4 4 1\r\n%begin 7 9 1\r\n\u{1b}]8;;u\u{1b}\\\r\n%end 7 9 1\r\n%exit\r\n\u{1b}\\").utf8)
+        var written = Data()
+        observer.write(resumed) { written += $0 }
+        XCTAssertEqual(written, resumed)
+        observer.leaveTmuxControl()
+        written = Data()
+        observer.write(Data("$ ".utf8)) { written += $0 }
+        XCTAssertGreaterThan(written.count, 2)
+    }
+
+    func testLongExitReasonStillEndsControlMode() {
+        let stream = Data(("\u{1b}P1000p%begin 1 1 0\r\n%end 1 1 0\r\n%exit detached (from session "
+            + String(repeating: "x", count: 100) + ")\r\n\u{1b}\\$ ").utf8)
+        let observer = TerminalProtocolObserver()
+        var written = Data()
+        observer.write(stream) { written += $0 }
+        XCTAssertGreaterThan(written.count, stream.count)
+    }
+
+    func testOtherDCSStillEndsAtStringTerminator() {
+        let observer = TerminalProtocolObserver()
+        var written = Data()
+        observer.write(Data("\u{1b}P1001p%exit\r\n".utf8)) { written += $0 }
+        XCTAssertEqual(written, Data("\u{1b}P1001p%exit\r\n".utf8))
+        written = Data()
+        observer.write(Data("\u{1b}\\$ ".utf8)) { written += $0 }
+        XCTAssertGreaterThan(written.count, 4)
+    }
 }

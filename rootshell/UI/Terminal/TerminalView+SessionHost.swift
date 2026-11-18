@@ -61,8 +61,11 @@ extension Ghostty.TerminalView: TerminalSessionControllerHost {
         if observesProtocol {
             let isRestoring = pendingScrollbackRestore || pendingScrollbackRestoreForLayout || restorationState != .none
             let saved = isRestoring ? ScrollbackPersistenceManager.shared.savedProtocolState(for: uuid) : nil
-            if let observer = outputPipeline.protocolObserver { observer.reset(state: saved) }
+            // A replacement session resumes the same PTY; a fresh one resets
+            // again through onFreshSessionStarting.
+            if let observer = outputPipeline.protocolObserver { observer.reset(state: saved, keepingTmuxControl: true) }
             else { outputPipeline.protocolObserver = TerminalProtocolObserver(state: saved) }
+            if restoredWasTmuxGateway { outputPipeline.protocolObserver?.enterTmuxControl() }
         } else { outputPipeline.protocolObserver = nil }
         return outputPipeline.makeSessionOutputSink(
             useOutputCoalescer: shouldUseOutputCoalescer,

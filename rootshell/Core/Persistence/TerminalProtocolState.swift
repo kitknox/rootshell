@@ -197,16 +197,106 @@ nonisolated struct TerminalProtocolState: Codable, Equatable {
 /// Incremental VT framing. OSC/DCS payloads are opaque: text inside them must
 /// never be mistaken for keyboard negotiation. Buffers have a fixed bound.
 nonisolated struct TerminalProtocolParser {
-    enum Phase { case ground, escape, escapeIntermediate, csi, charset(UInt8), string(Bool), stringEscape(Bool) }
+    enum Phase { case ground, escape, escapeIntermediate, csi, charset(UInt8), string(Bool), stringEscape(Bool), dcsHeader, tmuxControl }
+
+    /// Line framing inside tmux control mode (`ESC P 1000 p`). tmux sends
+    /// command replies unescaped, so a `capture-pane -e` reply can carry a raw
+    /// `ESC \` (the end of an OSC 8 link), and CAN/SUB are payload too. Like
+    /// GhosttyKit, only an ST after a `%exit` line outside a `%begin` block
+    /// ends the DCS. Anything inserted before that lands in the control stream.
+    struct TmuxControlFraming {
+        private var line: [UInt8] = []
+        private var lineOverflow = false
+        private var skipLine: Bool
+        private var block: [UInt8]?
+        /// Joined mid-stream, any line may be reply payload, guard-like pane
+        /// text included, so only the app ends control mode (leaveTmuxControl).
+        private let trustsExit: Bool
+        private var exited = false
+        private var escape = false
+
+        init(joiningMidStream: Bool = false) { skipLine = joiningMidStream; trustsExit = !joiningMidStream }
+
+        /// Returns true once tmux's closing ST has been consumed.
+        mutating func consume(_ byte: UInt8) -> Bool {
+            if escape {
+                escape = false
+                if byte == 0x5c, exited, block == nil { return true }
+            }
+            if byte == 0x1b { escape = true }
+            if byte == 0x0a {
+                if !skipLine { classifyLine() }
+                line.removeAll(keepingCapacity: true); lineOverflow = false; skipLine = false
+            } else if line.count < 64 { line.append(byte) } else { lineOverflow = true }
+            return false
+        }
+
+        private mutating func classifyLine() {
+            var text = line[...]
+            if !lineOverflow, text.last == 0x0d { text = text.dropLast() }
+            let word = text.prefix { $0 != 0x20 }
+            // Guard lines are short; only `%exit` carries free text (a reason).
+            if lineOverflow, word.count == text.count { return }
+            let arguments = Array(text.dropFirst(word.count))
+            switch String(decoding: word, as: UTF8.self) {
+            case "%begin" where block == nil && !lineOverflow && Self.isGuard(arguments): block = arguments
+            case "%end", "%error": if !lineOverflow, block == arguments { block = nil }
+            case "%exit" where block == nil && trustsExit: exited = true
+            default: break
+            }
+        }
+
+        /// Guard lines carry ` <time> <command number> <flags>`.
+        private static func isGuard(_ arguments: [UInt8]) -> Bool {
+            let fields = arguments.split(separator: 0x20, omittingEmptySubsequences: false)
+            return fields.count == 4 && fields[0].isEmpty
+                && fields.dropFirst().allSatisfy { !$0.isEmpty && $0.allSatisfy { (0x30...0x39).contains($0) } }
+        }
+    }
+
+    /// Framing inside tmux control mode or its `ESC P 1000 p` header. Other
+    /// phases restart in ground after a reattach: a resumed stream can drop
+    /// bytes, and a lost OSC terminator would hide ordinary output.
+    struct TmuxFraming {
+        fileprivate let phase: Phase
+        fileprivate let token: [UInt8]
+        fileprivate let tmux: TmuxControlFraming
+    }
+
     var state = TerminalProtocolState()
     private var phase = Phase.ground
     private var token = [UInt8]()
     private var utf8Remaining = 0
+    private var tmux = TmuxControlFraming()
     var atBoundary: Bool { if case .ground = phase { return utf8Remaining == 0 }; return false }
+    var inTmuxControl: Bool { if case .tmuxControl = phase { return true }; return false }
+    var tmuxFraming: TmuxFraming? {
+        switch phase {
+        case .escape, .dcsHeader, .tmuxControl: return TmuxFraming(phase: phase, token: token, tmux: tmux)
+        default: return nil
+        }
+    }
+
+    mutating func resume(_ framing: TmuxFraming) {
+        phase = framing.phase; token = framing.token; tmux = framing.tmux; utf8Remaining = 0
+    }
+
+    /// Join a control-mode DCS whose `ESC P 1000 p` this parser never saw.
+    /// A no-op while already inside one, so live framing is not lost.
+    mutating func enterTmuxControl() {
+        guard !inTmuxControl else { return }
+        phase = .tmuxControl; tmux = TmuxControlFraming(joiningMidStream: true); token = []; utf8Remaining = 0
+    }
+
+    mutating func leaveTmuxControl() {
+        guard inTmuxControl else { return }
+        phase = .ground; tmux = TmuxControlFraming()
+    }
+
     mutating func consume(_ data: Data, onCursorSave: ((Int, TerminalProtocolState) -> Void)? = nil) {
         for (offset, byte) in data.enumerated() {
             let previousSave = state.cursorSaveSerial
-            if byte == 0x18 || byte == 0x1a { phase = .ground; token = []; utf8Remaining = 0; continue }
+            if byte == 0x18 || byte == 0x1a, !inTmuxControl { phase = .ground; token = []; utf8Remaining = 0; continue }
             switch phase {
             case .ground:
                 if byte == 0x1b { phase = .escape; utf8Remaining = 0 }
@@ -220,7 +310,8 @@ nonisolated struct TerminalProtocolParser {
                 switch byte {
                 case 0x5b: phase = .csi
                 case 0x5d: phase = .string(true)
-                case 0x50, 0x58, 0x5e, 0x5f: phase = .string(false)
+                case 0x50: phase = .dcsHeader
+                case 0x58, 0x5e, 0x5f: phase = .string(false)
                 case 0x28...0x2b: phase = .charset(byte)
                 case 0x63: state = TerminalProtocolState(); phase = .ground
                 case 0x37: state.savePen(); phase = .ground
@@ -247,6 +338,20 @@ nonisolated struct TerminalProtocolParser {
                     state.charsets[String(slot)] = String(decoding: [0x1b, slot, byte], as: UTF8.self)
                     phase = .ground
                 } else if (0x20...0x2f).contains(byte) { phase = .escapeIntermediate }
+            case .dcsHeader:
+                // `ESC P 1000 p` enters tmux control mode; any other DCS stays
+                // an opaque string ended by ST, as before.
+                if byte == 0x1b { phase = .stringEscape(false); token = [] }
+                else if (0x40...0x7e).contains(byte) {
+                    if byte == 0x70, token.elementsEqual("1000".utf8) { phase = .tmuxControl; tmux = TmuxControlFraming() }
+                    else { phase = .string(false) }
+                    token = []
+                } else if (0x20...0x3f).contains(byte) {
+                    if token.count < 8 { token.append(byte) } else { phase = .string(false); token = [] }
+                } else if byte >= 0x80 { phase = .string(false); token = [] }
+                // C0 and DEL are ignored inside a DCS header.
+            case .tmuxControl:
+                if tmux.consume(byte) { phase = .ground; tmux = TmuxControlFraming() }
             case .string(let bell): if byte == 0x07 && bell { phase = .ground } else if byte == 0x1b { phase = .stringEscape(bell) }
             case .stringEscape(let bell): phase = byte == 0x5c ? .ground : (byte == 0x1b ? .stringEscape(bell) : .string(bell))
             }
@@ -321,14 +426,32 @@ nonisolated final class TerminalProtocolObserver: @unchecked Sendable {
         { [self] data in write(data, enqueue: enqueue) }
     }
 
-    func reset(state: TerminalProtocolState?) {
+    /// `keepingTmuxControl`: the replacement session resumes the same remote
+    /// PTY, which may still be inside tmux control mode or its `ESC P 1000 p`
+    /// header. A fresh PTY resets without it.
+    func reset(state: TerminalProtocolState?, keepingTmuxControl: Bool = false) {
         lock.lock(); defer { lock.unlock() }
+        let framing = keepingTmuxControl ? parser.tmuxFraming : nil
         parser = TerminalProtocolParser()
         if let state { parser.state = state }
+        if let framing { parser.resume(framing) }
         revision &+= 1; parsedRevision = nil; revisions = [:]; enqueueLatest = nil
         epoch &+= 1
         // Keep issued fence IDs and partial response framing. A late reply
         // from the previous session must not acknowledge this session's bytes.
+    }
+
+    /// A restored gateway re-enters control mode through
+    /// `ghostty_surface_tmux_resume`, so its stream never shows `ESC P 1000 p`.
+    func enterTmuxControl() {
+        lock.lock(); defer { lock.unlock() }
+        parser.enterTmuxControl()
+    }
+
+    /// The app ended or abandoned control mode (controller teardown, resume abort).
+    func leaveTmuxControl() {
+        lock.lock(); defer { lock.unlock() }
+        parser.leaveTmuxControl()
     }
 
     func write(_ data: Data, enqueue: @escaping (Data) -> Void) {
