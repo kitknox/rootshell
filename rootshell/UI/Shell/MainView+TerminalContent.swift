@@ -1202,20 +1202,37 @@ extension MainView {
             && terminals[selectedTabIndex].focusedPane?.keyboardToolbarShowsGlassBar == true
         // Tabletop holds the toolbar and keyboard in a region below the fold, outside
         // this container, so the band reaches on to the window's bottom edge. Not across
-        // a bottom tab bar, and only while some input sits below the fold: a hardware
-        // keyboard's toolbar stays above it.
+        // a bottom tab bar, and only while a docked keyboard fills the region below the
+        // fold: a hardware keyboard's toolbar stays above it.
         let tabletopUnderlap: CGFloat = {
+            #if !os(visionOS) && !targetEnvironment(macCatalyst)
             guard toolbarIsGlass, duoTabletopAvailable, !duoTabletopDisabled, !showsBottomTabBar,
                   let window = terminals[selectedTabIndex].focusedPane?.window else { return 0 }
             let bottom = geometry.frame(in: .global).maxY
             let lowerRegion = CGRect(x: window.bounds.minX, y: bottom + 1,
                                      width: window.bounds.width, height: max(0, window.bounds.maxY - bottom - 1))
-            let inputBelowFold = [accessoryFrame, touchKeyboardFrame, keyboardFrame].contains { frame in
+            func fillsLowerRegion(_ frame: CGRect?) -> Bool {
                 guard let frame, !frame.isNull, !frame.isEmpty else { return false }
                 let local = window.convert(frame, from: window.screen.coordinateSpace)
-                return !local.intersection(lowerRegion).isEmpty
+                return TerminalKeyboardGeometry.isDocked(keyboard: local, container: window.bounds)
+                    && !local.intersection(lowerRegion).isEmpty
             }
-            return inputBelowFold ? max(0, window.bounds.maxY - bottom) : 0
+            // Drawer rows can make a toolbar-only region pass for a docked keyboard. The
+            // toolbar owns it only when it spans the reported frame, not when it rests
+            // apart below the fold over the system keys.
+            let toolbarOwnsKeyboardRegion: Bool = {
+                guard let accessoryFrame, !keyboardFrame.isNull, !keyboardFrame.isEmpty else { return false }
+                let toolbar = window.convert(accessoryFrame, from: window.screen.coordinateSpace)
+                let keyboard = window.convert(keyboardFrame, from: window.screen.coordinateSpace)
+                return toolbar.minY <= keyboard.minY + 2
+                    && toolbar.maxY >= keyboard.maxY - windowSafeAreaInsets.bottom - 2
+            }()
+            let systemKeyboardFills = !toolbarOwnsKeyboardRegion && fillsLowerRegion(keyboardFrame)
+            return fillsLowerRegion(touchKeyboardFrame) || systemKeyboardFills
+                ? max(0, window.bounds.maxY - bottom) : 0
+            #else
+            return 0
+            #endif
         }()
         ZStack {
             ForEach(Array(terminals.enumerated()), id: \.element.id) { index, tab in

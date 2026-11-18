@@ -413,27 +413,20 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     var fillsHostHeight = false {
         didSet {
             guard oldValue != fillsHostHeight else { return }
-            if !fillsHostHeight { hostFill = nil }
+            if !fillsHostHeight {
+                hostFill = nil
+                // UIKit's reload asks for the self-sized height before the next layout.
+                fillUsesDefaultMetrics = false
+                invalidateIntrinsicContentSize()
+            }
             setNeedsLayout()
         }
     }
+    private var releasingDrawerDrag = false
     /// The fixed-height keyboard's toolbar takes the default metrics to match its
     /// filled keys, while they still leave each typing row its minimum height.
-    private var releasingDrawerDrag = false
-    private var fillUsesDefaultMetrics = false {
-        didSet {
-            guard oldValue != fillUsesDefaultMetrics else { return }
-            // Measured in layout; rebuilding there would re-enter it.
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.cancelInteraction(preservingModifiers: true)
-                self.rebuildKeys()
-                self.rebuildDrawer()
-                self.invalidateIntrinsicContentSize()
-                self.setNeedsLayout()
-            }
-        }
-    }
+    /// Read only by layout, which applies a change in the same pass.
+    private var fillUsesDefaultMetrics = false
     /// The fold in content coordinates while the keyboard is split around it.
     private var splitFoldSpan: ClosedRange<Double>?
     /// The typing rows are currently built as split halves.
@@ -814,7 +807,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         if isToolbarOnly || hidesToolbar || toolbarSize.terminalKeyboardRows != nil {
             fillUsesDefaultMetrics = false
         } else if releasingDrawerDrag || contacts.values.contains(where: { $0.drawerDrag != nil }) {
-            // The rebuild would end the drag; the drag's own relayout settles it after.
+            // Switching mid-drag would move the keys under the finger; the drag's
+            // own relayout settles it after.
         } else {
             let large = Model.Height.large
             let largeToolbar = large.toolbarRowHeight + CGFloat(toolbarDrawerRows.count) * large.toolbarDrawerRowHeight
@@ -832,7 +826,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     var textFieldMode: TextFieldMode {
         didSet {
             guard oldValue != textFieldMode else { return }
-            cancelInteraction()
+            cancelInteraction(preservingModifiers: preservesModifiersForModeChange)
             if !toolPages.contains(toolPage) {
                 #if canImport(FluidAudio) && !CHINA_BUILD
                 if toolPage == .dictation { loadedDictationPane?.paneWillHide() }
@@ -844,11 +838,23 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             loadToolbarConfiguration()
             rebuildKeys()
             rebuildDrawer()
+            // The toolbar band's glass depends on whether the row shows.
+            updateAppearance()
             invalidateIntrinsicContentSize()
             onHeightChanged?()
         }
     }
     private var hidesToolbar: Bool { textFieldMode == .keysOnly }
+    private var preservesModifiersForModeChange = false
+
+    /// Changes the row mode and republishes the keyboard's own modifiers, keeping
+    /// any it has latched (the glass bar handing the row back on a Duo fold).
+    func setTextFieldModePreservingModifiers(_ mode: TextFieldMode) {
+        preservesModifiersForModeChange = true
+        textFieldMode = mode
+        preservesModifiersForModeChange = false
+        publishModifiers()
+    }
 
     /// Whose toolbar layout the toolbar row shows. One keyboard serves every
     /// pane in the window, so this follows whichever pane holds it.

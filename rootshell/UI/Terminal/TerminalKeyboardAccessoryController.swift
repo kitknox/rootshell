@@ -178,7 +178,8 @@ final class TerminalKeyboardAccessoryController: NSObject {
             scope.keyboard.sequenceDelegate = delegate
         }
         scope.keyboard.toolbarContext = host.keyboardToolbarContext
-        scope.keyboard.textFieldMode = touchKeyboardRowMode
+        // Through the reconciliation, which keeps latched keys when a fold hands the row back.
+        refreshTouchKeyboardToolbarRow()
         let stateChanged = boundTouchKeyboardState !== scope.state(tabID: host.keyboardTabID, perTab: touchStatePerTab)
         if stateChanged {
             boundTouchKeyboardState = scope.activate(tabID: host.keyboardTabID, perTab: touchStatePerTab)
@@ -248,8 +249,21 @@ final class TerminalKeyboardAccessoryController: NSObject {
     /// The host's answer to `keyboardTouchKeyboardShowsToolbar` changed.
     func refreshTouchKeyboardToolbarRow() {
         guard let keyboard = touchKeyboard else { return }
-        keyboard.textFieldMode = touchKeyboardRowMode
+        let carried = glassBarCarriesTouchToolbar
+        let barLeaves = glassBarWasCarried && !carried
+        glassBarWasCarried = carried
+        guard barLeaves else {
+            keyboard.textFieldMode = touchKeyboardRowMode
+            return
+        }
+        // Folding into the laptop pose: the bar's latched modifiers go with it. The
+        // keyboard keeps its own and republishes them, now without the bar's.
+        if let toolbar = keyboardAccessory?.toolbarView, !toolbar.activeModifiers.isEmpty {
+            toolbar.clearModifiers()
+        }
+        keyboard.setTextFieldModePreservingModifiers(touchKeyboardRowMode)
     }
+    private var glassBarWasCarried = false
 
     /// Give up the window's keyboard. The presentation stays mounted so an
     /// incoming terminal can take it over without a blank frame.
