@@ -209,15 +209,18 @@ final class TerminalKeyboardAccessoryController: NSObject {
     /// slot, which gets no keyboard backdrop of its own.
     var glassBarCarriesTouchToolbar: Bool {
         let manager = KeyboardToolbarManager.shared
+        // UIKit lifts any accessory above the Duo's fold, away from the keys.
         return usesFullTouchKeyboard && host?.keyboardSoftwareKeyboardRequest == nil
-            && touchKeyboardPlacement == .docked && manager.toolbarStyle.resolved == .glassBar
+            && touchKeyboardPlacement == .docked && !foldDocksTouchKeyboard
+            && manager.toolbarStyle.resolved == .glassBar
             && manager.terminalKeyboardUsesGlassBar
     }
 
     /// The docked terminal keyboard, or its toolbar row alone once minimized, is
     /// glass over UIKit's keyboard backdrop, so that backdrop takes the theme's appearance.
     var touchKeyboardDocksGlass: Bool {
-        glassBarCarriesTouchToolbar || (usesTouchKeyboardToolbar && touchKeyboard?.docksGlass == true)
+        glassBarCarriesTouchToolbar
+            || ((usesFullTouchKeyboard || usesTouchKeyboardToolbar) && touchKeyboard?.docksGlass == true)
     }
 
     /// Modifiers held on the carried glass bar, for the next terminal keyboard key.

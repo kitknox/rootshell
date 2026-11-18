@@ -1200,6 +1200,23 @@ extension MainView {
         // A glass toolbar lets bottom panes draw on under it and the keyboard.
         let toolbarIsGlass = terminals.indices.contains(selectedTabIndex)
             && terminals[selectedTabIndex].focusedPane?.keyboardToolbarShowsGlassBar == true
+        // Tabletop holds the toolbar and keyboard in a region below the fold, outside
+        // this container, so the band reaches on to the window's bottom edge. Not across
+        // a bottom tab bar, and only while some input sits below the fold: a hardware
+        // keyboard's toolbar stays above it.
+        let tabletopUnderlap: CGFloat = {
+            guard toolbarIsGlass, duoTabletopAvailable, !duoTabletopDisabled, !showsBottomTabBar,
+                  let window = terminals[selectedTabIndex].focusedPane?.window else { return 0 }
+            let bottom = geometry.frame(in: .global).maxY
+            let lowerRegion = CGRect(x: window.bounds.minX, y: bottom + 1,
+                                     width: window.bounds.width, height: max(0, window.bounds.maxY - bottom - 1))
+            let inputBelowFold = [accessoryFrame, touchKeyboardFrame, keyboardFrame].contains { frame in
+                guard let frame, !frame.isNull, !frame.isEmpty else { return false }
+                let local = window.convert(frame, from: window.screen.coordinateSpace)
+                return !local.intersection(lowerRegion).isEmpty
+            }
+            return inputBelowFold ? max(0, window.bounds.maxY - bottom) : 0
+        }()
         ZStack {
             ForEach(Array(terminals.enumerated()), id: \.element.id) { index, tab in
                 if !tab.splitTree.isEmpty {
@@ -1263,7 +1280,8 @@ extension MainView {
                                 tabID: tab.id
                             )
                             // The padding is exactly the band the toolbar and keyboard cover.
-                            .environment(\.terminalKeyboardUnderlap, toolbarIsGlass ? bottomPadding : 0)
+                            .environment(\.terminalKeyboardUnderlap,
+                                         toolbarIsGlass ? bottomPadding + tabletopUnderlap : 0)
                             // NOTE: the tmux control-mode client size is NOT driven from here.
                             // A tmux pane is a real ghostty surface, so its grid is recomputed
                             // in the core (cell/font/inset-aware) on every resize/keyboard/font
@@ -1345,7 +1363,8 @@ extension MainView {
         // App-tab swipe views deliberately travel beyond their own bounds.
         // Clip at the expanded terminal viewport (which already includes the
         // bottom safe-area escape) so they cannot smear beneath the sidebar.
-        .clipped()
+        // Tabletop's underlap continues below it, past the fold.
+        .clipShape(BottomExtendedRect(bottom: tabletopUnderlap))
     }
 
     private func appTabSwipeVisualMetrics(for tabID: UUID, width: CGFloat) -> (opacity: Double, offsetX: CGFloat, zIndex: Double) {
@@ -1909,6 +1928,15 @@ enum TabSidebarLayout {
 
     static func saveDockedWidth(_ width: CGFloat) {
         SettingsStore.shared.set(Settings.Sidebar.dockedWidth, Double(max(width, minWidth)))
+    }
+}
+
+/// A clip rectangle that reaches past its view's bottom edge.
+private struct BottomExtendedRect: Shape {
+    let bottom: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        Path(CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height + max(0, bottom)))
     }
 }
 
