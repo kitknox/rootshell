@@ -169,6 +169,65 @@ final class KVMProtocolTests: XCTestCase {
         }
     }
 
+    func testRateLimitIntervalIsClamped() throws {
+        let huge = Data(#"{"ok":false,"result":{"remaining_time":9223372036854775807}}"#.utf8)
+        XCTAssertThrowsError(try KVMDLoginOutcome.parse(status: 429, body: huge)) { error in
+            XCTAssertEqual(error as? KVMDError, .rateLimited(seconds: KVMDError.maxRetrySeconds))
+        }
+        let negative = Data(#"{"ok":false,"result":{"remaining_time":-5}}"#.utf8)
+        XCTAssertThrowsError(try KVMDLoginOutcome.parse(status: 429, body: negative)) { error in
+            XCTAssertEqual(error as? KVMDError, .rateLimited(seconds: 0))
+        }
+        // Past Int.max, where NSNumber.intValue would wrap negative.
+        for text in ["9223372036854775808", "18446744073709551616", "1e300"] {
+            let body = Data(#"{"ok":false,"result":{"remaining_time":\#(text)}}"#.utf8)
+            XCTAssertThrowsError(try KVMDLoginOutcome.parse(status: 429, body: body)) { error in
+                XCTAssertEqual(error as? KVMDError, .rateLimited(seconds: KVMDError.maxRetrySeconds), text)
+            }
+        }
+        for text in ["true", "false"] {
+            let body = Data(#"{"ok":false,"result":{"remaining_time":\#(text)}}"#.utf8)
+            XCTAssertThrowsError(try KVMDLoginOutcome.parse(status: 429, body: body)) { error in
+                XCTAssertEqual(error as? KVMDError, .rateLimited(seconds: 600), text)
+            }
+        }
+        for text in ["nan", "inf", "-inf", "infinity"] {
+            XCTAssertEqual(KVMDError.retrySeconds(text), 600, text)
+        }
+        XCTAssertEqual(KVMDError.retrySeconds(nil), 600)
+        XCTAssertNotNil(KVMDError.rateLimited(seconds: .max).errorDescription)
+        XCTAssertNotNil(KVMDError.rateLimited(seconds: .min).errorDescription)
+    }
+
+    func testResponseBodyLimit() async throws {
+        func stream(_ count: Int) -> AsyncStream<UInt8> {
+            AsyncStream { continuation in
+                for _ in 0..<count { continuation.yield(0x20) }
+                continuation.finish()
+            }
+        }
+        let fits = try await KVMDResponseBody.collect(stream(16), expectedLength: -1, limit: 16)
+        XCTAssertEqual(fits?.count, 16)
+        let unlabeled = try await KVMDResponseBody.collect(stream(17), expectedLength: -1, limit: 16)
+        XCTAssertNil(unlabeled)
+        let declared = try await KVMDResponseBody.collect(stream(0), expectedLength: 17, limit: 16)
+        XCTAssertNil(declared)
+    }
+
+    func testOversizedErrorBodyKeepsItsStatus() throws {
+        let body = try KVMDResponseBody.body(status: 429, collected: nil)
+        XCTAssertThrowsError(try KVMDLoginOutcome.parse(status: 429, body: body)) { error in
+            XCTAssertEqual(error as? KVMDError, .rateLimited(seconds: 600))
+            XCTAssertTrue((error as? KVMDError)?.isTerminal == true)
+        }
+        XCTAssertThrowsError(try KVMDLoginOutcome.parse(status: 401, body: KVMDResponseBody.body(status: 401, collected: nil))) { error in
+            XCTAssertEqual(error as? KVMDError, .invalidCredentials)
+        }
+        XCTAssertThrowsError(try KVMDResponseBody.body(status: 200, collected: nil)) { error in
+            XCTAssertEqual(error as? KVMDError, .protocolError("response too large"))
+        }
+    }
+
     func testTerminalErrorsNeverRetry() {
         XCTAssertTrue(KVMDError.invalidCredentials.isTerminal)
         XCTAssertTrue(KVMDError.rateLimited(seconds: 1).isTerminal)

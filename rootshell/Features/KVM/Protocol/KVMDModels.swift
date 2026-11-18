@@ -77,6 +77,37 @@ nonisolated enum KVMDJSON {
     }
 }
 
+// MARK: - Response body
+
+nonisolated enum KVMDResponseBody {
+    /// kvmd replies are small JSON; anything larger is a misbehaving endpoint.
+    static let maxBytes = 1 << 20
+
+    /// Nil once the body passes `limit`. Enforced as bytes arrive, so a
+    /// missing or false Content-Length can't grow the buffer past it.
+    static func collect<Bytes: AsyncSequence>(
+        _ bytes: Bytes, expectedLength: Int64, limit: Int = maxBytes
+    ) async throws -> Data? where Bytes.Element == UInt8 {
+        guard expectedLength <= Int64(limit) else { return nil }
+        var data = Data()
+        if expectedLength > 0 { data.reserveCapacity(Int(expectedLength)) }
+        for try await byte in bytes {
+            guard data.count < limit else { return nil }
+            data.append(byte)
+        }
+        return data
+    }
+
+    /// An oversized error body is dropped but its status kept, so a 401/403/429
+    /// stays terminal. An oversized success has no usable meaning; an empty
+    /// login reply would read as "authentication disabled".
+    static func body(status: Int, collected: Data?) throws -> Data {
+        if let collected { return collected }
+        guard status != 200 else { throw KVMDError.protocolError("response too large") }
+        return Data()
+    }
+}
+
 // MARK: - Errors
 
 nonisolated enum KVMDError: LocalizedError, Equatable, Sendable {
@@ -89,6 +120,17 @@ nonisolated enum KVMDError: LocalizedError, Equatable, Sendable {
     case kickedOut(reason: String)
     case protocolError(String)
     case timedOut
+
+    /// The longest lockout we report; the device supplies the value.
+    static let maxRetrySeconds = 86_400
+
+    /// Clamped as a Double: narrowing a JSON number above Int.max to Int first
+    /// can wrap it negative. Missing, boolean, or non-finite falls back to ten minutes.
+    static func retrySeconds(_ value: Any?) -> Int {
+        if let number = value as? NSNumber, number === kCFBooleanTrue || number === kCFBooleanFalse { return 600 }
+        guard let seconds = KVMDJSON.double(value), seconds.isFinite else { return 600 }
+        return Int(min(max(seconds, 0), Double(maxRetrySeconds)))
+    }
 
     /// Errors a reconnect cannot fix; retrying them repeats the same failure
     /// or, for credentials, extends the device's lockout.
@@ -106,7 +148,8 @@ nonisolated enum KVMDError: LocalizedError, Equatable, Sendable {
         case .invalidCredentials:
             return String(localized: "The KVM rejected the user name, password, or verification code.")
         case .rateLimited(let seconds):
-            let minutes = max(1, (seconds + 59) / 60)
+            let clamped = min(max(seconds, 0), Self.maxRetrySeconds)
+            let minutes = max(1, (clamped + 59) / 60)
             return String(localized: "Too many failed sign-ins. The KVM accepts new attempts in about \(minutes) min.")
         case .twoStepExpired:
             return String(localized: "The sign-in wasn't approved on the KVM's screen in time.")
@@ -160,7 +203,7 @@ nonisolated enum KVMDLoginOutcome: Equatable, Sendable {
         case 401, 403:
             throw KVMDError.invalidCredentials
         case 429:
-            throw KVMDError.rateLimited(seconds: KVMDJSON.int(result["remaining_time"]) ?? 600)
+            throw KVMDError.rateLimited(seconds: KVMDError.retrySeconds(result["remaining_time"]))
         default:
             throw KVMDError.http(status: status, message: result["error_msg"] as? String)
         }

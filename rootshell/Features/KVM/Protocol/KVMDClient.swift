@@ -163,8 +163,17 @@ final class KVMDClient {
         }
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (bytes, response) = try await session.bytes(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let collected: Data?
+            do {
+                collected = try await KVMDResponseBody.collect(bytes, expectedLength: response.expectedContentLength)
+            } catch {
+                bytes.task.cancel()
+                throw error
+            }
+            if collected == nil { bytes.task.cancel() }
+            let data = try KVMDResponseBody.body(status: status, collected: collected)
             if status != 200 {
                 Self.logger.info("KVM \(method, privacy: .public) \(path, privacy: .public) -> \(status)")
             }
