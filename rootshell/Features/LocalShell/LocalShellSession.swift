@@ -127,7 +127,14 @@ final class LocalShellSession: TerminalSession, EmbeddedConnectionConfigProvidin
         didSet { updateAuthBannerCardForwarding() }
     }
     var embeddedTrzszSession: TrzszSession? {
-        didSet { updateAuthBannerCardForwarding() }
+        didSet {
+            updateAuthBannerCardForwarding()
+            // The local prompt returns: a save gathered while the tssh
+            // session ran must not write it as that session's remote screen.
+            // Not when the local shell itself is stopping: nothing is printed
+            // then, and the save gathered before the teardown is its last.
+            if embeddedTrzszSession == nil, oldValue != nil, isRunning { embeddedTrzszOutput?.beginSession() }
+        }
     }
 
     /// Relays the active embedded session's auth-banner card state through
@@ -358,8 +365,10 @@ final class LocalShellSession: TerminalSession, EmbeddedConnectionConfigProvidin
     /// (alt-screen / mouse capture / cursor key mode / bracketed paste / cursor
     /// shape) for resumed sessions, mirroring the top-level `.trzsz` path.
     var onEmbeddedTrzszReady: (@MainActor (TrzszSession) -> Void)?
-    var onEmbeddedTrzszFreshSession: (@Sendable () -> Void)?
-    var embeddedTrzszProtocolObserver: TerminalProtocolObserver?
+    /// Starts a new session when an embedded tssh session starts or ends:
+    /// its connection progress is on screen until its remote program writes,
+    /// and the local prompt afterwards.
+    var embeddedTrzszOutput: TerminalRemoteOutputMarker?
 
     /// Called when an embedded trzsz session fails before reaching `.running`
     /// (auth failure, host-key failure, expired credentials, network error).

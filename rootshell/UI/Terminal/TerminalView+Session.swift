@@ -203,7 +203,7 @@ extension Ghostty.TerminalView {
             return
         }
         if let trailer, !trailer.isEmpty {
-            outputPipeline.writeDirect(trailer)
+            outputPipeline.writeRestoreTrailer(trailer)
             didQueueScrollbackRestoreReplay()
         }
     }
@@ -401,7 +401,7 @@ extension Ghostty.TerminalView {
             // finish the gate, producing the desired stream:
             //     saved-scrollback → trailer → buffered-server-output → live
             if !restoredWasTmuxGateway, let trailer, !trailer.isEmpty {
-                outputPipeline.writeDirect(trailer)
+                outputPipeline.writeRestoreTrailer(trailer)
             }
             scrollbackWrittenAwaitingTrailer = false
             if restoredWasTmuxGateway {
@@ -426,23 +426,40 @@ extension Ghostty.TerminalView {
     }
 
     /// Ensures the restore replay's final cursor positioning is rendered after
-    /// the saved bytes and any gated live output have reached Ghostty.
+    /// Ghostty has parsed the saved bytes and any gated live output, and
+    /// keeps the surface from being saved until then.
     func didQueueScrollbackRestoreReplay() {
-        scrollbackRestoreReplayPending = true
+        let pipe = outputPipeline.bufferedWriter.pipePosition.pipe
+        scrollbackRestoreReplayPipe = pipe
         scrollbackRestoreReplayGeneration &+= 1
         let generation = scrollbackRestoreReplayGeneration
         outputPipeline.notifyWhenOutputDrained { [weak self] in
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                self?.flushPostScrollbackRestoreRender()
+                // Drained only means written to the pipe.
+                guard await self?.restoreReplayWasParsed(pipe: pipe, generation: generation) == true,
+                      let self else { return }
                 self.flushPostScrollbackRestoreRender()
-                await Task.yield()
-                guard !Task.isCancelled else { return }
-                self.flushPostScrollbackRestoreRender()
-                if self.scrollbackRestoreReplayGeneration == generation {
-                    self.scrollbackRestoreReplayPending = false
-                }
+                self.scrollbackRestoreReplayPipe = nil
             }
         }
+    }
+
+    /// True once Ghostty has parsed everything written to `pipe` so far.
+    /// False if that can no longer happen or no longer matters: the surface
+    /// and its pipe were replaced, or a newer replay owns the guard. There is
+    /// no timeout, since a slow parse must not pass for a finished one.
+    private func restoreReplayWasParsed(pipe: UInt64, generation: UInt64) async -> Bool {
+        let written = outputPipeline.bufferedWriter.pipePosition.written
+        var pause = Duration.milliseconds(2)
+        while !Task.isCancelled {
+            guard scrollbackRestoreReplayGeneration == generation, let surface,
+                  outputPipeline.bufferedWriter.pipePosition.pipe == pipe else { return false }
+            if ghostty_surface_parsed_bytes(surface) >= written { return true }
+            try? await Task.sleep(for: pause)
+            pause = min(pause * 2, .milliseconds(250))
+        }
+        return false
     }
 
     private func flushPostScrollbackRestoreRender() {

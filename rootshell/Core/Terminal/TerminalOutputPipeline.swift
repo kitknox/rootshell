@@ -60,7 +60,8 @@ final class TerminalOutputPipeline {
     private var outputCoalescingResumeTimer: Timer?
     private var onURLRequest: (@Sendable (URL) -> Void)?
     private var urlRequestObserver: TerminalURLRequestObserver?
-    var protocolObserver: TerminalProtocolObserver?
+    /// Where the adopted tssh session's remote program first wrote.
+    let remoteOutput = TerminalRemoteOutputMarker()
 
     let bufferedWriter: TerminalBufferedPipeWriter
     let scrollbackRestoreOutputGate = TerminalScrollbackRestoreOutputGate()
@@ -70,8 +71,8 @@ final class TerminalOutputPipeline {
             minBatchIntervalMs: config.minBatchIntervalMs,
             maxBatchIntervalMs: config.maxBatchIntervalMs,
             debug: config.debug,
-            write: { [scrollbackRestoreOutputGate, bufferedWriter] data in
-                scrollbackRestoreOutputGate.writeOrBuffer(data, to: bufferedWriter)
+            write: { [scrollbackRestoreOutputGate, bufferedWriter] data, mark in
+                scrollbackRestoreOutputGate.writeOrBuffer(data, to: bufferedWriter, onWritten: mark)
             }
         )
     }()
@@ -88,6 +89,7 @@ final class TerminalOutputPipeline {
 
     func configure(fd: Int32) {
         bufferedWriter.configure(fd: fd)
+        remoteOutput.pipeChanged()
     }
 
     func cancel() {
@@ -105,17 +107,21 @@ final class TerminalOutputPipeline {
         bufferedWriter.write(Data(string.utf8))
     }
 
+    /// The bytes that follow restored scrollback. A complete replay has to
+    /// arrive whole: cut at the front by the writer's cap it would lose its
+    /// reset and paint over whatever the terminal showed.
+    func writeRestoreTrailer(_ data: Data) {
+        bufferedWriter.write(data, keepingWhole: TerminalRestorationSnapshot.isReplay(data))
+    }
+
     func writeSessionOutput(_ data: Data) {
         urlRequestObserver?.consume(data)
-        if let protocolObserver {
-            protocolObserver.write(data) { [scrollbackRestoreOutputGate, bufferedWriter] in scrollbackRestoreOutputGate.writeOrBuffer($0, to: bufferedWriter) }
-        } else { scrollbackRestoreOutputGate.writeOrBuffer(data, to: bufferedWriter) }
+        scrollbackRestoreOutputGate.writeOrBuffer(data, to: bufferedWriter)
     }
 
     func enqueueCoalescedOutput(_ data: Data) {
         urlRequestObserver?.consume(data)
-        if let protocolObserver { protocolObserver.write(data) { [outputCoalescer] in outputCoalescer.enqueue($0) } }
-        else { outputCoalescer.enqueue(data) }
+        outputCoalescer.enqueue(data)
     }
 
     func setURLRequestHandler(_ handler: @escaping @Sendable (URL) -> Void) {
@@ -189,7 +195,6 @@ final class TerminalOutputPipeline {
 
     func makeSessionOutputSink(
         useOutputCoalescer: Bool,
-        observeProtocol: Bool = true,
         terminalUUID: UUID,
         noteGatewayInboundBytes: @escaping @Sendable (Int) -> Void
     ) -> @Sendable (Data) -> Void {
@@ -197,25 +202,36 @@ final class TerminalOutputPipeline {
         let bufferedWriter = self.bufferedWriter
         let scrollbackRestoreOutputGate = self.scrollbackRestoreOutputGate
         let persistenceNotifyPending = OSAllocatedUnfairLock<Bool>(initialState: false)
-        let protocolObserver = observeProtocol ? self.protocolObserver : nil
+        // A new session starts with its connection progress on screen. The
+        // sink keeps its session's id: output of a replaced session can still
+        // arrive and must not count as the new one's.
+        let remoteOutput = self.remoteOutput
+        let remoteSession = remoteOutput.beginSession()
         // One fresh parser per adopted session. Saved scrollback and local
         // redraws use writeDirect and cannot replay a browser request.
         let urlObserver = onURLRequest.map { TerminalURLRequestObserver(onURL: $0) }
-
-        let writeDirect: @Sendable (Data) -> Void = { data in
-            scrollbackRestoreOutputGate.writeOrBuffer(data, to: bufferedWriter)
-        }
 
         return { data in
             noteGatewayInboundBytes(data.count)
             urlObserver?.consume(data)
 
-            let enqueue: (Data) -> Void = { bytes in
-                if let outputCoalescer { outputCoalescer.enqueue(bytes) }
-                else { writeDirect(bytes) }
+            // The session's first remote chunk carries a mark through the
+            // coalescer and the restore gate to the pipe writer, which
+            // reports where in the pipe that chunk ended.
+            // Only bytes a remote program wrote count; a session also writes
+            // text of its own through this sink.
+            let session: UInt64? = switch TerminalRemoteOutputMarker.remoteDelivery {
+            case .ownSession: remoteSession
+            case .session(let embedded): embedded
+            case nil: nil
             }
-            if let protocolObserver { protocolObserver.write(data, enqueue: enqueue) }
-            else { enqueue(data) }
+            let mark = data.isEmpty ? nil : session.flatMap { remoteOutput.claimFirstWrite(session: $0) }
+
+            if let outputCoalescer {
+                outputCoalescer.enqueue(data, onWritten: mark)
+            } else {
+                scrollbackRestoreOutputGate.writeOrBuffer(data, to: bufferedWriter, onWritten: mark)
+            }
 
             guard !Ghostty.isAppBackgroundedAtomic else { return }
 
@@ -242,8 +258,9 @@ nonisolated final class TerminalOutputCoalescer: @unchecked Sendable {
     private let minBatchInterval: DispatchTimeInterval
     private let maxBatchInterval: DispatchTimeInterval
     private let debug: Bool
-    private let write: @Sendable (Data) -> Void
+    private let write: @Sendable (Data, TerminalWriteMark?) -> Void
     private var pending = Data()
+    private var pendingMarks: [TerminalWriteMark] = []
     private var timer: DispatchSourceTimer?
     private var firstEnqueueTime: DispatchTime?
     private var currentDeadline: DispatchTime?
@@ -253,7 +270,7 @@ nonisolated final class TerminalOutputCoalescer: @unchecked Sendable {
     private var fastPathLock = os_unfair_lock()
     private var isEnabled = false
 
-    init(minBatchIntervalMs: Int, maxBatchIntervalMs: Int, debug: Bool, write: @escaping @Sendable (Data) -> Void) {
+    init(minBatchIntervalMs: Int, maxBatchIntervalMs: Int, debug: Bool, write: @escaping @Sendable (Data, TerminalWriteMark?) -> Void) {
         let minMs = max(1, minBatchIntervalMs)
         let maxMs = max(minMs, maxBatchIntervalMs)
         self.minBatchInterval = .milliseconds(minMs)
@@ -303,7 +320,8 @@ nonisolated final class TerminalOutputCoalescer: @unchecked Sendable {
         }
     }
 
-    func enqueue(_ data: Data) {
+    /// `mark` goes on with `data`, or with the batch `data` ends up in.
+    func enqueue(_ data: Data, onWritten mark: TerminalWriteMark? = nil) {
         os_unfair_lock_lock(&fastPathLock)
         let enabled = enabledForFastPath
         let disablePending = disableFlushInProgress
@@ -314,17 +332,18 @@ nonisolated final class TerminalOutputCoalescer: @unchecked Sendable {
                 let byteCount = data.count
                 Ghostty.logger.debug("OutputCoalescer direct bypass: \(byteCount) bytes")
             }
-            write(data)
+            write(data, mark)
             return
         }
 
         queue.async {
             if !self.isEnabled {
-                self.write(data)
+                self.write(data, mark)
                 return
             }
 
             self.pending.append(data)
+            if let mark { self.pendingMarks.append(mark) }
             if self.firstEnqueueTime == nil {
                 self.firstEnqueueTime = .now()
             }
@@ -369,9 +388,11 @@ nonisolated final class TerminalOutputCoalescer: @unchecked Sendable {
 
         let output = pending
         pending.removeAll(keepingCapacity: true)
+        let marks = pendingMarks
+        pendingMarks.removeAll()
         cancelTimerLocked()
         firstEnqueueTime = nil
-        write(output)
+        write(output, mergedTerminalWriteMark(marks))
     }
 
     private func cancelTimerLocked() {
@@ -422,6 +443,9 @@ nonisolated final class TerminalScrollbackRestoreOutputGate: @unchecked Sendable
         var chunks: [Data] = []
         var bufferedByteCount = 0
         var didLogOverflow = false
+        /// Marks of buffered chunks, each with the buffered byte count its
+        /// chunk ends at.
+        var marks: [(end: Int, mark: TerminalWriteMark)] = []
     }
 
     private let state = OSAllocatedUnfairLock(initialState: State())
@@ -436,13 +460,20 @@ nonisolated final class TerminalScrollbackRestoreOutputGate: @unchecked Sendable
         }
     }
 
-    func writeOrBuffer(_ data: Data, to writer: TerminalBufferedPipeWriter) {
-        guard !data.isEmpty else { return }
+    /// `mark` stays with `data`: it goes to the writer now, or when the gate
+    /// opens, and is told if the gate drops the chunk instead.
+    func writeOrBuffer(_ data: Data, to writer: TerminalBufferedPipeWriter, onWritten mark: TerminalWriteMark? = nil) {
+        guard !data.isEmpty else {
+            mark?(nil)
+            return
+        }
 
         let result = state.withLock { state -> (shouldWrite: Bool, shouldLogOverflow: Bool) in
             guard state.isEnabled else {
                 return (shouldWrite: true, shouldLogOverflow: false)
             }
+            let bufferedBefore = state.bufferedByteCount
+            var droppedBuffered = 0
 
             var incoming = data
             var shouldLogOverflow = false
@@ -475,6 +506,7 @@ nonisolated final class TerminalScrollbackRestoreOutputGate: @unchecked Sendable
                     incoming = TerminalOutputChunkTuning.ownedSuffix(
                         of: incoming, count: Self.maxBufferedBytes)
                 }
+                droppedBuffered = bufferedBefore - state.bufferedByteCount
                 state.chunks.insert(Self.stringTerminator, at: 0)
                 state.bufferedByteCount += Self.stringTerminator.count
                 if !state.didLogOverflow {
@@ -492,11 +524,24 @@ nonisolated final class TerminalScrollbackRestoreOutputGate: @unchecked Sendable
             }
             state.bufferedByteCount += incoming.count
 
+            // The oldest bytes were dropped and a terminator took their
+            // place. A mark whose chunk went with them moves to the end of
+            // what is buffered now: output that follows it in the stream.
+            if droppedBuffered > 0 {
+                for index in state.marks.indices {
+                    let end = state.marks[index].end
+                    state.marks[index].end = end > droppedBuffered
+                        ? end - droppedBuffered + Self.stringTerminator.count
+                        : state.bufferedByteCount
+                }
+            }
+            if let mark { state.marks.append((end: state.bufferedByteCount, mark: mark)) }
+
             return (shouldWrite: false, shouldLogOverflow: shouldLogOverflow)
         }
 
         if result.shouldWrite {
-            writer.write(data)
+            writer.write(data, onWritten: mark)
         }
         if result.shouldLogOverflow {
             Ghostty.logger.warning("ScrollbackRestoreOutputGate exceeded 10MB; dropping oldest buffered live output")
@@ -506,9 +551,17 @@ nonisolated final class TerminalScrollbackRestoreOutputGate: @unchecked Sendable
     func finish(to writer: TerminalBufferedPipeWriter) {
         state.withLock { state in
             guard state.isEnabled else { return }
+            var end = 0
             for chunk in state.chunks {
-                writer.write(chunk)
+                end += chunk.count
+                // Small chunks were merged, so a mark goes with the chunk
+                // its own ends in.
+                let due = state.marks.filter { $0.end <= end }.map(\.mark)
+                state.marks.removeAll { $0.end <= end }
+                writer.write(chunk, onWritten: mergedTerminalWriteMark(due))
             }
+            state.marks.forEach { $0.mark(nil) }
+            state.marks.removeAll()
             state.chunks.removeAll(keepingCapacity: false)
             state.bufferedByteCount = 0
             state.isEnabled = false
@@ -517,17 +570,21 @@ nonisolated final class TerminalScrollbackRestoreOutputGate: @unchecked Sendable
     }
 
     func cancel() {
-        let shouldLogDrop = state.withLock { state -> Bool in
-            guard state.isEnabled else { return false }
+        let dropped = state.withLock { state -> (bytes: Int, marks: [TerminalWriteMark])? in
+            guard state.isEnabled else { return nil }
             state.isEnabled = false
             state.didLogOverflow = false
             let droppedBytes = state.bufferedByteCount
+            let marks = state.marks.map(\.mark)
+            state.marks.removeAll()
             state.chunks.removeAll(keepingCapacity: false)
             state.bufferedByteCount = 0
-            return droppedBytes > 0
+            return (droppedBytes, marks)
         }
+        guard let dropped else { return }
 
-        if shouldLogDrop {
+        dropped.marks.forEach { $0(nil) }
+        if dropped.bytes > 0 {
             Ghostty.logger.warning("ScrollbackRestoreOutputGate canceled; dropping buffered live output")
         }
     }
@@ -563,6 +620,22 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
     private var drainCallbacks: [@Sendable () -> Void] = []
     private var isSuspended = true
     private var totalWritten: Int = 0
+    /// Bytes written to the current fd. Ghostty counts what it has parsed from
+    /// the other end (`ghostty_surface_parsed_bytes`), so the two are equal
+    /// once everything written has taken effect.
+    private var writtenToFd: UInt64 = 0
+    /// Changes whenever the fd does, so a byte count is never compared with
+    /// the parse position of another surface.
+    private var pipeGeneration: UInt64 = 0
+    /// Marks of queued chunks, each with the `writtenToFd` value its chunk's
+    /// last byte is written at. Reported from the drain once reached.
+    private var marks: [(end: UInt64, mark: TerminalWriteMark)] = []
+    /// The `writtenToFd` value at which the last write that must arrive
+    /// whole ends. Queued bytes before it are never dropped: they are a
+    /// prefix of the queue that ends at a chunk boundary.
+    private var wholeEnd: UInt64 = 0
+    /// Keeps later small writes out of the chunk a whole write ends in.
+    private var tailIsSealed = false
     private var totalDropped: Int = 0
     private var droppedSinceLastDrain: Int = 0
     private var didLogOverflow = false
@@ -596,7 +669,16 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
     }
 
     func configure(fd: Int32) {
+        // Bytes queued for the previous fd never reach this one. Told after
+        // every unlock below.
+        var orphanedMarks: [TerminalWriteMark] = []
+        defer { orphanedMarks.forEach { $0(nil) } }
+
         os_unfair_lock_lock(&bufferLock)
+        orphanedMarks = marks.map(\.mark)
+        marks.removeAll()
+        wholeEnd = 0
+        tailIsSealed = false
 
         if let source = writeSource {
             if isSuspended {
@@ -608,6 +690,8 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
         }
 
         self.fd = fd
+        writtenToFd = 0
+        pipeGeneration &+= 1
 
         // New fd generation: any pending-loss accounting belongs to the
         // previous surface. Reset it so a stale overflow report can't fire
@@ -638,8 +722,15 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
         os_unfair_lock_unlock(&bufferLock)
     }
 
-    func write(_ data: Data) {
-        guard !data.isEmpty else { return }
+    /// `mark` is told where in the pipe `data` ended once its last byte has
+    /// been written to the fd, or that it was dropped. `keepingWhole` exempts
+    /// `data` from the cap, now and while it is queued: it is never cut and
+    /// doesn't count toward the cap, so the queue can exceed it by its size.
+    func write(_ data: Data, onWritten mark: TerminalWriteMark? = nil, keepingWhole: Bool = false) {
+        guard !data.isEmpty else {
+            mark?(nil)
+            return
+        }
 
         let maxBufferedBytes = Self.maxBufferedBytes()
         let overflowLowWaterBytes = maxBufferedBytes / 2
@@ -649,10 +740,15 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
         guard fd >= 0, let source = writeSource else {
             os_unfair_lock_unlock(&bufferLock)
             Ghostty.logger.warning("BufferedPipeWriter: no FD configured, dropping \(data.count) bytes")
+            mark?(nil)
             return
         }
 
-        let combinedSize = pendingByteCount + data.count
+        // The cap is for output that may be dropped. Bytes that must arrive
+        // whole don't count toward it, or a queued replay would use it up
+        // and every live write behind it would evict the one before.
+        let wholeAhead = wholeEnd > writtenToFd ? Int(wholeEnd - writtenToFd) : 0
+        let combinedSize = pendingByteCount - wholeAhead + (keepingWhole ? 0 : data.count)
         var overflowToLog = 0
 
         if combinedSize > maxBufferedBytes {
@@ -663,30 +759,46 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
             // excess, then an owned copy of the straddling chunk's remainder
             // (a suffix slice would pin the full chunk), trimming the
             // incoming chunk itself if it alone exceeds the mark (e.g. a
-            // full scrollback restore passed as one Data).
+            // full scrollback restore passed as one Data). Bytes that must
+            // arrive whole are passed over: the oldest ones behind them go.
             var incoming = data
             var dropped = 0
-            while pendingByteCount + incoming.count > overflowLowWaterBytes,
-                  headIndex < chunks.count {
-                let chunk = chunks[headIndex]
-                let remainder = chunk.count - headOffset
-                let excess = pendingByteCount + incoming.count - overflowLowWaterBytes
+            var dropIndex = headIndex
+            var kept = 0
+            while kept < wholeAhead, dropIndex < chunks.count {
+                kept += chunks[dropIndex].count - (dropIndex == headIndex ? headOffset : 0)
+                dropIndex += 1
+            }
+            var counted = combinedSize
+            while counted > overflowLowWaterBytes, dropIndex < chunks.count {
+                let isHead = dropIndex == headIndex
+                let chunk = chunks[dropIndex]
+                let remainder = chunk.count - (isHead ? headOffset : 0)
+                let excess = counted - overflowLowWaterBytes
                 if remainder <= excess {
-                    chunks[headIndex] = Data()
-                    headIndex += 1
-                    headOffset = 0
+                    if isHead {
+                        chunks[headIndex] = Data()
+                        headIndex += 1
+                        headOffset = 0
+                        dropIndex = headIndex
+                    } else {
+                        chunks.remove(at: dropIndex)
+                    }
                     pendingByteCount -= remainder
+                    counted -= remainder
                     dropped += remainder
                     continue
                 }
-                chunks[headIndex] = TerminalOutputChunkTuning.ownedSuffix(
+                chunks[dropIndex] = TerminalOutputChunkTuning.ownedSuffix(
                     of: chunk, count: remainder - excess)
-                headOffset = 0
+                if isHead { headOffset = 0 }
                 pendingByteCount -= excess
+                counted -= excess
                 dropped += excess
                 break
             }
-            if incoming.count > overflowLowWaterBytes {
+            let droppedQueued = dropped
+            if !keepingWhole, incoming.count > overflowLowWaterBytes {
                 dropped += incoming.count - overflowLowWaterBytes
                 incoming = TerminalOutputChunkTuning.ownedSuffix(
                     of: incoming, count: overflowLowWaterBytes)
@@ -694,13 +806,27 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
             if headIndex == chunks.count {
                 chunks.removeAll(keepingCapacity: true)
                 headIndex = 0
+                dropIndex = 0
             }
-            chunks.insert(Self.stringTerminator, at: headIndex)
+            chunks.insert(Self.stringTerminator, at: dropIndex)
             pendingByteCount += Self.stringTerminator.count
             appendChunkLocked(incoming)
+            // Bytes behind `dropStart` are gone and a terminator took their
+            // place, so every chunk queued behind them ends that much earlier
+            // in the pipe. A mark whose chunk went with them moves to the end
+            // of what is queued now: output that follows it in the stream,
+            // and an offset the pipe still reaches.
+            let dropStart = writtenToFd + UInt64(kept)
+            for index in marks.indices {
+                let end = marks[index].end
+                guard end > dropStart else { continue }
+                marks[index].end = end - dropStart > UInt64(droppedQueued)
+                    ? end - UInt64(droppedQueued) + UInt64(Self.stringTerminator.count)
+                    : writtenToFd + UInt64(pendingByteCount)
+            }
             totalDropped &+= dropped
             droppedSinceLastDrain &+= dropped
-            if !didLogOverflow {
+            if dropped > 0, !didLogOverflow {
                 didLogOverflow = true
                 overflowToLog = dropped
             }
@@ -709,6 +835,15 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
             if combinedSize > Self.bufferWarningThreshold && combinedSize - data.count <= Self.bufferWarningThreshold {
                 Ghostty.logger.warning("BufferedPipeWriter: buffer exceeded 1MB (\(combinedSize) bytes)")
             }
+        }
+
+        if keepingWhole {
+            wholeEnd = writtenToFd + UInt64(pendingByteCount)
+            tailIsSealed = true
+        }
+
+        if let mark {
+            marks.append((end: writtenToFd + UInt64(pendingByteCount), mark: mark))
         }
 
         if isSuspended {
@@ -730,13 +865,15 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
     /// `headOffset` counts consumed bytes, so the remainder simply grows.
     /// Must be called with `bufferLock` held.
     private func appendChunkLocked(_ data: Data) {
-        if data.count < TerminalOutputChunkTuning.smallChunkBytes,
+        if !tailIsSealed,
+           data.count < TerminalOutputChunkTuning.smallChunkBytes,
            chunks.count > headIndex,
            chunks[chunks.count - 1].count < TerminalOutputChunkTuning.coalescedChunkLimitBytes {
             chunks[chunks.count - 1].append(data)
         } else {
             chunks.append(data)
         }
+        tailIsSealed = false
         pendingByteCount += data.count
     }
 
@@ -811,12 +948,14 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
                 headIndex += 1
                 headOffset = 0
                 totalWritten &+= bytesWritten
+                writtenToFd &+= UInt64(bytesWritten)
                 pendingByteCount -= bytesWritten
                 continue
             }
             if bytesWritten > 0 {
                 headOffset += bytesWritten
                 totalWritten &+= bytesWritten
+                writtenToFd &+= UInt64(bytesWritten)
                 pendingByteCount -= bytesWritten
                 break
             }
@@ -843,13 +982,27 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
             // generation's loss window.
             droppedSinceLastDrain = 0
             didLogOverflow = false
+            let orphanedMarks = marks.map(\.mark)
+            marks.removeAll()
+            wholeEnd = 0
+            tailIsSealed = false
             if !isSuspended {
                 isSuspended = true
                 source.suspend()
             }
             os_unfair_lock_unlock(&bufferLock)
             Ghostty.logger.error("BufferedPipeWriter: write error \(err), dropping \(droppedBytes) bytes")
+            orphanedMarks.forEach { $0(nil) }
             return
+        }
+
+        // Chunks whose last byte is in the pipe now.
+        var reachedMarks: [(mark: TerminalWriteMark, offset: TerminalPipeOffset)] = []
+        if !marks.isEmpty {
+            for entry in marks where entry.end <= writtenToFd {
+                reachedMarks.append((entry.mark, TerminalPipeOffset(pipe: pipeGeneration, end: entry.end)))
+            }
+            marks.removeAll { $0.end <= writtenToFd }
         }
 
         if headIndex == chunks.count {
@@ -874,6 +1027,9 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
         }
 
         os_unfair_lock_unlock(&bufferLock)
+        for reached in reachedMarks {
+            reached.mark(reached.offset)
+        }
         if droppedToReport > 0 {
             overflowHandler?(droppedToReport)
         }
@@ -884,6 +1040,10 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
 
     func cancel() {
         os_unfair_lock_lock(&bufferLock)
+        let orphanedMarks = marks.map(\.mark)
+        marks.removeAll()
+        wholeEnd = 0
+        tailIsSealed = false
         if let source = writeSource {
             if isSuspended {
                 source.resume()
@@ -900,7 +1060,9 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
         droppedSinceLastDrain = 0
         didLogOverflow = false
         fd = -1
+        pipeGeneration &+= 1
         os_unfair_lock_unlock(&bufferLock)
+        orphanedMarks.forEach { $0(nil) }
     }
 
     /// Install the overflow callback: fired with the total bytes dropped since
@@ -911,6 +1073,22 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
         os_unfair_lock_lock(&bufferLock)
         onOverflow = handler
         os_unfair_lock_unlock(&bufferLock)
+    }
+
+    /// Byte offsets in the current pipe, comparable with
+    /// `ghostty_surface_parsed_bytes` of the surface that reads it.
+    struct PipePosition {
+        /// Identifies the pipe; see `pipeGeneration`.
+        let pipe: UInt64
+        /// Bytes written to the fd so far.
+        let written: UInt64
+    }
+
+    var pipePosition: PipePosition {
+        os_unfair_lock_lock(&bufferLock)
+        let position = PipePosition(pipe: pipeGeneration, written: writtenToFd)
+        os_unfair_lock_unlock(&bufferLock)
+        return position
     }
 
     var pendingBytes: Int {

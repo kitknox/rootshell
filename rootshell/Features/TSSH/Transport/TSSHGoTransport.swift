@@ -439,8 +439,17 @@ final class TrzszGoTransport: NSObject {
         }
 
         flushBackgroundedOutput()
-        outputSink.emit(data)
+        emitRemoteOutput(data)
         notifyDataArrived()
+    }
+
+    /// Hands bytes received from the server to the session's sink, marked as
+    /// the remote program's. Text the session writes itself, such as escape
+    /// help or `MainChannelReset`, goes to the same sink unmarked.
+    private nonisolated func emitRemoteOutput(_ data: Data) {
+        TerminalRemoteOutputMarker.$remoteDelivery.withValue(.ownSession) {
+            outputSink.emit(data)
+        }
     }
 
     nonisolated func deferGoCallbackEvent(_ event: DeferredCallbackEvent) {
@@ -503,7 +512,7 @@ final class TrzszGoTransport: NSObject {
             Self.logger.warning("tssh output buffer dropped \(drained.droppedDuringBackground) bytes while backgrounded")
         }
         if !drained.data.isEmpty {
-            outputSink.emit(drained.data)
+            emitRemoteOutput(drained.data)
             notifyDataArrived()
         }
         return drained.hasMore

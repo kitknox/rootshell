@@ -67,14 +67,9 @@ final class TerminalSessionController {
         // plumbing (coalescer / gate / buffered writer) and runs on the
         // session's background queue, so it must not hop to the main actor.
         let outputSink = host.makeSessionOutputSink()
-        let protocolObserver = host.terminalProtocolObserver
-        if let trzsz = session as? TrzszSession {
-            trzsz.onFreshSessionStarting = { protocolObserver?.reset(state: nil) }
-        }
         #if !targetEnvironment(macCatalyst)
         if let local = session as? LocalShellSession {
-            local.onEmbeddedTrzszFreshSession = { protocolObserver?.reset(state: nil) }
-            local.embeddedTrzszProtocolObserver = protocolObserver
+            local.embeddedTrzszOutput = host.terminalOutputPipeline.remoteOutput
         }
         #endif
         session.onOutputData = { outputSink($0) }

@@ -31,7 +31,7 @@ final class ScrollbackPersistenceManager {
     // MARK: - Configuration
 
     /// Maximum file size before truncation (10 MB)
-    private let maxFileSize = 10 * 1024 * 1024
+    private nonisolated static let maxFileSize = 10 * 1024 * 1024
 
     /// Debounce interval after output stops before saving
     private let debounceDuration: TimeInterval = 2.0
@@ -56,6 +56,10 @@ final class ScrollbackPersistenceManager {
     /// Per-terminal hash of (dump bytes + mode flags) used to skip redundant saves.
     /// Shared between the main-actor debounce path and the background periodic path,
     /// so either path can observe the other's most recent save.
+    /// Both save paths read the surface on one thread and write the files
+    /// on another, so they pass through here to stay in capture order.
+    nonisolated private static let saveOrder = TerminalSaveOrder()
+
     nonisolated private static let lastSavedHashes = OSAllocatedUnfairLock(
         initialState: [UUID: Int]()
     )
@@ -138,11 +142,16 @@ final class ScrollbackPersistenceManager {
         guard Self.isEnabled else { return }
         let uuid = terminal.uuid
         registeredTerminals[uuid] = TerminalRef(terminal: terminal)
+        // Saves still in flight for an earlier terminal under this UUID
+        // hold its surface and must not land over this one's.
+        _ = Self.saveOrder.register(uuid)
         Self.logger.debug("Registered terminal \(uuid.uuidString.prefix(8)) for scrollback persistence")
         startPeriodicTimerIfNeeded()
     }
 
     func unregisterTerminal(uuid: UUID) {
+        // The registration in `saveOrder` stays: a save gathered before a
+        // scene teardown is still in flight and is the terminal's last.
         registeredTerminals.removeValue(forKey: uuid)
         Self.lastSavedHashes.withLock { $0[uuid] = nil }
         outputDebounceTasks[uuid]?.cancel()
@@ -260,7 +269,8 @@ final class ScrollbackPersistenceManager {
         let isMouseCaptured: Bool
         let isCursorKeyMode: Bool
         let isFocusEventMode: Bool
-        let protocolObserver: TerminalProtocolObserver?
+        let contents: TerminalPersistedContents
+        let registration: UInt64
     }
 
     /// Gather terminal references for background save. MainActor, no I/O.
@@ -272,7 +282,8 @@ final class ScrollbackPersistenceManager {
         var refs: [BackgroundTerminalRef] = []
         for (uuid, termRef) in registeredTerminals {
             guard let terminal = termRef.terminal,
-                  terminal.canPersistTerminalContents,
+                  let contents = terminal.persistableTerminalContents,
+                  let registration = Self.saveOrder.registration(of: uuid),
                   let surface = terminal.surface else { continue }
 
             let isAlternate = ghostty_surface_is_alternate_active(surface)
@@ -300,7 +311,8 @@ final class ScrollbackPersistenceManager {
                 isMouseCaptured: isMouseCaptured,
                 isCursorKeyMode: isCursorKeyMode,
                 isFocusEventMode: isFocusEventMode,
-                protocolObserver: terminal.terminalPersistenceProtocolObserver
+                contents: contents,
+                registration: registration
             ))
         }
 
@@ -329,27 +341,13 @@ final class ScrollbackPersistenceManager {
     ) {
         defer { releaseSurface(ref.surfacePointer) }
 
-        // Dump the primary screen (thread-safe C API call)
-        var len: UInt = 0
-        guard let ptr = ghostty_surface_dump_primary_screen(ref.surfacePointer, &len) else { return }
-        var data = Data(bytes: ptr, count: Int(len))
-        ghostty_surface_free_dump(ptr, len)
+        // Dump the screen (thread-safe C API call), newest content kept.
+        guard let contents = captureContents(surface: ref.surfacePointer, ref.contents) else { return }
+        let standing = saveOrder.accept(ref.uuid, capture: contents.capture, registration: ref.registration)
+        guard standing != .superseded else { return }
+        let data = contents.scrollback
+        let terminalState = contents.terminalState
         let alternateScreen = ref.isAlternate ? dumpAlternateScreen(ref.surfacePointer) : nil
-        let terminalState = ref.protocolObserver?.capture { state in
-            makeProtocolSnapshot(surface: ref.surfacePointer, state: state)
-        }
-        guard terminalState != nil || ref.protocolObserver == nil else { return }
-
-        // Truncate from front if too large (keep most recent content)
-        let maxSize = 10 * 1024 * 1024
-        if data.count > maxSize {
-            let excess = data.count - maxSize
-            if let newlineOffset = data[excess...].firstIndex(of: UInt8(ascii: "\n")) {
-                data = Data(data[(newlineOffset + 1)...])
-            } else {
-                data = Data(data[excess...])
-            }
-        }
 
         // Change detection: skip encrypt+write if content and mode flags are
         // unchanged since the last *successful* save. The hash is only
@@ -366,8 +364,14 @@ final class ScrollbackPersistenceManager {
         hasher.combine(ref.isCursorKeyMode)
         hasher.combine(ref.isFocusEventMode)
         let contentHash = hasher.finalize()
+        // An unchanged screen still took its place in the order above, so an
+        // older save that has not written yet can no longer land. If one is
+        // pending, the disk may not hold this screen: write it anyway.
         let alreadySaved = lastSavedHashes.withLock { $0[ref.uuid] == contentHash }
-        guard !alreadySaved else { return }
+        if alreadySaved, standing == .current {
+            saveOrder.settle(ref.uuid, capture: contents.capture)
+            return
+        }
 
         // Encrypt
         let encryptedData: Data
@@ -415,6 +419,12 @@ final class ScrollbackPersistenceManager {
         let cursorKeyFlagURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).cursorkeys.enc")
         let focusEventFlagURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).focusevent.enc")
 
+        // A save that read the surface later has taken this one's place, or
+        // the terminal has been replaced since.
+        guard saveOrder.beginWrite(ref.uuid, capture: contents.capture, registration: ref.registration) else { return }
+        var written = false
+        defer { saveOrder.endWrite(ref.uuid, capture: contents.capture, succeeded: written) }
+
         do {
             try FileManager.default.createDirectory(at: scrollbackDir, withIntermediateDirectories: true)
             try encryptedData.write(to: fileURL, options: .atomic)
@@ -454,6 +464,7 @@ final class ScrollbackPersistenceManager {
             // Record the hash only after the write succeeds — a failed save
             // above must not short-circuit the next save tick.
             lastSavedHashes.withLock { $0[ref.uuid] = contentHash }
+            written = true
         } catch {
             logger.warning("Background save failed for \(ref.uuid.uuidString.prefix(8)): \(error.localizedDescription)")
         }
@@ -511,7 +522,8 @@ final class ScrollbackPersistenceManager {
     private func saveScrollback(for uuid: UUID) {
         guard let ref = registeredTerminals[uuid],
               let terminal = ref.terminal,
-              terminal.canPersistTerminalContents,
+              let persistable = terminal.persistableTerminalContents,
+              let registration = Self.saveOrder.registration(of: uuid),
               let surface = terminal.surface else { return }
 
         // Check terminal mode state for persistence
@@ -533,34 +545,15 @@ final class ScrollbackPersistenceManager {
             #endif
         }()
 
-        // Dump the primary screen with ANSI styling
-        var len: UInt = 0
-        guard let ptr = ghostty_surface_dump_primary_screen(surface, &len) else { return }
-        var data = Data(bytes: ptr, count: Int(len))
-        ghostty_surface_free_dump(ptr, len)
+        // Dump the primary screen with ANSI styling, newest content kept.
+        // Both save paths trim it the same way *before* hashing, so they
+        // share `lastSavedHashes` coherently.
+        guard let contents = Self.captureContents(surface: surface, persistable) else { return }
+        let standing = Self.saveOrder.accept(uuid, capture: contents.capture, registration: registration)
+        guard standing != .superseded else { return }
+        let data = contents.scrollback
+        let terminalState = contents.terminalState
         let alternateScreen = isAlternate ? Self.dumpAlternateScreen(surface) : nil
-        let observer = terminal.terminalPersistenceProtocolObserver
-        let terminalState = observer?.capture { state in
-            Self.makeProtocolSnapshot(surface: surface, state: state)
-        }
-        guard terminalState != nil || observer == nil else { return }
-
-        // Truncate from front if too large (keep most recent content).
-        // Must happen *before* hashing so both save paths (main-actor here
-        // and the background periodic path) hash the same bytes and share
-        // `lastSavedHashes` coherently. Hashing the untruncated dump would
-        // cause the two paths to record different hashes for the same
-        // on-disk file when the dump exceeds maxFileSize, preventing the
-        // dedupe from ever stabilizing.
-        if data.count > maxFileSize {
-            let excess = data.count - maxFileSize
-            // Find the next newline after the cut point to avoid splitting a line
-            if let newlineOffset = data[excess...].firstIndex(of: UInt8(ascii: "\n")) {
-                data = Data(data[(newlineOffset + 1)...])
-            } else {
-                data = Data(data[excess...])
-            }
-        }
 
         // Change detection: skip save if content and mode flags are unchanged
         // since the last *successful* write. The hash is recorded only after
@@ -578,8 +571,13 @@ final class ScrollbackPersistenceManager {
         hasher.combine(isCursorKeyMode)
         hasher.combine(isFocusEventMode)
         let contentHash = hasher.finalize()
+        // See saveScrollbackInBackground: unchanged is only a reason to skip
+        // while no older save is still waiting to write.
         let alreadySaved = Self.lastSavedHashes.withLock { $0[uuid] == contentHash }
-        guard !alreadySaved else { return }
+        if alreadySaved, standing == .current {
+            Self.saveOrder.settle(uuid, capture: contents.capture)
+            return
+        }
 
         // Encrypt on MainActor before handing off to background write
         let encryptedData: Data
@@ -626,7 +624,14 @@ final class ScrollbackPersistenceManager {
 
         // Write atomically on a utility queue
         let directory = scrollbackDirectory
+        let capture = contents.capture
         Task.detached(priority: .utility) {
+            // A save that read the surface later has taken this one's place,
+            // or the terminal has been replaced since.
+            guard Self.saveOrder.beginWrite(uuid, capture: capture, registration: registration) else { return }
+            var written = false
+            defer { Self.saveOrder.endWrite(uuid, capture: capture, succeeded: written) }
+
             do {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 try encryptedData.write(to: fileURL, options: .atomic)
@@ -671,6 +676,7 @@ final class ScrollbackPersistenceManager {
                 // Record the hash only after the write succeeds — failures
                 // above must not short-circuit the next save tick.
                 Self.lastSavedHashes.withLock { $0[uuid] = contentHash }
+                written = true
             } catch {
                 ScrollbackPersistenceManager.logger.warning("Failed to save scrollback for \(uuid.uuidString.prefix(8)): \(error.localizedDescription)")
             }
@@ -715,7 +721,7 @@ final class ScrollbackPersistenceManager {
 
         defer {
             if let trailer, !trailer.isEmpty {
-                terminal.outputPipeline.writeDirect(trailer)
+                terminal.outputPipeline.writeRestoreTrailer(trailer)
             }
             if !keepGateOpen {
                 terminal.outputPipeline.finishScrollbackRestoreGate()
@@ -724,6 +730,11 @@ final class ScrollbackPersistenceManager {
                 terminal.didQueueScrollbackRestoreReplay()
             }
         }
+
+        // A complete replay resets the terminal and carries the scrollback
+        // itself. The saved copy queued ahead of it would be parsed only to
+        // be discarded, and the two together can overflow the writer.
+        if let trailer, TerminalRestorationSnapshot.isReplay(trailer) { return }
 
         let uuid = terminal.uuid
         let encryptedURL = scrollbackFileURL(for: uuid)
@@ -770,33 +781,50 @@ final class ScrollbackPersistenceManager {
 
     // MARK: - Alternate Screen Query
 
-    private nonisolated static func makeProtocolSnapshot(surface: ghostty_surface_t, state: TerminalProtocolState) -> Data? {
-        var len: UInt = 0
-        guard let ptr = ghostty_surface_dump_primary_screen(surface, &len) else { return nil }
-        var primary = Data(bytes: ptr, count: Int(len))
-        ghostty_surface_free_dump(ptr, len)
-        let maxSize = 10 * 1024 * 1024
-        if primary.count > maxSize {
-            guard let cut = primary[(primary.count - maxSize)...].firstIndex(of: 10) else { return nil }
-            primary = Data(primary[(cut + 1)...])
-        }
-        let alternate = state.alternate ? dumpAlternateScreen(surface) : nil
-        guard !state.alternate || alternate != nil else { return nil }
-        return try? JSONEncoder().encode(TerminalRestorationSnapshot(primary: primary, alternate: alternate, state: state))
-    }
+    /// What one save writes: the primary screen dump, and for a tssh terminal
+    /// the restoration snapshot built around that same dump. Ghostty reads
+    /// both, how far it had parsed and the number that orders the capture
+    /// among the others of its surface under one lock, so the files always
+    /// describe one moment and a later moment always has the higher number.
+    /// Nil skips the save and keeps the previous files.
+    private nonisolated static func captureContents(
+        surface: ghostty_surface_t,
+        _ contents: TerminalPersistedContents
+    ) -> (scrollback: Data, terminalState: Data?, capture: UInt64)? {
+        // A terminal that saves scrollback alone gets a capture of the
+        // primary screen alone: its alternate screen and state would be
+        // serialized under the renderer lock only to be discarded.
+        var snapshot = ghostty_surface_restoration_s()
+        let captured = contents.snapshotParseTarget != nil
+            ? ghostty_surface_restoration_snapshot(surface, &snapshot)
+            : ghostty_surface_scrollback_capture(surface, &snapshot)
+        guard captured, let ptr = snapshot.ptr else { return nil }
+        defer { ghostty_surface_free_dump(ptr, snapshot.len) }
+        let primary = Int(snapshot.primary_offset)..<Int(snapshot.primary_offset + snapshot.primary_len)
+        guard primary.upperBound <= Int(snapshot.len) else { return nil }
 
-    func savedProtocolState(for uuid: UUID) -> TerminalProtocolState? {
-        guard let encrypted = try? Data(contentsOf: terminalStateURL(for: uuid)),
-              let bytes = try? ScrollbackEncryptionManager.shared.decrypt(encrypted) else { return nil }
-        if let snapshot = try? JSONDecoder().decode(TerminalRestorationSnapshot.self, from: bytes), snapshot.version == 1 {
-            return snapshot.protocolState
+        let scrollback: Data
+        var terminalState: Data?
+        if let parseTarget = contents.snapshotParseTarget {
+            // Connection progress is on screen until Ghostty has parsed the
+            // remote program's first write.
+            guard snapshot.parsed_bytes >= parseTarget else { return nil }
+            guard let parts = TerminalRestorationSnapshot.parts(
+                of: Data(bytes: ptr, count: Int(snapshot.len)), primary: primary, maxScrollbackBytes: maxFileSize),
+                  let replay = parts.replay else { return nil }
+            scrollback = parts.scrollback
+            terminalState = replay
+        } else {
+            let dump = Data(bytes: UnsafeRawPointer(ptr) + primary.lowerBound, count: primary.count)
+            scrollback = TerminalRestorationSnapshot.trimmed(dump, maxBytes: maxFileSize).data
         }
-        if bytes.starts(with: Data("\u{1b}c".utf8)) {
-            var parser = TerminalProtocolParser()
-            parser.consume(bytes)
-            return parser.state
-        }
-        return nil
+        // Another session took over the terminal after this save was
+        // gathered, or its surface was replaced: what to write was decided
+        // for the previous session, and what was read is the previous
+        // surface. Checked after reading the surface, so a change in
+        // between is caught.
+        guard contents.session.isCurrent else { return nil }
+        return (scrollback, terminalState, snapshot.capture)
     }
 
     /// A complete snapshot must replace the heuristic mode trailer, not precede
@@ -804,14 +832,9 @@ final class ScrollbackPersistenceManager {
     func terminalStateRestorationBytes(for uuid: UUID) -> Data? {
         guard let encrypted = try? Data(contentsOf: terminalStateURL(for: uuid)),
               let bytes = try? ScrollbackEncryptionManager.shared.decrypt(encrypted),
-              !bytes.isEmpty else { return nil }
-        if let snapshot = try? JSONDecoder().decode(TerminalRestorationSnapshot.self, from: bytes), snapshot.version == 1 {
-            ResumeDebugLogger.shared.log("[Restore] RootShell terminal snapshot \(uuid.uuidString.prefix(8)): \(snapshot.replay.count) bytes")
-            return snapshot.replay
-        }
-        // Read snapshots written by the previous local build during migration.
-        // They are already terminal bytes, rather than a protocol-state envelope.
-        return bytes.starts(with: Data("\u{1b}c".utf8)) ? bytes : nil
+              let replay = TerminalRestorationSnapshot.replay(fromSaved: bytes) else { return nil }
+        ResumeDebugLogger.shared.log("[Restore] RootShell terminal snapshot \(uuid.uuidString.prefix(8)): \(replay.count) bytes")
+        return replay
     }
 
     /// Both save paths must include the alternate viewport in change detection;

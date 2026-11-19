@@ -54,19 +54,8 @@ extension Ghostty.TerminalView: TerminalSessionControllerHost {
     /// `outputHandler` did. Runs on the session's background queue — no main
     /// actor hop on the hot output path.
     func makeSessionOutputSink() -> @Sendable (Data) -> Void {
-        var observesProtocol = session is TrzszSession
-        #if !targetEnvironment(macCatalyst)
-        observesProtocol = observesProtocol || session is LocalShellSession
-        #endif
-        if observesProtocol {
-            let isRestoring = pendingScrollbackRestore || pendingScrollbackRestoreForLayout || restorationState != .none
-            let saved = isRestoring ? ScrollbackPersistenceManager.shared.savedProtocolState(for: uuid) : nil
-            if let observer = outputPipeline.protocolObserver { observer.reset(state: saved) }
-            else { outputPipeline.protocolObserver = TerminalProtocolObserver(state: saved) }
-        } else { outputPipeline.protocolObserver = nil }
-        return outputPipeline.makeSessionOutputSink(
+        outputPipeline.makeSessionOutputSink(
             useOutputCoalescer: shouldUseOutputCoalescer,
-            observeProtocol: session is TrzszSession,
             terminalUUID: uuid,
             noteGatewayInboundBytes: { [weak self] byteCount in
                 guard let self else { return }
@@ -198,18 +187,15 @@ extension Ghostty.TerminalView {
     var terminalResponseReadQueue: DispatchQueue { readQueue }
     var terminalResponseTmuxGatewayOwnerKey: Int { tmuxGatewayOwnerKey }
     var terminalResponseHasTmuxController: Bool { tmuxController != nil }
-    var terminalProtocolObserver: TerminalProtocolObserver? { outputPipeline.protocolObserver }
 
-    /// Local shells keep observing across embedded-session transitions, but
-    /// only tssh has a surviving remote PTY that needs a protocol snapshot.
-    var terminalPersistenceProtocolObserver: TerminalProtocolObserver? {
-        if session is TrzszSession { return outputPipeline.protocolObserver }
+    /// Only tssh has a surviving remote PTY, so only its terminals save the
+    /// full restoration snapshot beside the scrollback.
+    var persistsTerminalRestorationSnapshot: Bool {
+        if session is TrzszSession { return true }
         #if !targetEnvironment(macCatalyst)
-        if let local = session as? LocalShellSession, local.embeddedTrzszSession != nil {
-            return outputPipeline.protocolObserver
-        }
+        if let local = session as? LocalShellSession, local.embeddedTrzszSession != nil { return true }
         #endif
-        return nil
+        return false
     }
 
     var terminalUUID: UUID { uuid }

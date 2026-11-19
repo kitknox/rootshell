@@ -30,17 +30,21 @@ enum EmbeddedSessionKind: Sendable {
 /// one drain task in flight, so a busy stream never queues a task per chunk.
 /// A single queue keeps chunk order.
 private nonisolated final class EmbeddedOutputRelay: @unchecked Sendable {
+    /// `isRemote`: the session received the bytes from its server, rather
+    /// than writing them itself.
+    typealias Chunk = (data: Data, isRemote: Bool)
+
     private struct State {
-        var chunks: [Data] = []
+        var chunks: [Chunk] = []
         var drainScheduled = false
     }
 
     private let state = OSAllocatedUnfairLock(initialState: State())
 
     /// Queues `data`; true when the caller must schedule a drain.
-    func append(_ data: Data) -> Bool {
+    func append(_ data: Data, isRemote: Bool) -> Bool {
         state.withLock { state in
-            state.chunks.append(data)
+            state.chunks.append((data, isRemote))
             guard !state.drainScheduled else { return false }
             state.drainScheduled = true
             return true
@@ -48,7 +52,7 @@ private nonisolated final class EmbeddedOutputRelay: @unchecked Sendable {
     }
 
     /// Takes every queued chunk; the next append schedules a new drain.
-    func takeAll() -> [Data] {
+    func takeAll() -> [Chunk] {
         state.withLock { state in
             state.drainScheduled = false
             defer { state.chunks.removeAll() }
@@ -201,31 +205,31 @@ extension LocalShellSession {
         let sessionID = ObjectIdentifier(session)
         let outputCallback = onOutput
         let outputDataCallback = onOutputData
-        // Observe remote bytes before the parent's output sink. Local prompts
-        // and connection spinners use that same sink, but must not overwrite
-        // the resumed application's saved modes and pen.
-        let protocolObserver = kind == .trzsz ? embeddedTrzszProtocolObserver : nil
-        let deliver: @Sendable (Data) -> Void = { data in
-            if let outputDataCallback { outputDataCallback(data) }
-            else { outputCallback?(String(decoding: data, as: UTF8.self)) }
-        }
-        let remoteOutput = protocolObserver?.makeOutputSink(enqueue: deliver)
+        // A new tssh session shows its connection spinner until the remote
+        // program writes. Its output goes through the parent's sink, which
+        // the local prompt and that spinner use too, so the bytes it
+        // received from its server are delivered flagged with its session;
+        // see TerminalRemoteOutputMarker.
+        let remoteSession = kind == .trzsz ? embeddedTrzszOutput?.beginSession() : nil
         session.onOutput = { [weak self] output in
             Task { @MainActor [weak self] in
                 guard let self, self.isCurrentEmbeddedSession(sessionID, kind: kind) else { return }
-                if let remoteOutput { remoteOutput(Data(output.utf8)) }
-                else { outputCallback?(output) }
+                outputCallback?(output)
             }
         }
         let relay = EmbeddedOutputRelay()
         session.onOutputData = { [weak self] data in
-            guard relay.append(data) else { return }
+            // The transport's flag does not survive the hop below.
+            let isRemote = TerminalRemoteOutputMarker.remoteDelivery != nil
+            guard relay.append(data, isRemote: isRemote) else { return }
             Task { @MainActor [weak self] in
                 let chunks = relay.takeAll()
                 guard let self, self.isCurrentEmbeddedSession(sessionID, kind: kind) else { return }
                 for chunk in chunks {
-                    if let remoteOutput { remoteOutput(chunk) }
-                    else { outputDataCallback?(chunk) }
+                    let delivery = chunk.isRemote ? remoteSession.map { TerminalRemoteOutputMarker.RemoteDelivery.session($0) } : nil
+                    TerminalRemoteOutputMarker.$remoteDelivery.withValue(delivery) {
+                        outputDataCallback?(chunk.data)
+                    }
                 }
             }
         }
@@ -2043,7 +2047,6 @@ extension LocalShellSession {
 
         // Create Trzsz session with terminal ID for credential persistence
         let trzszSession = TrzszSession(config: resolvedTrzszConfig, pty: pty, terminalId: terminalId)
-        trzszSession.onFreshSessionStarting = onEmbeddedTrzszFreshSession
 
         // Set up host key validation
         trzszSession.onHostKeyValidation = { [weak self] request in

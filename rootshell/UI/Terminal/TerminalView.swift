@@ -1494,8 +1494,11 @@ extension Ghostty {
         var scrollbackWrittenAwaitingTrailer: Bool = false
 
         /// Never replace a known-good save with the empty/spinner surface
-        /// while its restoration bytes are still being replayed.
-        var scrollbackRestoreReplayPending = false
+        /// while its restoration bytes are still being replayed. Holds the
+        /// pipe (see `TerminalBufferedPipeWriter.PipePosition`) whose replay
+        /// Ghostty has not finished parsing, so the guard ends with that
+        /// surface and is otherwise released only by reaching the last byte.
+        var scrollbackRestoreReplayPipe: UInt64?
         var scrollbackRestoreReplayGeneration: UInt64 = 0
 
         var canPersistTerminalContents: Bool {
@@ -1503,7 +1506,22 @@ extension Ghostty {
                 && !pendingScrollbackRestore
                 && !pendingScrollbackRestoreForLayout
                 && !scrollbackWrittenAwaitingTrailer
-                && !scrollbackRestoreReplayPending
+                && scrollbackRestoreReplayPipe != outputPipeline.bufferedWriter.pipePosition.pipe
+        }
+
+        /// What a save may write now, or nil if the surface must not be
+        /// saved. A tssh surface shows connection progress until Ghostty has
+        /// parsed the remote program's first write, so its save waits for
+        /// that write to be in the pipe and carries where it ended.
+        var persistableTerminalContents: TerminalPersistedContents? {
+            guard canPersistTerminalContents else { return nil }
+            let pipe = outputPipeline.bufferedWriter.pipePosition.pipe
+            let state = outputPipeline.remoteOutput.saveState(pipe: pipe)
+            guard persistsTerminalRestorationSnapshot else {
+                return TerminalPersistedContents(session: state.session, snapshotParseTarget: nil)
+            }
+            guard let parseTarget = state.parseTarget else { return nil }
+            return TerminalPersistedContents(session: state.session, snapshotParseTarget: parseTarget)
         }
 
         /// Set true when the embedded trzsz session reaches `.running` and

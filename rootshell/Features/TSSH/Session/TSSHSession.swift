@@ -401,10 +401,6 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
     /// Whether this session was resumed from saved credentials
     private(set) var wasResumed: Bool = false
 
-    /// Synchronous with the output path: discard a restored terminal's state
-    /// before a newly spawned PTY can emit its first bytes.
-    var onFreshSessionStarting: (@Sendable () -> Void)?
-
     /// Most recent moment the transport was confirmed connected to the
     /// server. Set on successful connect/attach and refreshed by
     /// `stateUpdateTask` while running. Held in memory only — persistence
@@ -673,7 +669,6 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
 
         // Normal SSH spawn path
         wasResumed = false
-        onFreshSessionStarting?()
         try await spawnAndConnect()
     }
 
