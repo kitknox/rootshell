@@ -694,6 +694,8 @@ class KeyboardToolbarView: UIView {
     /// The main row's capacity at the last build, so a smaller width change
     /// that moves a key between the row and the drawer still rebuilds.
     private var lastBuiltCapacity = 0
+    /// The side insets the row, drawer and plate constraints were last given.
+    private var appliedChromeInsets: (left: CGFloat, right: CGFloat) = (0, 0)
     private var effectiveDrawerRows: [[KeySlot]] = [[]]
     private var groupDividers: [UIView] = []
 
@@ -910,11 +912,29 @@ class KeyboardToolbarView: UIView {
         let localRight = safeAreaInsets.right
         let windowLeft = window?.safeAreaInsets.left ?? 0
         let windowRight = window?.safeAreaInsets.right ?? 0
+        var left = max(localLeft, windowLeft)
+        var right = max(localRight, windowRight)
 
-        return (
-            left: max(localLeft, windowLeft) + 2,
-            right: max(localRight, windowRight) + 2
-        )
+        #if !targetEnvironment(macCatalyst) && !os(visionOS)
+        // UIKit can charge Duo's outer camera to its whole side column. Above or
+        // below the camera that column is free, so this row takes no inset there.
+        if #available(iOS 27.1, *), DuoHingeEvents.isFrontDisplay, let window {
+            let row = convert(bounds, to: window)
+            let area = window.bounds
+            let occlusions = window.reservedRegions(kind: .occlusion).map(\.frame)
+            // A camera inside the strip explains the inset; any occlusion over
+            // the part beside this row still needs it.
+            func reclaims(_ strip: CGRect) -> Bool {
+                let besideRow = CGRect(x: strip.minX, y: row.minY, width: strip.width, height: row.height)
+                return occlusions.contains { strip.insetBy(dx: -1, dy: -1).contains($0) }
+                    && !occlusions.contains { $0.intersects(besideRow) }
+            }
+            if left > 0, reclaims(CGRect(x: area.minX, y: area.minY, width: left, height: area.height)) { left = 0 }
+            if right > 0, reclaims(CGRect(x: area.maxX - right, y: area.minY, width: right, height: area.height)) { right = 0 }
+        }
+        #endif
+
+        return (left: left + 2, right: right + 2)
     }
 
     private func setupViews() {
@@ -1121,6 +1141,12 @@ class KeyboardToolbarView: UIView {
 
         let width = bounds.width
         guard width > 0 else { return }
+        // Camera clearance follows the row's place in the window, which can
+        // move without changing this view's width or safe area.
+        let chromeInsets = currentChromeHorizontalInsets()
+        if chromeInsets.left != appliedChromeInsets.left || chromeInsets.right != appliedChromeInsets.right {
+            updateInsetsForCurrentTraits()
+        }
 
         // Rebuild when the width changes meaningfully (e.g. rotation), or by
         // enough to move a key between the row and the drawer.
@@ -1138,6 +1164,7 @@ class KeyboardToolbarView: UIView {
     private func updateInsetsForCurrentTraits() {
         let edgePadding = currentEdgePadding()
         let chromeInsets = currentChromeHorizontalInsets()
+        appliedChromeInsets = chromeInsets
         let plateInset = self.plateInset
         backgroundLeadingConstraint?.constant = chromeInsets.left + plateInset
         backgroundTrailingConstraint?.constant = -(chromeInsets.right + plateInset)

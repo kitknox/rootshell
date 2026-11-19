@@ -373,8 +373,53 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         // when it extends below Duo's camera. UIKit's rectangular safe area
         // still reserves the entire camera column there.
         if isEmbeddedPreview { return (0, 0) }
-        return (max(safeAreaInsets.left, window?.safeAreaInsets.left ?? 0),
-                max(safeAreaInsets.right, window?.safeAreaInsets.right ?? 0))
+        var left = max(safeAreaInsets.left, window?.safeAreaInsets.left ?? 0)
+        var right = max(safeAreaInsets.right, window?.safeAreaInsets.right ?? 0)
+        if let camera = cornerCamera {
+            // Both sides, so the rows stay centered as the system keyboard's do.
+            left = max(left, camera.clearance)
+            right = max(right, camera.clearance)
+        }
+        return (left, right)
+    }
+    /// Duo's outer camera where it meets these keys. UIKit charges it to the
+    /// bottom strip or to its side column, varying by window; like the system
+    /// keyboard, keep the height and clear it from both sides.
+    /// `bottomBand` is the height the camera explains when UIKit charged it to
+    /// the bottom strip; padding beyond that band still belongs to the keys.
+    private var cornerCamera: (clearance: CGFloat, bottomBand: CGFloat?)? {
+        guard #available(iOS 27.1, *), DuoHingeEvents.isFrontDisplay,
+              !isFloating, !isEmbeddedPreview, let window else { return nil }
+        let keys = convert(bounds, to: window)
+        let area = window.bounds
+        let safe = window.safeAreaInsets
+        // A corner camera leaves most of the row; anything wider is not one.
+        let maxClearance = keys.width / 4
+        var clearance: CGFloat = 0
+        var bottomBand: CGFloat = 0
+        // Cleared only by keeping the bottom inset: a side charge, or a bottom
+        // region the side insets can't clear.
+        var keepsBottom = false
+        for camera in window.reservedRegions(kind: .occlusion).map(\.frame) where camera.intersects(keys) {
+            if safe.left > 0, camera.maxX <= area.minX + safe.left + 1 {
+                keepsBottom = true
+                clearance = max(clearance, area.minX + safe.left - keys.minX)
+            } else if safe.right > 0, camera.minX >= area.maxX - safe.right - 1 {
+                keepsBottom = true
+                clearance = max(clearance, keys.maxX - (area.maxX - safe.right))
+            } else if safe.bottom > 0, camera.minY >= area.maxY - safe.bottom - 1 {
+                let corner = camera.maxX <= keys.midX ? camera.maxX - keys.minX
+                    : camera.minX >= keys.midX ? keys.maxX - camera.minX : .infinity
+                if corner <= maxClearance {
+                    clearance = max(clearance, corner)
+                    bottomBand = max(bottomBand, area.maxY - camera.minY)
+                } else {
+                    keepsBottom = true
+                }
+            }
+        }
+        guard clearance > 0, clearance <= maxClearance else { return nil }
+        return (clearance, keepsBottom || bottomBand == 0 ? nil : bottomBand)
     }
     /// Renders this style instead of the saved one (onboarding previews).
     var styleOverride: Model.Style? {
@@ -770,6 +815,20 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         return keyboardHeight.rowHeight(verticallyCompact: compact, pad: traitCollection.userInterfaceIdiom == .pad)
     }
     private var deviceBottomInset: CGFloat {
+        if let window, let band = cornerCamera?.bottomBand {
+            // The side insets clear a camera UIKit charged to the window's bottom
+            // strip. Padding the view adds beyond its overlap with that strip is
+            // its own and stays; the overlap moves with the view's height, so
+            // reading it raw would feed back into that height.
+            let strip = window.safeAreaInsets.bottom
+            let overlap = min(strip, max(0, convert(bounds, to: window).maxY - (window.bounds.maxY - strip)))
+            // What is left of the strip counts only where the host reaches into
+            // it. The host's bottom, unlike this view's, holds still while the
+            // height settles.
+            let host = superview ?? self
+            let hostGap = max(0, window.bounds.maxY - host.convert(host.bounds, to: window).maxY)
+            return max(0, safeAreaInsets.bottom - overlap) + max(0, strip - band - hostGap)
+        }
         // An embedded settings preview must not inherit padding from the window's
         // bottom edge unless the keyboard actually reaches that edge.
         guard let window, convert(bounds, to: window).maxY >= window.bounds.maxY - 1 else {
