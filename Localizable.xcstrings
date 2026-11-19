@@ -1,6 +1,74 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Send Control-Space to Remote Computer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send Control-Space to Remote Computer"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Control-Space를 원격 컴퓨터로 전송"
+          }
+        }
+      }
+    },
+    "Caps Lock Switches Keyboard Language": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caps Lock Switches Keyboard Language"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caps Lock으로 키보드 언어 전환"
+          }
+        }
+      }
+    },
+    "Input Language Switching": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input Language Switching"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "입력 언어 전환"
+          }
+        }
+      }
+    },
+    "Turn off remote Control-Space to cycle through the input languages installed on this device. Enable Caps Lock switching to cycle with a short press; hold Caps Lock or press Shift-Caps Lock to lock uppercase. Local switching requires at least two input languages, excluding emoji. These defaults apply to new sessions; change the current session from the Screen Sharing menu.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn off remote Control-Space to cycle through the input languages installed on this device. Enable Caps Lock switching to cycle with a short press; hold Caps Lock or press Shift-Caps Lock to lock uppercase. Local switching requires at least two input languages, excluding emoji. These defaults apply to new sessions; change the current session from the Screen Sharing menu."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Control-Space의 원격 전송을 끄면 이 기기에 등록된 입력 언어를 순환합니다. Caps Lock 전환을 켜면 짧게 눌러 언어를 바꾸고, 길게 누르거나 Shift-Caps Lock을 눌러 대문자를 잠급니다. 로컬 전환에는 이모티콘을 제외한 입력 언어가 두 개 이상 필요합니다. 이 기본값은 새 세션에 적용되며, 현재 세션은 화면 공유 메뉴에서 변경할 수 있습니다."
+          }
+        }
+      }
+    },
     "" : {
       "localizations" : {
         "ar" : {

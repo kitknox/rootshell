@@ -306,6 +306,12 @@ enum QuickSettingsCatalog {
             toggle(Settings.Transfer.attachmentUploadConfirm),
             choices(Settings.Transfer.attachmentUploadFormat, label: { $0.displayName }),
         ]
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        entries += [
+            toggle(Settings.ScreenSharing.routesControlSpaceToRemoteDefault),
+            toggle(Settings.ScreenSharing.capsLockSwitchesInputSourceDefault),
+        ]
+        #endif
         entries += [
             toggle(Settings.CodingAgents.detectionEnabled, set: {
                 SettingsStore.shared.set(Settings.CodingAgents.detectionEnabled, $0)

@@ -18,6 +18,8 @@ struct ScreenSharingSettingsView: View {
     @Setting(Settings.ScreenSharing.kvmLocalCursorDefault) private var kvmLocalCursorDefault
     @Setting(Settings.ScreenSharing.controlOptionAsCommandDefault) private var controlOptionAsCommandDefault
     @Setting(Settings.ScreenSharing.routeReservedShortcutsToVNCDefault) private var routeReservedShortcutsToVNCDefault
+    @Setting(Settings.ScreenSharing.routesControlSpaceToRemoteDefault) private var routesControlSpaceToRemoteDefault
+    @Setting(Settings.ScreenSharing.capsLockSwitchesInputSourceDefault) private var capsLockSwitchesInputSourceDefault
     @Setting(Settings.ScreenSharing.floatingToolbarDefault) private var floatingToolbarDefault
     @Setting(Settings.ScreenSharing.touchHoldDelay) private var touchHoldDelay
     @Setting(Settings.ScreenSharing.showsHeldButton) private var showsHeldButton
@@ -48,6 +50,31 @@ struct ScreenSharingSettingsView: View {
             } footer: {
                 Text("Maps physical Control+Option to remote Command, including Tab and Shift shortcuts. Replaces existing Control+Option shortcuts, including Dictate. Sets the default for new sessions; change it for the current session from the Screen Sharing menu. Turn it off to send Control+Option combinations.")
             }
+
+            #if os(iOS) && !targetEnvironment(macCatalyst)
+            Section {
+                Toggle(isOn: $routesControlSpaceToRemoteDefault) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "arrowshape.turn.up.right")
+                        Text("Send Control-Space to Remote Computer")
+                    }
+                    .settingRow(Settings.ScreenSharing.routesControlSpaceToRemoteDefault)
+                }
+                .themedRow()
+                Toggle(isOn: $capsLockSwitchesInputSourceDefault) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "globe")
+                        Text("Caps Lock Switches Keyboard Language")
+                    }
+                    .settingRow(Settings.ScreenSharing.capsLockSwitchesInputSourceDefault)
+                }
+                .themedRow()
+            } header: {
+                SettingGroupHeader("Input Language Switching", group: .screenSharing)
+            } footer: {
+                Text("Turn off remote Control-Space to cycle through the input languages installed on this device. Enable Caps Lock switching to cycle with a short press; hold Caps Lock or press Shift-Caps Lock to lock uppercase. Local switching requires at least two input languages, excluding emoji. These defaults apply to new sessions; change the current session from the Screen Sharing menu.")
+            }
+            #endif
 
             Section {
                 Toggle(isOn: $routeReservedShortcutsToVNCDefault) {

@@ -305,6 +305,12 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
             Settings.ScreenSharing.controlOptionAsCommandDefault)
         keyboardCapture.routeReservedHostShortcutsToVNC(SettingsStore.shared.value(
             Settings.ScreenSharing.routeReservedShortcutsToVNCDefault))
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        keyboardCapture.routesControlSpaceToRemote = SettingsStore.shared.value(
+            Settings.ScreenSharing.routesControlSpaceToRemoteDefault)
+        keyboardCapture.capsLockSwitchesInputSource = SettingsStore.shared.value(
+            Settings.ScreenSharing.capsLockSwitchesInputSourceDefault)
+        #endif
         self.keyboardCapture = keyboardCapture
         self.displayTitle = config.displayName
         self.windowId = windowId
