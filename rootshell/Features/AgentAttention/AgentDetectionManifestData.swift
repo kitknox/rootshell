@@ -20,6 +20,9 @@ nonisolated enum AgentDetectionManifestData {
           "id": "agy",
           "displayName": "Antigravity CLI",
           "identity": {
+            "programStatusApps": [
+              "antigravity"
+            ],
             "screenSignatures": [
               {
                 "regex": [
