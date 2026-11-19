@@ -721,10 +721,23 @@ final class TerminalKeyboardAccessoryController: NSObject {
             ? (keyboardAccessory?.intrinsicContentSize.height ?? 0) : 0
         let height = input.intrinsicContentSize.height + toolbar
         guard height > 0 else { return nil }
+        // iOS re-lays out an inactive app for snapshots and the keys measure
+        // for the other orientation. Hold the height across a round trip while
+        // the window keeps its size, anchored to where the window is now.
+        let windowSize = window.bounds.size
+        var dockedHeight = height
+        if tracker.isPreservingSoftwareKeyboardForAppTransition,
+           let held = heldDockedTouchKeyboardHeight, held.windowSize == windowSize {
+            dockedHeight = held.height
+        } else {
+            heldDockedTouchKeyboardHeight = (height, windowSize)
+        }
         let frame = window.convert(window.bounds, to: window.screen.coordinateSpace)
-        return CGRect(x: frame.minX, y: frame.maxY - height,
-                      width: frame.width, height: height)
+        return CGRect(x: frame.minX, y: frame.maxY - dockedHeight,
+                      width: frame.width, height: dockedHeight)
     }
+
+    private var heldDockedTouchKeyboardHeight: (height: CGFloat, windowSize: CGSize)?
 
     /// The way back from Apple's keyboard. Shown only while that switch is in effect.
     private func updateTouchKeyboardReturnButton() {

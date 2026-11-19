@@ -69,7 +69,6 @@ class KeyboardTracker {
     /// then counts as the layout returning, so the re-shown toolbar is not
     /// mistaken for a still-hidden keyboard and committed away on release.
     @MainActor private var overlayPreservationCoversInputViewOnly = false
-    @MainActor private var appTransitionPreservationCoversInputViewOnly = false
 
     @MainActor
     private func isPreservedLayoutFrameVisible(_ frame: CGRect, inputViewOnly: Bool) -> Bool {
@@ -265,6 +264,42 @@ class KeyboardTracker {
     @MainActor
     private var ignoredHiddenKeyboardFrameDuringPreservation = false
 
+    /// Last visible frame the active scene (or a rotated window) reported
+    /// while the app-transition latch held.
+    @MainActor
+    private var appTransitionReturnedKeyboardFrame: CGRect?
+
+    /// An uncommitted frame from the previous trip. A hide, an active or
+    /// rotated frame, or a hardware-confirmed frame from this trip outranks it.
+    @MainActor
+    private var appTransitionCarriedKeyboardFrame: CGRect?
+
+    /// Frames posted before the app is active are restoration noise (the
+    /// accessory detaches and reattaches); only a later one shows where the
+    /// keyboard settled.
+    @MainActor
+    private var appTransitionKeyboardReturnedWhileActive = false
+
+    /// The input window's size the held keyboard frame belongs to.
+    @MainActor
+    private var appTransitionWindowSize: CGSize?
+
+    /// The window rotated during this trip.
+    @MainActor
+    private var appTransitionWindowWasResized = false
+
+    /// The pending hide came from an uncommitted previous trip.
+    @MainActor
+    private var appTransitionHideIsCarried = false
+
+    /// Latest visible frame from the inactive scene. Untrusted on its own;
+    /// used only when the hardware keyboard changed during the trip.
+    @MainActor
+    private var appTransitionInactiveKeyboardFrame: CGRect?
+
+    @MainActor
+    private var appTransitionHardwareKeyboardAtArm = false
+
     @MainActor
     private var overlayKeyboardPreservationReleaseTask: Task<Void, Never>?
 
@@ -274,6 +309,20 @@ class KeyboardTracker {
     /// Height threshold to treat a keyboard frame as an on-screen keyboard
     private static let softwareKeyboardHeightThreshold: CGFloat = 120
     private static let appTransitionKeyboardPreservationDuration: Duration = .milliseconds(750)
+    /// Quiet time after the returned keyboard's last frame before the latch
+    /// releases. Covers the with/without-accessory flaps on the way back.
+    private static let appTransitionKeyboardSettleDuration: Duration = .milliseconds(150)
+    /// How long a fresh frame from UIKit gets to supersede the latched one.
+    private static let appTransitionKeyboardCommitDelay: Duration = .milliseconds(100)
+    /// visionOS keyboard frames below this height are a hardware keyboard's bar.
+    private static let visionOSHardwareKeyboardMaxHeight: CGFloat = 100
+
+    @MainActor
+    private var appTransitionKeyboardCommitTask: Task<Void, Never>?
+
+    /// The frame (or `.zero` for a hide) the pending commit will apply.
+    @MainActor
+    private var appTransitionPendingCommitFrame: CGRect?
 
     /// True when the physical Cmd+Period system-cancel chord is down right now.
     /// Pure GCKeyboard poll used only to disambiguate an event that already
@@ -491,12 +540,27 @@ class KeyboardTracker {
 
     @MainActor
     private func beginAppTransitionKeyboardPreservationIfNeeded(autoClearIfAppStaysActive: Bool) {
-        guard isAnyInputViewPresented else { return }
+        guard isAnyInputViewPresented || isPreservingSoftwareKeyboardForAppTransition else { return }
         appTransitionKeyboardPreservationTask?.cancel()
         appTransitionKeyboardPreservationTask = nil
-        appTransitionPreservationCoversInputViewOnly = !isSoftwareKeyboardVisible
-        isPreservingSoftwareKeyboardForAppTransition = true
-        ignoredHiddenKeyboardFrameDuringPreservation = false
+        // Scene deactivation and app resignation both land here; a re-arm
+        // keeps what this trip already recorded.
+        if !isPreservingSoftwareKeyboardForAppTransition {
+            // An uncommitted result from the last trip may be the only record
+            // of it (UIKit won't re-report a hide), so it seeds this cycle.
+            let carried = appTransitionPendingCommitFrame
+            cancelAppTransitionKeyboardCommit()
+            isPreservingSoftwareKeyboardForAppTransition = true
+            ignoredHiddenKeyboardFrameDuringPreservation = carried == .zero
+            appTransitionHideIsCarried = carried == .zero
+            appTransitionReturnedKeyboardFrame = nil
+            appTransitionCarriedKeyboardFrame = carried == .zero ? nil : carried
+            appTransitionKeyboardReturnedWhileActive = false
+            appTransitionWindowSize = inputOwnerWindow?.bounds.size
+            appTransitionWindowWasResized = false
+            appTransitionInactiveKeyboardFrame = nil
+            appTransitionHardwareKeyboardAtArm = hardwareKeyboardAttachedNow
+        }
         setKeyboardAnimating(false)
 
         if autoClearIfAppStaysActive {
@@ -522,20 +586,74 @@ class KeyboardTracker {
         scheduleAppTransitionKeyboardPreservationClear()
     }
 
+    /// Once the keyboard is back in the active app, release after a short
+    /// quiet period (each new frame restarts it); otherwise wait the full
+    /// window for it.
     @MainActor
     private func scheduleAppTransitionKeyboardPreservationClear() {
         guard isPreservingSoftwareKeyboardForAppTransition else { return }
+        let delay = appTransitionKeyboardReturnedWhileActive
+            ? Self.appTransitionKeyboardSettleDuration
+            : Self.appTransitionKeyboardPreservationDuration
         appTransitionKeyboardPreservationTask?.cancel()
         appTransitionKeyboardPreservationTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: Self.appTransitionKeyboardPreservationDuration)
+            try? await Task.sleep(for: delay)
             guard let self, !Task.isCancelled else { return }
             self.clearAppTransitionKeyboardPreservation()
         }
     }
 
+    /// The last latched frame can be stale: the release lets focus state apply
+    /// and UIKit then posts the keyboard's real frame. Apply the latched frame
+    /// (or hide) only if nothing newer arrives first.
+    @MainActor
+    private func scheduleAppTransitionKeyboardCommit(_ frame: CGRect) {
+        appTransitionKeyboardCommitTask?.cancel()
+        appTransitionPendingCommitFrame = frame
+        appTransitionKeyboardCommitTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.appTransitionKeyboardCommitDelay)
+            guard let self, !Task.isCancelled else { return }
+            self.appTransitionKeyboardCommitTask = nil
+            self.appTransitionPendingCommitFrame = nil
+            let overlayHolds = self.isPreservingSoftwareKeyboardForOverlay
+            if frame == .zero {
+                // An overlay opened meanwhile owns the hide commit.
+                if overlayHolds {
+                    self.ignoredHiddenKeyboardFrameDuringOverlayPreservation = true
+                    return
+                }
+                self.keyboardFrame = .zero
+                self.updateSoftwareKeyboardVisibility(false)
+                EffectManager.shared.clearPreservedKeyboardLayout()
+                // Applies the zero frame too, which recomputes docking.
+                EffectManager.shared.resyncKeyboardFrameAfterPreservation()
+            } else {
+                self.applyKeyboardFrameEnd(frame)
+                if !overlayHolds { EffectManager.shared.resyncKeyboardFrameAfterPreservation() }
+            }
+        }
+    }
+
+    /// A newer frame from UIKit supersedes the pending commit.
+    @MainActor
+    private func cancelAppTransitionKeyboardCommit() {
+        appTransitionKeyboardCommitTask?.cancel()
+        appTransitionKeyboardCommitTask = nil
+        appTransitionPendingCommitFrame = nil
+    }
+
     @MainActor
     private func clearAppTransitionKeyboardPreservation() {
-        if ignoredHiddenKeyboardFrameDuringPreservation {
+        var pendingCommit: CGRect?
+        // A hardware keyboard came or went while away, and only the inactive
+        // scene saw the result (say, toolbar only): newer, real evidence that
+        // outranks anything carried from an earlier trip.
+        let hardwareFrame = appTransitionReturnedKeyboardFrame == nil
+            ? appTransitionInactiveKeyboardFrame.flatMap { hardwareKeyboardChanged(for: $0) ? $0 : nil }
+            : nil
+        if let hardwareFrame {
+            if hardwareFrame != keyboardFrame { pendingCommit = hardwareFrame }
+        } else if ignoredHiddenKeyboardFrameDuringPreservation {
             if isPreservingSoftwareKeyboardForOverlay {
                 // While an overlay latch is also up, the overlay release owns
                 // the eventual hide commit — committing here would collapse
@@ -543,17 +661,30 @@ class KeyboardTracker {
                 // the pending hide instead of dropping it.
                 ignoredHiddenKeyboardFrameDuringOverlayPreservation = true
             } else {
-                keyboardFrame = .zero
-                updateSoftwareKeyboardVisibility(false)
-                EffectManager.shared.clearPreservedKeyboardLayout()
+                pendingCommit = .zero
             }
+        } else if let returnedFrame = appTransitionReturnedKeyboardFrame {
+            if returnedFrame != keyboardFrame { pendingCommit = returnedFrame }
+        } else if let carriedFrame = appTransitionCarriedKeyboardFrame,
+                  carriedFrame != keyboardFrame {
+            pendingCommit = carriedFrame
         }
+        if let pendingCommit { scheduleAppTransitionKeyboardCommit(pendingCommit) }
         isPreservingSoftwareKeyboardForAppTransition = false
-        appTransitionPreservationCoversInputViewOnly = false
         ignoredHiddenKeyboardFrameDuringPreservation = false
+        appTransitionReturnedKeyboardFrame = nil
+        appTransitionKeyboardReturnedWhileActive = false
+        appTransitionWindowSize = nil
+        appTransitionWindowWasResized = false
+        appTransitionHideIsCarried = false
+        appTransitionInactiveKeyboardFrame = nil
+        appTransitionCarriedKeyboardFrame = nil
         appTransitionKeyboardPreservationTask?.cancel()
         appTransitionKeyboardPreservationTask = nil
-        if !isPreservingSoftwareKeyboardForOverlay {
+        // With a commit pending, the tracker still holds the pre-trip frame,
+        // which measures wrong against a rotated window. The commit, or the
+        // fresh frame that supersedes it, resyncs instead.
+        if pendingCommit == nil, !isPreservingSoftwareKeyboardForOverlay {
             EffectManager.shared.resyncKeyboardFrameAfterPreservation()
         }
     }
@@ -642,7 +773,7 @@ class KeyboardTracker {
                     // Symmetric with clearAppTransitionKeyboardPreservation's
                     // deferral: hand the pending hide to the app-transition
                     // latch instead of resizing layout while inactive.
-                    self.ignoredHiddenKeyboardFrameDuringPreservation = true
+                    self.noteAppTransitionHide()
                 } else {
                     self.keyboardFrame = .zero
                     self.updateSoftwareKeyboardVisibility(false)
@@ -1267,7 +1398,8 @@ class KeyboardTracker {
 
     @MainActor
     @objc private func keyboardWillShow(_ notification: Notification) {
-        updateKeyboardFrame(from: notification)
+        // A show absorbed by the app-transition latch moves nothing on screen.
+        guard updateKeyboardFrame(from: notification) else { return }
         setKeyboardAnimating(true)
         // Every accepted will-notification restarts the hold, even mid-animation.
         beginKeyboardResizeHold()
@@ -1283,7 +1415,7 @@ class KeyboardTracker {
             setKeyboardAnimating(false)
             return
         }
-        updateKeyboardFrame(from: notification)
+        guard updateKeyboardFrame(from: notification) else { return }
         setKeyboardAnimating(true)
         beginKeyboardResizeHold()
     }
@@ -1313,6 +1445,16 @@ class KeyboardTracker {
     /// runloop turn, and every branch here is idempotent.
     @MainActor
     @objc private func keyboardWillChangeFrame(_ notification: Notification) {
+        // UIKit can move the keyboard with no willShow/willHide, and
+        // EffectManager adopts this frame now; the stale commit must not
+        // land on top of it before didChangeFrame arrives.
+        if !isPreservingSoftwareKeyboardForAppTransition {
+            cancelAppTransitionKeyboardCommit()
+        } else if let end = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+            // Latched: record the destination and restart the settle, so a
+            // release between will and did can't commit the older frame.
+            if recordAppTransitionKeyboardFrame(end) { beginKeyboardResizeHold() }
+        }
         guard isPreservingSoftwareKeyboardForOverlay else { return }
         guard let keyboardFrameEnd =
                 notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
@@ -1340,21 +1482,22 @@ class KeyboardTracker {
 
     @MainActor
     @objc private func keyboardDidChangeFrame(_ notification: Notification) {
-        updateKeyboardFrame(from: notification)
+        _ = updateKeyboardFrame(from: notification)
     }
 
+    /// Returns false when the frame was held back rather than applied.
     @MainActor
-    private func updateKeyboardFrame(from notification: Notification) {
+    private func updateKeyboardFrame(from notification: Notification) -> Bool {
         guard let userInfo = notification.userInfo,
               let keyboardFrameEnd = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
-            return
+            return false
         }
 
         if overlayKeyboardPreservationIsActive() {
             if overlayKeyboardPreservationOwnerWindowIsActive {
                 guard isPreservedLayoutFrameVisible(keyboardFrameEnd, inputViewOnly: overlayPreservationCoversInputViewOnly) else {
                     ignoredHiddenKeyboardFrameDuringOverlayPreservation = true
-                    return
+                    return false
                 }
                 // A visible frame (close-side re-show, rotation, a sheet's own
                 // keyboard) refreshes the latched geometry without clearing the
@@ -1368,15 +1511,71 @@ class KeyboardTracker {
         }
 
         if isPreservingSoftwareKeyboardForAppTransition {
-            guard isPreservedLayoutFrameVisible(keyboardFrameEnd, inputViewOnly: appTransitionPreservationCoversInputViewOnly) else {
-                ignoredHiddenKeyboardFrameDuringPreservation = true
-                Ghostty.logger.debug("KeyboardTracker: Ignored transient app-transition keyboard frame")
-                return
-            }
-            ignoredHiddenKeyboardFrameDuringPreservation = false
-            clearAppTransitionKeyboardPreservation()
+            return recordAppTransitionKeyboardFrame(keyboardFrameEnd)
         }
 
+        cancelAppTransitionKeyboardCommit()
+        applyKeyboardFrameEnd(keyboardFrameEnd)
+        return true
+    }
+
+    /// iOS hides, re-shows and flaps the keyboard across the round trip. Hold
+    /// every frame; the release applies only the last, so a keyboard that
+    /// comes back where it was moves nothing. True when it applied (rotation).
+    @MainActor
+    @discardableResult
+    private func recordAppTransitionKeyboardFrame(_ keyboardFrameEnd: CGRect) -> Bool {
+        let isActive = inputSceneIsActive
+        var applied = false
+        // Any on-screen input view counts, so a keyboard that comes back as a
+        // toolbar is kept rather than committed as a hide.
+        if visibleKeyboardHeight(for: keyboardFrameEnd) > 0 {
+            // A resized window (rotation) means the held frame no longer fits
+            // the layout: apply this one now. Snapshot re-layouts keep the
+            // window's size, so their frames stay held.
+            if let size = inputOwnerWindow?.bounds.size,
+               let heldSize = appTransitionWindowSize, size != heldSize {
+                appTransitionWindowSize = size
+                appTransitionWindowWasResized = true
+                applyKeyboardFrameEnd(keyboardFrameEnd)
+                EffectManager.shared.resyncKeyboardFrameAfterPreservation()
+                applied = true
+            }
+            // A hide carried from the last trip stands until the active app
+            // shows the keyboard; an inactive snapshot is no evidence.
+            if isActive || !appTransitionHideIsCarried {
+                ignoredHiddenKeyboardFrameDuringPreservation = false
+                appTransitionHideIsCarried = false
+            }
+            // Inactive frames are snapshot or restoration states, except after
+            // a rotation, where they are the new geometry settling.
+            if isActive || appTransitionWindowWasResized {
+                appTransitionReturnedKeyboardFrame = keyboardFrameEnd
+                if isActive { appTransitionKeyboardReturnedWhileActive = true }
+            } else {
+                appTransitionInactiveKeyboardFrame = keyboardFrameEnd
+            }
+        } else {
+            noteAppTransitionHide()
+            Ghostty.logger.debug("KeyboardTracker: Ignored transient app-transition keyboard frame")
+        }
+        if isActive { scheduleAppTransitionKeyboardPreservationClear() }
+        return applied
+    }
+
+    /// Every app-transition hide goes through here, so a newer hide always
+    /// drops the older frames it supersedes. A carried hide stays carried:
+    /// only the active scene showing the keyboard ends it.
+    @MainActor
+    private func noteAppTransitionHide() {
+        ignoredHiddenKeyboardFrameDuringPreservation = true
+        appTransitionReturnedKeyboardFrame = nil
+        appTransitionInactiveKeyboardFrame = nil
+        appTransitionKeyboardReturnedWhileActive = false
+    }
+
+    @MainActor
+    private func applyKeyboardFrameEnd(_ keyboardFrameEnd: CGRect) {
         if keyboardFrame != keyboardFrameEnd { keyboardGeometryChangedAt = .now }
         keyboardFrame = keyboardFrameEnd
         let visibleHeight = visibleKeyboardHeight(for: keyboardFrameEnd)
@@ -1393,7 +1592,7 @@ class KeyboardTracker {
         let wasHardwareKeyboard = isHardwareKeyboard
         // Use height-based detection: software keyboards are tall (200-350pt)
         // Hardware keyboard accessory bars are small (< 100pt)
-        isHardwareKeyboard = keyboardFrameEnd.height < 100
+        isHardwareKeyboard = keyboardFrameEnd.height < Self.visionOSHardwareKeyboardMaxHeight
 
         if wasHardwareKeyboard != isHardwareKeyboard {
             Ghostty.logger.debug("KeyboardTracker: visionOS height-based detection - isHardware=\(self.isHardwareKeyboard)")
@@ -1450,14 +1649,43 @@ class KeyboardTracker {
 
         guard let userInfo = notification.userInfo,
               let keyboardFrameEnd = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
-            ignoredHiddenKeyboardFrameDuringPreservation = true
+            noteAppTransitionHide()
             return true
         }
-        let shouldPreserve = !isPreservedLayoutFrameVisible(keyboardFrameEnd, inputViewOnly: appTransitionPreservationCoversInputViewOnly)
-        if shouldPreserve {
-            ignoredHiddenKeyboardFrameDuringPreservation = true
-        }
+        let shouldPreserve = visibleKeyboardHeight(for: keyboardFrameEnd) <= 0
+        if shouldPreserve { recordAppTransitionKeyboardFrame(keyboardFrameEnd) }
         return shouldPreserve
+    }
+
+    /// Read live rather than from `isHardwareKeyboard`: the connect
+    /// notification may not have landed yet when the latch releases.
+    @MainActor
+    private var hardwareKeyboardAttachedNow: Bool {
+        #if os(visionOS)
+        return isHardwareKeyboard
+        #else
+        return isMacOSCompatibilityMode || GCKeyboard.coalesced != nil
+        #endif
+    }
+
+    /// Whether the hardware keyboard came or went since the latch armed.
+    /// visionOS only learns it from frame height, so judge the held frame.
+    @MainActor
+    private func hardwareKeyboardChanged(for frame: CGRect) -> Bool {
+        #if os(visionOS)
+        return (frame.height < Self.visionOSHardwareKeyboardMaxHeight) != appTransitionHardwareKeyboardAtArm
+        #else
+        return hardwareKeyboardAttachedNow != appTransitionHardwareKeyboardAtArm
+        #endif
+    }
+
+    /// The keyboard's own scene is active, not just the app: another iPad
+    /// window can be foreground-active while the input owner's scene is not.
+    @MainActor
+    private var inputSceneIsActive: Bool {
+        guard UIApplication.shared.applicationState == .active else { return false }
+        guard let scene = inputOwnerWindow?.windowScene else { return true }
+        return scene.activationState == .foregroundActive
     }
 
     @MainActor

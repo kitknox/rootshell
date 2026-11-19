@@ -462,6 +462,9 @@ final class EffectManager {
         guard let keyboardFrame else {
             return
         }
+        // The tracker holds every frame of an app round trip and resyncs
+        // this once on release, so the padding never follows the flaps.
+        if KeyboardTracker.shared.isPreservingSoftwareKeyboardForAppTransition { return }
         if KeyboardTracker.shared.isPreservingSoftwareKeyboardLayout,
            !isMeaningfulKeyboardFrame(keyboardFrame) {
             return
