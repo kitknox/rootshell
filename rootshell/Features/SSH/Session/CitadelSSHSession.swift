@@ -2279,7 +2279,17 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
         let fingerprint = generateFingerprint(for: hostKey)
         let keyType = getKeyType(from: hostKey)
         let publicKeyData = try serializePublicKey(hostKey)
-        let dnsLine = dnsVerdict.promptLine.map { "\n\n\($0)" } ?? ""
+        let makeRequest = { (previouslyTrusted: String?) in
+            HostKeyValidationRequest(
+                hostname: hostname,
+                port: port,
+                keyType: keyType,
+                fingerprint: fingerprint,
+                publicKeyData: publicKeyData,
+                previouslyTrusted: previouslyTrusted,
+                label: label,
+                note: dnsVerdict.promptLine)
+        }
 
         let labelTag = label ?? "Direct"
         logger.info("[\(labelTag)] Validating host key for \(hostname):\(port) - Type: \(keyType)")
@@ -2324,20 +2334,8 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
                     return true
                 }
 
-                let labelPrefix = label.map { "\($0)\n" } ?? ""
-                let message = "\(labelPrefix)The host key for \(hostname):\(port) has changed. " +
-                    "This could indicate a man-in-the-middle attack!\n\n" +
-                    "Previously Trusted:\n\(knownHost.fingerprint)\n\n" +
-                    "New Key Received:\n\(fingerprint)" + dnsLine
-
-                let request = HostKeyValidationRequest(message: message, isKeyChanged: true)
                 return await handleUserResponse(
-                    request,
-                    hostname: hostname,
-                    port: port,
-                    publicKeyData: publicKeyData,
-                    keyType: keyType,
-                    fingerprint: fingerprint,
+                    makeRequest(knownHost.fingerprint),
                     label: label,
                     validationCallback: validationCallback
                 )
@@ -2351,20 +2349,8 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
                 return true
             }
 
-            let labelPrefix = label.map { "\($0)\n" } ?? ""
-            let message = "\(labelPrefix)Do you want to trust this host?\n\n" +
-                "Host: \(hostname):\(port)\n" +
-                "Key Type: \(keyType)\n\n" +
-                "Fingerprint:\n\(fingerprint)" + dnsLine
-
-            let request = HostKeyValidationRequest(message: message, isKeyChanged: false)
             return await handleUserResponse(
-                request,
-                hostname: hostname,
-                port: port,
-                publicKeyData: publicKeyData,
-                keyType: keyType,
-                fingerprint: fingerprint,
+                makeRequest(nil),
                 label: label,
                 validationCallback: validationCallback
             )
@@ -2374,11 +2360,6 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
     @MainActor
     private func handleUserResponse(
         _ request: HostKeyValidationRequest,
-        hostname: String,
-        port: Int,
-        publicKeyData: String,
-        keyType: String,
-        fingerprint: String,
         label: String?,
         validationCallback: ((HostKeyValidationRequest) async -> HostKeyValidationResult)?
     ) async -> Bool {
@@ -2390,28 +2371,21 @@ final class CitadelHostKeyValidatorDelegate: NIOSSHClientServerAuthenticationDel
         }
 
         let result = await callback(request)
-        let manager = KnownHostsManager.shared
+        // Connect Once keys are remembered so ancillary connections in the
+        // same flow (discovery, hole punch) don't strict-reject them.
+        request.record(result)
 
         switch result {
         case .accept:
-            // User accepted - save to known hosts
-            let newHost = KnownHost(
-                hostname: hostname,
-                port: port,
-                publicKeyData: publicKeyData,
-                keyType: keyType,
-                fingerprint: fingerprint
-            )
-            manager.addHost(newHost)
             logger.info("[\(labelTag)] User accepted host, added to known hosts")
             return true
 
         case .acceptOnce:
-            // Accept but don't persist; remember in-memory so ancillary
-            // connections in the same flow (discovery, hole punch) don't
-            // strict-reject the key the user just approved.
-            SessionApprovedHostKeys.shared.remember(hostname: hostname, port: port, publicKeyData: publicKeyData)
             logger.info("[\(labelTag)] User accepted host for this session only")
+            return true
+
+        case .accepted:
+            logger.info("[\(labelTag)] Host accepted, decision already recorded")
             return true
 
         case .reject:

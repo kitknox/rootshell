@@ -193,23 +193,9 @@ extension MainView {
                     restoreFirstResponderAfterSheetDismissal()
                 }
             }
-            .onChange(of: alerts.showNewHostAlert) { oldValue, newValue in
-                if newValue {
-                    alerts.enqueue(.newHost)
-                } else if oldValue {
-                    if alerts.presentedKind == .newHost {
-                        alerts.completePresented(clearBackingState: false)
-                    }
-                    restoreFirstResponderAfterSheetDismissal()
-                }
-            }
-            .onChange(of: alerts.showKeyChangedAlert) { oldValue, newValue in
-                if newValue {
-                    alerts.enqueue(.keyChanged)
-                } else if oldValue {
-                    if alerts.presentedKind == .keyChanged {
-                        alerts.completePresented(clearBackingState: false)
-                    }
+            // The controller enqueues and completes host-key prompts itself.
+            .onChange(of: alerts.hostKeyQueue.isEmpty) { wasEmpty, isEmpty in
+                if isEmpty, !wasEmpty {
                     restoreFirstResponderAfterSheetDismissal()
                 }
             }

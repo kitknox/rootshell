@@ -31,8 +31,7 @@ import UserNotifications
         case aiAgentUnsupported
         case voiceAgentAPIKey
         #endif
-        case newHost
-        case keyChanged
+        case hostKey
         case helperMissing
         case herdrUpgrade
         case herdrTakeControl
@@ -55,11 +54,28 @@ import UserNotifications
 
     // MARK: - Backing state (one flag/queue per kind)
 
-    // Host key validation state
-    @ObservationIgnored var hostKeyValidationContinuation: CheckedContinuation<HostKeyValidationResult, Never>?
-    var showNewHostAlert = false
-    var showKeyChangedAlert = false
-    var validationData: MainView.ValidationData?
+    /// One connection's host-key prompt. Each carries its own continuation so
+    /// overlapping prompts in a window resolve the connection they belong to.
+    struct HostKeyPrompt: Identifiable {
+        var id = UUID()
+        /// The pane that asked; its teardown withdraws the prompt.
+        let owner: UUID
+        let sessionLabel: String
+        var request: HostKeyValidationRequest
+        /// Re-asked after the user approved against stale trust. The user
+        /// still owes an explicit decision, so Connect Once can't settle it.
+        var isReasked = false
+        let continuation: CheckedContinuation<HostKeyValidationResult, Never>
+
+        var alertTitle: String {
+            request.isKeyChanged
+                ? "⚠️ WARNING: Host Key Changed (\(sessionLabel))"
+                : "New SSH Host (\(sessionLabel))"
+        }
+    }
+
+    /// FIFO; the first entry is the one on screen.
+    var hostKeyQueue: [HostKeyPrompt] = []
 
     var showHelperMissingAlert = false
     var showProfileUnavailableAlert = false
@@ -110,17 +126,23 @@ import UserNotifications
     var vncHighPerformanceConnectionQueue: [PendingVNCHighPerformanceConnection] = []
     var showVNCHighPerformanceTransportAlert = false
 
-    struct VNCCertificateValidationData {
+    /// One pane's certificate prompt, queued like `HostKeyPrompt`.
+    struct VNCCertificateValidationRequest: Identifiable {
+        var id = UUID()
+        let owner: UUID
         let endpoint: String
         let fingerprint: String
         let sessionLabel: String
-        let isChanged: Bool
+        /// The saved fingerprint the prompt was shown against; nil when the
+        /// endpoint had none.
+        var previouslyTrusted: String?
+        let continuation: CheckedContinuation<VNCConfiguration.CertificateValidationResult, Never>
+
+        var isChanged: Bool { previouslyTrusted != nil }
     }
 
-    @ObservationIgnored var vncCertificateValidationContinuation:
-        CheckedContinuation<VNCConfiguration.CertificateValidationResult, Never>?
-    var vncCertificateValidationData: VNCCertificateValidationData?
-    var showVNCCertificateAlert = false
+    /// FIFO; the first entry is the one on screen.
+    var vncCertificateQueue: [VNCCertificateValidationRequest] = []
 
     #if !CHINA_BUILD
     var showAIAgentSSHRequiredAlert = false
@@ -193,6 +215,8 @@ import UserNotifications
     func enqueue(_ kind: Kind) {
         guard isAvailable(kind) else { return }
         if presentedKind == nil {
+            refreshQueueHead(for: kind)
+            guard isAvailable(kind) else { return }
             presentedKind = kind
             return
         }
@@ -209,10 +233,8 @@ import UserNotifications
         case .voiceAgentAPIKey:
             return showVoiceAgentAPIKeyAlert
         #endif
-        case .newHost:
-            return showNewHostAlert
-        case .keyChanged:
-            return showKeyChangedAlert
+        case .hostKey:
+            return !hostKeyQueue.isEmpty
         case .helperMissing:
             return showHelperMissingAlert
         case .herdrUpgrade:
@@ -226,7 +248,7 @@ import UserNotifications
         case .vncHighPerformanceTransport:
             return !vncHighPerformanceConnectionQueue.isEmpty
         case .vncCertificate:
-            return showVNCCertificateAlert
+            return !vncCertificateQueue.isEmpty
         case .agentApproval:
             return !agentApprovalQueue.isEmpty
         case .gpgAgentApproval:
@@ -244,10 +266,44 @@ import UserNotifications
         guard presentedKind == nil else { return }
         while !pendingKinds.isEmpty {
             let next = pendingKinds.removeFirst()
+            refreshQueueHead(for: next)
             if isAvailable(next) {
                 presentedKind = next
                 return
             }
+        }
+    }
+
+    /// Re-checks trust for the queued prompt about to show. A prompt answered
+    /// while it waited may have saved its key or certificate, or a different
+    /// one for the same host.
+    private func refreshQueueHead(for kind: Kind) {
+        switch kind {
+        case .hostKey:
+            while let head = hostKeyQueue.first {
+                switch head.request.recheck(honoringConnectOnce: !head.isReasked) {
+                case .current:
+                    return
+                case .reclassified(let request):
+                    hostKeyQueue[0].request = request
+                    return
+                case .trusted:
+                    hostKeyQueue.removeFirst()
+                    head.continuation.resume(returning: .accepted)
+                }
+            }
+        case .vncCertificate:
+            while let head = vncCertificateQueue.first {
+                let saved = VNCCertificateTrustStore.savedFingerprint(for: head.endpoint)
+                guard saved == head.fingerprint else {
+                    vncCertificateQueue[0].previouslyTrusted = saved
+                    return
+                }
+                vncCertificateQueue.removeFirst()
+                head.continuation.resume(returning: .acceptOnce)
+            }
+        default:
+            break
         }
     }
 
@@ -278,6 +334,16 @@ import UserNotifications
             pendingKinds.insert(.vncHighPerformanceTransport, at: 0)
         }
 
+        if kind == .hostKey, !hostKeyQueue.isEmpty,
+           !pendingKinds.contains(.hostKey) {
+            pendingKinds.insert(.hostKey, at: 0)
+        }
+
+        if kind == .vncCertificate, !vncCertificateQueue.isEmpty,
+           !pendingKinds.contains(.vncCertificate) {
+            pendingKinds.insert(.vncCertificate, at: 0)
+        }
+
         #if targetEnvironment(macCatalyst) && STANDALONE
         if kind == .localAgentApproval, !localAgentApprovalQueue.isEmpty,
            !pendingKinds.contains(.localAgentApproval) {
@@ -298,10 +364,10 @@ import UserNotifications
         case .voiceAgentAPIKey:
             showVoiceAgentAPIKeyAlert = false
         #endif
-        case .newHost:
-            showNewHostAlert = false
-        case .keyChanged:
-            showKeyChangedAlert = false
+        case .hostKey, .vncCertificate:
+            // Queued prompts hold live continuations; only their respond
+            // functions may remove them.
+            break
         case .helperMissing:
             showHelperMissingAlert = false
         case .herdrUpgrade:
@@ -316,9 +382,6 @@ import UserNotifications
             showVNCProfileInvalidAlert = false
         case .vncHighPerformanceTransport:
             showVNCHighPerformanceTransportAlert = false
-        case .vncCertificate:
-            showVNCCertificateAlert = false
-            vncCertificateValidationData = nil
         case .agentApproval:
             showAgentApprovalAlert = false
         case .gpgAgentApproval:
@@ -365,51 +428,201 @@ import UserNotifications
         request: HostKeyValidationRequest,
         terminalView: Ghostty.TerminalView
     ) async -> HostKeyValidationResult {
+        await handleHostKeyValidation(
+            request: request,
+            sessionLabel: terminalView.connectionConfig.displayName,
+            owner: terminalView.uuid)
+    }
+
+    /// Also serves connections without a terminal view (Screen Sharing and
+    /// KVM jump tunnels).
+    func handleHostKeyValidation(
+        request: HostKeyValidationRequest,
+        sessionLabel: String,
+        owner: UUID
+    ) async -> HostKeyValidationResult {
+        guard admitsPrompt(from: owner) else { return .reject }
         return await withCheckedContinuation { continuation in
-            let sessionLabel = terminalView.connectionConfig.displayName
-            let alertContext = "(\(sessionLabel))"
-
-            // Request already has the pre-formatted message
-            validationData = MainView.ValidationData(
-                alertTitle: request.isKeyChanged
-                    ? "⚠️ WARNING: Host Key Changed \(alertContext)"
-                    : "New SSH Host \(alertContext)",
-                message: request.message,
-                isKeyChanged: request.isKeyChanged
-            )
-
-            hostKeyValidationContinuation = continuation
-
-            // Show the appropriate alert based on key change status
-            if request.isKeyChanged {
-                showKeyChangedAlert = true
-            } else {
-                showNewHostAlert = true
-            }
+            hostKeyQueue.append(HostKeyPrompt(
+                owner: owner,
+                sessionLabel: sessionLabel,
+                request: request,
+                continuation: continuation))
+            enqueue(.hostKey)
         }
     }
 
-    func respondToHostKeyValidation(with result: HostKeyValidationResult) {
-        hostKeyValidationContinuation?.resume(returning: result)
-        hostKeyValidationContinuation = nil
-        showNewHostAlert = false
-        showKeyChangedAlert = false
-        validationData = nil
+    /// `id` is the prompt the alert was built for, so a late or repeated
+    /// button press can't answer the prompt queued behind it. The decision is
+    /// recorded here, before the next prompt rechecks trust; the waiting
+    /// connection gets `.accepted` and records nothing. An approval made
+    /// against stale trust (another window saved a key while this alert was
+    /// up) shows the prompt again with the current warning instead.
+    func respondToHostKeyValidation(id: UUID?, with result: HostKeyValidationResult) {
+        guard let id, let index = hostKeyQueue.firstIndex(where: { $0.id == id }) else { return }
+        // Saved trust only: a Connect Once approval must not let this save
+        // replace a key someone saved after the prompt was shown.
+        if result != .reject, let current = hostKeyQueue[index].request.savedKeyChange() {
+            hostKeyQueue[index].request = current
+            hostKeyQueue[index].isReasked = true
+            // A new id, so the dismissal of the alert just answered can't
+            // reject the re-asked prompt.
+            hostKeyQueue[index].id = UUID()
+            if index == 0, presentedKind == .hostKey {
+                completePresented(clearBackingState: false)
+            }
+            return
+        }
+        let prompt = hostKeyQueue.remove(at: index)
+        prompt.request.record(result)
+        if index == 0, presentedKind == .hostKey {
+            completePresented(clearBackingState: false)
+        }
+        prompt.continuation.resume(returning: result == .reject ? .reject : .accepted)
     }
 
+    /// `id` and stale-trust handling as in `respondToHostKeyValidation`.
     func respondToVNCCertificateValidation(
+        id: UUID?,
         with result: VNCConfiguration.CertificateValidationResult
     ) {
-        if result == .acceptAndStore,
-           let data = vncCertificateValidationData {
-            VNCCertificateTrustStore.save(
-                fingerprint: data.fingerprint,
-                for: data.endpoint)
+        guard let id,
+              let index = vncCertificateQueue.firstIndex(where: { $0.id == id }) else { return }
+        if result != .reject {
+            let request = vncCertificateQueue[index]
+            let saved = VNCCertificateTrustStore.savedFingerprint(for: request.endpoint)
+            if saved != request.fingerprint, saved != request.previouslyTrusted {
+                vncCertificateQueue[index].previouslyTrusted = saved
+                vncCertificateQueue[index].id = UUID()
+                if index == 0, presentedKind == .vncCertificate {
+                    completePresented(clearBackingState: false)
+                }
+                return
+            }
         }
-        let continuation = vncCertificateValidationContinuation
-        vncCertificateValidationContinuation = nil
-        completePresented(clearBackingState: true)
-        continuation?.resume(returning: result)
+        let request = vncCertificateQueue.remove(at: index)
+        if result == .acceptAndStore {
+            VNCCertificateTrustStore.save(
+                fingerprint: request.fingerprint,
+                for: request.endpoint)
+        }
+        if index == 0, presentedKind == .vncCertificate {
+            completePresented(clearBackingState: false)
+        }
+        request.continuation.resume(returning: result)
+    }
+
+    // MARK: - Trust Prompt Lifetime
+
+    /// Panes closed in this window. A callback already on its way to the
+    /// main actor when the pane closed must not queue a prompt after it.
+    private var withdrawnOwners: Set<UUID> = []
+    private var isWindowClosed = false
+
+    func admitsPrompt(from owner: UUID) -> Bool {
+        !isWindowClosed && !withdrawnOwners.contains(owner)
+    }
+
+    /// Rejects the prompts a closing pane left queued, and any it sends
+    /// later, so none shows (and saves trust) for a connection that is gone.
+    func withdrawPrompts(owner: UUID) {
+        withdrawnOwners.insert(owner)
+        reject(takePrompts { $0 == owner })
+    }
+
+    /// Window teardown: rejects queued prompts and refuses new ones.
+    func closeWindow(windowId: String) {
+        isWindowClosed = true
+        if Self.controllersByWindow[windowId]?.controller === self {
+            Self.controllersByWindow[windowId] = nil
+        }
+        reject(takePrompts { _ in true })
+    }
+
+    private typealias TakenPrompts = (hostKeys: [HostKeyPrompt], certificates: [VNCCertificateValidationRequest])
+
+    /// Removes the owners' prompts without answering them, taking down the
+    /// alert if it shows one.
+    private func takePrompts(where matches: (UUID) -> Bool) -> TakenPrompts {
+        let shownHostKey = presentedKind == .hostKey ? hostKeyQueue.first?.id : nil
+        let shownCertificate = presentedKind == .vncCertificate ? vncCertificateQueue.first?.id : nil
+        let hostKeys = hostKeyQueue.filter { matches($0.owner) }
+        let certificates = vncCertificateQueue.filter { matches($0.owner) }
+        hostKeyQueue.removeAll { matches($0.owner) }
+        vncCertificateQueue.removeAll { matches($0.owner) }
+        if let shownHostKey, hostKeys.contains(where: { $0.id == shownHostKey }) {
+            completePresented(clearBackingState: false)
+        }
+        if let shownCertificate, certificates.contains(where: { $0.id == shownCertificate }) {
+            completePresented(clearBackingState: false)
+        }
+        return (hostKeys, certificates)
+    }
+
+    private func reject(_ prompts: TakenPrompts) {
+        for prompt in prompts.hostKeys {
+            prompt.continuation.resume(returning: .reject)
+        }
+        for request in prompts.certificates {
+            request.continuation.resume(returning: .reject)
+        }
+    }
+
+    private func adopt(_ prompts: TakenPrompts) {
+        hostKeyQueue += prompts.hostKeys
+        vncCertificateQueue += prompts.certificates
+        if !prompts.hostKeys.isEmpty { enqueue(.hostKey) }
+        if !prompts.certificates.isEmpty { enqueue(.vncCertificate) }
+    }
+
+    // MARK: - Window Routing
+
+    private struct WeakController {
+        weak var controller: MainAlertController?
+    }
+
+    private static var controllersByWindow: [String: WeakController] = [:]
+
+    static func attach(_ controller: MainAlertController, toWindow windowId: String) {
+        controllersByWindow[windowId] = WeakController(controller: controller)
+    }
+
+    /// A tab moving between windows takes its queued prompts along, so they
+    /// show, and are withdrawn, where the tab now lives. Without a live
+    /// destination they stay, and the source's teardown rejects them.
+    static func movePrompts(for tab: TabModel, from sourceWindowId: String, to destinationWindowId: String) {
+        guard sourceWindowId != destinationWindowId,
+              let source = controllersByWindow[sourceWindowId]?.controller,
+              let destination = controllersByWindow[destinationWindowId]?.controller else { return }
+        let owners = Set(tab.splitTree.map(\.uuid))
+        destination.adopt(source.takePrompts { owners.contains($0) })
+    }
+
+    /// Remote screen sessions keep the callbacks they connected with while
+    /// their tab can move windows, so each prompt goes to the window that
+    /// holds the pane when it asks.
+    static func routeHostKeyValidation(
+        _ request: HostKeyValidationRequest,
+        sessionLabel: String,
+        from pane: (any RemoteScreenPane)?
+    ) async -> HostKeyValidationResult {
+        guard let pane, let controller = controllersByWindow[pane.windowId]?.controller else { return .reject }
+        return await controller.handleHostKeyValidation(
+            request: request,
+            sessionLabel: sessionLabel,
+            owner: pane.uuid)
+    }
+
+    static func routeCertificateValidation(
+        _ request: VNCConfiguration.CertificateValidationRequest,
+        sessionLabel: String,
+        from pane: (any RemoteScreenPane)?
+    ) async -> VNCConfiguration.CertificateValidationResult {
+        guard let pane, let controller = controllersByWindow[pane.windowId]?.controller else { return .reject }
+        return await controller.handleVNCCertificateValidation(
+            request: request,
+            sessionLabel: sessionLabel,
+            owner: pane.uuid)
     }
 
     // MARK: - SSH Agent Approval
@@ -499,10 +712,8 @@ import UserNotifications
     }
     #endif
 
-    // NOTE: no deinit — `hostKeyValidationContinuation` is non-Sendable and
-    // must not be touched from a nonisolated deinit. A continuation dropped
-    // un-resumed when a window dies mid-prompt matches the previous @State
-    // behavior.
+    // NOTE: no deinit — the queued prompt continuations must not be touched
+    // from a nonisolated deinit. Window cleanup calls `closeWindow(windowId:)`.
 }
 
 enum VNCCertificateTrustStore {

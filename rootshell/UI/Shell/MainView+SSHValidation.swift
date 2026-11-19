@@ -173,6 +173,16 @@ extension MainView {
         keyboardInteractiveQueue = remaining
         showKeyboardInteractivePrompt = !keyboardInteractiveQueue.isEmpty
     }
+
+    /// Rejects everything a closing pane left waiting in this window: its
+    /// keyboard-interactive challenge and its host-key or certificate prompts.
+    @MainActor
+    func withdrawPendingPrompts(for pane: SplitPaneView) {
+        if let terminalView = pane.asTerminal {
+            withdrawKeyboardInteractive(for: terminalView)
+        }
+        alerts.withdrawPrompts(owner: pane.uuid)
+    }
 }
 
 // MARK: - Remote Credential Requests

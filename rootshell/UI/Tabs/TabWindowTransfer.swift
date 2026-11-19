@@ -347,10 +347,12 @@ final class TabTransferCoordinator {
             TerminalWindowRegistry.refreshSelectionAfterMutation(in: sourceWindowId, allowFocus: true)
         }
 
-        // 2. Retarget every moved tab (placeholders: near no-op) + rebind callbacks.
+        // 2. Retarget every moved tab (placeholders: near no-op) + rebind
+        // callbacks; queued trust prompts follow their panes.
         for tab in movable {
             tab.retargetWindow(to: destinationWindowId, isWindowFocused: isDestinationWindowFocused)
             TerminalWindowRegistry.rebindCallbacks(for: tab, in: destinationWindowId)
+            MainAlertController.movePrompts(for: tab, from: sourceWindowId, to: destinationWindowId)
         }
 
         // 3. Insert contiguously, preserving order.
@@ -449,6 +451,7 @@ final class TabTransferCoordinator {
 
         tab.retargetWindow(to: destinationWindowId, isWindowFocused: isDestinationWindowFocused)
         TerminalWindowRegistry.rebindCallbacks(for: tab, in: destinationWindowId)
+        MainAlertController.movePrompts(for: tab, from: payload.sourceWindowId, to: destinationWindowId)
 
         let destinationIndex: Int
         if let requestedIndex {

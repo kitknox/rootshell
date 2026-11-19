@@ -29,15 +29,6 @@ extension MainView {
         case trzsz
     }
 
-    // MARK: - Validation Data
-
-    /// Data for SSH host key validation alerts
-    struct ValidationData {
-        let alertTitle: String
-        let message: String // Pre-formatted message to avoid Text concatenation
-        let isKeyChanged: Bool
-    }
-
     struct AppTabSwipeState: Equatable {
         let sourceTabID: UUID
         let targetTabID: UUID

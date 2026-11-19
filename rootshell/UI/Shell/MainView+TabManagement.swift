@@ -1076,10 +1076,10 @@ extension MainView {
                 paneView.resignFirstResponder()
             }
             paneView.isLogicallyFocused = false
+            // Cancel the pane's pending prompts so its auth future doesn't
+            // park until the login timeout.
+            withdrawPendingPrompts(for: paneView)
             if let terminalView = paneView.asTerminal {
-                // Resume any pending keyboard-interactive prompt for this terminal
-                // (cancel), so its auth future doesn't park until the login timeout.
-                withdrawKeyboardInteractive(for: terminalView)
                 terminalView.cleanup(reason: .userClose)
             } else {
                 paneView.prepareForClose()
@@ -1236,7 +1236,7 @@ extension MainView {
         }
         if previous.isFirstResponder { previous.resignFirstResponder() }
         previous.isLogicallyFocused = false
-        withdrawKeyboardInteractive(for: previous)
+        withdrawPendingPrompts(for: previous)
         previous.prepareForClose()
         selectedTabIndex = index
         setFocusedTerminal(terminalView, inTab: index)

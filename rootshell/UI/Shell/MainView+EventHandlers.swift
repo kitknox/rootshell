@@ -86,6 +86,9 @@ extension MainView {
 
     func handleOnAppear() {
         LaunchSignposts.event("mainView.onAppear.\(windowId)")
+        // Before any pane connects: remote screen panes find their window's
+        // trust prompts through this.
+        MainAlertController.attach(alerts, toWindow: windowId)
         updateWindowFocusState()
 
         // Restore the docked sidebar if it was pinned: `tabSidebarPinned`
@@ -367,6 +370,11 @@ extension MainView {
         // the main thread. Retain those panes until the next main-queue turn,
         // after scene teardown has unwound, then run their normal close funnel.
         var deferredPaneCleanup: [SplitPaneView] = []
+
+        // No alert will answer the host-key or certificate prompts still
+        // queued here, or any that arrive later; reject them so their
+        // connections don't stay suspended.
+        alerts.closeWindow(windowId: windowId)
 
         // Cleanup all panes in all tabs before removing
         for tab in terminals {

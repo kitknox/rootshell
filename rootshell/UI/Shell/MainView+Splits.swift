@@ -530,15 +530,15 @@ extension MainView {
         }
         paneToClose.isLogicallyFocused = false
 
-        // Cleanup the pane being closed BEFORE removing from tree. Terminals
-        // keep their user-close semantics (plus withdrawing any pending
-        // keyboard-interactive prompt so its auth future doesn't park until
-        // the login timeout); other panes take the generic close funnel.
+        // Cleanup the pane being closed BEFORE removing from tree, after
+        // withdrawing its pending prompts so no auth future parks until the
+        // login timeout. Terminals keep their user-close semantics; other
+        // panes take the generic close funnel.
         // Mux detach posts leaveMuxSession so cleanup uses `.muxDetach`.
         // Close Tab also leaves a zmx session running (closing the client
         // is zmx’s detach path).
+        withdrawPendingPrompts(for: paneToClose)
         if let terminalToClose = paneToClose.asTerminal {
-            withdrawKeyboardInteractive(for: terminalToClose)
             terminalToClose.cleanup(reason: leaveMuxSession ? .muxDetach : .userClose)
         } else {
             paneToClose.prepareForClose()

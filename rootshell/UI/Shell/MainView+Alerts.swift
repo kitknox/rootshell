@@ -30,10 +30,8 @@ extension MainView {
         case .voiceAgentAPIKey:
             return String(localized: "Google API Key Required", comment: "Voice agent alert title")
         #endif
-        case .newHost:
-            return alerts.validationData?.alertTitle ?? "New SSH Host"
-        case .keyChanged:
-            return alerts.validationData?.alertTitle ?? "⚠️ WARNING: Host Key Changed"
+        case .hostKey:
+            return alerts.hostKeyQueue.first?.alertTitle ?? "New SSH Host"
         case .helperMissing:
             return String(localized: "Rootshell Helper Required", comment: "Standalone helper alert title")
         case .herdrUpgrade:
@@ -47,7 +45,7 @@ extension MainView {
         case .vncHighPerformanceTransport:
             return String(localized: "High Performance May Be Unreliable", comment: "Alert title for High Performance Screen Sharing on an unreliable transport or mesh VPN hostname")
         case .vncCertificate:
-            return alerts.vncCertificateValidationData?.isChanged == true
+            return alerts.vncCertificateQueue.first?.isChanged == true
                 ? String(localized: "Screen Sharing Certificate Changed", comment: "Changed VNC TLS certificate alert title")
                 : String(localized: "Trust Screen Sharing Server?", comment: "New VNC TLS certificate alert title")
         case .agentApproval:
@@ -88,16 +86,25 @@ extension MainView {
         }
     }
 
+    /// Captures what is on screen when the alert is built, like the buttons,
+    /// so a dismissal SwiftUI reports after the queue advanced can't answer
+    /// the next alert.
     private var mainAlertPresented: Binding<Bool> {
-        Binding(
+        let shownKind = alerts.presentedKind
+        let hostKeyID = alerts.hostKeyQueue.first?.id
+        let certificateID = alerts.vncCertificateQueue.first?.id
+        return Binding(
             get: { alerts.presentedKind != nil },
             set: { isPresented in
-                if !isPresented {
-                    if alerts.presentedKind == .vncCertificate {
-                        alerts.respondToVNCCertificateValidation(with: .reject)
-                    } else {
-                        alerts.completePresented(clearBackingState: true)
-                    }
+                guard !isPresented else { return }
+                switch shownKind {
+                case .hostKey:
+                    alerts.respondToHostKeyValidation(id: hostKeyID, with: .reject)
+                case .vncCertificate:
+                    alerts.respondToVNCCertificateValidation(id: certificateID, with: .reject)
+                default:
+                    guard alerts.presentedKind == shownKind else { return }
+                    alerts.completePresented(clearBackingState: true)
                 }
             }
         )
@@ -132,27 +139,31 @@ extension MainView {
                         alerts.dismissActive()
                     }
             #endif
-                case .newHost:
-                    Button("Cancel", role: .cancel) {
-                        alerts.respondToHostKeyValidation(with: .reject)
+                case .hostKey:
+                    // Capture the prompt on screen so each button answers it.
+                    let prompt = alerts.hostKeyQueue.first
+                    if prompt?.request.isKeyChanged == true {
+                        Button("Cancel Connection", role: .cancel) {
+                            alerts.respondToHostKeyValidation(id: prompt?.id, with: .reject)
+                        }
+                        .keyboardShortcut(.cancelAction)
+                        Button("Replace & Connect", role: .destructive) {
+                            alerts.respondToHostKeyValidation(id: prompt?.id, with: .accept)
+                        }
+                        .keyboardShortcut(.defaultAction)
+                    } else {
+                        Button("Cancel", role: .cancel) {
+                            alerts.respondToHostKeyValidation(id: prompt?.id, with: .reject)
+                        }
+                        .keyboardShortcut(.cancelAction)
+                        Button("Connect Once") {
+                            alerts.respondToHostKeyValidation(id: prompt?.id, with: .acceptOnce)
+                        }
+                        Button("Trust & Save") {
+                            alerts.respondToHostKeyValidation(id: prompt?.id, with: .accept)
+                        }
+                        .keyboardShortcut(.defaultAction)
                     }
-                    .keyboardShortcut(.cancelAction)
-                    Button("Connect Once") {
-                        alerts.respondToHostKeyValidation(with: .acceptOnce)
-                    }
-                    Button("Trust & Save") {
-                        alerts.respondToHostKeyValidation(with: .accept)
-                    }
-                    .keyboardShortcut(.defaultAction)
-                case .keyChanged:
-                    Button("Cancel Connection", role: .cancel) {
-                        alerts.respondToHostKeyValidation(with: .reject)
-                    }
-                    .keyboardShortcut(.cancelAction)
-                    Button("Replace & Connect", role: .destructive) {
-                        alerts.respondToHostKeyValidation(with: .accept)
-                    }
-                    .keyboardShortcut(.defaultAction)
                 case .helperMissing:
                     Button("OK", role: .cancel) {
                         alerts.dismissActive()
@@ -213,15 +224,16 @@ extension MainView {
                     }
                     .keyboardShortcut(.defaultAction)
                 case .vncCertificate:
+                    let requestID = alerts.vncCertificateQueue.first?.id
                     Button("Cancel", role: .cancel) {
-                        alerts.respondToVNCCertificateValidation(with: .reject)
+                        alerts.respondToVNCCertificateValidation(id: requestID, with: .reject)
                     }
                     .keyboardShortcut(.cancelAction)
                     Button("Connect Once") {
-                        alerts.respondToVNCCertificateValidation(with: .acceptOnce)
+                        alerts.respondToVNCCertificateValidation(id: requestID, with: .acceptOnce)
                     }
                     Button("Trust & Save") {
-                        alerts.respondToVNCCertificateValidation(with: .acceptAndStore)
+                        alerts.respondToVNCCertificateValidation(id: requestID, with: .acceptAndStore)
                     }
                     .keyboardShortcut(.defaultAction)
                 case .agentApproval:
@@ -273,9 +285,9 @@ extension MainView {
                 case .voiceAgentAPIKey:
                     Text("Voice Agent requires a Google API key. Add one in Settings > AI Agent > Google Gemini.")
                 #endif
-                case .newHost, .keyChanged:
-                    if let data = alerts.validationData {
-                        Text(data.message)
+                case .hostKey:
+                    if let prompt = alerts.hostKeyQueue.first {
+                        Text(prompt.request.message)
                     }
                 case .helperMissing:
                     Text("Local shells on Mac require the separate Rootshell Helper app. Launch the helper and try again.")
@@ -294,7 +306,7 @@ extension MainView {
                 case .vncHighPerformanceTransport:
                     Text("High Performance Screen Sharing can be unreliable over cellular or mesh VPN connections such as Tailscale and NetBird. Continue with High Performance or use Standard for this connection.")
                 case .vncCertificate:
-                    if let data = alerts.vncCertificateValidationData {
+                    if let data = alerts.vncCertificateQueue.first {
                         let warning = data.isChanged
                             ? "The server certificate has changed. This can indicate that the server was reinstalled or that someone is intercepting the connection."
                             : "The server uses a certificate that is not trusted by this device. Verify the fingerprint before saving it."

@@ -12,7 +12,7 @@ extension MainView {
 
     /// Mirrors `makeVNCPane`: window-active and focus stamping before the
     /// pane joins the hierarchy, plus host-key and certificate prompts through
-    /// this window's alert queue.
+    /// the alert queue of the window holding the pane.
     func makeKVMPane(
         config: KVMConnectionConfig,
         sourceProfileID: UUID?,
@@ -26,13 +26,12 @@ extension MainView {
         pane.setWindowActive(isWindowFocused)
         pane.isLogicallyFocused = logicallyFocused
 
-        let alerts = self.alerts
         let sessionLabel = config.displayName
-        pane.onHostKeyValidation = { @Sendable request in
-            await alerts.handleHostKeyValidation(request: request, sessionLabel: sessionLabel)
+        pane.onHostKeyValidation = { @Sendable [weak pane] request in
+            await MainAlertController.routeHostKeyValidation(request, sessionLabel: sessionLabel, from: pane)
         }
-        pane.onCertificateValidation = { @Sendable request in
-            await alerts.handleVNCCertificateValidation(request: request, sessionLabel: sessionLabel)
+        pane.onCertificateValidation = { @Sendable [weak pane] request in
+            await MainAlertController.routeCertificateValidation(request, sessionLabel: sessionLabel, from: pane)
         }
         return pane
     }

@@ -44,18 +44,14 @@ extension MainView {
         pane.setWindowActive(isWindowFocused)
         pane.isLogicallyFocused = logicallyFocused
 
-        // Jump-tunnel host-key prompts ride the same per-window alert
-        // mechanism as SSH tabs. Captures the alert controller, not the
-        // view, so the closure survives MainView body re-evaluation.
-        let alerts = self.alerts
+        // Jump-tunnel host-key and certificate prompts ride the per-window
+        // alert queue of whichever window holds the pane when they arrive.
         let sessionLabel = config.displayName
-        pane.onHostKeyValidation = { @Sendable request in
-            await alerts.handleHostKeyValidation(request: request, sessionLabel: sessionLabel)
+        pane.onHostKeyValidation = { @Sendable [weak pane] request in
+            await MainAlertController.routeHostKeyValidation(request, sessionLabel: sessionLabel, from: pane)
         }
-        pane.onCertificateValidation = { @Sendable request in
-            await alerts.handleVNCCertificateValidation(
-                request: request,
-                sessionLabel: sessionLabel)
+        pane.onCertificateValidation = { @Sendable [weak pane] request in
+            await MainAlertController.routeCertificateValidation(request, sessionLabel: sessionLabel, from: pane)
         }
         return pane
     }
@@ -181,64 +177,37 @@ extension MainView {
     }
 }
 
-// MARK: - Host-Key Prompts for Non-Terminal Panes
+// MARK: - Certificate Prompts for Remote Screen Panes
 
 extension MainAlertController {
 
     func handleVNCCertificateValidation(
         request: VNCConfiguration.CertificateValidationRequest,
-        sessionLabel: String
+        sessionLabel: String,
+        owner: UUID
     ) async -> VNCConfiguration.CertificateValidationResult {
-        guard let leafCertificate = request.certificateChainDER.first else {
+        guard admitsPrompt(from: owner),
+              let leafCertificate = request.certificateChainDER.first else {
             return .reject
         }
         let fingerprint = VNCCertificateTrustStore.fingerprint(leafCertificate)
         let endpoint = VNCCertificateTrustStore.endpointKey(
             host: request.host,
             port: request.port)
-        if VNCCertificateTrustStore.savedFingerprint(for: endpoint) == fingerprint {
+        let saved = VNCCertificateTrustStore.savedFingerprint(for: endpoint)
+        if saved == fingerprint {
             return .acceptOnce
         }
 
         return await withCheckedContinuation { continuation in
-            vncCertificateValidationData = VNCCertificateValidationData(
+            vncCertificateQueue.append(VNCCertificateValidationRequest(
+                owner: owner,
                 endpoint: endpoint,
                 fingerprint: fingerprint,
                 sessionLabel: sessionLabel,
-                isChanged: VNCCertificateTrustStore.savedFingerprint(for: endpoint) != nil)
-            vncCertificateValidationContinuation = continuation
-            showVNCCertificateAlert = true
+                previouslyTrusted: saved,
+                continuation: continuation))
             enqueue(.vncCertificate)
-        }
-    }
-
-    /// Host-key validation for connections without a terminal view
-    /// (Screen Sharing jump tunnels). Mirrors
-    /// `handleHostKeyValidation(request:terminalView:)` with a
-    /// caller-supplied session label, reusing the same alert flags,
-    /// continuation slot, and queue mechanics.
-    func handleHostKeyValidation(
-        request: HostKeyValidationRequest,
-        sessionLabel: String
-    ) async -> HostKeyValidationResult {
-        await withCheckedContinuation { continuation in
-            let alertContext = "(\(sessionLabel))"
-
-            validationData = MainView.ValidationData(
-                alertTitle: request.isKeyChanged
-                    ? "⚠️ WARNING: Host Key Changed \(alertContext)"
-                    : "New SSH Host \(alertContext)",
-                message: request.message,
-                isKeyChanged: request.isKeyChanged
-            )
-
-            hostKeyValidationContinuation = continuation
-
-            if request.isKeyChanged {
-                showKeyChangedAlert = true
-            } else {
-                showNewHostAlert = true
-            }
         }
     }
 }

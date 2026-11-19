@@ -13,19 +13,84 @@ enum HostKeyValidationScenario: Equatable {
 
 /// Request for user validation of a host key
 struct HostKeyValidationRequest: Sendable {
-    // Store as UTF-8 data to avoid any string bridging issues
-    private let messageData: Data
-    let isKeyChanged: Bool
+    let hostname: String
+    let port: Int
+    let keyType: String
+    let fingerprint: String
+    let publicKeyData: String
+    /// The saved fingerprint this request was classified against; nil for a
+    /// new host.
+    let previouslyTrusted: String?
+    /// Prefixes the message (the connection hop's label).
+    var label: String? = nil
+    /// Appended to the message (the SSHFP verdict).
+    var note: String? = nil
+
+    var isKeyChanged: Bool { previouslyTrusted != nil }
 
     var message: String {
-        // Reconstruct from UTF-8 data
-        String(data: messageData, encoding: .utf8) ?? ""
+        let prefix = label.map { "\($0)\n" } ?? ""
+        let suffix = note.map { "\n\n\($0)" } ?? ""
+        let body: String
+        if let previouslyTrusted {
+            body = "The host key for \(hostname):\(port) has changed. " +
+                "This could indicate a man-in-the-middle attack!\n\n" +
+                "Previously Trusted:\n\(previouslyTrusted)\n\n" +
+                "New Key Received:\n\(fingerprint)"
+        } else {
+            body = "Do you want to trust this host?\n\n" +
+                "Host: \(hostname):\(port)\n" +
+                "Key Type: \(keyType)\n\n" +
+                "Fingerprint:\n\(fingerprint)"
+        }
+        return prefix + body + suffix
     }
 
-    init(message: String, isKeyChanged: Bool) {
-        // Convert to UTF-8 data for safe cross-actor transfer
-        self.messageData = message.data(using: .utf8) ?? Data()
-        self.isKeyChanged = isKeyChanged
+    enum Recheck {
+        /// Saved, or approved with Connect Once, since the request was made.
+        case trusted
+        /// Still classified as it was.
+        case current
+        /// The saved key changed (or was removed) since the request was made.
+        case reclassified(HostKeyValidationRequest)
+    }
+
+    /// For a prompt that waited behind another: that prompt may have saved
+    /// this key, or a different one for the same host. `honoringConnectOnce`
+    /// is false for a prompt re-asked after the user chose to save, which
+    /// must still offer the replacement.
+    @MainActor
+    func recheck(honoringConnectOnce: Bool = true) -> Recheck {
+        let known = KnownHostsManager.shared.getHost(hostname: hostname, port: port)
+        if let known, known.fingerprint == fingerprint || known.publicKeyData == publicKeyData {
+            return .trusted
+        }
+        if honoringConnectOnce,
+           SessionApprovedHostKeys.shared.matches(hostname: hostname, port: port, publicKeyData: publicKeyData) {
+            return .trusted
+        }
+        return savedKeyChange().map { .reclassified($0) } ?? .current
+    }
+
+    /// Saved trust only, ignoring Connect Once approvals: the request updated
+    /// to warn against the currently saved key when that is no longer the one
+    /// the prompt showed, or nil when the prompt is still accurate.
+    @MainActor
+    func savedKeyChange() -> HostKeyValidationRequest? {
+        let known = KnownHostsManager.shared.getHost(hostname: hostname, port: port)
+        if let known, known.fingerprint == fingerprint || known.publicKeyData == publicKeyData {
+            return nil
+        }
+        guard known?.fingerprint != previouslyTrusted else { return nil }
+        return HostKeyValidationRequest(
+            hostname: hostname,
+            port: port,
+            keyType: keyType,
+            fingerprint: fingerprint,
+            publicKeyData: publicKeyData,
+            previouslyTrusted: known?.fingerprint,
+            label: label,
+            note: note)
     }
 }
 
@@ -34,6 +99,29 @@ enum HostKeyValidationResult {
     case accept          // Accept and save to known hosts
     case acceptOnce      // Accept for this session only (don't save)
     case reject          // Reject the connection
+    /// Accept with nothing left to record: the prompt already recorded the
+    /// decision, or the key was already trusted.
+    case accepted
+}
+
+extension HostKeyValidationRequest {
+    /// Saves the key for `.accept`; remembers it for this run for `.acceptOnce`.
+    @MainActor
+    func record(_ result: HostKeyValidationResult, in manager: KnownHostsManager = .shared) {
+        switch result {
+        case .accept:
+            manager.addHost(KnownHost(
+                hostname: hostname,
+                port: port,
+                publicKeyData: publicKeyData,
+                keyType: keyType,
+                fingerprint: fingerprint))
+        case .acceptOnce:
+            SessionApprovedHostKeys.shared.remember(hostname: hostname, port: port, publicKeyData: publicKeyData)
+        case .reject, .accepted:
+            break
+        }
+    }
 }
 
 /// Custom SSH server authentication delegate that validates host keys against known hosts
@@ -154,38 +242,34 @@ nonisolated final class SSHHostKeyDelegate: NIOSSHClientServerAuthenticationDele
                     return true
                 }
 
-                // Build complete message string here, before crossing any boundaries
-                let oldFp = String(knownHost.fingerprint)
-                let message = "The host key for \(hostnameCopy):\(portCopy) has changed. This could indicate a man-in-the-middle attack!\n\nPreviously Trusted:\n\(oldFp)\n\nNew Key Received:\n\(fingerprint)"
-
                 let request = HostKeyValidationRequest(
-                    message: message,
-                    isKeyChanged: true
+                    hostname: hostnameCopy,
+                    port: portCopy,
+                    keyType: keyType,
+                    fingerprint: fingerprint,
+                    publicKeyData: publicKeyData,
+                    previouslyTrusted: String(knownHost.fingerprint)
                 )
 
                 let result = await requestUserValidation(request)
+                request.record(result, in: manager)
 
                 switch result {
                 case .accept:
-                    // User accepted the new key - update known hosts
-                    let newHost = KnownHost(
-                        hostname: hostnameCopy,
-                        port: portCopy,
-                        publicKeyData: publicKeyData,
-                        keyType: keyType,
-                        fingerprint: fingerprint
-                    )
-                    manager.addHost(newHost)
                     logger.info("User accepted new host key, updated known hosts")
                     SSHDebugLogger.shared.event("HOSTKEY", "user decision=accept(stored)")
                     return true
 
                 case .acceptOnce:
-                    // Accept but don't persist; remember in-memory for
-                    // ancillary connections in the same flow.
-                    SessionApprovedHostKeys.shared.remember(hostname: hostnameCopy, port: portCopy, publicKeyData: publicKeyData)
+                    // Not persisted; remembered in-memory for ancillary
+                    // connections in the same flow.
                     logger.info("User accepted new host key for this session only")
                     SSHDebugLogger.shared.event("HOSTKEY", "user decision=acceptOnce(not stored)")
+                    return true
+
+                case .accepted:
+                    logger.info("Host key accepted, decision already recorded")
+                    SSHDebugLogger.shared.event("HOSTKEY", "user decision=accepted(recorded by prompt)")
                     return true
 
                 case .reject:
@@ -204,37 +288,34 @@ nonisolated final class SSHHostKeyDelegate: NIOSSHClientServerAuthenticationDele
                 return true
             }
 
-            // Build complete message string here, before crossing any boundaries
-            let message = "Do you want to trust this host?\n\nHost: \(hostnameCopy):\(portCopy)\nKey Type: \(keyType)\n\nFingerprint:\n\(fingerprint)"
-
             let request = HostKeyValidationRequest(
-                message: message,
-                isKeyChanged: false
+                hostname: hostnameCopy,
+                port: portCopy,
+                keyType: keyType,
+                fingerprint: fingerprint,
+                publicKeyData: publicKeyData,
+                previouslyTrusted: nil
             )
 
             let result = await requestUserValidation(request)
+            request.record(result, in: manager)
 
             switch result {
             case .accept:
-                // User accepted - save to known hosts
-                let newHost = KnownHost(
-                    hostname: hostnameCopy,
-                    port: portCopy,
-                    publicKeyData: publicKeyData,
-                    keyType: keyType,
-                    fingerprint: fingerprint
-                )
-                manager.addHost(newHost)
                 logger.info("User accepted new host, added to known hosts")
                 SSHDebugLogger.shared.event("HOSTKEY", "user decision=accept(stored)")
                 return true
 
             case .acceptOnce:
-                // Accept but don't persist; remember in-memory for ancillary
+                // Not persisted; remembered in-memory for ancillary
                 // connections in the same flow.
-                SessionApprovedHostKeys.shared.remember(hostname: hostnameCopy, port: portCopy, publicKeyData: publicKeyData)
                 logger.info("User accepted host for this session only")
                 SSHDebugLogger.shared.event("HOSTKEY", "user decision=acceptOnce(not stored)")
+                return true
+
+            case .accepted:
+                logger.info("Host accepted, decision already recorded")
+                SSHDebugLogger.shared.event("HOSTKEY", "user decision=accepted(recorded by prompt)")
                 return true
 
             case .reject:

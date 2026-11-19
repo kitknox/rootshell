@@ -178,7 +178,7 @@ extension MainView {
             leaf.resignFirstResponder()
         }
         leaf.isLogicallyFocused = false
-        withdrawKeyboardInteractive(for: leaf)
+        withdrawPendingPrompts(for: leaf)
         leaf.cleanup(reason: .transferOut)
 
         // Single leaf in the tab → close the tab. closeTab re-runs cleanup
