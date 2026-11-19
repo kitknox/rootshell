@@ -199,10 +199,11 @@ final class TerminalKeyboardAccessoryController: NSObject {
         }
     }
 
-    /// Keys only beside a host's own toolbar, or under the system toolbar when
-    /// the glass bar carries the terminal keyboard's row.
+    /// Keys only beside a host's own toolbar. Under the glass bar, which carries
+    /// the terminal keyboard's row, the keys keep every page.
     private var touchKeyboardRowMode: TerminalTouchKeyboardView.TextFieldMode {
-        (host?.keyboardTouchKeyboardShowsToolbar ?? true) && !glassBarCarriesTouchToolbar ? .off : .keysOnly
+        if glassBarCarriesTouchToolbar { return .toolbarCarried }
+        return (host?.keyboardTouchKeyboardShowsToolbar ?? true) ? .off : .keysOnly
     }
 
     /// Glass Bar with Use with Terminal Keyboard: the docked terminal keyboard

@@ -626,6 +626,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         case .off: return pages
         case .toolbar: return pages.filter { $0 != .shortcuts }
         case .keysOnly: return pages.filter { $0 == .typing || $0 == .dictation }
+        case .toolbarCarried: return pages
         }
     }
     private var toolbarDrawerKeys: [[Model.Key]] = []
@@ -880,8 +881,9 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     }
 
     /// Ordinary text fields drop the Shortcuts page; keys-only also drops the
-    /// toolbar, its drawers, and every page but Dictation.
-    enum TextFieldMode { case off, toolbar, keysOnly }
+    /// toolbar, its drawers, and every page but Dictation. `toolbarCarried` hides
+    /// the toolbar row, which the Glass Bar shows above the keys, but keeps every page.
+    enum TextFieldMode { case off, toolbar, keysOnly, toolbarCarried }
     var textFieldMode: TextFieldMode {
         didSet {
             guard oldValue != textFieldMode else { return }
@@ -903,7 +905,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             onHeightChanged?()
         }
     }
-    private var hidesToolbar: Bool { textFieldMode == .keysOnly }
+    private var hidesToolbar: Bool { textFieldMode == .keysOnly || textFieldMode == .toolbarCarried }
     private var preservesModifiersForModeChange = false
 
     /// Changes the row mode and republishes the keyboard's own modifiers, keeping
