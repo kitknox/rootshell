@@ -50,8 +50,18 @@ actor HerdrControlChannel {
     private var nextRequestId: UInt64 = 1
     private var pending: [String: CheckedContinuation<Data, Error>] = [:]
     private var readerTask: Task<Void, Never>?
-    private var closed = false
-    private var writeQueue: Task<Void, Error>?
+
+    private enum Write: Sendable {
+        case input(attachId: String, bytes: Data, auto: Bool?)
+        case line(Data)
+    }
+
+    private let writes: OSAllocatedUnfairLock<AsyncStream<Write>.Continuation?>
+    private var writeStream: AsyncStream<Write>?
+    private var acceptingWrites: Bool { writes.withLock { $0 != nil } }
+    private var writerTask: Task<Void, Never>?
+    private var gracefulCloseTask: Task<Void, Never>?
+    private var pipeCloseTask: Task<Void, Never>?
 
     /// Facts from `control.open`, set once the stream is up.
     private(set) var opened: HerdrControl.ControlOpened?
@@ -64,6 +74,9 @@ actor HerdrControlChannel {
         self.pipe = pipe
         self.onInbound = onInbound
         self.onClosed = onClosed
+        let (stream, continuation) = AsyncStream.makeStream(of: Write.self)
+        self.writeStream = stream
+        self.writes = OSAllocatedUnfairLock(initialState: continuation)
     }
 
     // MARK: - Lifecycle
@@ -110,30 +123,65 @@ actor HerdrControlChannel {
                 "herdr \(opened.version) has no control stream support"
             )
         }
+        guard acceptingWrites else { throw HerdrChannelError.closed }
         self.opened = opened
+        startWriter()
         startReader(framer: framer)
         return opened
     }
 
     func close() async {
-        guard !closed else { return }
-        closed = true
-        readerTask?.cancel()
-        // Best effort: tell the bridge to release everything before the pipe dies.
-        let line = #"{"id":"control:close","method":"control.close","params":{}}"# + "\n"
-        try? await pipe.write(Data(line.utf8))
-        await pipe.close()
+        if let closing = gracefulCloseTask ?? pipeCloseTask {
+            await closing.value
+            return
+        }
+        finishWrites()
         failPending(HerdrChannelError.closed)
+        // Give the current line exclusive use of the pipe until its last byte.
+        // The writer skips its backlog once close starts.
+        let closing = Task {
+            await writerTask?.value
+            if pipeCloseTask == nil {
+                let line = #"{"id":"control:close","method":"control.close","params":{}}"# + "\n"
+                try? await pipe.write(Data(line.utf8))
+            }
+            await startPipeClose().value
+        }
+        gracefulCloseTask = closing
+        await closing.value
     }
 
     /// Close without the courtesy write: used when the stream is presumed
     /// dead, where a blocked writer would stall recovery.
     func abort() async {
-        guard !closed else { return }
-        closed = true
+        await abort(error: nil, notifyOwner: false)
+    }
+
+    private func abort(error: Error?, notifyOwner: Bool) async {
+        if acceptingWrites {
+            finishWrites()
+            failPending(error ?? HerdrChannelError.closed)
+            if notifyOwner { onClosed(error) }
+        }
+        // EOF or a forced abort must wake even a gracefully closing writer.
+        writerTask?.cancel()
+        await startPipeClose().value
+    }
+
+    private func startPipeClose() -> Task<Void, Never> {
+        if let pipeCloseTask { return pipeCloseTask }
         readerTask?.cancel()
-        await pipe.close()
-        failPending(HerdrChannelError.closed)
+        let closing = Task { [pipe] in await pipe.close() }
+        pipeCloseTask = closing
+        return closing
+    }
+
+    private func finishWrites() {
+        writes.withLock { continuation in
+            continuation?.finish()
+            continuation = nil
+        }
+        writeStream = nil
     }
 
     private func failPending(_ error: Error) {
@@ -153,26 +201,18 @@ actor HerdrControlChannel {
         _ params: P,
         timeout: Duration = HerdrControlChannel.defaultTimeout
     ) async throws -> Data {
-        guard !closed else { throw HerdrChannelError.closed }
+        guard acceptingWrites else { throw HerdrChannelError.closed }
         let id = "r\(nextRequestId)"
         nextRequestId += 1
         let encoded = try JSONEncoder().encode(HerdrControl.Request(id: id, method: method, params: params))
         var line = encoded
         line.append(0x0A)
 
-        // The continuation is registered before the write suspends: a fast
+        // Register the continuation before handing the line to the writer. A fast
         // reply could otherwise land in `dispatch` with nothing to match.
         let response: Data = try await withCheckedThrowingContinuation { continuation in
             pending[id] = continuation
-            let write = enqueueWrite(line)
-            Task { [weak self] in
-                guard let self else { return }
-                do {
-                    try await write.value
-                } catch {
-                    await self.fail(id: id, error: error)
-                }
-            }
+            writes.withLock { $0 }?.yield(.line(line))
             Task { [weak self] in
                 try? await Task.sleep(for: timeout)
                 await self?.timeOut(id: id, method: method)
@@ -202,47 +242,49 @@ actor HerdrControlChannel {
         }
     }
 
-    /// Fire-and-forget input write: no response wait so typing never blocks
-    /// behind slower requests. Errors surface as responses the reader logs.
-    func sendInput(attachId: String, bytes: Data, auto: Bool? = nil) async {
-        guard !closed else { return }
-        let id = "i\(nextRequestId)"
-        nextRequestId += 1
-        let params = HerdrControl.InputParams(attach_id: attachId, bytes: bytes.base64EncodedString(), auto: auto)
-        guard var line = try? JSONEncoder().encode(HerdrControl.Request(id: id, method: "terminal.input", params: params)) else {
-            return
-        }
-        line.append(0x0A)
-        do {
-            try await enqueueWrite(line).value
-        } catch {
-            Self.logger.warning("herdr input write failed: \(error.localizedDescription)")
-        }
+    /// Publish in the caller's order before it returns to the UI run loop.
+    nonisolated func sendInput(attachId: String, bytes: Data, auto: Bool? = nil) {
+        writes.withLock { $0 }?.yield(.input(attachId: attachId, bytes: bytes, auto: auto))
     }
 
-    /// Actor reentrancy must not interleave JSON lines or reorder a resize
-    /// and the attach/input that follows it while a transport write awaits.
-    private func enqueueWrite(_ line: Data) -> Task<Void, Error> {
-        let previous = writeQueue
-        let pipe = self.pipe
-        let write = Task {
-            if let previous { try await previous.value }
-            try Task.checkCancellation()
-            guard !closed else { throw HerdrChannelError.closed }
-            try await pipe.write(line)
+    /// A single consumer keeps writes FIFO even when a transport suspends.
+    /// Encoding a paste and writing input can proceed while the reader
+    /// decodes a large snapshot or waits for a layout change.
+    private func startWriter() {
+        guard let stream = writeStream else { return }
+        writeStream = nil
+        writerTask = Task.detached(priority: .userInitiated) { [weak self, stream, pipe, writes] in
+            var inputID: UInt64 = 0
+            do {
+                for await write in stream {
+                    guard writes.withLock({ $0 != nil }) else { return }
+                    let line: Data
+                    switch write {
+                    case .input(let attachId, let bytes, let auto):
+                        inputID += 1
+                        let params = HerdrControl.InputParams(
+                            attach_id: attachId, bytes: bytes.base64EncodedString(), auto: auto
+                        )
+                        let request = HerdrControl.Request(id: "i\(inputID)", method: "terminal.input", params: params)
+                        var encoded = try JSONEncoder().encode(request)
+                        encoded.append(0x0A)
+                        line = encoded
+                    case .line(let encoded):
+                        line = encoded
+                    }
+                    // Closing may have begun while encoding a large paste.
+                    guard writes.withLock({ $0 != nil }) else { return }
+                    try await pipe.write(line)
+                }
+            } catch {
+                await self?.abort(error: error, notifyOwner: true)
+            }
         }
-        writeQueue = write
-        return write
     }
 
     private func timeOut(id: String, method: String) {
         guard let continuation = pending.removeValue(forKey: id) else { return }
         continuation.resume(throwing: HerdrChannelError.timedOut(method: method))
-    }
-
-    private func fail(id: String, error: Error) {
-        guard let continuation = pending.removeValue(forKey: id) else { return }
-        continuation.resume(throwing: error)
     }
 
     // MARK: - Reader
@@ -260,16 +302,7 @@ actor HerdrControlChannel {
             } catch {
                 failure = error
             }
-            await self.readerEnded(failure)
-        }
-    }
-
-    private func readerEnded(_ error: Error?) {
-        let wasClosed = closed
-        closed = true
-        failPending(error ?? HerdrChannelError.closed)
-        if !wasClosed {
-            onClosed(error)
+            await self.abort(error: failure, notifyOwner: true)
         }
     }
 

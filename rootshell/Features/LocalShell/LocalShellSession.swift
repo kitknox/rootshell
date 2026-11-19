@@ -1298,69 +1298,18 @@ final class LocalShellSession: TerminalSession, EmbeddedConnectionConfigProvidin
             return
         }
 
-        // Handle password prompt modes (SSH, SCP, SFTP, Mosh, and Trzsz)
-        if case .passwordPrompt = sessionMode {
+        switch sessionMode {
+        case .passwordPrompt, .scpPasswordPrompt, .sftpPasswordPrompt, .moshPasswordPrompt,
+             .trzszPasswordPrompt, .sshCopyIDPasswordPrompt:
             guard let text = String(data: data, encoding: .utf8) else { return }
-            Task { @MainActor [weak self] in
-                for char in text {
-                    self?.handlePasswordInput(char)
-                }
-            }
+            for char in text { handlePasswordInput(char) }
             return
-        }
-        if case .scpPasswordPrompt = sessionMode {
+        case .gitPasswordPrompt:
             guard let text = String(data: data, encoding: .utf8) else { return }
-            Task { @MainActor [weak self] in
-                for char in text {
-                    self?.handlePasswordInput(char)
-                }
-            }
+            for char in text { handleGitPasswordInput(char) }
             return
-        }
-        if case .sftpPasswordPrompt = sessionMode {
-            guard let text = String(data: data, encoding: .utf8) else { return }
-            Task { @MainActor [weak self] in
-                for char in text {
-                    self?.handlePasswordInput(char)
-                }
-            }
-            return
-        }
-        if case .moshPasswordPrompt = sessionMode {
-            guard let text = String(data: data, encoding: .utf8) else { return }
-            Task { @MainActor [weak self] in
-                for char in text {
-                    self?.handlePasswordInput(char)
-                }
-            }
-            return
-        }
-        if case .trzszPasswordPrompt = sessionMode {
-            guard let text = String(data: data, encoding: .utf8) else { return }
-            Task { @MainActor [weak self] in
-                for char in text {
-                    self?.handlePasswordInput(char)
-                }
-            }
-            return
-        }
-        if case .sshCopyIDPasswordPrompt = sessionMode {
-            guard let text = String(data: data, encoding: .utf8) else { return }
-            Task { @MainActor [weak self] in
-                for char in text {
-                    self?.handlePasswordInput(char)
-                }
-            }
-            return
-        }
-        if case .gitPasswordPrompt = sessionMode {
-            guard let text = String(data: data, encoding: .utf8) else { return }
-            Task { @MainActor [weak self] in
-                for char in text {
-                    self?.handleGitPasswordInput(char)
-                }
-            }
-            return
+        default:
+            break
         }
 
         // Handle ssh-copy-id transfer mode (Ctrl-C to cancel)
@@ -1411,22 +1360,14 @@ final class LocalShellSession: TerminalSession, EmbeddedConnectionConfigProvidin
         // Handle host key prompt mode
         if case .hostKeyPrompt = sessionMode {
             guard let text = String(data: data, encoding: .utf8) else { return }
-            Task { @MainActor [weak self] in
-                for char in text {
-                    self?.handleHostKeyInput(char)
-                }
-            }
+            for char in text { handleHostKeyInput(char) }
             return
         }
 
         // Handle save password prompt mode
         if case .savePasswordPrompt = sessionMode {
             guard let text = String(data: data, encoding: .utf8) else { return }
-            Task { @MainActor [weak self] in
-                for char in text {
-                    self?.handleSavePasswordInput(char)
-                }
-            }
+            for char in text { handleSavePasswordInput(char) }
             return
         }
 
@@ -1434,11 +1375,7 @@ final class LocalShellSession: TerminalSession, EmbeddedConnectionConfigProvidin
         #if !CHINA_BUILD
         if case .aiCommitPrompt = sessionMode {
             guard let text = String(data: data, encoding: .utf8) else { return }
-            Task { @MainActor [weak self] in
-                for char in text {
-                    self?.handleAICommitPromptInput(char)
-                }
-            }
+            for char in text { handleAICommitPromptInput(char) }
             return
         }
         #endif
@@ -1464,9 +1401,7 @@ final class LocalShellSession: TerminalSession, EmbeddedConnectionConfigProvidin
         case .lineEditor:
             // Process through line editor (existing behavior)
             guard let text = String(data: data, encoding: .utf8) else { return }
-            Task { @MainActor [weak self] in
-                self?.processInput(text)
-            }
+            processInput(text)
 
         case .commandStdin:
             guard writeFd >= 0 else {

@@ -13,26 +13,49 @@
 import Foundation
 import os
 
+/// A duplex byte stream over a local socket or remote transport channel.
+nonisolated protocol AsyncBytePipe: Sendable {
+    /// Read up to `maxBytes` from the channel. Returns `nil` on clean EOF.
+    func read(maxBytes: Int) async throws -> Data?
+
+    /// Write all of `data` to the channel.
+    func write(_ data: Data) async throws
+
+    /// Close the channel. Idempotent.
+    func close() async
+}
+
 nonisolated final class FileDescriptorBytePipe: AsyncBytePipe, @unchecked Sendable {
 
     private let fd: Int32
     private let readQueue = DispatchQueue(label: "com.rootshell.fdpipe.read", qos: .userInitiated)
     private let writeQueue = DispatchQueue(label: "com.rootshell.fdpipe.write", qos: .userInitiated)
-    private let state = OSAllocatedUnfairLock(initialState: false)
+    private enum State { case open, closing, closed }
+    private let state = OSAllocatedUnfairLock(initialState: State.open)
+    private let operations = DispatchGroup()
 
     init(fd: Int32) {
         self.fd = fd
+        var enabled: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &enabled, socklen_t(MemoryLayout.size(ofValue: enabled)))
     }
 
-    private var isClosed: Bool {
-        state.withLock { $0 }
+    /// Register before queueing the syscall so shutdown also covers work
+    /// that has been accepted but hasn't reached its dispatch queue yet.
+    private func beginOperation() -> Bool {
+        state.withLock { state in
+            guard state == .open else { return false }
+            operations.enter()
+            return true
+        }
     }
 
     func read(maxBytes: Int) async throws -> Data? {
-        if isClosed { return nil }
+        guard beginOperation() else { return nil }
         let fd = self.fd
         return try await withCheckedThrowingContinuation { continuation in
-            readQueue.async {
+            readQueue.async { [operations] in
+                defer { operations.leave() }
                 var buffer = [UInt8](repeating: 0, count: max(1, min(maxBytes, 256 * 1024)))
                 while true {
                     let count = Darwin.read(fd, &buffer, buffer.count)
@@ -57,12 +80,13 @@ nonisolated final class FileDescriptorBytePipe: AsyncBytePipe, @unchecked Sendab
     }
 
     func write(_ data: Data) async throws {
-        if isClosed {
+        guard beginOperation() else {
             throw POSIXError(.EPIPE)
         }
         let fd = self.fd
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            writeQueue.async {
+            writeQueue.async { [operations] in
+                defer { operations.leave() }
                 var offset = 0
                 data.withUnsafeBytes { raw in
                     guard let base = raw.baseAddress else { return }
@@ -86,15 +110,24 @@ nonisolated final class FileDescriptorBytePipe: AsyncBytePipe, @unchecked Sendab
     }
 
     func close() async {
-        let wasClosed = state.withLock { closed -> Bool in
-            let was = closed
-            closed = true
-            return was
+        state.withLock { state in
+            guard state == .open else { return }
+            state = .closing
+            // Darwin can reject SHUT_RDWR with ENOTCONN after peer EOF
+            // without waking a blocked write. Shut each half independently.
+            _ = Darwin.shutdown(fd, SHUT_WR)
+            _ = Darwin.shutdown(fd, SHUT_RD)
         }
-        if !wasClosed {
-            // Shutdown first so a blocked read returns promptly.
-            _ = Darwin.shutdown(fd, SHUT_RDWR)
-            _ = Darwin.close(fd)
+        await withCheckedContinuation { continuation in
+            operations.notify(queue: writeQueue) { [state, fd] in
+                state.withLock { state in
+                    if state == .closing {
+                        _ = Darwin.close(fd)
+                        state = .closed
+                    }
+                }
+                continuation.resume()
+            }
         }
     }
 }

@@ -29,28 +29,6 @@ import Combine
 import Crypto
 import os.log
 
-// MARK: - AsyncBytePipe protocol
-
-/// Duplex byte stream abstraction supplied by whichever SSH transport
-/// accepted the forwarded Unix-socket connection.
-///
-/// Both ``CitadelSSHSession`` (via the Citadel streamlocal extension)
-/// and ``TrzszSession`` (via the iosbridge streamlocal callback)
-/// adapt their native channel types to this protocol — the agent
-/// manager itself stays transport-agnostic so the Assuan logic lives
-/// in exactly one place.
-nonisolated protocol AsyncBytePipe: Sendable {
-    /// Read up to `maxBytes` from the channel. Returns `nil` when the
-    /// peer has cleanly closed; throws on transport error.
-    func read(maxBytes: Int) async throws -> Data?
-
-    /// Write all of `data` to the channel.
-    func write(_ data: Data) async throws
-
-    /// Close the channel. Idempotent.
-    func close() async
-}
-
 // MARK: - Manager
 
 @MainActor

@@ -112,6 +112,8 @@
 		47AC7E5700000000000000A7 /* rootshell/Features/Herdr/HerdrReplyFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E5700000000000000B7 /* rootshell/Features/Herdr/HerdrReplyFilter.swift */; };
 		47AC7E5700000000000000A8 /* rootshell/Core/Terminal/TerminalGridReports.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E5700000000000000B8 /* rootshell/Core/Terminal/TerminalGridReports.swift */; };
 		47AC7E5700000000000000A9 /* rootshell/Core/Foundation/ByteSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E5700000000000000B9 /* rootshell/Core/Foundation/ByteSearch.swift */; };
+		F210A5E40000000000000003 /* rootshell/Features/Herdr/HerdrControlChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F210A5E40000000000000013 /* rootshell/Features/Herdr/HerdrControlChannel.swift */; };
+		F210A5E40000000000000002 /* rootshell/Core/Helper/FileDescriptorBytePipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = F210A5E40000000000000012 /* rootshell/Core/Helper/FileDescriptorBytePipe.swift */; };
 		47AC7E57000000000000C7A1 /* rootshell/Features/KVM/Protocol/KVMHIDFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000C7B1 /* rootshell/Features/KVM/Protocol/KVMHIDFrame.swift */; };
 		47AC7E57000000000000C7A2 /* rootshell/Features/KVM/Protocol/KVMKeyMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000C7B2 /* rootshell/Features/KVM/Protocol/KVMKeyMap.swift */; };
 		47AC7E57000000000000C7A3 /* rootshell/Features/KVM/Protocol/KVMMediaFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AC7E57000000000000C7B3 /* rootshell/Features/KVM/Protocol/KVMMediaFrame.swift */; };
@@ -649,6 +651,8 @@
 		47AC7E5700000000000000B7 /* rootshell/Features/Herdr/HerdrReplyFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/Herdr/HerdrReplyFilter.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E5700000000000000B8 /* rootshell/Core/Terminal/TerminalGridReports.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Terminal/TerminalGridReports.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E5700000000000000B9 /* rootshell/Core/Foundation/ByteSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Foundation/ByteSearch.swift; sourceTree = SOURCE_ROOT; };
+		F210A5E40000000000000013 /* rootshell/Features/Herdr/HerdrControlChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/Herdr/HerdrControlChannel.swift; sourceTree = SOURCE_ROOT; };
+		F210A5E40000000000000012 /* rootshell/Core/Helper/FileDescriptorBytePipe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Helper/FileDescriptorBytePipe.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E57000000000000C7B1 /* rootshell/Features/KVM/Protocol/KVMHIDFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/KVM/Protocol/KVMHIDFrame.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E57000000000000C7B2 /* rootshell/Features/KVM/Protocol/KVMKeyMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/KVM/Protocol/KVMKeyMap.swift; sourceTree = SOURCE_ROOT; };
 		47AC7E57000000000000C7B3 /* rootshell/Features/KVM/Protocol/KVMMediaFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/KVM/Protocol/KVMMediaFrame.swift; sourceTree = SOURCE_ROOT; };
@@ -1363,6 +1367,8 @@
 				47AC7E5700000000000000B7 /* rootshell/Features/Herdr/HerdrReplyFilter.swift */,
 				47AC7E5700000000000000B8 /* rootshell/Core/Terminal/TerminalGridReports.swift */,
 				47AC7E5700000000000000B9 /* rootshell/Core/Foundation/ByteSearch.swift */,
+				F210A5E40000000000000013 /* rootshell/Features/Herdr/HerdrControlChannel.swift */,
+				F210A5E40000000000000012 /* rootshell/Core/Helper/FileDescriptorBytePipe.swift */,
 				47AC7E57000000000000F7B1 /* rootshell/Features/Effects/Weather/Model/LightningSchedule.swift */,
 				47AC7E57000000000000F7B2 /* rootshell/Features/Effects/Weather/Model/WeatherConditionMapping.swift */,
 				47AC7E57000000000000F7B3 /* rootshell/Features/Effects/Weather/Model/WeatherFetchPolicy.swift */,
@@ -2426,6 +2432,8 @@
 				47AC7E5700000000000000A7 /* rootshell/Features/Herdr/HerdrReplyFilter.swift in Sources */,
 				47AC7E5700000000000000A8 /* rootshell/Core/Terminal/TerminalGridReports.swift in Sources */,
 				47AC7E5700000000000000A9 /* rootshell/Core/Foundation/ByteSearch.swift in Sources */,
+				F210A5E40000000000000003 /* rootshell/Features/Herdr/HerdrControlChannel.swift in Sources */,
+				F210A5E40000000000000002 /* rootshell/Core/Helper/FileDescriptorBytePipe.swift in Sources */,
 				47AC7E57000000000000F7A1 /* rootshell/Features/Effects/Weather/Model/LightningSchedule.swift in Sources */,
 				47AC7E57000000000000F7A2 /* rootshell/Features/Effects/Weather/Model/WeatherConditionMapping.swift in Sources */,
 				47AC7E57000000000000F7A3 /* rootshell/Features/Effects/Weather/Model/WeatherFetchPolicy.swift in Sources */,

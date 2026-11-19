@@ -173,13 +173,7 @@ final class ConsoleSession: TerminalSession {
             return
         }
 
-        Task {
-            do {
-                try await client.send(data)
-            } catch {
-                Self.logger.error("Failed to send input: \(error.localizedDescription)")
-            }
-        }
+        client.sendInput(data)
     }
 
     func setSize(_ size: TerminalPTY.TerminalSize) throws {

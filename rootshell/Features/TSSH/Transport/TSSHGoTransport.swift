@@ -564,9 +564,16 @@ final class TrzszGoTransport: NSObject {
     private static var nextSessionNumber: Int = 1
 
     private var transportRef: TSSHTransportRef?
+    private let currentSession = OSAllocatedUnfairLock<TSSHSessionRef?>(initialState: nil)
     private var sessionRef: TSSHSessionRef? {
-        didSet {
-            if sessionRef != oldValue { resizeController.reset() }
+        get { currentSession.withLock { $0 } }
+        set {
+            let previous = currentSession.withLock { ref in
+                let previous = ref
+                ref = newValue
+                return previous
+            }
+            if newValue != previous { resizeController.reset() }
         }
     }
 
@@ -593,8 +600,7 @@ final class TrzszGoTransport: NSObject {
     /// could reach the wire out of order (tears large tmux -CC pastes, whose
     /// send-keys chunks ride this path). The writer reads `sessionRef` per
     /// item, so the pipeline survives reconnects; items sent while the ref is
-    /// nil are dropped (matches the previous guard). The stream auto-finishes
-    /// when the transport deallocates.
+    /// nil are dropped.
     private var sendStreamContinuation: AsyncStream<Data>.Continuation?
     private var sendWriterTask: Task<Void, Never>?
     private var cachedSessionID: UInt64?
@@ -662,6 +668,11 @@ final class TrzszGoTransport: NSObject {
         self.terminalType = terminalType
 
         super.init()
+    }
+
+    deinit {
+        sendWriterTask?.cancel()
+        sendStreamContinuation?.finish()
     }
 
     func effectiveRelayMTU(requested: Int, mode: String) async throws -> Int {
@@ -1083,12 +1094,12 @@ final class TrzszGoTransport: NSObject {
 
         let (stream, continuation) = AsyncStream.makeStream(of: Data.self)
         sendStreamContinuation = continuation
-        sendWriterTask = Task { [weak self] in
+        sendWriterTask = Task.detached(priority: .userInitiated) { [weak self, currentSession, probe = ioProbe, debugLabel] in
             for await data in stream {
-                guard let self, let sRef = self.sessionRef else { continue }
-                let probe = self.ioProbe
+                guard !Task.isCancelled else { return }
+                guard let sRef = currentSession.withLock({ $0 }) else { continue }
                 let byteCount = data.count
-                let probeID = probe.begin(kind: "send", label: self.debugLabel, [
+                let probeID = probe.begin(kind: "send", label: debugLabel, [
                     ("bytes", byteCount),
                 ])
                 probe.scheduleStallCheck(id: probeID, thresholdSeconds: 2.0)
@@ -1098,10 +1109,15 @@ final class TrzszGoTransport: NSObject {
                 } catch {
                     probe.end(id: probeID, error: error.localizedDescription)
                     Self.logger.error("Failed to send data: \(error.localizedDescription)")
-                    self.delegate?.transport(self, didEncounterError: error)
+                    await self?.reportWriteError(error, for: sRef)
                 }
             }
         }
+    }
+
+    private func reportWriteError(_ error: Error, for session: TSSHSessionRef) {
+        guard sessionRef == session else { return }
+        delegate?.transport(self, didEncounterError: error)
     }
 
     /// Resizes the terminal

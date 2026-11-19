@@ -293,13 +293,7 @@ final class KubernetesNodeSession: TerminalSession {
             return
         }
 
-        Task {
-            do {
-                try await execClient.sendStdin(data)
-            } catch {
-                Self.logger.error("Failed to send input: \(error.localizedDescription)")
-            }
-        }
+        execClient.sendStdin(data)
     }
 
     func setSize(_ size: TerminalPTY.TerminalSize) throws {
@@ -309,13 +303,7 @@ final class KubernetesNodeSession: TerminalSession {
             return
         }
 
-        Task {
-            do {
-                try await execClient.sendResize(cols: Int(size.cols), rows: Int(size.rows))
-            } catch {
-                Self.logger.warning("Failed to send resize: \(error.localizedDescription)")
-            }
-        }
+        execClient.sendResize(cols: Int(size.cols), rows: Int(size.rows))
     }
 
     // MARK: - Private Methods
@@ -484,15 +472,13 @@ final class KubernetesNodeSession: TerminalSession {
             }
         }
 
-        client.onOpen = { [weak self] in
+        client.onOpen = { [weak self, weak client] in
             Self.logger.info("Exec connection opened")
 
             // Send initial resize
             if let self = self {
                 let size = self.pty.windowSize
-                Task {
-                    try? await client.sendResize(cols: Int(size.cols), rows: Int(size.rows))
-                }
+                client?.sendResize(cols: Int(size.cols), rows: Int(size.rows))
             }
         }
 

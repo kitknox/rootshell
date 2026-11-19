@@ -84,7 +84,7 @@ extension HerdrController {
         // Still mark them automatic: the server's grace window admits an
         // outstanding reply from before the handoff without claiming input.
         let auto: Bool? = automaticReply && capabilities.supports(.autoInput) ? true : nil
-        Task { await channel.sendInput(attachId: attachId, bytes: data, auto: auto) }
+        channel.sendInput(attachId: attachId, bytes: data, auto: auto)
     }
 
     // MARK: - Attach queue

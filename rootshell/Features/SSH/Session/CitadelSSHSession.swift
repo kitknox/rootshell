@@ -1400,7 +1400,7 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
         stdinWriter = outbound
         let (stdinStream, stdinContinuation) = AsyncStream.makeStream(of: ByteBuffer.self)
         stdinStreamContinuation = stdinContinuation
-        stdinWriterTask = Task {
+        stdinWriterTask = Task.detached(priority: .userInitiated) {
             for await buffer in stdinStream {
                 do {
                     try await outbound.write(buffer)

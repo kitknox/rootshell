@@ -271,23 +271,26 @@ final class KubernetesExecClient {
 
     /// Send data to stdin
     /// - Parameter data: The data to send
-    func sendStdin(_ data: Data) async throws {
+    func sendStdin(_ data: Data) {
         guard isConnected, let wsTask = webSocketTask else {
-            throw KubernetesNodeShellError.execConnectionClosed("Not connected")
+            Self.logger.warning("Cannot send input: exec session is disconnected")
+            return
         }
 
         // Prepend channel ID
         var message = Data([Channel.stdin.rawValue])
         message.append(data)
 
-        try await wsTask.send(.data(message))
+        wsTask.send(.data(message)) { error in
+            if let error { Self.logger.error("Failed to send input: \(error.localizedDescription)") }
+        }
     }
 
     /// Send a terminal resize event
     /// - Parameters:
     ///   - cols: Number of columns
     ///   - rows: Number of rows
-    func sendResize(cols: Int, rows: Int) async throws {
+    func sendResize(cols: Int, rows: Int) {
         guard isConnected, let wsTask = webSocketTask else {
             Self.logger.warning("Cannot send resize: not connected")
             return
@@ -310,7 +313,9 @@ final class KubernetesExecClient {
 
         Self.logger.debug("Sending resize: \(cols)x\(rows)")
 
-        try await wsTask.send(.data(message))
+        wsTask.send(.data(message)) { error in
+            if let error { Self.logger.warning("Failed to send resize: \(error.localizedDescription)") }
+        }
     }
 
     // MARK: - Disconnect

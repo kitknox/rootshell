@@ -315,22 +315,15 @@ final class ConsoleClient {
 
     // MARK: - Send Methods
 
-    /// Send data to the console
-    /// - Parameter data: The data to send (terminal input)
-    func send(_ data: Data) async throws {
+    /// Submit each message to the current socket in keyboard event order.
+    func sendInput(_ data: Data) {
         guard isConnected, let wsTask = webSocketTask else {
-            throw ConsoleError.connectionClosed("Not connected")
+            Self.logger.warning("Cannot send input: console is disconnected")
+            return
         }
-
-        // LISH uses simple text protocol - no channel prefix
-        try await wsTask.send(.data(data))
-    }
-
-    /// Send a string to the console
-    /// - Parameter string: The string to send
-    func send(_ string: String) async throws {
-        guard let data = string.data(using: .utf8) else { return }
-        try await send(data)
+        wsTask.send(.data(data)) { error in
+            if let error { Self.logger.error("Failed to send input: \(error.localizedDescription)") }
+        }
     }
 
     // MARK: - Disconnect
