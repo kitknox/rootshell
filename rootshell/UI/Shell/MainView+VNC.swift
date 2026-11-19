@@ -34,13 +34,13 @@ extension MainView {
     func makeVNCPane(
         config: VNCConnectionConfig,
         sourceProfileID: UUID?,
-        password: String?,
+        passwordHandoff: RemoteScreenPasswordHandoff? = nil,
         uuid: UUID = UUID(),
         logicallyFocused: Bool = true
     ) -> VNCPaneView {
         let pane = VNCPaneView(config: config, windowId: windowId, uuid: uuid)
         pane.sourceProfileID = sourceProfileID
-        pane.pendingPassword = password
+        pane.passwordHandoff = passwordHandoff
         pane.setWindowActive(isWindowFocused)
         pane.isLogicallyFocused = logicallyFocused
 
@@ -60,10 +60,13 @@ extension MainView {
         return pane
     }
 
-    /// Open a Screen Sharing session in a new tab. `password` is a one-shot
-    /// handoff from a profile password prompt (not saved to the Keychain).
-    func createVNCTab(with config: VNCConnectionConfig, sourceProfileID: UUID? = nil, password: String? = nil) {
-        let pane = makeVNCPane(config: config, sourceProfileID: sourceProfileID, password: password)
+    /// Open a Screen Sharing session in a new tab.
+    func createVNCTab(
+        with config: VNCConnectionConfig,
+        sourceProfileID: UUID? = nil,
+        passwordHandoff: RemoteScreenPasswordHandoff? = nil
+    ) {
+        let pane = makeVNCPane(config: config, sourceProfileID: sourceProfileID, passwordHandoff: passwordHandoff)
         insertPaneAsTab(pane, title: config.displayName, profileThemeSourceID: sourceProfileID)
     }
 
@@ -73,10 +76,10 @@ extension MainView {
         with config: VNCConnectionConfig,
         direction: SplitTree<SplitPaneView>.NewDirection,
         sourceProfileID: UUID? = nil,
-        password: String? = nil
+        passwordHandoff: RemoteScreenPasswordHandoff? = nil
     ) {
         guard terminals.indices.contains(selectedTabIndex) else {
-            createVNCTab(with: config, sourceProfileID: sourceProfileID, password: password)
+            createVNCTab(with: config, sourceProfileID: sourceProfileID, passwordHandoff: passwordHandoff)
             return
         }
 
@@ -88,11 +91,11 @@ extension MainView {
         }
 
         guard let targetPane = focusedPane else {
-            createVNCTab(with: config, sourceProfileID: sourceProfileID, password: password)
+            createVNCTab(with: config, sourceProfileID: sourceProfileID, passwordHandoff: passwordHandoff)
             return
         }
 
-        let pane = makeVNCPane(config: config, sourceProfileID: sourceProfileID, password: password)
+        let pane = makeVNCPane(config: config, sourceProfileID: sourceProfileID, passwordHandoff: passwordHandoff)
         insertPaneAsSplit(
             pane,
             at: targetPane,

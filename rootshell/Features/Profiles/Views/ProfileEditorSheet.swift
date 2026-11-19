@@ -115,6 +115,10 @@ struct ProfileEditorSheet: View {
     @State private var kvmForm = KVMFormState()
     @State private var hasExistingKVMPassword: Bool = false
     @State private var hasExistingKVMHostPassword: Bool = false
+    /// The Screen Sharing or KVM route the saved-password status above was
+    /// read for. Turning Save Password off removes that route's password only,
+    /// never one the edited route may share with another profile.
+    @State private var loadedPasswordRoute: RemoteScreenRoute?
     @State private var trzszTransportMode: ProfileTransportMode = .default
     @State private var trzszMTU: String = ""
     @State private var trzszConnectTimeoutSec: String = ""
@@ -1879,14 +1883,16 @@ struct ProfileEditorSheet: View {
             if profile.connectionProtocol == .vnc {
                 if let vncConfig = profile.vncConfig {
                     vncForm = VNCFormState(config: vncConfig)
-                    hasExistingVNCPassword = VNCPasswordManager.shared.hasPassword(for: vncConfig)
+                    loadedPasswordRoute = vncConfig.currentRoute
+                    hasExistingVNCPassword = VNCPasswordManager.shared.savedState(for: vncConfig) == .saved
                 }
                 return
             }
             if profile.connectionProtocol == .kvm {
                 if let kvmConfig = profile.kvmConfig {
                     kvmForm = KVMFormState(config: kvmConfig)
-                    hasExistingKVMPassword = VNCPasswordManager.kvm.hasPassword(for: kvmConfig.passwordKey)
+                    loadedPasswordRoute = kvmConfig.currentRoute
+                    hasExistingKVMPassword = VNCPasswordManager.kvm.savedState(for: kvmConfig) == .saved
                     hasExistingKVMHostPassword = VNCPasswordManager.kvmHost.hasPassword(
                         for: KVMConnectionConfig.hostPasswordKey(profileID: profile.id))
                 }
@@ -2351,7 +2357,7 @@ struct ProfileEditorSheet: View {
         }
 
         // Password handling: a typed password replaces the saved one when
-        // the toggle is on; toggling save off removes any saved password.
+        // the toggle is on; toggling save off removes the loaded route's password.
         // Blank field with the toggle on keeps the existing entry.
         if vncForm.savePassword {
             if !vncForm.password.isEmpty {
@@ -2362,8 +2368,13 @@ struct ProfileEditorSheet: View {
                     return
                 }
             }
-        } else {
-            try? VNCPasswordManager.shared.deletePassword(for: config)
+        } else if let loadedPasswordRoute {
+            do {
+                try VNCPasswordManager.shared.deletePassword(for: loadedPasswordRoute)
+            } catch {
+                errorMessage = "Failed to remove password: \(error.localizedDescription)"
+                return
+            }
         }
 
         do {
@@ -2418,14 +2429,19 @@ struct ProfileEditorSheet: View {
         if kvmForm.savePassword {
             if !kvmForm.password.isEmpty {
                 do {
-                    try passwords.savePassword(kvmForm.password, for: config.passwordKey)
+                    try passwords.savePassword(kvmForm.password, for: config)
                 } catch {
                     errorMessage = "Failed to save password: \(error.localizedDescription)"
                     return
                 }
             }
-        } else {
-            try? passwords.deletePassword(for: config.passwordKey)
+        } else if let loadedPasswordRoute {
+            do {
+                try passwords.deletePassword(for: loadedPasswordRoute)
+            } catch {
+                errorMessage = "Failed to remove password: \(error.localizedDescription)"
+                return
+            }
         }
 
         // Saved before the profile, under the ID the profile will have, so a

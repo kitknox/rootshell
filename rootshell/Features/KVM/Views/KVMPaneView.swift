@@ -34,6 +34,9 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
     @Published private(set) var needsPassword = false
     /// The device rejected the last password, so the prompt says so.
     @Published private(set) var passwordRejected = false
+    /// A password saved before keys carried the jump route, which the prompt
+    /// offers rather than sends.
+    @Published private(set) var offersUnconfirmedSavedPassword = false
     /// Never set: KVM launch failures surface through the session state.
     @Published private(set) var launchErrorMessage: String?
     /// A destructive power action waiting for confirmation.
@@ -52,8 +55,13 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
         didSet { loginPassword.profileID = sourceProfileID }
     }
     var restorationState: RestorationState = .none
-    /// One-shot password from a profile prompt; consumed by the first connect.
-    var pendingPassword: String?
+    /// A typed password for this pane's first attempt, used only if the
+    /// route it was typed for is still the pane's route.
+    var passwordHandoff: RemoteScreenPasswordHandoff?
+    /// The route the session's password, or the open prompt, belongs to.
+    @Published private(set) var route: RemoteScreenRoute?
+    /// The prompt reopened because the jump route moved under it.
+    @Published private(set) var promptRouteChanged = false
 
     @Published private var keyboardToolbarOverride: VNCConnectionConfig.KeyboardToolbarPreference?
 
@@ -246,42 +254,80 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
 
     // MARK: - Connection
 
-    /// Pending handoff, then a one-shot stash, then the Keychain; a miss shows
-    /// the in-pane password prompt.
+    /// This attempt's typed password, then the Keychain, for the route
+    /// captured here; a miss shows the in-pane password prompt for that route.
     func connectIfNeeded() {
         guard !hasStartedConnect, !isClosed, !needsPassword else { return }
+        let route = config.currentRoute
+        self.route = route
+        // No password belongs to a jump profile this device doesn't have yet:
+        // the session fails before signing in, and Retry starts over here.
+        if route.isUnresolved {
+            passwordHandoff = nil
+            startConnect(password: "")
+            return
+        }
         let passwords = VNCPasswordManager.kvm
         let password: String
-        if let pending = pendingPassword {
-            pendingPassword = nil
-            password = pending
-        } else if let stashed = passwords.takeEphemeralPassword(for: config.passwordKey) {
-            password = stashed
-        } else if passwords.hasPassword(for: config.passwordKey),
-                  let saved = try? passwords.loadPassword(for: config.passwordKey) {
+        if let handoff = takePasswordHandoff(for: route) {
+            password = handoff
+        } else if let saved = try? passwords.loadPassword(for: config) {
             password = saved
         } else {
+            offersUnconfirmedSavedPassword = passwords.savedState(for: config) == .needsConfirmation
             needsPassword = true
             return
         }
         startConnect(password: password)
     }
 
+    /// The first attempt's typed password, if it was typed for `route`.
+    /// Taken either way, so it can't reach a later attempt.
+    private func takePasswordHandoff(for route: RemoteScreenRoute) -> String? {
+        defer { passwordHandoff = nil }
+        guard let passwordHandoff, passwordHandoff.passwordKey == route.passwordKey else { return nil }
+        return passwordHandoff.password
+    }
+
+    /// The user chose the old-format saved password for this route.
+    func useUnconfirmedSavedPassword(save: Bool) {
+        guard promptRouteIsCurrent() else { return }
+        offersUnconfirmedSavedPassword = false
+        guard let password = try? VNCPasswordManager.kvm.useLegacyPassword(for: config, save: save) else { return }
+        submitPassword(password, save: false)
+    }
+
     func submitPassword(_ password: String, save: Bool) {
+        guard promptRouteIsCurrent() else { return }
         needsPassword = false
+        offersUnconfirmedSavedPassword = false
+        promptRouteChanged = false
         if save, !password.isEmpty {
             do {
-                try VNCPasswordManager.kvm.savePassword(password, for: config.passwordKey)
+                try VNCPasswordManager.kvm.savePassword(password, for: config)
             } catch {
                 Self.logger.error("KVM password save failed: \(error.localizedDescription, privacy: .public)")
             }
         }
         if passwordRejected {
             passwordRejected = false
-            session.retry(password: password)
+            session.retry(password: password, jumpProfile: route?.jumpProfile)
         } else {
             startConnect(password: password)
         }
+    }
+
+    /// A prompt answers only for the route it opened on. If the jump moved
+    /// since, drop what was typed and resolve the new route from scratch.
+    private func promptRouteIsCurrent() -> Bool {
+        guard config.passwordKey != route?.passwordKey else { return true }
+        needsPassword = false
+        offersUnconfirmedSavedPassword = false
+        passwordRejected = false
+        hasStartedConnect = false
+        connectIfNeeded()
+        promptRouteChanged = needsPassword
+        return false
     }
 
     private func startConnect(password: String) {
@@ -289,7 +335,7 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
         restorationState = .none
         session.onHostKeyValidation = onHostKeyValidation
         session.onCertificateValidation = onCertificateValidation
-        session.connect(password: password)
+        session.connect(password: password, jumpProfile: route?.jumpProfile)
     }
 
     func cancelConnectionAttempt() {
@@ -299,8 +345,15 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
 
     func retryLaunch() {}
 
+    /// A route whose jump profile was missing gets its route and password
+    /// chosen again, now that the profile may have synced.
     func retryRemoteConnection() {
-        session.retry()
+        if route?.isUnresolved == true {
+            hasStartedConnect = false
+            connectIfNeeded()
+        } else {
+            session.retry()
+        }
     }
 
     func cancelFailedConnection() {
@@ -310,7 +363,7 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
     func nudgeRetryAfterForeground() {
         guard !isClosed, hasStartedConnect, !needsPassword else { return }
         guard case .failed = session.connectionState, session.lastError?.isTerminal != true else { return }
-        session.retry()
+        retryRemoteConnection()
     }
 
     var wantsBackgroundKeepaliveGrace: Bool {

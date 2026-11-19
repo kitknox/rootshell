@@ -11,8 +11,8 @@ import os.log
 
 /// Manages VNC / Screen Sharing passwords stored in the Keychain.
 ///
-/// Items are keyed by `VNCConnectionConfig.passwordKey` ("user@host:port"),
-/// stored synchronizable (iCloud Keychain) in the shared access group, with
+/// Device passwords are keyed by `RemoteScreenPasswordIdentity.passwordKey`
+/// ("user@host:port via route"), stored synchronizable (iCloud Keychain) in the shared access group, with
 /// after-first-unlock accessibility unless the instance asks for stricter.
 /// No biometric gating: access control flags can't sync.
 /// Passwords never appear in profile JSON, CKRecords, or window state; this
@@ -20,7 +20,7 @@ import os.log
 @MainActor
 @Observable
 class VNCPasswordManager {
-    private nonisolated static let logger = Logger(subsystem: "com.rootshell", category: "VNCPasswordManager")
+    nonisolated static let logger = Logger(subsystem: "com.rootshell", category: "VNCPasswordManager")
 
     static let shared = VNCPasswordManager(service: "com.ghostty.vnc.password")
     /// KVM over IP device passwords, keyed by `KVMConnectionConfig.passwordKey`.
@@ -44,19 +44,23 @@ class VNCPasswordManager {
         self.accessibility = accessibility
     }
 
-    /// One-shot in-memory passwords for connections the user chose not to
-    /// persist (typed in the connect form or a profile prompt with "Save
-    /// Password" off). Consumed by the pane's first connect attempt.
+    /// Typed passwords on their way from the connect form to the attempt it
+    /// starts, never persisted. MainView claims one for that attempt in the
+    /// same call, and the form drops any left over, so no other pane takes it.
     private var ephemeralPasswords: [String: String] = [:]
 
-    /// Stashes a password for a single upcoming connection (never persisted).
     func stashEphemeralPassword(_ password: String, for key: String) {
         ephemeralPasswords[key] = password
     }
 
-    /// Takes (and removes) a stashed one-shot password for a connection key.
-    func takeEphemeralPassword(for key: String) -> String? {
+    func hasEphemeralPassword(for key: String) -> Bool {
+        ephemeralPasswords[key] != nil
+    }
+
+    /// Takes (and removes) a stashed password as a handoff for one attempt.
+    func takeEphemeralPassword(for key: String) -> RemoteScreenPasswordHandoff? {
         ephemeralPasswords.removeValue(forKey: key)
+            .map { RemoteScreenPasswordHandoff(password: $0, passwordKey: key) }
     }
 
     // MARK: - Public Methods
@@ -167,35 +171,21 @@ class VNCPasswordManager {
         if status == errSecSuccess { revision &+= 1 }
     }
 
-    // MARK: - Config Conveniences
-
-    func savePassword(_ password: String, for config: VNCConnectionConfig) throws {
-        try savePassword(password, for: config.passwordKey)
-    }
-
-    func loadPassword(for config: VNCConnectionConfig) throws -> String {
-        try loadPassword(for: config.passwordKey)
-    }
-
-    func hasPassword(for config: VNCConnectionConfig) -> Bool {
-        hasPassword(for: config.passwordKey)
-    }
-
-    func deletePassword(for config: VNCConnectionConfig) throws {
-        try deletePassword(for: config.passwordKey)
-    }
-
     // MARK: - Error Types
 
     enum PasswordError: LocalizedError {
         case notFound
         case dataConversionFailed
         case unexpectedStatus(OSStatus)
+        /// The route's jump profile isn't on this device, so no password belongs to it.
+        case jumpProfileMissing
 
         var errorDescription: String? {
             switch self {
             case .notFound:
                 return "Password not found."
+            case .jumpProfileMissing:
+                return VNCLaunchError.jumpProfileNotFound.localizedDescription
             case .dataConversionFailed:
                 return "Password data could not be converted."
             case .unexpectedStatus(let status):

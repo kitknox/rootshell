@@ -130,6 +130,8 @@ struct MainView: View {
     @State var showPasswordPromptSheet = false
     @State var passwordPromptProfile: ConnectionProfile?
     @State var passwordPromptSplitOption: SSHConnectionView.SplitOption = .newTab
+    /// Screen Sharing route the prompt opened for; its password is bound to it.
+    @State var passwordPromptRouteKey: String?
     @State var showKeyResolutionSheet = false
     @State var keyResolutionUnresolvedKeys: [UnresolvedKeyInfo] = []
     @State var keyResolutionConfig: SSHConfig?

@@ -363,6 +363,7 @@ extension MainView {
                         onCancel: {
                             showPasswordPromptSheet = false
                             passwordPromptProfile = nil
+                            passwordPromptRouteKey = nil
                         }
                     )
                     .themedSheet(themeColors: sheetTheme.themeColors, accentColor: sheetTheme.accentColor, colorScheme: sheetTheme.colorScheme)

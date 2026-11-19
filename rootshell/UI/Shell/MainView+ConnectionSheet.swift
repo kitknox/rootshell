@@ -198,21 +198,24 @@ extension MainView {
         }
     }
 
-    /// Route a Screen Sharing connect to the VNC pane creators. `password`
-    /// is a one-shot handoff from a profile password prompt.
+    /// Route a Screen Sharing connect to the VNC pane creators. A password
+    /// the connect form typed for this route is claimed here and travels
+    /// with this attempt, through the transport warning, to its own pane.
     private func handleVNCConnection(
         config: VNCConnectionConfig,
         splitOption: SSHConnectionView.SplitOption,
         sourceProfileID: UUID? = nil,
-        password: String? = nil
+        passwordHandoff: RemoteScreenPasswordHandoff? = nil
     ) {
+        let handoff = passwordHandoff
+            ?? VNCPasswordManager.shared.takeEphemeralPassword(for: config.passwordKey)
         if config.quality == .adaptive, config.usesUnreliableHighPerformancePath {
             alerts.handleVNCHighPerformanceTransportWarning(
                 MainAlertController.PendingVNCHighPerformanceConnection(
                     config: config,
                     splitOption: splitOption,
                     sourceProfileID: sourceProfileID,
-                    password: password
+                    passwordHandoff: handoff
                 )
             )
             return
@@ -222,7 +225,7 @@ extension MainView {
             config: config,
             splitOption: splitOption,
             sourceProfileID: sourceProfileID,
-            password: password
+            passwordHandoff: handoff
         )
     }
 
@@ -233,15 +236,17 @@ extension MainView {
         config: VNCConnectionConfig,
         splitOption: SSHConnectionView.SplitOption,
         sourceProfileID: UUID? = nil,
-        password: String? = nil
+        passwordHandoff: RemoteScreenPasswordHandoff? = nil
     ) {
         switch splitOption {
         case .newTab:
-            createVNCTab(with: config, sourceProfileID: sourceProfileID, password: password)
+            createVNCTab(with: config, sourceProfileID: sourceProfileID, passwordHandoff: passwordHandoff)
         case .splitRight:
-            createVNCSplit(with: config, direction: .right, sourceProfileID: sourceProfileID, password: password)
+            createVNCSplit(
+                with: config, direction: .right, sourceProfileID: sourceProfileID, passwordHandoff: passwordHandoff)
         case .splitDown:
-            createVNCSplit(with: config, direction: .down, sourceProfileID: sourceProfileID, password: password)
+            createVNCSplit(
+                with: config, direction: .down, sourceProfileID: sourceProfileID, passwordHandoff: passwordHandoff)
         }
     }
 
@@ -408,13 +413,18 @@ extension MainView {
             return
         }
 
-        if let password = VNCPasswordManager.shared.takeEphemeralPassword(for: vncConfig.passwordKey) {
-            handleVNCConnection(config: vncConfig, splitOption: splitOption, sourceProfileID: profile.id, password: password)
-        } else if vncConfig.security == .none || VNCPasswordManager.shared.hasPassword(for: vncConfig) {
+        // A route whose jump profile hasn't synced goes straight to the pane,
+        // which reports it missing: no password belongs to that route yet.
+        let passwords = VNCPasswordManager.shared
+        if vncConfig.currentRoute.isUnresolved
+            || passwords.hasEphemeralPassword(for: vncConfig.passwordKey)
+            || vncConfig.security == .none
+            || passwords.savedState(for: vncConfig) != .notSaved {
             handleVNCConnection(config: vncConfig, splitOption: splitOption, sourceProfileID: profile.id)
         } else {
             passwordPromptProfile = profile
             passwordPromptSplitOption = splitOption
+            passwordPromptRouteKey = vncConfig.passwordKey
             showPasswordPromptSheet = true
         }
     }
@@ -560,31 +570,37 @@ extension MainView {
         showPasswordPromptSheet = false
         passwordPromptProfile = nil
 
+        let routeKey = passwordPromptRouteKey
+        passwordPromptRouteKey = nil
+
+        // KVM panes prompt for themselves; this sheet never opened for a
+        // KVM route, so the typed password isn't bound to one.
         if profile.connectionProtocol == .kvm {
             guard let kvmConfig = profile.kvmConfig else { return }
-            if shouldSave {
-                try? VNCPasswordManager.kvm.savePassword(password, for: kvmConfig.passwordKey)
-            }
             handleKVMConnection(
                 config: kvmConfig,
                 splitOption: passwordPromptSplitOption,
-                sourceProfileID: profile.id,
-                password: password)
+                sourceProfileID: profile.id)
             return
         }
 
-        // Screen Sharing profiles: persist to the VNC Keychain slot when
-        // requested and hand the typed password straight to the new pane.
+        // The password goes to this attempt alone, and only while the route
+        // matches the one the sheet opened for. If it moved, the password is
+        // dropped and the pane asks for the new route itself.
         if profile.connectionProtocol == .vnc {
             guard let vncConfig = profile.vncConfig else { return }
-            if shouldSave {
-                try? VNCPasswordManager.shared.savePassword(password, for: vncConfig)
+            var handoff: RemoteScreenPasswordHandoff?
+            if let routeKey, routeKey == vncConfig.passwordKey {
+                handoff = RemoteScreenPasswordHandoff(password: password, passwordKey: routeKey)
+                if shouldSave {
+                    try? VNCPasswordManager.shared.savePassword(password, for: vncConfig)
+                }
             }
             handleVNCConnection(
                 config: vncConfig,
                 splitOption: passwordPromptSplitOption,
                 sourceProfileID: profile.id,
-                password: password
+                passwordHandoff: handoff
             )
             return
         }

@@ -198,7 +198,7 @@ extension MainView {
                             config: request.config,
                             splitOption: request.splitOption,
                             sourceProfileID: request.sourceProfileID,
-                            password: request.password
+                            passwordHandoff: request.passwordHandoff
                         )
                     }
                     Button("Use Standard") {
@@ -208,7 +208,7 @@ extension MainView {
                             config: request.config,
                             splitOption: request.splitOption,
                             sourceProfileID: request.sourceProfileID,
-                            password: request.password
+                            passwordHandoff: request.passwordHandoff
                         )
                     }
                     .keyboardShortcut(.defaultAction)

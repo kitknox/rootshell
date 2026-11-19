@@ -98,13 +98,13 @@ import UserNotifications
     var showVNCProfileInvalidAlert = false
 
     /// A user-initiated High Performance Screen Sharing connection awaiting a
-    /// transport warning decision. The password is a one-shot value and is
-    /// removed from this queue as soon as the user chooses a mode.
+    /// transport warning decision. Its password handoff belongs to this
+    /// attempt; if switching to Standard changes the route, the pane drops it.
     struct PendingVNCHighPerformanceConnection {
         var config: VNCConnectionConfig
         let splitOption: SSHConnectionView.SplitOption
         let sourceProfileID: UUID?
-        let password: String?
+        let passwordHandoff: RemoteScreenPasswordHandoff?
     }
 
     var vncHighPerformanceConnectionQueue: [PendingVNCHighPerformanceConnection] = []

@@ -65,6 +65,9 @@ final class KVMSession {
     // MARK: Connection internals
 
     @ObservationIgnored private var password = ""
+    /// Captured with `password`: every tunnel rebuild dials these hosts, not
+    /// wherever the jump profile points now.
+    @ObservationIgnored private var jumpProfile: ConnectionProfile?
     @ObservationIgnored private var bridge: KVMLoopbackBridge?
     @ObservationIgnored private var urlSession: URLSession?
     @ObservationIgnored private var trustDelegate: KVMTrustDelegate?
@@ -138,9 +141,11 @@ final class KVMSession {
 
     // MARK: - Lifecycle
 
-    func connect(password: String) {
+    /// `jumpProfile` comes from the route `password` was chosen for.
+    func connect(password: String, jumpProfile: ConnectionProfile?) {
         guard connectionState.canConnect else { return }
         self.password = password
+        self.jumpProfile = jumpProfile
         userDisconnected = false
         reconnectAttempt = 0
         lastError = nil
@@ -160,8 +165,9 @@ final class KVMSession {
     }
 
     /// The pane calls this after the user fixes a rejected password.
-    func retry(password: String) {
+    func retry(password: String, jumpProfile: ConnectionProfile?) {
         self.password = password
+        self.jumpProfile = jumpProfile
         retry()
     }
 
@@ -277,6 +283,7 @@ final class KVMSession {
         var basePort = config.port
         let providers = try await RemoteScreenTransportFactory.providers(
             jump: config.jump,
+            jumpProfile: jumpProfile,
             host: config.host,
             onHostKeyValidation: onHostKeyValidation)
         if let transport = providers.transport {

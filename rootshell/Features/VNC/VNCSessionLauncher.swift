@@ -45,6 +45,7 @@ enum VNCSessionLauncher {
     static func prepare(
         config: VNCConnectionConfig,
         password: String,
+        jumpProfile: ConnectionProfile?,
         onHostKeyValidation: (@Sendable (HostKeyValidationRequest) async -> HostKeyValidationResult)?,
         onCertificateValidation: VNCConfiguration.CertificateValidationHandler?
     ) async throws -> (credentials: VNCCredentials, configuration: VNCConfiguration) {
@@ -63,6 +64,7 @@ enum VNCSessionLauncher {
 
         let providers = try await RemoteScreenTransportFactory.providers(
             jump: config.effectiveJump,
+            jumpProfile: jumpProfile,
             host: config.host,
             onHostKeyValidation: onHostKeyValidation)
         if let datagram = providers.datagram {

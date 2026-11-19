@@ -494,11 +494,6 @@ struct VNCConnectionConfig: Codable, Hashable, Sendable {
         }
         return hostPart
     }
-
-    /// Keychain account key for the saved password ("user@host:port").
-    var passwordKey: String {
-        "\(username ?? "")@\(host):\(port)"
-    }
 }
 
 // MARK: - Package Mapping

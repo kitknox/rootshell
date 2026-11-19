@@ -16,13 +16,13 @@ extension MainView {
     func makeKVMPane(
         config: KVMConnectionConfig,
         sourceProfileID: UUID?,
-        password: String?,
+        passwordHandoff: RemoteScreenPasswordHandoff? = nil,
         uuid: UUID = UUID(),
         logicallyFocused: Bool = true
     ) -> KVMPaneView {
         let pane = KVMPaneView(config: config, windowId: windowId, uuid: uuid)
         pane.sourceProfileID = sourceProfileID
-        pane.pendingPassword = password
+        pane.passwordHandoff = passwordHandoff
         pane.setWindowActive(isWindowFocused)
         pane.isLogicallyFocused = logicallyFocused
 
@@ -37,8 +37,12 @@ extension MainView {
         return pane
     }
 
-    func createKVMTab(with config: KVMConnectionConfig, sourceProfileID: UUID? = nil, password: String? = nil) {
-        let pane = makeKVMPane(config: config, sourceProfileID: sourceProfileID, password: password)
+    func createKVMTab(
+        with config: KVMConnectionConfig,
+        sourceProfileID: UUID? = nil,
+        passwordHandoff: RemoteScreenPasswordHandoff? = nil
+    ) {
+        let pane = makeKVMPane(config: config, sourceProfileID: sourceProfileID, passwordHandoff: passwordHandoff)
         insertPaneAsTab(pane, title: config.displayName, profileThemeSourceID: sourceProfileID)
     }
 
@@ -46,10 +50,10 @@ extension MainView {
         with config: KVMConnectionConfig,
         direction: SplitTree<SplitPaneView>.NewDirection,
         sourceProfileID: UUID? = nil,
-        password: String? = nil
+        passwordHandoff: RemoteScreenPasswordHandoff? = nil
     ) {
         guard terminals.indices.contains(selectedTabIndex) else {
-            createKVMTab(with: config, sourceProfileID: sourceProfileID, password: password)
+            createKVMTab(with: config, sourceProfileID: sourceProfileID, passwordHandoff: passwordHandoff)
             return
         }
         var focusedPane = terminals[selectedTabIndex].focusedPane
@@ -58,10 +62,10 @@ extension MainView {
             terminals[selectedTabIndex].focusedPane = firstPane
         }
         guard let targetPane = focusedPane else {
-            createKVMTab(with: config, sourceProfileID: sourceProfileID, password: password)
+            createKVMTab(with: config, sourceProfileID: sourceProfileID, passwordHandoff: passwordHandoff)
             return
         }
-        let pane = makeKVMPane(config: config, sourceProfileID: sourceProfileID, password: password)
+        let pane = makeKVMPane(config: config, sourceProfileID: sourceProfileID, passwordHandoff: passwordHandoff)
         insertPaneAsSplit(
             pane,
             at: targetPane,
@@ -72,19 +76,21 @@ extension MainView {
         )
     }
 
+    /// Claims a password the connect form typed for this route, so only the
+    /// pane this call creates can use it.
     func handleKVMConnection(
         config: KVMConnectionConfig,
         splitOption: SSHConnectionView.SplitOption,
-        sourceProfileID: UUID? = nil,
-        password: String? = nil
+        sourceProfileID: UUID? = nil
     ) {
+        let handoff = VNCPasswordManager.kvm.takeEphemeralPassword(for: config.passwordKey)
         switch splitOption {
         case .newTab:
-            createKVMTab(with: config, sourceProfileID: sourceProfileID, password: password)
+            createKVMTab(with: config, sourceProfileID: sourceProfileID, passwordHandoff: handoff)
         case .splitRight:
-            createKVMSplit(with: config, direction: .right, sourceProfileID: sourceProfileID, password: password)
+            createKVMSplit(with: config, direction: .right, sourceProfileID: sourceProfileID, passwordHandoff: handoff)
         case .splitDown:
-            createKVMSplit(with: config, direction: .down, sourceProfileID: sourceProfileID, password: password)
+            createKVMSplit(with: config, direction: .down, sourceProfileID: sourceProfileID, passwordHandoff: handoff)
         }
     }
 

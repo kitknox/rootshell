@@ -130,10 +130,6 @@ struct KVMConnectionConfig: Codable, Hashable, Sendable {
         port == Self.defaultPort ? host : "\(host):\(port)"
     }
 
-    var passwordKey: String {
-        "kvm:\(username)@\(host):\(port)"
-    }
-
     /// The computer password belongs to a profile, not the device: one KVM
     /// can switch between computers, each with its own profile.
     static func hostPasswordKey(profileID: UUID) -> String {

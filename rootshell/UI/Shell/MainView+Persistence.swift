@@ -468,7 +468,6 @@ extension MainView {
                 let pane = makeVNCPane(
                     config: vncConfig,
                     sourceProfileID: leafData.sourceProfileID,
-                    password: nil,
                     uuid: leafData.terminalId,
                     logicallyFocused: false
                 )
@@ -483,7 +482,6 @@ extension MainView {
                 let pane = makeKVMPane(
                     config: kvmConfig,
                     sourceProfileID: leafData.sourceProfileID,
-                    password: nil,
                     uuid: leafData.terminalId,
                     logicallyFocused: false
                 )

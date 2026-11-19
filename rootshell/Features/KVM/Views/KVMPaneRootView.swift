@@ -439,7 +439,12 @@ private struct KVMSessionOverlay: View {
                 subtitle: subtitle,
                 rejected: pane.passwordRejected,
                 onSubmit: { password, save in pane.submitPassword(password, save: save) },
-                onCancel: { pane.cancelConnectionAttempt() })
+                onCancel: { pane.cancelConnectionAttempt() },
+                onUseUnconfirmedSavedPassword: pane.offersUnconfirmedSavedPassword
+                    ? { pane.useUnconfirmedSavedPassword(save: $0) } : nil,
+                routeChanged: pane.promptRouteChanged)
+                // A new route gets a fresh card, so nothing typed for the old one stays.
+                .id(pane.route?.passwordKey)
         } else if let prompt = session.pendingAuthPrompt {
             switch prompt {
             case .oneTimeCode:
@@ -494,6 +499,8 @@ private struct KVMPasswordCard: View {
     let rejected: Bool
     let onSubmit: (String, Bool) -> Void
     let onCancel: () -> Void
+    var onUseUnconfirmedSavedPassword: ((Bool) -> Void)?
+    var routeChanged = false
 
     @State private var password = ""
     @State private var savePassword = true
@@ -511,7 +518,9 @@ private struct KVMPasswordCard: View {
             },
             content: {
                 VStack(spacing: 14) {
-                    Text(rejected
+                    Text(routeChanged
+                        ? String(localized: "The jump route changed. Enter the password for the new route.")
+                        : rejected
                         ? String(localized: "The KVM rejected that password. Enter it again.")
                         : String(localized: "Enter the KVM's web interface password."))
                         .font(.callout)
@@ -544,6 +553,10 @@ private struct KVMPasswordCard: View {
                         .disabled(password.isEmpty)
                     }
                     .controlSize(.large)
+
+                    if let onUseUnconfirmedSavedPassword {
+                        UnconfirmedSavedPasswordOption { onUseUnconfirmedSavedPassword(savePassword) }
+                    }
                 }
                 .frame(maxWidth: 320)
             })

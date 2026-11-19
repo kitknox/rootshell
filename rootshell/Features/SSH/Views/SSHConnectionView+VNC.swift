@@ -83,20 +83,18 @@ extension SSHConnectionView {
 
     // MARK: - Populate helpers
 
-    /// Populate the VNC form from a saved profile (QuickConnect suggestion
-    /// accept). Mirrors handleProfileAccepted for SSH profiles.
-    /// Populate the KVM form from a saved profile.
+    /// Populate the KVM form from a saved profile. No password prefill: the
+    /// pane looks it up for the route the form ends up with.
     func applyKVMProfile(_ profile: ConnectionProfile) {
         guard let config = profile.kvmConfig else { return }
         quickConnectProfile = profile
         connectionType = .vnc
         screenSharingKind = .kvm
         kvmForm = KVMFormState(config: config)
-        if let saved = try? VNCPasswordManager.kvm.loadPassword(for: config.passwordKey) {
-            kvmForm.password = saved
-        }
     }
 
+    /// Populate the VNC form from a saved profile (QuickConnect suggestion
+    /// accept), without a password prefill like `applyKVMProfile`.
     func applyVNCProfile(_ profile: ConnectionProfile) {
         guard let config = profile.vncConfig else { return }
 
@@ -104,12 +102,6 @@ extension SSHConnectionView {
         connectionType = .vnc
         screenSharingKind = .vnc
         vncForm = VNCFormState(config: config)
-
-        // Prefill a saved password so connect works without a prompt.
-        if let saved = try? VNCPasswordManager.shared.loadPassword(for: config) {
-            vncForm.password = saved
-        }
-
     }
 
     /// Populate the VNC form from a discovered host or vnc:// quick connect.
@@ -202,6 +194,9 @@ extension SSHConnectionView {
         } else {
             onVNCConnect?(config, splitOption)
         }
+        // The connect above claimed the password for its attempt; anything
+        // left (no pane started) must not reach a later one.
+        _ = VNCPasswordManager.shared.takeEphemeralPassword(for: config.passwordKey)
         close()
     }
 }
@@ -235,7 +230,7 @@ extension SSHConnectionView {
         if !kvmForm.password.isEmpty {
             // An unsaved password (or a Keychain failure) goes to the pane once.
             let saved = kvmForm.savePassword
-                && (try? passwords.savePassword(kvmForm.password, for: config.passwordKey)) != nil
+                && (try? passwords.savePassword(kvmForm.password, for: config)) != nil
             if !saved {
                 passwords.stashEphemeralPassword(kvmForm.password, for: config.passwordKey)
             }
@@ -250,6 +245,7 @@ extension SSHConnectionView {
         } else {
             onKVMConnect?(config, splitOption)
         }
+        _ = passwords.takeEphemeralPassword(for: config.passwordKey)
         close()
     }
 }

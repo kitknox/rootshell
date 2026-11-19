@@ -24,8 +24,12 @@ enum RemoteScreenTransportFactory {
         var datagram: VNCDatagramProvider?
     }
 
+    /// `jumpProfile` is the jump's profile captured when the session chose
+    /// its password (`Jump.currentProfile`), so a profile repointed since
+    /// then never carries that password to other hosts.
     static func providers(
         jump: VNCConnectionConfig.Jump,
+        jumpProfile: ConnectionProfile?,
         host: String,
         onHostKeyValidation: (@Sendable (HostKeyValidationRequest) async -> HostKeyValidationResult)?
     ) async throws -> Providers {
@@ -42,7 +46,7 @@ enum RemoteScreenTransportFactory {
             return Providers()
 
         case .sshProfile(let profileID):
-            guard let profile = ConnectionProfileManager.shared.profile(for: profileID) else {
+            guard let profile = jumpProfile, profile.id == profileID else {
                 throw VNCLaunchError.jumpProfileNotFound
             }
             let resolved = try await resolveJumpSSHConfig(profile.sshConfig, profileID: profileID)
@@ -53,7 +57,7 @@ enum RemoteScreenTransportFactory {
             return Providers(transport: sshProvider(config: resolved, onHostKeyValidation: onHostKeyValidation))
 
         case .tsshProfile(let profileID):
-            guard let profile = ConnectionProfileManager.shared.profile(for: profileID) else {
+            guard let profile = jumpProfile, profile.id == profileID else {
                 throw VNCLaunchError.jumpProfileNotFound
             }
             let resolved = try await resolveJumpSSHConfig(profile.sshConfig, profileID: profileID)

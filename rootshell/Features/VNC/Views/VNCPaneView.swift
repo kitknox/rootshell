@@ -109,6 +109,10 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
     /// Shows the in-pane password prompt when no saved password exists.
     @Published private(set) var needsPassword = false
 
+    /// A password saved before keys carried the jump route, which the prompt
+    /// offers rather than sends.
+    @Published private(set) var offersUnconfirmedSavedPassword = false
+
     /// Launcher failure (jump profile missing, jump key unresolved, jump
     /// password load failed) surfaced before the package session ever
     /// starts, so the package's own recovery overlay can't render it.
@@ -195,9 +199,13 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
         _ = session.reconnect(with: configuration)
     }
 
-    /// One-shot password handed over by a profile password prompt when the
-    /// user chose not to save it. Consumed by the first connect attempt.
-    var pendingPassword: String?
+    /// A typed password for this pane's first attempt, used only if the
+    /// route it was typed for is still the pane's route.
+    var passwordHandoff: RemoteScreenPasswordHandoff?
+    /// The route the session's password, or the open prompt, belongs to.
+    @Published private(set) var route: RemoteScreenRoute?
+    /// The prompt reopened because the jump route moved under it.
+    @Published private(set) var promptRouteChanged = false
 
     /// Window this pane currently belongs to, including its theme context.
     private(set) var windowId: String {
@@ -462,40 +470,74 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
 
     // MARK: - Connection
 
-    /// Kick off the first connect: resolve the password (pending handoff →
-    /// none-security empty → Keychain) and connect. A missing password
-    /// surfaces the in-pane prompt instead of a doomed attempt.
+    /// Kick off the first connect: capture the route, resolve its password
+    /// (this attempt's typed password → none-security empty → Keychain) and connect. A
+    /// missing password surfaces the in-pane prompt for that route.
     func connectIfNeeded() {
         guard !hasStartedConnect, !isClosed, !needsPassword,
               launchErrorMessage == nil else { return }
 
+        let route = config.currentRoute
+        self.route = route
+        // No password belongs to a jump profile this device doesn't have
+        // yet; Retry captures the route again.
+        if route.isUnresolved {
+            passwordHandoff = nil
+            launchErrorMessage = VNCLaunchError.jumpProfileNotFound.localizedDescription
+            return
+        }
+
         let password: String
-        if let pending = pendingPassword {
-            pendingPassword = nil
-            password = pending
-        } else if let stashed = VNCPasswordManager.shared.takeEphemeralPassword(for: config.passwordKey) {
-            password = stashed
+        if let handoff = takePasswordHandoff(for: route) {
+            password = handoff
         } else if config.security == .none {
             password = ""
-        } else if VNCPasswordManager.shared.hasPassword(for: config) {
-            do {
-                password = try VNCPasswordManager.shared.loadPassword(for: config)
-            } catch {
-                Self.logger.error("VNC password load failed: \(error.localizedDescription)")
+        } else {
+            let passwords = VNCPasswordManager.shared
+            switch passwords.savedState(for: config) {
+            case .saved:
+                do {
+                    password = try passwords.loadPassword(for: config)
+                } catch {
+                    Self.logger.error("VNC password load failed: \(error.localizedDescription)")
+                    needsPassword = true
+                    return
+                }
+            case .needsConfirmation:
+                offersUnconfirmedSavedPassword = true
+                needsPassword = true
+                return
+            case .notSaved:
                 needsPassword = true
                 return
             }
-        } else {
-            needsPassword = true
-            return
         }
 
         startConnect(password: password)
     }
 
+    /// The first attempt's typed password, if it was typed for `route`.
+    /// Taken either way, so it can't reach a later attempt.
+    private func takePasswordHandoff(for route: RemoteScreenRoute) -> String? {
+        defer { passwordHandoff = nil }
+        guard let passwordHandoff, passwordHandoff.passwordKey == route.passwordKey else { return nil }
+        return passwordHandoff.password
+    }
+
+    /// The user chose the old-format saved password for this route.
+    func useUnconfirmedSavedPassword(save: Bool) {
+        guard promptRouteIsCurrent() else { return }
+        offersUnconfirmedSavedPassword = false
+        guard let password = try? VNCPasswordManager.shared.useLegacyPassword(for: config, save: save) else { return }
+        submitPassword(password, save: false)
+    }
+
     /// Password prompt submission: optionally persist, then connect.
     func submitPassword(_ password: String, save: Bool) {
+        guard promptRouteIsCurrent() else { return }
         needsPassword = false
+        offersUnconfirmedSavedPassword = false
+        promptRouteChanged = false
         if save && !password.isEmpty {
             do {
                 try VNCPasswordManager.shared.savePassword(password, for: config)
@@ -504,6 +546,17 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
             }
         }
         startConnect(password: password)
+    }
+
+    /// A prompt answers only for the route it opened on. If the jump moved
+    /// since, drop what was typed and resolve the new route from scratch.
+    private func promptRouteIsCurrent() -> Bool {
+        guard config.passwordKey != route?.passwordKey else { return true }
+        needsPassword = false
+        offersUnconfirmedSavedPassword = false
+        connectIfNeeded()
+        promptRouteChanged = needsPassword
+        return false
     }
 
     private func startConnect(password: String) {
@@ -519,6 +572,7 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
                 + "quality=\(config.quality.rawValue) "
                 + "transport=\(Self.jumpLabel(for: config.effectiveJump))")
         startDebugHeartbeatIfNeeded()
+        let jumpProfile = route?.jumpProfile
         connectionTask = Task { [weak self] in
             guard let self, !self.isClosed else { return }
 
@@ -529,6 +583,7 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
                 prepared = try await VNCSessionLauncher.prepare(
                     config: self.config,
                     password: password,
+                    jumpProfile: jumpProfile,
                     onHostKeyValidation: self.onHostKeyValidation,
                     onCertificateValidation: self.onCertificateValidation
                 )
@@ -1635,8 +1690,13 @@ private struct VNCSessionOverlay: View {
                 subtitle: pane.config.displayName,
                 onSubmit: { password, save in
                     pane.submitPassword(password, save: save)
-                }
+                },
+                onUseUnconfirmedSavedPassword: pane.offersUnconfirmedSavedPassword
+                    ? { pane.useUnconfirmedSavedPassword(save: $0) } : nil,
+                routeChanged: pane.promptRouteChanged
             )
+            // A new route gets a fresh card, so nothing typed for the old one stays.
+            .id(pane.route?.passwordKey)
         } else if let launchError = pane.launchErrorMessage {
             // Full-screen failures are hosted above the takeover container by
             // PaneFullScreenController so its guaranteed exit action remains
@@ -1806,6 +1866,8 @@ struct VNCOverlayCard<Icon: View, Content: View>: View {
 private struct VNCPasswordPromptCard: View {
     let subtitle: String
     let onSubmit: (String, Bool) -> Void
+    var onUseUnconfirmedSavedPassword: ((Bool) -> Void)?
+    var routeChanged = false
 
     @State private var password = ""
     @State private var savePassword = true
@@ -1823,7 +1885,9 @@ private struct VNCPasswordPromptCard: View {
             },
             content: {
                 VStack(spacing: 14) {
-                    Text("Enter the password for this Screen Sharing connection.")
+                    Text(routeChanged
+                        ? String(localized: "The jump route changed. Enter the password for the new route.")
+                        : String(localized: "Enter the password for this Screen Sharing connection."))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -1855,6 +1919,10 @@ private struct VNCPasswordPromptCard: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .disabled(password.isEmpty)
+
+                    if let onUseUnconfirmedSavedPassword {
+                        UnconfirmedSavedPasswordOption { onUseUnconfirmedSavedPassword(savePassword) }
+                    }
                 }
                 .frame(maxWidth: 320)
             }
@@ -1867,6 +1935,26 @@ private struct VNCPasswordPromptCard: View {
     private func submit() {
         guard !password.isEmpty else { return }
         onSubmit(password, savePassword)
+    }
+}
+
+/// Offers a password saved for this address before keys carried the jump
+/// route. Shared by the Screen Sharing and KVM prompts.
+struct UnconfirmedSavedPasswordOption: View {
+    let onUse: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("A password is saved for this address, but not for this route. Use it only if this is the same computer.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button(action: onUse) {
+                Text("Use Saved Password").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+        }
     }
 }
 
