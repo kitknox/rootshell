@@ -235,16 +235,37 @@ final class TerminalKeyboardAccessoryController: NSObject {
 
     private var carriedToolbarReload: DispatchWorkItem?
 
-    private func scheduleCarriedToolbarReload() {
+    /// The keys' height at the last carried reload.
+    private var carriedToolbarReloadHeight: CGFloat?
+
+    /// Once the keys settle at a new height. A reload re-hosts the keys, which
+    /// then report their height again; reloading on each report never settles
+    /// (a rotation made ten in a row). `force` when the bar has no window at all.
+    private func scheduleCarriedToolbarReload(force: Bool = false) {
+        let forced = force || carriedToolbarReloadForced
+        carriedToolbarReloadForced = forced
         carriedToolbarReload?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let self, self.glassBarCarriesTouchToolbar else { return }
+            guard let self else { return }
+            self.carriedToolbarReloadForced = false
+            guard self.glassBarCarriesTouchToolbar, !self.pendingHandoffRefresh else { return }
+            // Still moving: look again once it stops rather than drop the reload.
+            guard !KeyboardTracker.shared.isKeyboardAnimating else {
+                self.scheduleCarriedToolbarReload(force: forced)
+                return
+            }
+            let height = self.touchKeyboardInputView?.intrinsicContentSize.height
+            // UIKit may have attached the bar meanwhile; then only the height decides.
+            let stillMissing = forced && self.keyboardAccessory?.window == nil
+            guard stillMissing || height != self.carriedToolbarReloadHeight else { return }
+            self.carriedToolbarReloadHeight = height
             self.host?.keyboardReloadInputViews()
             EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
         }
         carriedToolbarReload = work
-        DispatchQueue.main.async(execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
     }
+    private var carriedToolbarReloadForced = false
 
     /// The host's answer to `keyboardTouchKeyboardShowsToolbar` changed.
     func refreshTouchKeyboardToolbarRow() {
@@ -378,7 +399,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
                 // The card shows its own toolbar row; the dock takes the glass bar back.
                 refreshTouchKeyboardToolbarRow()
                 if placement == .docked, glassBarCarriesTouchToolbar, keyboardAccessory?.window == nil {
-                    scheduleCarriedToolbarReload()
+                    scheduleCarriedToolbarReload(force: true)
                 }
                 EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
             } else if placement == .floating {
@@ -613,13 +634,14 @@ final class TerminalKeyboardAccessoryController: NSObject {
     }
 
     /// Moves the keyboard between the input root and the card to match `touchKeyboardPlacement`.
-    private func applyTouchKeyboardPlacement() {
+    /// `reloadsInputViews: false` when a pending Duo handoff refresh owns the reload.
+    private func applyTouchKeyboardPlacement(reloadsInputViews: Bool = true) {
         updateTouchKeyboardInputSuppression()
         if touchKeyboardPlacement == .docked {
             dismissFloatingTouchKeyboard()
             touchKeyboardInputView?.attachKeyboard()
         }
-        host?.keyboardReloadInputViews()
+        if reloadsInputViews { host?.keyboardReloadInputViews() }
         scheduleFloatingTouchKeyboardUpdate()
         EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
     }
@@ -788,6 +810,21 @@ final class TerminalKeyboardAccessoryController: NSObject {
     private var accessoryWithheldForFold = false
     /// Set by teardown; a retired view can linger as first responder.
     private var foldToolbarRetired = false
+    /// A Duo fold or display handoff owes one input-view reload; the reloads
+    /// its handlers would make meanwhile fold into it.
+    private var pendingHandoffRefresh = false
+    private var handoffRefreshRequestedAt: Date?
+    private var handoffRefreshFallbackScheduled = false
+    /// The display a pending display change goes to (front or not).
+    private var handoffDisplayTarget: Bool?
+    /// A fold change waits for the host layout after it, which reflects the new fold region.
+    private var handoffAwaitsFoldLayout = false
+    /// Set by the first `hostDidLayout()`; remote-screen hosts never report one.
+    private var hostReportsLayout = false
+    private var lastLaidOutHostSize: CGSize?
+    /// Confirmed window size per display (keyed by front): seeded by the first
+    /// layout, then written only when a display refresh runs on layout evidence.
+    private var laidOutSizeByDisplay: [Bool: CGSize] = [:]
     #endif
 
     var shouldShowKeyboardToolbar = false
@@ -871,8 +908,6 @@ final class TerminalKeyboardAccessoryController: NSObject {
     private var keyboardStateTask: Task<Void, Never>?
     private var keyboardVisibilityTask: Task<Void, Never>?
     private var keyboardAnimationTask: Task<Void, Never>?
-    /// Hinge detection can land after setup; the trait change alone would miss it.
-    private var duoDisplayTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
     init(host: TerminalKeyboardAccessoryHost) {
@@ -1255,7 +1290,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
               let window = host?.keyboardHostView.window else {
             reclaimFoldToolbar()
             // The query that withheld the accessory lost the race; ask for it again.
-            if accessoryWithheldForFold, host?.keyboardIsFirstResponder == true,
+            if accessoryWithheldForFold, !pendingHandoffRefresh, host?.keyboardIsFirstResponder == true,
                KeyboardTracker.shared.isSoftwareKeyboardVisible {
                 accessoryWithheldForFold = false
                 host?.keyboardReloadInputViews()
@@ -1277,8 +1312,9 @@ final class TerminalKeyboardAccessoryController: NSObject {
                 toolbar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             ])
             foldToolbarMounted = true
-            // UIKit still shows the emptied accessory; let it re-query.
-            if accessory.window != nil { host?.keyboardReloadInputViews() }
+            // UIKit still shows the emptied accessory; let it re-query (a pending
+            // handoff refresh does that once settled).
+            if accessory.window != nil, !pendingHandoffRefresh { host?.keyboardReloadInputViews() }
         }
         window.bringSubviewToFront(container)
         guard container.frame != frame else { return }
@@ -1293,6 +1329,92 @@ final class TerminalKeyboardAccessoryController: NSObject {
         keyboardAccessory?.reclaimToolbar()
         foldToolbarHost.removeFromSuperview()
         EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
+    }
+
+    /// One Duo fold or display handoff gets one input-view reload, once the
+    /// terminal has laid out for the destination and the keyboard has settled.
+    /// Reloading while UIKit still lays out the old pose can leave the toolbar
+    /// in that pose's place.
+    private func requestHandoffRefresh(display: Bool) {
+        guard DuoHingeEvents.hasHinge, !foldToolbarRetired else { return }
+        if display {
+            // Duplicates for one destination keep its evidence; a new or reversed
+            // destination starts over, timeout included.
+            let target = DuoHingeEvents.isFrontDisplay
+            if handoffDisplayTarget != target {
+                handoffDisplayTarget = target
+                handoffRefreshRequestedAt = Date()
+            }
+        } else {
+            handoffAwaitsFoldLayout = true
+            // A fold that leaves the terminal's bounds alone brings no layout on its own.
+            host?.keyboardHostView.setNeedsLayout()
+        }
+        if !pendingHandoffRefresh { handoffRefreshRequestedAt = Date() }
+        pendingHandoffRefresh = true
+        // Consumed by the host's next fitting layout, the keyboard settling, or
+        // the fallback. The terminal may already have laid out for the display.
+        consumeHandoffRefreshSoon()
+        scheduleHandoffRefreshFallback()
+    }
+
+    /// For hosts without a layout hook (remote screens), and settles that post
+    /// nothing. Past 1.5 s it stops waiting on the layout, never on the latches.
+    private func scheduleHandoffRefreshFallback() {
+        guard !handoffRefreshFallbackScheduled else { return }
+        handoffRefreshFallbackScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self else { return }
+            self.handoffRefreshFallbackScheduled = false
+            guard self.pendingHandoffRefresh else { return }
+            let overdue = self.handoffRefreshRequestedAt.map { Date().timeIntervalSince($0) > 1.5 } ?? true
+            self.consumeHandoffRefreshIfReady(skipsLayoutWait: overdue)
+            // In the background, activation picks it up instead.
+            if self.pendingHandoffRefresh, UIApplication.shared.applicationState == .active {
+                self.scheduleHandoffRefreshFallback()
+            }
+        }
+    }
+
+    private func consumeHandoffRefreshIfReady(skipsLayoutWait: Bool = false) {
+        guard pendingHandoffRefresh else { return }
+        guard let host, host.keyboardIsFirstResponder, let window = host.keyboardHostView.window else {
+            // Nothing presents a toolbar to refresh.
+            clearHandoffRefresh()
+            return
+        }
+        let tracker = KeyboardTracker.shared
+        // Hard guards: a held or uncommitted keyboard frame would place the toolbar for the old pose.
+        guard UIApplication.shared.applicationState == .active, !tracker.isKeyboardAnimating,
+              !tracker.isPreservingSoftwareKeyboardLayout, !tracker.isAppTransitionKeyboardCommitPending
+        else { return }
+        // Judged from the latest layout only, which must be of the current window.
+        let latest = lastLaidOutHostSize
+        let sized = window.windowScene.map { $0.coordinateSpace.bounds.size == window.bounds.size } ?? true
+        let current = latest == window.bounds.size && sized
+        let onDisplay = handoffDisplayTarget.map { target in latest.map { isLayout($0, for: target) } ?? false } ?? true
+        let laidOut = !hostReportsLayout || (current && onDisplay && !handoffAwaitsFoldLayout)
+        guard laidOut || skipsLayoutWait else { return }
+        if laidOut, hostReportsLayout, let target = handoffDisplayTarget, let latest {
+            laidOutSizeByDisplay[target] = latest
+        }
+        clearHandoffRefresh()
+        // The row may have to move between UIKit's slot and the fold host.
+        if foldToolbarFrame == nil { reclaimFoldToolbar() }
+        // This reload places a carried bar for the keys' height now; the height
+        // the rehosted keys report next must not reload it again.
+        if glassBarCarriesTouchToolbar {
+            carriedToolbarReloadHeight = touchKeyboardInputView?.intrinsicContentSize.height
+        }
+        host.keyboardReloadInputViews()
+        scheduleFoldToolbarUpdate()
+        EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
+    }
+
+    private func clearHandoffRefresh() {
+        pendingHandoffRefresh = false
+        handoffDisplayTarget = nil
+        handoffAwaitsFoldLayout = false
     }
     #endif
 
@@ -1484,10 +1606,18 @@ final class TerminalKeyboardAccessoryController: NSObject {
 
         // The toolbar size is a setting per display, so either changing resizes the keys.
         for name in [Notification.Name.settingsDidChange, .duoDisplayDidChange] {
-            let sizeObserver = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+            let sizeObserver = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
                 MainActor.assumeIsolated {
+                    #if !os(visionOS) && !targetEnvironment(macCatalyst)
+                    // Before resizing, so the reload that resize asks for joins the handoff's.
+                    if note.name == .duoDisplayDidChange, self?.host?.keyboardIsFirstResponder == true {
+                        self?.requestHandoffRefresh(display: true)
+                    }
+                    #endif
+                    // A display change always resizes: this observer alone answers it.
                     guard let self, let host = self.host, let toolbar = self.keyboardAccessory?.toolbarView,
-                          toolbar.rowHeight != host.keyboardSizes.toolbar.height else { return }
+                          note.name == .duoDisplayDidChange
+                            || toolbar.rowHeight != host.keyboardSizes.toolbar.height else { return }
                     host.keyboardUpdateAccessoryForTraitCollection()
                 }
             }
@@ -1503,20 +1633,29 @@ final class TerminalKeyboardAccessoryController: NSObject {
             MainActor.assumeIsolated {
                 guard let self, let host = self.host, host.keyboardIsFirstResponder,
                       notification.object as? UIWindow === host.keyboardHostView.window else { return }
+                // Moves the toolbar between UIKit's accessory slot and the fold, once settled.
+                self.requestHandoffRefresh(display: false)
                 if self.usesFullTouchKeyboard, !self.touchSystemFloating,
                    self.currentTouchKeyboardState.placement == .floating,
                    (self.floatingKeyboardOverlay != nil) != (self.touchKeyboardPlacement == .floating) {
                     // Entering or leaving the laptop pose; a moved fold keeps the placement.
+                    // The keyboard moves now; the handoff refresh reloads.
                     host.keyboardPrepareTouchKeyboardSwitch()
-                    self.applyTouchKeyboardPlacement()
-                } else {
-                    // Move the toolbar between UIKit's accessory slot and the fold.
-                    host.keyboardReloadInputViews()
+                    self.applyTouchKeyboardPlacement(reloadsInputViews: !self.pendingHandoffRefresh)
                 }
-                self.scheduleFoldToolbarUpdate()
             }
         }
         cancellables.insert(AnyCancellable { NotificationCenter.default.removeObserver(foldObserver) })
+        let activeObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.pendingHandoffRefresh else { return }
+                self.consumeHandoffRefreshIfReady()
+                if self.pendingHandoffRefresh { self.scheduleHandoffRefreshFallback() }
+            }
+        }
+        cancellables.insert(AnyCancellable { NotificationCenter.default.removeObserver(activeObserver) })
         #endif
 
         let homeIndicatorObserver = NotificationCenter.default.addObserver(
@@ -1584,6 +1723,9 @@ final class TerminalKeyboardAccessoryController: NSObject {
                 guard let self else { break }
                 if !animating {
                     self.host?.keyboardDidFinishAnimationLayout()
+                    #if !os(visionOS) && !targetEnvironment(macCatalyst)
+                    self.consumeHandoffRefreshIfReady()
+                    #endif
                 }
             }
         }
@@ -1592,13 +1734,6 @@ final class TerminalKeyboardAccessoryController: NSObject {
             Task { @MainActor in
                 guard let terminalHost = view as? TerminalKeyboardAccessoryHost else { return }
                 terminalHost.keyboardUpdateAccessoryForTraitCollection()
-            }
-        }
-
-        duoDisplayTask = Task { @MainActor [weak self] in
-            for await _ in NotificationCenter.default.notifications(named: .duoDisplayDidChange) {
-                guard let self else { break }
-                self.host?.keyboardUpdateAccessoryForTraitCollection()
             }
         }
 
@@ -1620,7 +1755,9 @@ final class TerminalKeyboardAccessoryController: NSObject {
             .debounce(for: .milliseconds(50), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 Task { @MainActor [weak self] in
-                    self?.host?.keyboardReloadInputViews()
+                    // A Duo handoff's one reload picks this change up.
+                    guard let self, !self.pendingHandoffRefresh else { return }
+                    self.host?.keyboardReloadInputViews()
                 }
             }
             .store(in: &cancellables)
@@ -1675,6 +1812,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
         // An already queued update then finds no fold frame and only reclaims.
         foldToolbarRetired = true
         accessoryWithheldForFold = false
+        clearHandoffRefresh()
         reclaimFoldToolbar()
         #endif
         keyboardStateDebounceTimer?.invalidate()
@@ -1685,8 +1823,6 @@ final class TerminalKeyboardAccessoryController: NSObject {
         keyboardVisibilityTask = nil
         keyboardAnimationTask?.cancel()
         keyboardAnimationTask = nil
-        duoDisplayTask?.cancel()
-        duoDisplayTask = nil
         cancellables.removeAll()
     }
 
@@ -1803,6 +1939,45 @@ final class TerminalKeyboardAccessoryController: NSObject {
         return nil
         #endif
     }
+
+    /// The host laid out; a pending Duo handoff refresh may now be due. Taken
+    /// on the next turn, so no input-view reload runs inside layout.
+    func hostDidLayout() {
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        hostReportsLayout = true
+        guard let size = host?.keyboardHostView.window?.bounds.size else { return }
+        lastLaidOutHostSize = size
+        // Only the first layout seeds, once a hinge update has named the display
+        // (`isFrontDisplay` defaults to inner). A layout ahead of a display
+        // notification would file the new size under the old display.
+        if laidOutSizeByDisplay.isEmpty, DuoHingeEvents.hasHinge {
+            laidOutSizeByDisplay[DuoHingeEvents.isFrontDisplay] = size
+        }
+        guard pendingHandoffRefresh else { return }
+        handoffAwaitsFoldLayout = false
+        // Readiness is judged from this, the latest layout, when consumed.
+        consumeHandoffRefreshSoon()
+        #endif
+    }
+
+    #if !os(visionOS) && !targetEnvironment(macCatalyst)
+    /// A layout at `size` belongs to the `front` display: its confirmed size
+    /// (either orientation), or, never confirmed, any size the other display
+    /// doesn't have.
+    private func isLayout(_ size: CGSize, for front: Bool) -> Bool {
+        func matches(_ known: CGSize) -> Bool {
+            size == known || (size.width == known.height && size.height == known.width)
+        }
+        if let known = laidOutSizeByDisplay[front] { return matches(known) }
+        if let other = laidOutSizeByDisplay[!front] { return !matches(other) }
+        return true
+    }
+
+    private func consumeHandoffRefreshSoon() {
+        // Taken on the next turn, so no input-view reload runs inside layout.
+        DispatchQueue.main.async { [weak self] in self?.consumeHandoffRefreshIfReady() }
+    }
+    #endif
 
     func updateCollapsedKeyboardToolbarButtonLayout() {
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
@@ -1947,6 +2122,10 @@ final class TerminalKeyboardAccessoryController: NSObject {
         host?.keyboardHostView.window?.setNeedsLayout()
 
         guard host?.keyboardIsFirstResponder == true else { return }
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        // A Duo handoff's one reload picks this change up.
+        guard !pendingHandoffRefresh else { return }
+        #endif
 
         host?.keyboardReloadInputViews()
 

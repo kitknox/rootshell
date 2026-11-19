@@ -126,6 +126,11 @@ class KeyboardTracker {
         isPreservingSoftwareKeyboardForAppTransition || isPreservingSoftwareKeyboardForOverlay
     }
 
+    /// A released latch still owes its last frame for a moment; until then
+    /// `keyboardFrame` can be the pre-transition one.
+    @MainActor
+    var isAppTransitionKeyboardCommitPending: Bool { appTransitionKeyboardCommitTask != nil }
+
     /// Window-scoped read of the overlay latch: true only while the latch is
     /// armed AND the given window is the preservation owner's window (or
     /// ownership was never window-resolved). Keeps one window's overlay from

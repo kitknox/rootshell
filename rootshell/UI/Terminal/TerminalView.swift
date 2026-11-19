@@ -3920,6 +3920,7 @@ extension Ghostty {
             // Update scroll indicator position when layout changes
             updateScrollIndicatorLayout()
             updateCollapsedKeyboardToolbarButtonLayout()
+            keyboardAccessoryController.hostDidLayout()
 
             // Reserve the bottom safe-area strip as a per-surface inset BEFORE
             // reporting the (now taller, safe-area-ignoring) size, so the grid is
