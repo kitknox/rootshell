@@ -724,10 +724,10 @@ extension LocalShellSession {
         case .idle:
             handleFirstTab()
 
-        case .waitingForSecondTab(let matches, let displayNames, let range):
+        case .waitingForSecondTab(let origBuffer, let matches, let displayNames, let range):
             displayCompletionMatches(displayNames)
             generalCompletionState = .cycling(
-                originalBuffer: lineEditor.buffer,
+                originalBuffer: origBuffer,
                 allMatches: matches,
                 range: range,
                 currentIndex: -1
@@ -764,17 +764,18 @@ extension LocalShellSession {
             // Stay idle — single match fully applied
 
         case .extendedToCommonPrefix(let text, let range, let allMatches, let displayNames):
+            // Matches replace the typed range in the pre-extension buffer. The cursor can't mark
+            // the end of the extension when its last scalar joins the following grapheme.
+            let originalBuffer = lineEditor.buffer
             lineEditor.replaceText(in: range, with: text)
             clearGhostText()
             redrawLine()
             onBell?()
-            // Range must reflect the extended text, not the original typed prefix.
-            // replaceText places the cursor at the end of the insertion.
-            let updatedRange = range.lowerBound..<lineEditor.cursorPosition
             generalCompletionState = .waitingForSecondTab(
+                originalBuffer: originalBuffer,
                 allMatches: allMatches,
                 displayNames: displayNames,
-                range: updatedRange
+                range: range
             )
 
         case .showAllMatches(let allMatches, let displayNames, let range):

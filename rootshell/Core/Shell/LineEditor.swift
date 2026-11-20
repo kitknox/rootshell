@@ -20,14 +20,14 @@ class LineEditor {
     /// Text before cursor
     var textBeforeCursor: String {
         guard cursorPosition > 0 else { return "" }
-        let index = buffer.index(buffer.startIndex, offsetBy: min(cursorPosition, buffer.count))
+        let index = index(at: cursorPosition)
         return String(buffer[..<index])
     }
 
     /// Text after cursor
     var textAfterCursor: String {
         guard cursorPosition < buffer.count else { return "" }
-        let index = buffer.index(buffer.startIndex, offsetBy: cursorPosition)
+        let index = index(at: cursorPosition)
         return String(buffer[index...])
     }
 
@@ -128,22 +128,15 @@ class LineEditor {
     func moveCursorToPreviousWord() -> Bool {
         guard cursorPosition > 0 else { return false }
 
-        // Skip any whitespace before cursor
-        var pos = cursorPosition - 1
-        while pos > 0 && buffer[buffer.index(buffer.startIndex, offsetBy: pos)].isWhitespace {
-            pos -= 1
+        // Skip whitespace before the cursor, then the word itself
+        var i = index(at: cursorPosition)
+        while i > buffer.startIndex, buffer[buffer.index(before: i)].isWhitespace {
+            i = buffer.index(before: i)
         }
-
-        // Find start of word
-        while pos > 0 && !buffer[buffer.index(buffer.startIndex, offsetBy: pos - 1)].isWhitespace {
-            pos -= 1
+        while i > buffer.startIndex, !buffer[buffer.index(before: i)].isWhitespace {
+            i = buffer.index(before: i)
         }
-
-        if pos != cursorPosition {
-            cursorPosition = pos
-            return true
-        }
-        return false
+        return moveCursor(to: i)
     }
 
     /// Move cursor to next word
@@ -151,22 +144,39 @@ class LineEditor {
     func moveCursorToNextWord() -> Bool {
         guard cursorPosition < buffer.count else { return false }
 
-        // Skip current word
-        var pos = cursorPosition
-        while pos < buffer.count && !buffer[buffer.index(buffer.startIndex, offsetBy: pos)].isWhitespace {
-            pos += 1
+        // Skip the current word, then the whitespace after it
+        var i = index(at: cursorPosition)
+        while i < buffer.endIndex, !buffer[i].isWhitespace {
+            i = buffer.index(after: i)
         }
+        while i < buffer.endIndex, buffer[i].isWhitespace {
+            i = buffer.index(after: i)
+        }
+        return moveCursor(to: i)
+    }
 
-        // Skip whitespace
-        while pos < buffer.count && buffer[buffer.index(buffer.startIndex, offsetBy: pos)].isWhitespace {
-            pos += 1
-        }
+    private func moveCursor(to i: String.Index) -> Bool {
+        let pos = buffer.distance(from: buffer.startIndex, to: i)
+        guard pos != cursorPosition else { return false }
+        cursorPosition = pos
+        return true
+    }
 
-        if pos != cursorPosition {
-            cursorPosition = pos
-            return true
-        }
-        return false
+    // MARK: - Index Helpers
+
+    /// Index for a Character offset, clamped so a stale cursor can never trap. Bounded by the
+    /// offset, not `buffer.count`, so per-keystroke inserts don't scan the whole line.
+    private func index(at offset: Int) -> String.Index {
+        buffer.index(buffer.startIndex, offsetBy: max(0, offset), limitedBy: buffer.endIndex) ?? buffer.endIndex
+    }
+
+    /// Replaces `range` with `text` and returns the Character offset just past it. Inserted scalars
+    /// can join a neighbouring cluster (combining marks, flags, skin tones), so measure after the edit.
+    private func replace(_ range: Range<String.Index>, with text: String) -> Int {
+        let endUTF8 = buffer.utf8.distance(from: buffer.startIndex, to: range.lowerBound) + text.utf8.count
+        buffer.replaceSubrange(range, with: text)
+        let end = buffer.utf8.index(buffer.startIndex, offsetBy: endUTF8)
+        return buffer[..<end].count
     }
 
     // MARK: - Text Insertion
@@ -176,9 +186,8 @@ class LineEditor {
     func insertText(_ text: String) -> Bool {
         guard !text.isEmpty else { return false }
 
-        let index = buffer.index(buffer.startIndex, offsetBy: cursorPosition)
-        buffer.insert(contentsOf: text, at: index)
-        cursorPosition += text.count
+        let index = index(at: cursorPosition)
+        cursorPosition = replace(index..<index, with: text)
         return true
     }
 
@@ -190,8 +199,8 @@ class LineEditor {
         guard cursorPosition > 0 else { return false }
 
         let deleteCount = min(count, cursorPosition)
-        let startIndex = buffer.index(buffer.startIndex, offsetBy: cursorPosition - deleteCount)
-        let endIndex = buffer.index(buffer.startIndex, offsetBy: cursorPosition)
+        let startIndex = index(at: cursorPosition - deleteCount)
+        let endIndex = index(at: cursorPosition)
         buffer.removeSubrange(startIndex..<endIndex)
         cursorPosition -= deleteCount
         return true
@@ -203,8 +212,8 @@ class LineEditor {
         guard cursorPosition < buffer.count else { return false }
 
         let deleteCount = min(count, buffer.count - cursorPosition)
-        let startIndex = buffer.index(buffer.startIndex, offsetBy: cursorPosition)
-        let endIndex = buffer.index(startIndex, offsetBy: deleteCount)
+        let startIndex = index(at: cursorPosition)
+        let endIndex = buffer.index(startIndex, offsetBy: max(0, deleteCount), limitedBy: buffer.endIndex) ?? buffer.endIndex
         buffer.removeSubrange(startIndex..<endIndex)
         return true
     }
@@ -214,7 +223,7 @@ class LineEditor {
     func deleteToEnd() -> Bool {
         guard cursorPosition < buffer.count else { return false }
 
-        let startIndex = buffer.index(buffer.startIndex, offsetBy: cursorPosition)
+        let startIndex = index(at: cursorPosition)
         buffer.removeSubrange(startIndex...)
         return true
     }
@@ -224,7 +233,7 @@ class LineEditor {
     func deleteToStart() -> Bool {
         guard cursorPosition > 0 else { return false }
 
-        let endIndex = buffer.index(buffer.startIndex, offsetBy: cursorPosition)
+        let endIndex = index(at: cursorPosition)
         buffer.removeSubrange(..<endIndex)
         cursorPosition = 0
         return true
@@ -248,8 +257,8 @@ class LineEditor {
         let originalPos = cursorPosition
         moveCursorToPreviousWord()
 
-        let startIndex = buffer.index(buffer.startIndex, offsetBy: cursorPosition)
-        let endIndex = buffer.index(buffer.startIndex, offsetBy: originalPos)
+        let startIndex = index(at: cursorPosition)
+        let endIndex = index(at: originalPos)
         buffer.removeSubrange(startIndex..<endIndex)
 
         return true
@@ -264,10 +273,9 @@ class LineEditor {
               range.lowerBound <= range.upperBound else {
             return
         }
-        let startIndex = buffer.index(buffer.startIndex, offsetBy: range.lowerBound)
-        let endIndex = buffer.index(buffer.startIndex, offsetBy: range.upperBound)
+        let startIndex = index(at: range.lowerBound)
+        let endIndex = index(at: range.upperBound)
 
-        buffer.replaceSubrange(startIndex..<endIndex, with: text)
-        cursorPosition = range.lowerBound + text.count
+        cursorPosition = replace(startIndex..<endIndex, with: text)
     }
 }

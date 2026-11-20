@@ -219,7 +219,7 @@ final class LocalShellSession: TerminalSession, EmbeddedConnectionConfigProvidin
     // General file/command tab completion state machine
     enum GeneralCompletionState {
         case idle
-        case waitingForSecondTab(allMatches: [String], displayNames: [String], range: Range<Int>)
+        case waitingForSecondTab(originalBuffer: String, allMatches: [String], displayNames: [String], range: Range<Int>)
         case cycling(originalBuffer: String, allMatches: [String], range: Range<Int>, currentIndex: Int)
     }
     var generalCompletionState: GeneralCompletionState = .idle
