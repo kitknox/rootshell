@@ -3,6 +3,33 @@
 All notable changes to the rootshell app for iPhone, iPad, Vision Pro, and Mac, newest first.
 Versions are listed as `release-build`, matching the version shown in Settings, About.
 
+## 1.0.16-180 - November 19, 2026
+
+### Terminal
+
+- **Typing and pasting** respond faster in SSH, tssh, herdr control mode, the local shell, Kubernetes node shells, and Linode LISH.
+- **herdr control mode** now shuts down cleanly when you quit with input queued or a dropped connection leaves a paste blocked.
+- **tmux over tssh** had a hang that could close tmux tabs when attaching in control mode. This build fixes the hang. Resumed tssh sessions restore scrollback, cursor position, and terminal modes from the terminal’s own snapshot.
+- **Terminal position** stays stable when you switch apps and return with the software keyboard open. The terminal adjusts when the keyboard settles in a new position, such as after rotation.
+- **Glass Bar** once again shows the Symbols, Navigation, and Shortcuts pages with Use with Terminal Keyboard enabled. Build 179 hid those pages. On iPhone Duo, folding also preserves the current keyboard page.
+- **Network diagnostics** on iOS use packet arrival times for more accurate latency readings in `ping` and `mtr`. Their timeouts account for device sleep, and `mtr` counts a probe as lost only after it expires. In-app Tailscale ping counts only probes that start and keeps replies that arrive within the timeout.
+
+### Antigravity
+
+- **Agent Usage** shows Google Antigravity quotas and reset times, including separate Gemini and Claude limits when available. The machine running Antigravity fetches usage and keeps its sign-in local.
+- **Antigravity CLI** now shows its logo and appears in the Agent Inbox when it reports its own status.
+
+### iPhone Duo
+
+- **Laptop pose** keeps Glass Bar with the Terminal Keyboard below the fold, fixing a build 179 regression. The keyboard backdrop follows the theme, and scrollback can extend behind the docked keyboard. Latched modifiers carry through folds, and the toolbar stays in place during rotations and display switches.
+- **Outer display** keys stay centered beside the camera while the Terminal Keyboard retains its height. The toolbar uses the full width when it clears the camera.
+
+### Screen Sharing, KVM, and SSH
+
+- **Shared Clipboard on macOS** lets a remote Mac finish a copy or cut even if you immediately switch apps. A newer local copy takes precedence over a late reply. Ordinary clicks and Copy with nothing selected no longer retrieve stale remote clipboard contents.
+- **Saved device passwords** for Screen Sharing and KVM are now specific to the destination and SSH route. This fixes automatic sign-in sending a password to the wrong machine when two machines share a private IP address behind different SSH jump hosts. For passwords saved in earlier builds, choose Use Saved Password only if you recognize the destination as the same machine. Turn on Save Password to remember it for that route.
+- **SSH host-key and Screen Sharing certificate prompts** now appear one at a time, and each approval applies only to the key or certificate shown. If the saved key or certificate changes during review, rootshell shows an updated warning and asks again before replacing it. Prompts follow tabs between windows and close when the connection ends.
+
 ## 1.0.16-179 - November 18, 2026
 
 ### Keyboard Toolbars
