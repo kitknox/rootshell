@@ -15,6 +15,8 @@ struct CustomKeyEditorView: View {
     let existingKey: CustomKey?
     let onSave: (CustomKey) -> Void
     let onDelete: (() -> Void)?
+    /// Only a terminal toolbar on iPhone and iPad shows keys for one input.
+    private let offersKeyboardOnce: Bool
 
     enum ActionType: String, CaseIterable {
         case text = "Text"
@@ -58,15 +60,25 @@ struct CustomKeyEditorView: View {
     @State private var sequence: [SequenceStep]
     @State private var activeSheet: ActiveSheet?
     @State private var showingDeleteConfirmation = false
+    @State private var showsKeyboardOnce: Bool
 
-    init(existingKey: CustomKey? = nil, onSave: @escaping (CustomKey) -> Void, onDelete: (() -> Void)? = nil) {
+    /// `context` is the toolbar whose settings opened the editor.
+    init(existingKey: CustomKey? = nil, context: ToolbarContext, onSave: @escaping (CustomKey) -> Void,
+         onDelete: (() -> Void)? = nil) {
         self.existingKey = existingKey
         self.onSave = onSave
         self.onDelete = onDelete
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        // Keys are shared by every toolbar; keep an existing flag editable anywhere.
+        offersKeyboardOnce = context == .terminal || existingKey?.showsKeyboardOnce == true
+        #else
+        offersKeyboardOnce = false
+        #endif
         _label = State(initialValue: existingKey?.label ?? "")
         _iconName = State(initialValue: existingKey?.iconName)
         _colorHex = State(initialValue: existingKey?.colorHex)
         _sequence = State(initialValue: existingKey?.sequence ?? [])
+        _showsKeyboardOnce = State(initialValue: existingKey?.showsKeyboardOnce ?? false)
 
         // Detect action type from existing key's sequence
         if let existing = existingKey {
@@ -116,6 +128,8 @@ struct CustomKeyEditorView: View {
 
     private var canSave: Bool {
         let hasLabel = !label.trimmingCharacters(in: .whitespaces).isEmpty
+        // A one-shot key may send nothing before showing the keyboard.
+        if offersKeyboardOnce && showsKeyboardOnce { return hasLabel }
         switch actionType {
         case .text:
             return hasLabel && !quickText.isEmpty
@@ -162,6 +176,9 @@ struct CustomKeyEditorView: View {
                 addStepSection
             }
 
+            if offersKeyboardOnce {
+                keyboardSection
+            }
             iconSection
             colorSection
             previewSection
@@ -462,16 +479,25 @@ struct CustomKeyEditorView: View {
         }
     }
 
+    private var keyboardSection: some View {
+        Section {
+            Toggle("Show Keyboard for One Key", isOn: $showsKeyboardOnce)
+                .themedRow()
+        } footer: {
+            Text("On the Terminal toolbar with the keyboard hidden, tapping this key sends its action, then shows the keyboard until you type one key.")
+        }
+    }
+
     private var previewSection: some View {
         Section {
-            let steps = effectiveSequence
-            if steps.isEmpty {
+            let summary = CustomKey.summary(of: effectiveSequence, showsKeyboardOnce: showsKeyboardOnce)
+            if summary.isEmpty {
                 Text("Empty sequence")
                     .foregroundStyle(.secondary)
                     .font(.subheadline)
                     .themedRow()
             } else {
-                Text(steps.map(\.displayText).joined(separator: " \u{2192} "))
+                Text(summary)
                     .font(.system(.body, design: .monospaced))
                     .themedRow()
             }
@@ -559,7 +585,8 @@ struct CustomKeyEditorView: View {
             label: label.trimmingCharacters(in: .whitespaces),
             iconName: iconName,
             sequence: effectiveSequence,
-            colorHex: colorHex
+            colorHex: colorHex,
+            showsKeyboardOnce: showsKeyboardOnce
         )
         onSave(key)
         dismiss()

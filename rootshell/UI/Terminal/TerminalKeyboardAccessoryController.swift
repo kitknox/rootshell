@@ -376,6 +376,7 @@ final class TerminalKeyboardAccessoryController: NSObject {
                 exitToolbarOnlyMode()
             } else { keyboardAccessory?.onDismissRequested?() }
         case .pinHidden: keyboardAccessory?.onPinHiddenRequested?()
+        case .oneShotKeyboard: beginOneShotKeyboard()
         case .modifierDoublePress(let modifier): host?.keyboardSendModifierDoublePress(modifier)
         case .switchToSystemKeyboard: setTemporarySystemKeyboard(true)
         case .compose: host?.keyboardToggleCompose()
@@ -704,6 +705,11 @@ final class TerminalKeyboardAccessoryController: NSObject {
         touchSystemFloating = systemFloating
         touchStatePerTab = perTab
         guard changed else { return }
+        // A scope change copies the key request into the new state; end an
+        // open one-shot first so the request it set isn't carried along.
+        if endOwnOneShotIntent(), host?.keyboardIsFirstResponder == true {
+            reconcileWithHideIntent()
+        }
         if enabledChanged {
             updateTouchKeyboardReturnButton()
             // Select the input implementation without requesting onscreen keys.
@@ -838,13 +844,20 @@ final class TerminalKeyboardAccessoryController: NSObject {
     }
     private var localHideIntent: SoftwareKeyboardHideIntent = .none
     private var usesHideIntent: Bool { host?.keyboardHideIntentWindow != nil }
-    private func setHideIntent(_ intent: SoftwareKeyboardHideIntent) {
+    private func setHideIntent(_ intent: SoftwareKeyboardHideIntent, oneShotRequestState: AnyObject? = nil) {
         guard let window = host?.keyboardHideIntentWindow else {
             localHideIntent = intent
             return
         }
-        SoftwareKeyboardHideIntentStore.shared.set(intent, for: window)
+        SoftwareKeyboardHideIntentStore.shared.set(
+            intent, for: window, oneShotOwner: self, oneShotRequestState: oneShotRequestState)
     }
+    private var oneShotOwner: TerminalKeyboardAccessoryController? {
+        SoftwareKeyboardHideIntentStore.shared.oneShotOwner(for: host?.keyboardHideIntentWindow)
+            as? TerminalKeyboardAccessoryController
+    }
+    /// The window whose intent this host's open one-shot keyboard changed.
+    private weak var oneShotWindow: UIWindow?
     /// Hosting choice captured when toolbar-only mode begins. A detached iPad
     /// keyboard must keep the toolbar in the accessory slot: replacing the
     /// floating keyboard with the accessory as its primary input view preserves
@@ -1473,6 +1486,8 @@ final class TerminalKeyboardAccessoryController: NSObject {
             #endif
             if self.toolbarOnlyMode {
                 self.exitToolbarOnlyMode()
+            } else if self.hideIntent.isOneShot {
+                self.finishOneShotKeyboard()
             } else if self.usesHideIntent || SettingsStore.shared.value(Settings.KeyboardToolbar.persistent) {
                 self.setHideIntent(.hidden(pinned: false))
                 self.enterToolbarOnlyMode(pinned: false)
@@ -1502,6 +1517,10 @@ final class TerminalKeyboardAccessoryController: NSObject {
                 self.setHideIntent(.hidden(pinned: true))
                 self.enterToolbarOnlyMode(pinned: true)
             }
+        }
+
+        keyboardAccessory?.onOneShotKeyboardRequested = { [weak self] in
+            self?.beginOneShotKeyboard()
         }
 
         keyboardAccessory?.onTabSwitcherRequested = { [weak host] in
@@ -1807,6 +1826,9 @@ final class TerminalKeyboardAccessoryController: NSObject {
     }
 
     func tearDown() {
+        // A closing opener ends its one-shot keyboard rather than leave the
+        // shared key request behind.
+        _ = endOwnOneShotIntent()
         dismissFloatingTouchKeyboard()
         releaseTouchKeyboardState()
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
@@ -1866,8 +1888,13 @@ final class TerminalKeyboardAccessoryController: NSObject {
     }
 
     func exitToolbarOnlyMode() {
-        touchKeyboardRequestedWithHardware = KeyboardTracker.shared.isHardwareKeyboard
         setHideIntent(.none)
+        leaveToolbarOnlyMode()
+    }
+
+    /// Shows the keyboard without touching the window's hide intent.
+    private func leaveToolbarOnlyMode() {
+        touchKeyboardRequestedWithHardware = KeyboardTracker.shared.isHardwareKeyboard
         keyboardAccessory?.setDismissButtonPinned(false)
         toolbarOnlyMode = false
         toolbarOnlyHidesToolbar = false
@@ -1879,6 +1906,82 @@ final class TerminalKeyboardAccessoryController: NSObject {
         toolbarOnlyUsesPrimaryInputView = true
     }
 
+    /// Shows the keys for one input, from a hidden keyboard or from the
+    /// toolbar a hardware keyboard leaves. Visible keys or a remote screen
+    /// leave this a no-op.
+    func beginOneShotKeyboard() {
+        // A delayed sequence can finish after focus moved to another terminal.
+        guard usesHideIntent, host?.keyboardIsFirstResponder == true else { return }
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        guard host?.keyboardSoftwareKeyboardRequest == nil else { return }
+        let showsHardwareToolbarOnly = !toolbarOnlyMode && hidesTouchKeyboardForHardware
+        #else
+        let showsHardwareToolbarOnly = false
+        #endif
+        let intent = hideIntent
+        let previous: SoftwareKeyboardHideIntent
+        if toolbarOnlyMode, intent.isHidden {
+            previous = intent
+        } else if showsHardwareToolbarOnly, intent == .none {
+            previous = .none
+        } else {
+            return
+        }
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        let requestState: AnyObject? = currentTouchKeyboardState
+        #else
+        let requestState: AnyObject? = nil
+        #endif
+        setHideIntent(.oneShot(returningTo: previous), oneShotRequestState: requestState)
+        oneShotWindow = host?.keyboardHideIntentWindow
+        // Same path as the chevron restoring keys in either state.
+        leaveToolbarOnlyMode()
+    }
+
+    /// Restores the intent a window's one-shot keyboard replaced and drops
+    /// the key request it set. Returns the restored intent, nil if none was open.
+    private func endOneShotIntent(in window: UIWindow) -> SoftwareKeyboardHideIntent? {
+        let store = SoftwareKeyboardHideIntentStore.shared
+        guard case .oneShot(let previous) = store.intent(for: window) else { return nil }
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        // Hand the keys back to a hardware keyboard, as docking does.
+        (store.oneShotRequestState(for: window) as? TerminalFloatingKeyboardState)?.requestedWithHardware = false
+        #endif
+        store.set(previous, for: window)
+        return previous
+    }
+
+    /// Ends this host's open one-shot keyboard without touching input views.
+    /// Returns true when one was open.
+    private func endOwnOneShotIntent() -> Bool {
+        defer { oneShotWindow = nil }
+        guard let window = oneShotWindow,
+              SoftwareKeyboardHideIntentStore.shared.oneShotOwner(for: window) === self else { return false }
+        return endOneShotIntent(in: window) != nil
+    }
+
+    /// Returns a one-shot keyboard to the state it was opened from. Another
+    /// host hands the request to the opener, which alone re-applies its input
+    /// views. `applying: false` leaves them alone during a focus handoff; the
+    /// opener's next focus reconciles with the restored intent.
+    func finishOneShotKeyboard(applying: Bool = true) {
+        if hideIntent.isOneShot, oneShotOwner !== self {
+            reconcileWithHideIntent()
+            return
+        }
+        guard let window = oneShotWindow,
+              SoftwareKeyboardHideIntentStore.shared.oneShotOwner(for: window) === self,
+              let previous = endOneShotIntent(in: window) else { return }
+        oneShotWindow = nil
+        guard applying, host?.keyboardHideIntentWindow === window else { return }
+        if case .hidden(let pinned) = previous {
+            enterToolbarOnlyMode(pinned: pinned)
+        } else {
+            host?.keyboardReloadInputViews()
+            scheduleKeyboardToolbarUpdate(reason: "oneShotKeyboardFinished")
+        }
+    }
+
     /// Bring this host's applied mode in line with the window's hide intent.
     /// Idempotent; called before every first-responder acquisition so the
     /// input view UIKit queries already reflects the intent. Returns true when
@@ -1886,10 +1989,16 @@ final class TerminalKeyboardAccessoryController: NSObject {
     @discardableResult
     func reconcileWithHideIntent() -> Bool {
         guard usesHideIntent else { return false }
+        // Another terminal taking focus ends its one-shot keyboard, even
+        // after the opener closed.
+        if hideIntent.isOneShot, oneShotOwner !== self {
+            oneShotOwner?.finishOneShotKeyboard(applying: false)
+            if let window = host?.keyboardHideIntentWindow { _ = endOneShotIntent(in: window) }
+        }
         let intent = hideIntent
         if !intent.isHidden {
             guard toolbarOnlyMode else { return false }
-            exitToolbarOnlyMode()
+            if intent.isOneShot { leaveToolbarOnlyMode() } else { exitToolbarOnlyMode() }
             return true
         }
         let pinned = intent.isPinned

@@ -962,14 +962,32 @@ struct CustomKey: Identifiable, Codable, Hashable, Sendable {
     var sequence: [SequenceStep]
     /// Hex RGB. Wins over the toolbar's key colors.
     var colorHex: String?
+    /// While the keyboard is hidden, sends the sequence, then shows the
+    /// keyboard until one more input is sent.
+    var showsKeyboardOnce: Bool
 
     init(id: UUID = UUID(), label: String, iconName: String? = nil, sequence: [SequenceStep] = [],
-         colorHex: String? = nil) {
+         colorHex: String? = nil, showsKeyboardOnce: Bool = false) {
         self.id = id
         self.label = label
         self.iconName = iconName
         self.sequence = sequence
         self.colorHex = colorHex
+        self.showsKeyboardOnce = showsKeyboardOnce
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, label, iconName, sequence, colorHex, showsKeyboardOnce
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        label = try container.decode(String.self, forKey: .label)
+        iconName = try container.decodeIfPresent(String.self, forKey: .iconName)
+        sequence = try container.decode([SequenceStep].self, forKey: .sequence)
+        colorHex = try container.decodeIfPresent(String.self, forKey: .colorHex)
+        showsKeyboardOnce = try container.decodeIfPresent(Bool.self, forKey: .showsKeyboardOnce) ?? false
     }
 
     /// Concatenate all steps into a single Data payload for writing to the terminal.
@@ -983,7 +1001,18 @@ struct CustomKey: Identifiable, Codable, Hashable, Sendable {
 
     /// Human-readable summary of the sequence (e.g. "Ctrl+B -> Return")
     var sequenceSummary: String {
-        sequence.map(\.displayText).joined(separator: " \u{2192} ")
+        Self.summary(of: sequence, showsKeyboardOnce: showsKeyboardOnce)
+    }
+
+    static func summary(of steps: [SequenceStep], showsKeyboardOnce: Bool) -> String {
+        var parts = steps.map(\.displayText)
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        if showsKeyboardOnce {
+            parts.append(String(localized: "Show Keyboard",
+                                comment: "Custom key summary step: the keyboard opens for one key"))
+        }
+        #endif
+        return parts.joined(separator: " \u{2192} ")
     }
 }
 

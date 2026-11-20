@@ -4536,7 +4536,7 @@ extension Ghostty {
                 if activeKeyboardModifiers.contains(.control), text.lowercased() == "c",
                    let localSession = session as? LocalShellSession,
                    !localSession.hasActiveEmbeddedSession {
-                    localSession.interrupt()
+                    interruptLocalShell(localSession)
                     keyboardAccessoryController?.clearOneShotModifiers()
                     return
                 }
@@ -4630,7 +4630,7 @@ extension Ghostty {
             #if !targetEnvironment(macCatalyst)
             if finalText == "\u{03}", let localSession = session as? LocalShellSession,
                !localSession.hasActiveEmbeddedSession {
-                localSession.interrupt()
+                interruptLocalShell(localSession)
                 return
             }
             #endif
@@ -6027,7 +6027,7 @@ extension Ghostty.TerminalView {
         text: String? = nil,
         unshiftedCodepoint: UInt32 = 0
     ) -> Bool {
-        noteUserInput()
+        noteUserInput(endsOneShotKeyboard: action != .release)
         endDictationSession()
         invalidateWritingAssistance()
         // Covered herdr gateway: Ghostty would encode straight into the hidden
@@ -6150,7 +6150,7 @@ extension Ghostty.TerminalView: KeyboardButtonDelegate {
         if modifiers.contains(.control), key.count == 1, key.lowercased() == "c",
            let localSession = session as? LocalShellSession,
            !localSession.hasActiveEmbeddedSession {
-            localSession.interrupt()
+            interruptLocalShell(localSession)
             return
         }
         #endif

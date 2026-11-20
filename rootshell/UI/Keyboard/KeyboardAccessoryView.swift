@@ -45,6 +45,13 @@ class KeyboardAccessoryView: UIInputView {
         }
     }
 
+    /// A one-shot custom key finished sending and wants the keyboard for one input.
+    var onOneShotKeyboardRequested: (() -> Void)? {
+        didSet {
+            toolbarView.onOneShotKeyboardRequested = onOneShotKeyboardRequested
+        }
+    }
+
     /// Callback when tab switcher button is tapped
     var onTabSwitcherRequested: (() -> Void)? {
         didSet {

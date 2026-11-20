@@ -354,6 +354,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     var onModifiersChanged: ((KeyModifiers) -> Void)?
     var onDismiss: (() -> Void)?
     var onPinHidden: (() -> Void)?
+    /// A one-shot custom key finished sending and wants the keyboard for one input.
+    var onOneShotKeyboard: (() -> Void)?
     /// A locked toolbar modifier was held.
     var onModifierDoublePress: ((KeyModifiers) -> Void)?
     var onSwitchKeyboard: (() -> Void)?
@@ -2518,11 +2520,18 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             onToolbarAction?(action)
         case .custom(let id):
             guard let custom = KeyboardToolbarManager.shared.customKey(for: id) else { return }
+            // A one-shot key opens the keyboard only once its own keys are out.
+            var opensKeyboard: (@MainActor () -> Void)?
+            if custom.showsKeyboardOnce {
+                opensKeyboard = { [weak self] in self?.onOneShotKeyboard?() }
+            }
             if let character = custom.plainCharacter {
                 perform(Model.Key(title: String(character), action: .text(String(character))))
+                opensKeyboard?()
             } else if let input = custom.plainSpecialKeyInput, modifierState.rawValue != 0 {
                 keyPressed(input, modifiers: [])
-            } else { sendCustomSequence(custom.sequence) }
+                opensKeyboard?()
+            } else { sendCustomSequence(custom.sequence, completion: opensKeyboard) }
         case .joystick:
             if isToolbarOnly { toggleToolbarDrawer() } else { showPage(.navigation) }
         case .modifier: break
@@ -3272,14 +3281,15 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         return outgoing
     }
 
-    private func sendCustomSequence(_ steps: [SequenceStep]) {
+    /// `completion` runs once every step is out; a cancelled send skips it.
+    private func sendCustomSequence(_ steps: [SequenceStep], completion: (@MainActor () -> Void)? = nil) {
         modifierState.consume()
         cancelInteraction(preservingModifiers: true)
         host?.touchKeyboardInvalidateSuggestions()
         // Ghostty-encoded keys arrive asynchronously and would reorder against
         // raw steps, so only a lone combo takes that path.
         if steps.count == 1, case .keyCombo(let combo) = steps[0], canSend,
-           sequenceDelegate?.sendKeyCombo(combo) == true { return }
+           sequenceDelegate?.sendKeyCombo(combo) == true { completion?(); return }
         sequenceTask = Task { @MainActor [weak self] in
             for step in steps {
                 guard !Task.isCancelled, let self, self.canSend else { return }
@@ -3287,6 +3297,8 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                 self.sequenceDelegate?.sendRawData(data)
                 if data.last == 0x1b { try? await Task.sleep(for: .milliseconds(50)) }
             }
+            guard !Task.isCancelled else { return }
+            completion?()
         }
     }
 

@@ -1649,10 +1649,28 @@ extension Ghostty.TerminalView {
 extension Ghostty.TerminalView {
 
     /// Every input path calls this first; dictation's own delivery doesn't count.
-    func noteUserInput() {
+    /// A key release passes `endsOneShotKeyboard: false`: it may belong to a
+    /// press made before the one-shot keyboard opened.
+    func noteUserInput(endsOneShotKeyboard: Bool = true) {
         guard !dictationDelivering else { return }
         userInputGeneration &+= 1
+        if endsOneShotKeyboard { noteOneShotKeyboardInput() }
     }
+
+    /// The input a one-shot keyboard waits for. Deferred so the input views
+    /// don't reload inside UIKit's text delivery.
+    func noteOneShotKeyboardInput() {
+        guard keyboardAccessoryController?.hideIntent.isOneShot == true else { return }
+        Task { @MainActor [weak self] in self?.keyboardAccessoryController?.finishOneShotKeyboard() }
+    }
+
+    #if !targetEnvironment(macCatalyst)
+    /// Local-shell Ctrl-C bypasses the terminal input path.
+    func interruptLocalShell(_ session: LocalShellSession) {
+        noteOneShotKeyboardInput()
+        session.interrupt()
+    }
+    #endif
 
     /// Sends now, or behind a delayed dictation Return so it keeps both its
     /// order and its gap from the dictated text.

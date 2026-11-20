@@ -29,7 +29,10 @@ extension Ghostty.TerminalView {
         case .customKeyRef(let id):
             guard let key = KeyboardToolbarManager.shared.customKey(for: id) else { return }
             triggerHapticFeedback()
-            sendSequenceSteps(key.sequence)
+            guard key.showsKeyboardOnce else { sendSequenceSteps(key.sequence); return }
+            sendSequenceSteps(key.sequence) { [weak self] in
+                self?.keyboardAccessoryController?.beginOneShotKeyboard()
+            }
         }
     }
 
