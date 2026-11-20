@@ -259,11 +259,10 @@ struct VPNTunnelDetailsDisclosure: View {
             }
             if isTailnet, let egress = tailnetStatus?.egress, !egress.isOff {
                 let stateText = egress.localizedStateText
-                let egressLabel: String
-                if let host = egress.host, !host.isEmpty, egress.state != "failed" {
-                    egressLabel = "\(stateText) (\(host))"
+                let egressLabel = if let host = egress.host, !host.isEmpty, egress.state != "failed" {
+                    "\(stateText) (\(host))"
                 } else {
-                    egressLabel = stateText
+                    stateText
                 }
                 detailRow(
                     String(localized: "SSH Egress", comment: "VPN Tailscale detail row"),
