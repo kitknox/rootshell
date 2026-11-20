@@ -18,7 +18,7 @@ import AppKit
 
 // MARK: - Touch-Only Gesture Delegate
 
-/// Prevents the double-tap gesture from tracking mouse/trackpad touches so they
+/// Prevents the tap gestures from tracking mouse/trackpad touches so they
 /// flow exclusively through touchesBegan/touchesEnded for proper click counting.
 /// Separate from TerminalView's delegate to preserve all other gesture behaviors.
 extension UITouch {
@@ -65,7 +65,8 @@ extension Ghostty.TerminalView {
         // Clear any existing text selection by sending a click at the tap location.
         // Only for finger taps — mouse/trackpad clicks already send press/release
         // via touchesBegan/touchesEnded. Adding more here for mouse would double-count
-        // clicks (handleTap fires ~300ms after single click due to require(toFail:)).
+        // clicks. (Pointer clicks only reach handleTap on Mac; on iPad the tap
+        // skips them and finishPointerClick does the focus work above.)
         if let surface = surface, !isMouseCaptured, lastContextMenuTriggerWasFinger {
             selectionWasTouchInitiated = false
             hideSelectionHandles(animated: false)
@@ -2236,6 +2237,9 @@ extension Ghostty.TerminalView {
             let point = touch.location(in: self)
             // Check which button is pressed (iOS 13.4+)
             let isRightClick = event?.buttonMask.contains(.secondary) ?? false
+            #if !targetEnvironment(macCatalyst)
+            pointerClickStartPoint = isRightClick ? nil : point
+            #endif
             handleMouseDown(at: point, isRightClick: isRightClick)
             return
         }
@@ -2314,6 +2318,12 @@ extension Ghostty.TerminalView {
             lastPencilLocationTimestamp = touch.timestamp
         }
 
+        #if !targetEnvironment(macCatalyst)
+        if touch.type == .indirectPointer {
+            dropPointerClickIfMoved(to: touch.location(in: self))
+        }
+        #endif
+
         if touch.type == .indirectPointer && mousePressed {
             let point = touch.location(in: self)
             handleMouseMove(at: point)
@@ -2351,6 +2361,9 @@ extension Ghostty.TerminalView {
             handleMouseUp(at: point)
             selectionMouseDragActive = false
             stopRightClickMonitoring()
+            #if !targetEnvironment(macCatalyst)
+            finishPointerClick(at: point)
+            #endif
             return
         }
 
@@ -2422,6 +2435,7 @@ extension Ghostty.TerminalView {
             stopCaptureAutoScroll()
 
             #if !targetEnvironment(macCatalyst)
+            pointerClickStartPoint = nil
             // On iPad, if we're tracking a right-click from context menu, don't let
             // touchesCancelled stop it. The pan gesture or touchesEnded handles release.
             if Self.rightClickTrackingView != nil {
@@ -2463,6 +2477,32 @@ extension Ghostty.TerminalView {
 
         super.touchesCancelled(touches, with: event)
     }
+
+    #if !targetEnvironment(macCatalyst)
+    /// A pointer press stops being a click once it strays, even if it returns.
+    private func dropPointerClickIfMoved(to point: CGPoint) {
+        guard let start = pointerClickStartPoint else { return }
+        if hypot(point.x - start.x, point.y - start.y) > Self.captureTapMaxMovement {
+            pointerClickStartPoint = nil
+        }
+    }
+
+    /// The tap recognizer's work for a primary pointer click, which it no
+    /// longer tracks. Same gates the tap has in gestureRecognizerShouldBegin.
+    private func finishPointerClick(at point: CGPoint) {
+        dropPointerClickIfMoved(to: point)
+        guard pointerClickStartPoint != nil else { return }
+        pointerClickStartPoint = nil
+        guard !isMouseCaptured, herdrController?.showsGatewayStatus != true else { return }
+        // The press usually posts this too, but not before a surface or
+        // herdr pane is ready.
+        NotificationCenter.default.post(name: .focusSplit, object: self)
+        if brightnessHUDHost != nil {
+            hideBrightnessHUD()
+        }
+        reloadInputViews()
+    }
+    #endif
 
     func captureAutoScrollMouseStateAllowsDrag() -> Bool {
         mousePressed && Self.pressedMouseButton == GHOSTTY_MOUSE_LEFT && !selectionMouseDragActive

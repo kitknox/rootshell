@@ -1293,8 +1293,10 @@ extension Ghostty {
         #if !targetEnvironment(macCatalyst)
         /// Pan gesture for right-click drag on iPad (bypasses UIContextMenuInteraction touch issues)
         var rightClickPanGesture: UIPanGestureRecognizer?
-        /// Delegate that excludes mouse/trackpad touches from the double-tap gesture
-        var doubleTapDelegate: TouchOnlyGestureDelegate?
+        /// Delegate that excludes mouse/trackpad touches from the tap gestures
+        var touchOnlyTapDelegate: TouchOnlyGestureDelegate?
+        /// Where a primary pointer press began, to tell a click from a drag.
+        var pointerClickStartPoint: CGPoint?
         #endif
 
         // Mouse/trackpad state
@@ -1988,14 +1990,18 @@ extension Ghostty {
             addGestureRecognizer(tapGesture)
 
             #if !targetEnvironment(macCatalyst)
-            let dblTapDelegate = TouchOnlyGestureDelegate()
-            doubleTapDelegate = dblTapDelegate
+            let touchOnlyDelegate = TouchOnlyGestureDelegate()
+            touchOnlyTapDelegate = touchOnlyDelegate
+            // The single tap waits for the double tap to fail, and UIKit holds
+            // touchesEnded while it waits. Tracking the pointer here would
+            // delay every click's button release by that timeout.
+            tapGesture.delegate = touchOnlyDelegate
 
             let doubleTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap))
             doubleTapGesture.numberOfTapsRequired = 2
             doubleTapGesture.cancelsTouchesInView = false
             doubleTapGesture.delaysTouchesBegan = false
-            doubleTapGesture.delegate = dblTapDelegate
+            doubleTapGesture.delegate = touchOnlyDelegate
             addGestureRecognizer(doubleTapGesture)
 
             tapGesture.require(toFail: doubleTapGesture)
