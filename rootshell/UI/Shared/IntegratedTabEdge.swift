@@ -708,13 +708,47 @@ struct IntegratedTabSurfaceFill {
     let style: IntegratedSurfaceStyle
     let override: Color?
     var position: TabBarPosition = .top
+
+    var runs: [(minX: CGFloat, maxX: CGFloat, color: UIColor)] {
+        surface.runs(for: tabIDs, position: position)
+    }
+
+    /// Light or dark as the tab's paint reads at window `x`, which a program
+    /// can change live (OSC 11). A translucent paint shows `backdrop`; nil
+    /// counts it as opaque. Nil result until a pane has pushed its colors.
+    func scheme(atX x: CGFloat, over backdrop: Color?) -> ColorScheme? {
+        let paint = override ?? runs.first { x < $0.maxX }.map { style.color(for: Color(uiColor: $0.color)) }
+        guard let paint else { return nil }
+        let surface = backdrop.map { paint.composited(over: $0) } ?? paint
+        return ColorScheme(lightSurface: surface.isLight)
+    }
 }
 
 private struct IntegratedTabSurfaceFillKey: EnvironmentKey {
     static let defaultValue: IntegratedTabSurfaceFill? = nil
 }
 
+/// The Theme Gradient behind the tab row. It shades with height, so chrome
+/// measures it where it sits: a bottom row, or one lifted by the keyboard.
+struct TabBackdrop: Equatable {
+    let surface: EffectiveSurface
+    let windowHeight: CGFloat
+
+    func color(atWindowY y: CGFloat) -> Color? {
+        surface.backdrop(atHeight: y / windowHeight)
+    }
+}
+
+private struct TabBackdropKey: EnvironmentKey {
+    static let defaultValue: TabBackdrop? = nil
+}
+
 extension EnvironmentValues {
+    var tabBackdrop: TabBackdrop? {
+        get { self[TabBackdropKey.self] }
+        set { self[TabBackdropKey.self] = newValue }
+    }
+
     var integratedTabSurfaceFill: IntegratedTabSurfaceFill? {
         get { self[IntegratedTabSurfaceFillKey.self] }
         set { self[IntegratedTabSurfaceFillKey.self] = newValue }
@@ -728,7 +762,7 @@ struct IntegratedTabSurfaceFillView: View {
     @Environment(\.integratedTabSurfaceFill) private var fill
 
     var body: some View {
-        let runs = fill.map { $0.surface.runs(for: $0.tabIDs, position: $0.position) } ?? []
+        let runs = fill?.runs ?? []
         if let override = fill?.override {
             Rectangle().fill(override)
         } else if let fill, !runs.isEmpty {

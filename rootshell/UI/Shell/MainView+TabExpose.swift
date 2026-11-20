@@ -94,6 +94,7 @@ extension MainView {
         appearance.cornerRadius = roundedPanes ? PaneCardStyle.cornerRadius : 0
         appearance.rimPalette = roundedPanes ? theme.integratedEdgePalette : nil
         appearance.textColor = UIColor(theme.tabText)
+        appearance.captionInterfaceStyle = UIUserInterfaceStyle(theme.terminalSurfaceScheme)
         if let accent = sheetAccentColor {
             appearance.accentColor = UIColor(accent)
         }

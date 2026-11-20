@@ -67,6 +67,11 @@ struct AgentBrandMark: View {
     /// colour so they follow the tab theme.
     var tint: Color = .secondary
 
+    /// Appearance of the surface under the mark, which picks the light or
+    /// dark artwork. Nil follows the app appearance; themed chrome passes
+    /// its own, since a dark theme can run under a light system.
+    var surfaceScheme: ColorScheme?
+
     init(agentID: String?, size: CGFloat = 14) {
         self.agentID = agentID
         self.size = size
@@ -77,11 +82,12 @@ struct AgentBrandMark: View {
         self.init(mark: .asset(assetName), size: size)
     }
 
-    init(mark: BrandMark, size: CGFloat = 14, tint: Color = .secondary) {
+    init(mark: BrandMark, size: CGFloat = 14, tint: Color = .secondary, surfaceScheme: ColorScheme? = nil) {
         self.agentID = nil
         self.size = size
         self.explicitMark = mark
         self.tint = tint
+        self.surfaceScheme = surfaceScheme
     }
 
     var body: some View {
@@ -98,6 +104,7 @@ struct AgentBrandMark: View {
                 // further: `SidebarTabRow` also fades receding agent
                 // metadata to 0.72, and the two multiply.
                 .opacity(0.85)
+                .optionalColorSchemeEnvironment(surfaceScheme)
                 .accessibilityHidden(true)
         case .template(let asset):
             Image(asset)
@@ -116,6 +123,21 @@ struct AgentBrandMark: View {
         case nil:
             EmptyView()
         }
+    }
+}
+
+/// Hands its content the window frame it occupies, for a mark whose surface
+/// varies across the window. Untracked content gets `.zero` and no updates.
+struct WindowFrameReader<Content: View>: View {
+    var tracks = true
+    @ViewBuilder let content: (CGRect) -> Content
+    @State private var frame = CGRect.zero
+
+    var body: some View {
+        content(frame)
+            .onGeometryChange(for: CGRect.self) { [tracks = tracks] in
+                tracks ? $0.frame(in: .global) : .zero
+            } action: { frame = $0 }
     }
 }
 

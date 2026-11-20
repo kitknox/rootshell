@@ -55,6 +55,9 @@ final class TabExposeView: UIView, TabExposeControllerObserver, PreviewRendering
         var rimPalette: IntegratedTabEdgePalette?
         var accentColor: UIColor = .systemBlue
         var textColor: UIColor = .white
+        /// Light or dark as the backdrop under the captions reads; their
+        /// logo artwork and semantic colors resolve against it.
+        var captionInterfaceStyle: UIUserInterfaceStyle = .unspecified
         var showsCaptions: Bool = true
         /// Caption for a cell (title + badges); index is the navigation position.
         var captionProvider: ((TabModel, Int) -> AnyView)?
@@ -1326,6 +1329,10 @@ final class TabExposeCellView: UIView {
     var currentRingColor: UIColor = UIColor.white.withAlphaComponent(0.3) {
         didSet { currentRing.layer.borderColor = currentRingColor.cgColor }
     }
+    /// Applied to the caption host, so open captions follow a theme change.
+    var captionInterfaceStyle: UIUserInterfaceStyle = .unspecified {
+        didSet { captionHost?.view.overrideUserInterfaceStyle = captionInterfaceStyle }
+    }
     var isCurrent = false {
         didSet {
             updateRings()
@@ -1475,6 +1482,7 @@ final class TabExposeCellView: UIView {
         } else {
             let host = UIHostingController(rootView: view)
             host.view.backgroundColor = .clear
+            host.view.overrideUserInterfaceStyle = captionInterfaceStyle
             host.view.isUserInteractionEnabled = false
             host.view.alpha = captionAlpha
             addSubview(host.view)

@@ -57,6 +57,13 @@ private nonisolated let _hexParseCache = OSAllocatedUnfairLock<[String: HexParse
     initialState: [:]
 )
 
+extension ColorScheme {
+    /// The appearance whose artwork and semantic colors suit a surface.
+    init(lightSurface: Bool) {
+        self = lightSurface ? .light : .dark
+    }
+}
+
 extension Color {
     /// Initialize a Color from a hex string (e.g., "#1e1e2e" or "1e1e2e")
     nonisolated init?(hex: String) {
@@ -199,6 +206,12 @@ extension Color {
     /// Returns true if this color is considered "light" (luminance > 0.5)
     var isLight: Bool {
         luminance > 0.5
+    }
+
+    /// The color seen where this draws at its own alpha over `backdrop`.
+    /// For measuring a surface: only the result's RGB is meaningful.
+    func composited(over backdrop: Color) -> Color {
+        backdrop.blended(toward: self, amount: UIColor(self).cgColor.alpha)
     }
 
     /// HSV saturation (0.0 = gray/white, 1.0 = fully saturated)

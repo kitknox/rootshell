@@ -669,7 +669,8 @@ struct MainView: View {
                         currentIndex: visiblePosition,
                         totalCount: tabsModel.navigationTabs.count,
                         keyboardShortcut: keyboardShortcut(for: visiblePosition),
-                        tmuxBadgePalette: TmuxTabBadgePalette(theme: resolvedTheme)
+                        tmuxBadgePalette: TmuxTabBadgePalette(theme: resolvedTheme),
+                        terminalScheme: resolvedTheme.terminalSurfaceScheme
                     )
                     // Center over the terminal, not the window: the docked
                     // (pinned) tab sidebar consumes the leading edge and the

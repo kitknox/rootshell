@@ -1383,6 +1383,8 @@ struct TabBarItem: View, Equatable {
     let onHover: (Bool) -> Void
     let previewAnchors: TabHoverPreviewAnchorRegistry?
 
+    @Environment(\.avoidsMaterials) private var avoidsMaterials
+
     // Equality gates *parent-driven* re-evaluation only (a selection change
     // re-runs the whole ForEach and reconstructs every TabBarItem with fresh
     // closures). With `.equatable()`, a switch re-renders only the outgoing +
@@ -1450,6 +1452,10 @@ struct TabBarItem: View, Equatable {
             controlledElsewhere: tab.herdrIsControlledElsewhere,
             attentionBadge: attentionBadge,
             logoMark: logoMark,
+            logoSurfaceScheme: {
+                theme.contentScheme(selected: isOnly || isSelected, hovered: $0, style: style,
+                                    flat: avoidsMaterials, backdrop: $1)
+            },
             style: style,
             tabWidth: tabWidth,
             usesTitlebarTabs: usesTitlebarTabs,

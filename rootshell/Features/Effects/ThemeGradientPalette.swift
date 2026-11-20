@@ -308,6 +308,8 @@ struct ThemeGradientPalette: Equatable {
         var average: SIMD3<Double>
         /// The strip under the status bar and top tabs.
         var topBand: SIMD3<Double>
+        /// Each row's average, top to bottom, for chrome elsewhere in the window.
+        var rows: [SIMD3<Double>]
     }
 
     private static var cachedSample: (palette: ThemeGradientPalette, sample: Sample)?
@@ -318,6 +320,7 @@ struct ThemeGradientPalette: Equatable {
         let size = SIMD2<Double>(1280, 800)
         let columns = 32, rows = 20, topRows = 2
         var total = SIMD3<Double>.zero, top = SIMD3<Double>.zero
+        var rowTotals = [SIMD3<Double>](repeating: .zero, count: rows)
         for row in 0..<rows {
             for column in 0..<columns {
                 let x: Double = (Double(column) + 0.5) / Double(columns) * size.x
@@ -325,10 +328,12 @@ struct ThemeGradientPalette: Equatable {
                 let position = SIMD2<Double>(x, y)
                 let rgb = backdropShade(at: position, size: size)
                 total += rgb
+                rowTotals[row] += rgb
                 if row < topRows { top += rgb }
             }
         }
-        let sample = Sample(average: total / Double(columns * rows), topBand: top / Double(columns * topRows))
+        let sample = Sample(average: total / Double(columns * rows), topBand: top / Double(columns * topRows),
+                            rows: rowTotals.map { $0 / Double(columns) })
         Self.cachedSample = (self, sample)
         return sample
     }

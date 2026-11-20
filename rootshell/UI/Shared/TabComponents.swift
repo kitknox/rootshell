@@ -346,6 +346,20 @@ enum TabMetrics {
     /// Gap between the trough well and the selected knob riding inside it.
     static let troughKnobInset: CGFloat = 2
     #endif
+
+    /// Opacity of the Integrated hover fill, and of a hovered capsule's.
+    static let hoverFillOpacity: Double = 0.75
+
+    /// Opacity of the fill behind an inactive Pills or Trough tab. visionOS
+    /// always draws one so tabs look targetable for gaze; elsewhere it is the
+    /// hover fill, opaque where materials are avoided.
+    static func capsuleFillOpacity(hovered: Bool, flat: Bool) -> Double {
+        #if os(visionOS)
+        return 0.5
+        #else
+        return hovered ? (flat ? 1 : hoverFillOpacity) : 0
+        #endif
+    }
 }
 
 // MARK: - Group Menu Sizing
@@ -415,6 +429,9 @@ struct TabButton: View {
     var controlledElsewhere: Bool = false
     var attentionBadge: AgentAttentionStatus? = nil  // agent attention dot (id=agent-attention)
     var logoMark: BrandMark? = nil  // detected agent, PSP, or shell/program logo
+    /// Appearance of the tab's own surface, hovered or not and over the
+    /// gradient behind it if any, for the logo's light/dark artwork.
+    var logoSurfaceScheme: ((_ hovered: Bool, _ backdrop: Color?) -> ColorScheme?)? = nil
     var style: TopTabStyle = .pills
     var tabWidth: CGFloat = 240
     var usesTitlebarTabs: Bool = false
@@ -505,7 +522,12 @@ struct TabButton: View {
             }
 
             if let logoMark {
-                AgentBrandMark(mark: logoMark, size: 14, tint: titleColor)
+                TabLogoMark(
+                    mark: logoMark,
+                    tint: titleColor,
+                    scheme: { [isHovered] in logoSurfaceScheme?(isHovered, $0) },
+                    followsSurfaceFill: style == .integrated && isSelected
+                )
                     .badgeVibrancyCompensated(badgeNeedsVibrancyEscape)
                     .fixedSize()
             }
@@ -805,6 +827,39 @@ private struct LedgerTabIndicator: View {
     }
 }
 
+/// A tab's logo, in the artwork for what is drawn under it. The Theme
+/// Gradient and the panes a selected Integrated tab paints both vary across
+/// the window, so the logo is measured where it sits.
+private struct TabLogoMark: View {
+    let mark: BrandMark
+    let tint: Color
+    /// The tab's own scheme over `backdrop`, the gradient behind it if any.
+    let scheme: (_ backdrop: Color?) -> ColorScheme?
+    let followsSurfaceFill: Bool
+
+    @Environment(\.integratedTabSurfaceFill) private var surfaceFill
+    @Environment(\.tabBackdrop) private var tabBackdrop
+
+    var body: some View {
+        WindowFrameReader(tracks: followsSurfaceFill || tabBackdrop != nil) { frame in
+            let backdrop = tabBackdrop?.color(atWindowY: frame.midY)
+            let live = followsSurfaceFill ? surfaceFill?.scheme(atX: frame.midX, over: backdrop) : nil
+            AgentBrandMark(mark: mark, size: 14, tint: tint, surfaceScheme: live ?? scheme(backdrop))
+        }
+    }
+}
+
+extension EnvironmentValues {
+    /// Reduce Transparency / Increase Contrast replace Liquid Glass with a
+    /// flat fill that resolves against the system appearance, ignoring the
+    /// app's forced appearance mode entirely (white pill over a dark theme
+    /// whenever the window is inactive, issue #250). Tab chrome skips
+    /// materials and draws plain theme-colored fills in those modes.
+    var avoidsMaterials: Bool {
+        accessibilityReduceTransparency || colorSchemeContrast == .increased
+    }
+}
+
 /// Trough well: the shared segmented-control track behind the tab run. Drawn
 /// as a plain theme fill (never glass) so the selected knob's Liquid Glass
 /// is not nested inside another glass surface.
@@ -814,12 +869,7 @@ struct TroughWellBackground: View {
     let segmentWidth: CGFloat
     let theme: ResolvedTabBarTheme
 
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
-
-    private var flat: Bool {
-        reduceTransparency || colorSchemeContrast == .increased
-    }
+    @Environment(\.avoidsMaterials) private var flat
 
     private var hairline: Color {
         theme.tabText.opacity(theme.isLight ? 0.12 : 0.16)
@@ -828,7 +878,7 @@ struct TroughWellBackground: View {
     var body: some View {
         ZStack(alignment: .leading) {
             Capsule()
-                .fill(theme.unselectedBackground.opacity(flat ? 1 : 0.6))
+                .fill(theme.troughWellFill(flat: flat))
                 .overlay(Capsule().strokeBorder(hairline, lineWidth: 0.5))
 
             // Segment dividers, dropped on either side of the knob.
@@ -879,7 +929,7 @@ private struct IntegratedTabBackground: View {
                 selectedBackground
             } else {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(hoverColor.opacity(0.75))
+                    .fill(hoverColor.opacity(TabMetrics.hoverFillOpacity))
                     .padding(.vertical, 4)
                     .opacity(isHovered ? 1 : 0)
             }
@@ -994,18 +1044,8 @@ struct GlassTabBackgroundModifier: ViewModifier {
     let isLightTheme: Bool
     let isHovered: Bool
 
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.avoidsMaterials) private var avoidsMaterials
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
-
-    /// Reduce Transparency / Increase Contrast replace Liquid Glass with a
-    /// flat fill that resolves against the system appearance, ignoring the
-    /// app's forced appearance mode entirely (white pill over a dark theme
-    /// whenever the window is inactive — issue #250). Skip materials and
-    /// draw a plain theme-colored capsule in those modes.
-    private var avoidsMaterials: Bool {
-        reduceTransparency || colorSchemeContrast == .increased
-    }
 
     /// A stable, non-material hover fill for inactive tabs. Keeping this
     /// capsule in the view tree at zero opacity avoids replacing the content's
@@ -1014,7 +1054,7 @@ struct GlassTabBackgroundModifier: ViewModifier {
     private var inactiveHoverBackground: some View {
         Capsule()
             .fill(unselectedBackgroundColor)
-            .opacity(isHovered ? (avoidsMaterials ? 1 : 0.75) : 0)
+            .opacity(TabMetrics.capsuleFillOpacity(hovered: isHovered, flat: avoidsMaterials))
             .animation(
                 reduceMotion ? nil : .easeOut(duration: 0.12),
                 value: isHovered
@@ -1035,7 +1075,8 @@ struct GlassTabBackgroundModifier: ViewModifier {
             content
                 .background(
                     Capsule()
-                        .fill(unselectedBackgroundColor.opacity(0.5))
+                        .fill(unselectedBackgroundColor.opacity(
+                            TabMetrics.capsuleFillOpacity(hovered: isHovered, flat: avoidsMaterials)))
                 )
         }
         #else

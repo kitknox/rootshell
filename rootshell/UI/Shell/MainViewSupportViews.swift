@@ -169,8 +169,37 @@ struct TabIndicatorOverlay: View {
     let totalCount: Int
     let keyboardShortcut: String?
     let tmuxBadgePalette: TmuxTabBadgePalette
+    /// Appearance of the themed terminal, for panes with no live color.
+    let terminalScheme: ColorScheme?
+
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var paneBackgroundRevision = 0
+
+    /// The pane showing through the material under the logo, as it draws
+    /// now: a program can recolor it (OSC 11) and Tint by Host shifts it.
+    /// Falls back to the focused pane until the tab's panes are on screen.
+    private func liveTerminalScheme(under logoFrame: CGRect) -> ColorScheme? {
+        func coverage(_ terminal: Ghostty.TerminalView) -> CGFloat {
+            let shared = terminal.visibleWindowFrame.intersection(logoFrame)
+            return shared.width * shared.height
+        }
+        let covered = tab?.splitTree.terminalLeaves.max { coverage($0) < coverage($1) }
+        let terminal = covered.flatMap { coverage($0) > 0 ? $0 : nil }
+            ?? (tab?.focusedPane ?? tab?.splitTree.first)?.asTerminal
+        return terminal?.paneBackgroundColor
+            .map { ColorScheme(lightSurface: EffectiveSurface.resolve(background: Color(uiColor: $0)).isLight) }
+    }
+
+    /// The darkened material still reads light over a light terminal in
+    /// Light appearance, and dark in every other pairing.
+    private func surfaceScheme(under logoFrame: CGRect) -> ColorScheme {
+        let terminal = liveTerminalScheme(under: logoFrame) ?? terminalScheme
+        return ColorScheme(lightSurface: colorScheme == .light && terminal != .dark)
+    }
 
     var body: some View {
+        // A recolored pane re-resolves the logo.
+        let _ = paneBackgroundRevision
         VStack(spacing: 12) {
             // Tab title with optional keyboard shortcut
             if let tab {
@@ -178,7 +207,8 @@ struct TabIndicatorOverlay: View {
                     tab: tab,
                     allTabs: allTabs,
                     tmuxBadgePalette: tmuxBadgePalette,
-                    keyboardShortcut: keyboardShortcut
+                    keyboardShortcut: keyboardShortcut,
+                    surfaceScheme: { surfaceScheme(under: $0) }
                 )
             } else {
                 Text("Terminal")
@@ -210,6 +240,11 @@ struct TabIndicatorOverlay: View {
                 )
         )
         .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: .terminalPaneBackgroundDidChange) {
+                paneBackgroundRevision &+= 1
+            }
+        }
     }
 }
 

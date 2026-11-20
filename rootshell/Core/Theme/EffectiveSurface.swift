@@ -20,6 +20,8 @@ struct EffectiveSurface: Equatable {
     /// Averaged backdrop and the opacity the terminal draws over it.
     var backdropRGB: SIMD3<Double> = .zero
     var opacity: Double = 1
+    /// The backdrop's rows, top to bottom; it shades with height.
+    var backdropRowsRGB: [SIMD3<Double>] = []
     let onBackdrop: Bool
 
     var base: Color { Self.color(baseRGB) }
@@ -43,8 +45,16 @@ struct EffectiveSurface: Equatable {
             chromeRGB: sample.topBand,
             backdropRGB: sample.average,
             opacity: opacity,
+            backdropRowsRGB: sample.rows,
             onBackdrop: true
         )
+    }
+
+    /// The backdrop at a height in the window, 0 at the top; nil off the backdrop.
+    func backdrop(atHeight fraction: Double) -> Color? {
+        guard onBackdrop, !backdropRowsRGB.isEmpty, fraction.isFinite else { return nil }
+        let row = Int(min(max(fraction, 0), 1) * Double(backdropRowsRGB.count))
+        return Self.color(backdropRowsRGB[min(row, backdropRowsRGB.count - 1)])
     }
 
     /// The fill that, drawn at the terminal's opacity over the backdrop, shows

@@ -166,9 +166,56 @@ struct ResolvedTabBarTheme: Equatable {
     /// title contrasts with that surface instead.
     var integratedSelectedText: Color {
         if let override = overrideTabText { return override }
-        guard let baseColor else { return .primary }
-        let light = onBackdrop ? (surface?.isLight ?? baseColor.isLight) : baseColor.isLight
-        return light ? Color(white: 0.1) : Color(white: 0.95)
+        guard baseColor != nil else { return .primary }
+        return terminalSurfaceIsLight ? Color(white: 0.1) : Color(white: 0.95)
+    }
+
+    /// Off the backdrop the terminal and the strip share the theme background.
+    private var terminalSurfaceIsLight: Bool {
+        onBackdrop ? (surface?.isLight ?? isLight) : isLight
+    }
+
+    /// Light or dark as the terminal surface reads; the selected Integrated
+    /// tab and the exposé backdrop both paint it. Nil without a theme, where
+    /// chrome uses system colors and follows the app appearance.
+    var terminalSurfaceScheme: ColorScheme? {
+        baseColor == nil ? nil : ColorScheme(lightSurface: terminalSurfaceIsLight)
+    }
+
+    /// The trough well, opaque when materials are avoided.
+    func troughWellFill(flat: Bool) -> Color {
+        unselectedBackground.opacity(flat ? 1 : 0.6)
+    }
+
+    /// The fill an inactive tab draws behind its content, as drawn; nil for none.
+    func inactiveFill(for style: TopTabStyle, hovered: Bool, flat: Bool) -> Color? {
+        let opacity: Double
+        switch style {
+        case .ledger: return nil
+        case .integrated: opacity = hovered ? TabMetrics.hoverFillOpacity : 0
+        case .pills, .trough: opacity = TabMetrics.capsuleFillOpacity(hovered: hovered, flat: flat)
+        }
+        return opacity > 0 ? inactiveHoverBackground(for: style).opacity(opacity) : nil
+    }
+
+    /// Appearance of the surface under one tab's title and marks, measured
+    /// from what is drawn there: the terminal, the selected capsule, or
+    /// whatever is stacked on the strip beneath an inactive tab. `backdrop`
+    /// is the Theme Gradient at the tab's height, where one shows.
+    func contentScheme(selected: Bool, hovered: Bool, style: TopTabStyle, flat: Bool,
+                       backdrop: Color?) -> ColorScheme? {
+        guard let baseColor else { return nil }
+        if selected, style == .integrated { return terminalSurfaceScheme }
+        if selected, style != .ledger { return ColorScheme(lightSurface: selectedBackground.isLight) }
+        // Fills between the strip and the tab's content, bottom up.
+        var fills: [Color] = []
+        if style == .trough { fills.append(troughWellFill(flat: flat)) }
+        if !selected, let fill = inactiveFill(for: style, hovered: hovered, flat: flat) { fills.append(fill) }
+        // The strip is clear on the backdrop, so its override never draws.
+        let strip = onBackdrop ? backdrop : overrideTabBarBackground
+        guard strip != nil || !fills.isEmpty else { return ColorScheme(lightSurface: isLight) }
+        let surface = fills.reduce(strip ?? tabBase ?? baseColor) { $1.composited(over: $0) }
+        return ColorScheme(lightSurface: surface.isLight)
     }
 
     var tabSecondaryText: Color {

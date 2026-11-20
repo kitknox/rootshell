@@ -62,6 +62,11 @@ extension MainView {
             hostWindow: pane == nil ? window ?? sceneHostWindow : nil)
     }
 
+    private func tabBackdrop(theme: ResolvedTabBarTheme) -> TabBackdrop? {
+        guard let surface = theme.surface, surface.onBackdrop, let window = sceneHostWindow else { return nil }
+        return TabBackdrop(surface: surface, windowHeight: window.bounds.height)
+    }
+
     /// This scene's window, from any mounted pane or else the scene itself.
     private var sceneHostWindow: UIWindow? {
         if let window = overlayPreservationHostWindow { return window }
@@ -157,6 +162,7 @@ extension MainView {
         }
         .environment(\.integratedTabJoinsCard, integratedTabsJoinCards)
         .environment(\.integratedTabSurfaceFill, surfaceFill)
+        .environment(\.tabBackdrop, tabBackdrop(theme: resolvedTheme))
         .modifier(ContainerCornerModifier())
 #if targetEnvironment(macCatalyst)
         .catalystCursorRegion()

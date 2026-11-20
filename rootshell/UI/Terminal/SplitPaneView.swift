@@ -192,6 +192,17 @@ extension SplitPaneView {
     }
 }
 
+extension Ghostty.TerminalView {
+    /// Window frame of this pane's scroll container; null while the pane
+    /// is detached or hidden, as the others are behind a zoomed pane.
+    var visibleWindowFrame: CGRect {
+        let chain = sequence(first: self as UIView, next: \.superview)
+        guard window != nil, chain.allSatisfy({ !$0.isHidden }),
+              let container = chain.first(where: { $0 is Ghostty.TerminalScrollView }) else { return .null }
+        return container.convert(container.bounds, to: nil)
+    }
+}
+
 extension SplitTree where ViewType == SplitPaneView {
     /// All terminal leaves in layout order, skipping non-terminal panes.
     var terminalLeaves: [Ghostty.TerminalView] {

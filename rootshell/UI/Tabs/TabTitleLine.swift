@@ -20,6 +20,9 @@ struct TabTitleLine: View {
     var showsBadges = true
     var showsAttentionDot = false
     var logoSize: CGFloat = 14
+    /// Appearance of the surface behind the logo, given its window frame;
+    /// nil follows the environment.
+    var surfaceScheme: ((_ logoWindowFrame: CGRect) -> ColorScheme?)?
 
     @Setting(Settings.CodingAgents.attentionBadges) private var agentMarksEnabled
     @Setting(Settings.Tabs.programIcons) private var programIconsEnabled
@@ -36,7 +39,10 @@ struct TabTitleLine: View {
                 }
 
                 if let logoMark {
-                    AgentBrandMark(mark: logoMark, size: logoSize, tint: textColor)
+                    WindowFrameReader(tracks: surfaceScheme != nil) { frame in
+                        AgentBrandMark(mark: logoMark, size: logoSize, tint: textColor,
+                                       surfaceScheme: surfaceScheme?(frame))
+                    }
                 }
 
                 if tab.herdrIsControlledElsewhere {

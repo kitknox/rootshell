@@ -165,6 +165,7 @@ final class TabExposeTrayView: UIScrollView {
             applyPreviewBackground(to: cell)
             cell.accentColor = appearance.accentColor
             cell.currentRingColor = appearance.textColor.withAlphaComponent(0.3)
+            cell.captionInterfaceStyle = appearance.captionInterfaceStyle
         }
     }
 
