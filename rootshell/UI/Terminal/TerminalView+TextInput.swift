@@ -243,6 +243,8 @@ extension Ghostty.TerminalView {
         // then calling unmarkText(). Flush the composed text to the terminal
         // before clearing, otherwise the candidate is silently dropped.
         if let text = markedTextString, !text.isEmpty {
+            // A committed candidate ends a pending sequence, as a key would.
+            KeySequenceTracker.shared.resetIfOwnedBy(self)
             if let data = text.data(using: .utf8) {
                 sendUserInput(data, documentMutation: committedCompositionMutation(text))
             }

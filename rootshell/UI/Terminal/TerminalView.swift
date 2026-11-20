@@ -104,6 +104,27 @@ extension Ghostty {
             "\u{1B}[3~": .keyboardDeleteForward
         ]
 
+        /// Named keys as the toolbar and terminal keyboard send them.
+        static let softwareKeyHIDUsageMap: [String: UIKeyboardHIDUsage] = [
+            "\r": .keyboardReturnOrEnter, "\t": .keyboardTab,
+            "\u{7f}": .keyboardDeleteOrBackspace,
+            "\u{1b}[A": .keyboardUpArrow, "\u{1b}[B": .keyboardDownArrow,
+            "\u{1b}[C": .keyboardRightArrow, "\u{1b}[D": .keyboardLeftArrow,
+            "\u{1b}[H": .keyboardHome, "\u{1b}[F": .keyboardEnd,
+            "\u{1b}[5~": .keyboardPageUp, "\u{1b}[6~": .keyboardPageDown,
+            "\u{1b}[3~": .keyboardDeleteForward
+        ]
+
+        /// 1 through 12 for "F1" through "F12", as the terminal keyboard names them.
+        static func softwareFunctionKeyNumber(_ key: String) -> Int? {
+            guard key.hasPrefix("F"), let number = Int(key.dropFirst()), (1...12).contains(number) else { return nil }
+            return number
+        }
+
+        static func softwareFunctionKeyUsage(_ number: Int) -> UIKeyboardHIDUsage? {
+            UIKeyboardHIDUsage(rawValue: UIKeyboardHIDUsage.keyboardF1.rawValue + number - 1)
+        }
+
         /// Maps characters to HID usages for routing virtual keyboard
         /// key presses through Ghostty's key encoding pipeline.
         /// This enables proper CSI u / kitty protocol encoding for modified keys.
@@ -1423,6 +1444,9 @@ extension Ghostty {
         /// only track UIKit's explicit signals and the settle liveness deadline.
         var pendingDictationPlaceholderTokens = Set<String>()
         var dictationDeliveryDepth = 0
+        /// The sequence prefix a one-shot keyboard is waiting out, by the
+        /// tracker's generation, so its expiry finishes only that keyboard.
+        var oneShotKeyboardPrefixGeneration: UInt64?
         var dictationSettleDeadline: TimeInterval?
         /// On-device dictation output held behind a delayed Return, in order.
         var dictationPending: [(submit: Bool, work: @MainActor (Ghostty.TerminalView) -> Void)] = []
@@ -4451,6 +4475,22 @@ extension Ghostty {
             }
             commitKoreanCompositionIfNeeded(external: false)
 
+            // A typed key can be a shortcut: a toolbar Command chord, or the
+            // second key of a sequence. Dictation, in either delivery shape,
+            // and an input method's commit are text, so the key is judged
+            // before dictation phrases are rewritten.
+            if text.count == 1, dictationDeliveryDepth == 0, correctionContext.dictation == nil,
+               markedTextString == nil {
+                if handleSoftwareKeyShortcut(text, modifiers: activeKeyboardModifiers) {
+                    resetDoubleSpaceTracking()
+                    keyboardAccessoryController?.clearOneShotModifiers()
+                    return
+                }
+            } else {
+                // Any other text commit ends a pending sequence, as a key would.
+                KeySequenceTracker.shared.resetIfOwnedBy(self)
+            }
+
             // Apply dictation auto-corrections (e.g., "shell pipe" → "|")
             finalText = applyDictationReplacements(finalText)
 
@@ -4551,9 +4591,12 @@ extension Ghostty {
                 }
                 #endif
 
-                // Try routing through Ghostty's key encoder first
-                if text.count == 1, let char = text.first,
-                   sendViaGhosttyKeyEvent(char, modifiers: activeKeyboardModifiers) {
+                // Try routing through Ghostty's key encoder first. Text that
+                // gets here under Command was not a chord, so Command is
+                // dropped; with nothing left it is plain text for the path below.
+                let textModifiers = activeKeyboardModifiers.subtracting(.command)
+                if !textModifiers.isEmpty, text.count == 1, let char = text.first,
+                   sendViaGhosttyKeyEvent(char, modifiers: textModifiers) {
                     keyboardAccessoryController?.clearOneShotModifiers()
                     return
                 }
@@ -4666,6 +4709,14 @@ extension Ghostty {
             }
 
             if handleThirdPartyKeyboardDelete() {
+                return
+            }
+
+            // Command-Delete can be bound, and Delete can end a pending
+            // sequence. Dictation's own deletions are neither.
+            if dictationDeliveryDepth == 0, correctionContext.dictation == nil,
+               handleSoftwareKeyShortcut("\u{7f}", modifiers: activeKeyboardModifiers) {
+                keyboardAccessoryController?.clearOneShotModifiers()
                 return
             }
 
@@ -5964,12 +6015,7 @@ extension Ghostty.TerminalView {
         toolbarModifiers: KeyModifiers = [],
         virtualModifier: ModTapModifier? = nil
     ) -> Bool {
-        var modifiers = UIKeyModifierFlags()
-        if toolbarModifiers.contains(.control) { modifiers.insert(.control) }
-        if toolbarModifiers.contains(.shift) { modifiers.insert(.shift) }
-        if toolbarModifiers.contains(.alt) { modifiers.insert(.alternate) }
-        if toolbarModifiers.contains(.command) { modifiers.insert(.command) }
-
+        var modifiers = toolbarModifiers.uiKeyModifierFlags
         if let virtualModifier {
             modifiers.insert(virtualModifier.uiKeyModifierFlag)
         }
@@ -5986,25 +6032,32 @@ extension Ghostty.TerminalView {
     ///   - char: The character being pressed (lowercase for letters)
     ///   - modifiers: Active keyboard modifiers from toolbar
     /// - Returns: `true` if the key was handled via Ghostty, `false` if no mapping exists
-    private func sendViaGhosttyKeyEvent(_ char: Character, modifiers: KeyModifiers, shifted: Character? = nil) -> Bool {
+    func sendViaGhosttyKeyEvent(_ char: Character, modifiers: KeyModifiers, shifted: Character? = nil) -> Bool {
         let lookupChar = char.lowercased().first ?? char
-        guard let hidUsage = Self.characterHIDUsageMap[lookupChar] else { return false }
+        var mappedUsage = Self.characterHIDUsageMap[lookupChar]
+        // § stays on the text fallback except in a Command chord, which has none.
+        if mappedUsage == nil, lookupChar == "§", modifiers.contains(.command) {
+            mappedUsage = .keyboardNonUSBackslash
+        }
+        guard let hidUsage = mappedUsage else { return false }
         let mods = Self.ghosttyMods(modifiers)
 
         // Build the text payload: apply shift transformation so legacy mode
         // sends the correct character (e.g., 'A' instead of 'a').
         let shiftActive = modifiers.contains(.shift)
         let effectiveChar = shiftActive ? shifted ?? Self.shiftedCharacter(char) : char
-        let text = String(effectiveChar)
+        // Ghostty's legacy encoding types the text of a Command chord on iOS,
+        // so the chord goes without it. herdr encodes chords from the key.
+        let text = modifiers.contains(.command) && herdrEndpointPane == nil ? nil : String(effectiveChar)
 
         // Determine the unshifted codepoint (what the key produces without Shift)
-        let unshiftedCodepoint = UInt32(lookupChar.asciiValue ?? 0)
+        let unshiftedCodepoint = lookupChar.unicodeScalars.first?.value ?? 0
 
         guard sendKeyViaGhostty(
             keyCode: hidUsage,
             action: .press,
             mods: mods,
-            consumedMods: shiftActive ? .shift : [],
+            consumedMods: shiftActive && text != nil ? .shift : [],
             text: text,
             unshiftedCodepoint: unshiftedCodepoint
         ) else { return false }
@@ -6137,6 +6190,9 @@ extension Ghostty.TerminalView: KeyboardButtonDelegate {
         if key == TerminalSequence.escape, dismissSessionDiscoveryIfPresented() {
             return
         }
+
+        // A toolbar or terminal-keyboard key can be a shortcut too.
+        if handleSoftwareKeyShortcut(key, modifiers: modifiers) { return }
 
         // Notify that input was received (for scroll-to-bottom behavior)
         NotificationCenter.default.post(name: .ghosttyDidReceiveInput, object: self)

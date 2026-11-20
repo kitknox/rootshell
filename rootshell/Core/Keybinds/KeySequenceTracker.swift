@@ -48,6 +48,11 @@ final class KeySequenceTracker: ObservableObject {
     /// install from a different view can't redirect an already-armed fallback.
     var onTimeoutDirectAction: ((Keybind) -> Void)?
 
+    /// Fires when a pending prefix times out, with or without a direct
+    /// action, passing the view that armed it and that arming's
+    /// `pendingGeneration`. Captured at arm-time too.
+    var onPrefixExpired: ((AnyObject?, UInt64) -> Void)?
+
     /// Identifies the view/caller that armed the current pending prefix. When a
     /// different owner dispatches a key — or when the owner deallocated without
     /// calling `resetIfOwnedBy` and this weak ref nil'd — the prior state is
@@ -58,7 +63,7 @@ final class KeySequenceTracker: ObservableObject {
     /// the MainActor hop so a stale timer whose sleep completed just before
     /// `reset()` fired can't wipe a freshly-armed prefix and fire the previous
     /// prefix's fallback in its place.
-    private var pendingGeneration: UInt64 = 0
+    private(set) var pendingGeneration: UInt64 = 0
 
     /// Timeout for waiting for second key (1 second)
     private let timeout: TimeInterval = 1.0
@@ -237,6 +242,7 @@ final class KeySequenceTracker: ObservableObject {
         // prefix's direct action in its place.
         let capturedFallback = directKeybind
         let capturedCallback = onTimeoutDirectAction
+        let capturedExpiry = onPrefixExpired
         let timeoutInterval = timeout
 
         timeoutTask = Task { [weak self] in
@@ -252,10 +258,12 @@ final class KeySequenceTracker: ObservableObject {
                 guard self.pendingGeneration == generation else { return }
                 guard self.isAwaitingSecondKey else { return }
                 Self.logger.info("Sequence timeout, resetting")
+                let owner = self.pendingOwner
                 self.reset()
                 if let capturedFallback {
                     capturedCallback?(capturedFallback)
                 }
+                capturedExpiry?(owner, generation)
             }
         }
     }

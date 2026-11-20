@@ -72,6 +72,15 @@ struct KeyModifiers: OptionSet, Hashable {
     static let alt     = KeyModifiers(rawValue: 1 << 1)
     static let command = KeyModifiers(rawValue: 1 << 2)
     static let shift   = KeyModifiers(rawValue: 1 << 3)
+
+    var uiKeyModifierFlags: UIKeyModifierFlags {
+        var flags: UIKeyModifierFlags = []
+        if contains(.control) { flags.insert(.control) }
+        if contains(.alt) { flags.insert(.alternate) }
+        if contains(.shift) { flags.insert(.shift) }
+        if contains(.command) { flags.insert(.command) }
+        return flags
+    }
 }
 
 enum KeyboardKeyColors {

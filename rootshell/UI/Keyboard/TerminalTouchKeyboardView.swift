@@ -32,6 +32,9 @@ protocol TerminalTouchKeyboardHost: AnyObject {
     /// Modifiers held outside the keyboard, on a toolbar above it, that join its next key.
     var touchKeyboardHeldModifiers: KeyModifiers { get }
     func touchKeyboardInsert(_ text: String)
+    /// Offers a key about to be inserted as text to the host's shortcuts, with
+    /// the keyboard's own modifiers. True when the host consumed it.
+    func touchKeyboardConsumeShortcut(_ key: String, modifiers: KeyModifiers) -> Bool
     /// `shifted` is the layout's Shift output for a letter key; nil keeps US casing.
     func touchKeyboardSend(_ key: String, modifiers: KeyModifiers, shifted: Character?)
     func touchKeyboardAccept(_ text: String, context: TerminalTouchKeyboardModel.SuggestionContext)
@@ -49,6 +52,7 @@ extension TerminalTouchKeyboardHost {
     var touchKeyboardThemeColors: ThemeManager.ThemeInfo.ThemeColors? { nil }
     var touchKeyboardPredictionContext: TerminalTouchKeyboardModel.PredictionSnapshot? { nil }
     var touchKeyboardHeldModifiers: KeyModifiers { [] }
+    func touchKeyboardConsumeShortcut(_ key: String, modifiers: KeyModifiers) -> Bool { false }
     func touchKeyboardSend(_ key: String, modifiers: KeyModifiers) {
         touchKeyboardSend(key, modifiers: modifiers, shifted: nil)
     }
@@ -2549,7 +2553,10 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
             let held = host?.touchKeyboardHeldModifiers ?? []
             if held.isEmpty, mods.subtracting(.shift).isEmpty {
                 // Shift changes letters without invoking terminal shortcut encoding.
-                host?.touchKeyboardInsert(mods.contains(.shift) ? layout.shifted(text) : text)
+                // A pending shortcut takes the key first: text alone drops its Shift.
+                if host?.touchKeyboardConsumeShortcut(text, modifiers: mods) != true {
+                    host?.touchKeyboardInsert(mods.contains(.shift) ? layout.shifted(text) : text)
+                }
             } else {
                 // Chords keep the base key; only the text payload follows the layout's Shift.
                 // The host adds the held modifiers to the chord.

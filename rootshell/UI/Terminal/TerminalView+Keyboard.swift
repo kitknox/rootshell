@@ -2762,6 +2762,79 @@ extension Ghostty.TerminalView {
         return true
     }
 
+    /// A toolbar or software-keyboard key as hardware would report it.
+    private struct SoftwareKey {
+        let code: KeyCode
+        let modifiers: KeyModifiers
+        /// The base character of a printable key; nil for a named key.
+        let character: Character?
+    }
+
+    /// Named keys resolve by HID usage. A shifted symbol is its base key plus
+    /// Shift. A capital is only its letter: the system keyboard cannot tell
+    /// Caps Lock from Shift, so a chord's Shift comes from the toolbar. Nil
+    /// when the text names no key.
+    private func softwareKey(for text: String, modifiers: KeyModifiers) -> SoftwareKey? {
+        let usage: UIKeyboardHIDUsage?
+        switch text {
+        case "\n": usage = .keyboardReturnOrEnter
+        case TerminalSequence.escape: usage = .keyboardEscape
+        default:
+            usage = Self.softwareKeyHIDUsageMap[text]
+                ?? Self.softwareFunctionKeyNumber(text).flatMap { Self.softwareFunctionKeyUsage($0) }
+        }
+        if let usage {
+            return KeyCode(hidUsage: usage).map { SoftwareKey(code: $0, modifiers: modifiers, character: nil) }
+        }
+        guard text.count == 1, var character = text.lowercased().first else { return nil }
+        var folded = modifiers
+        if let base = HardwareKeyboardText.unshiftedCharacter(character) {
+            character = base
+            folded.insert(.shift)
+        }
+        guard let code = KeyCode(uiKeyInput: String(character)) else { return nil }
+        return SoftwareKey(code: code, modifiers: folded, character: character)
+    }
+
+    /// Offers a toolbar or software-keyboard key to the keybind table: a chord
+    /// with Command, or any key while a sequence awaits its second key. An
+    /// unclaimed printable Command chord goes to the encoder as a key without
+    /// text, since legacy encoding has no Command. Returns false when the key
+    /// is left to the caller.
+    func handleSoftwareKeyShortcut(_ text: String, modifiers: KeyModifiers) -> Bool {
+        let hasCommand = modifiers.contains(.command)
+        guard hasCommand || KeySequenceTracker.shared.isAwaitingSecondKey else { return false }
+        let key = softwareKey(for: text, modifiers: modifiers)
+        // A key the table cannot name still ends a pending sequence.
+        if key == nil { KeySequenceTracker.shared.reset() }
+        let claimed = key.map {
+            dispatchKeybindTrigger(normalizedBindingTrigger(KeyTrigger(
+                key: $0.code, modifiers: KeybindModifiers(uiModifierFlags: $0.modifiers.uiKeyModifierFlags)
+            )))
+        } ?? false
+        if !claimed {
+            // Named keys and plain text keep their own encoding.
+            guard hasCommand, text.count == 1, TerminalCorrectionContext.isPrintable(text) else { return false }
+            if let key, let character = key.character,
+               sendViaGhosttyKeyEvent(character, modifiers: key.modifiers) {
+                // The terminal may act on the chord, so the view follows it.
+                NotificationCenter.default.post(name: .ghosttyDidReceiveInput, object: self)
+            }
+        }
+        // A shortcut is the one key a one-shot keyboard waits for, unless it
+        // armed a sequence that still needs its second key. Expiry then
+        // finishes the keyboard that was open for this prefix, not a later one.
+        let tracker = KeySequenceTracker.shared
+        let armedPrefix = tracker.isAwaitingSecondKey
+        oneShotKeyboardPrefixGeneration = armedPrefix && keyboardAccessoryController?.hideIntent.isOneShot == true
+            ? tracker.pendingGeneration : nil
+        noteUserInput(endsOneShotKeyboard: !armedPrefix)
+        // UIKit may believe it inserted the character; the terminal never saw it.
+        endDictationSession()
+        invalidateWritingAssistance()
+        return true
+    }
+
     /// Install the tracker's timeout callback. The callback dispatches the
     /// pending direct action (the single-key binding that the prefix
     /// temporarily shadowed) when the user presses and holds the prefix past
@@ -2772,6 +2845,14 @@ extension Ghostty.TerminalView {
         KeySequenceTracker.shared.onTimeoutDirectAction = { [weak self] keybind in
             guard let self else { return }
             self.executeKeybindAction(keybind.action, parameter: keybind.actionParameter)
+        }
+        // An armed prefix defers a one-shot keyboard's dismissal; expiry ends
+        // the wait for the view that armed it, whichever view installed this.
+        KeySequenceTracker.shared.onPrefixExpired = { owner, generation in
+            guard let view = owner as? Ghostty.TerminalView,
+                  view.oneShotKeyboardPrefixGeneration == generation else { return }
+            view.oneShotKeyboardPrefixGeneration = nil
+            view.noteOneShotKeyboardInput()
         }
     }
 

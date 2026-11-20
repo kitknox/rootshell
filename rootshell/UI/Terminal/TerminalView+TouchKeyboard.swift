@@ -29,6 +29,12 @@ extension Ghostty.TerminalView: TerminalTouchKeyboardHost {
         insertText(text)
     }
 
+    func touchKeyboardConsumeShortcut(_ key: String, modifiers: KeyModifiers) -> Bool {
+        guard touchKeyboardCanSend, KeySequenceTracker.shared.isAwaitingSecondKey else { return false }
+        resetDoubleSpaceTracking()
+        return handleSoftwareKeyShortcut(key, modifiers: modifiers)
+    }
+
     func touchKeyboardSend(_ key: String, modifiers: KeyModifiers, shifted: Character?) {
         guard touchKeyboardCanSend else { return }
         let held = touchKeyboardHeldModifiers
@@ -36,6 +42,8 @@ extension Ghostty.TerminalView: TerminalTouchKeyboardHost {
         defer { if !held.isEmpty { keyboardAccessoryController?.consumeGlassBarModifiers() } }
         // Special keys bypass insertText, but still interrupt consecutive spaces.
         resetDoubleSpaceTracking()
+        // A shortcut wins before the named keys below reach the encoder.
+        if handleSoftwareKeyShortcut(key, modifiers: modifiers) { return }
         if key == "\u{7f}", modifiers.isEmpty {
             touchKeyboardInputDepth += 1
             defer { touchKeyboardInputDepth -= 1 }
@@ -43,23 +51,9 @@ extension Ghostty.TerminalView: TerminalTouchKeyboardHost {
             return
         }
         invalidateWritingAssistance()
-        let special: [String: UIKeyboardHIDUsage] = [
-            "\r": .keyboardReturnOrEnter, "\t": .keyboardTab,
-            "\u{7f}": .keyboardDeleteOrBackspace,
-            "\u{1b}[A": .keyboardUpArrow, "\u{1b}[B": .keyboardDownArrow,
-            "\u{1b}[C": .keyboardRightArrow, "\u{1b}[D": .keyboardLeftArrow,
-            "\u{1b}[H": .keyboardHome, "\u{1b}[F": .keyboardEnd,
-            "\u{1b}[5~": .keyboardPageUp, "\u{1b}[6~": .keyboardPageDown,
-            "\u{1b}[3~": .keyboardDeleteForward
-        ]
-        let functionNumber = key.hasPrefix("F") ? Int(key.dropFirst()) : nil
-        let functionUsage = functionNumber.flatMap { (1...12).contains($0) ? UIKeyboardHIDUsage(rawValue: UIKeyboardHIDUsage.keyboardF1.rawValue + $0 - 1) : nil }
-        if let usage = special[key] ?? functionUsage {
-            var flags: UIKeyModifierFlags = []
-            if modifiers.contains(.control) { flags.insert(.control) }
-            if modifiers.contains(.alt) { flags.insert(.alternate) }
-            if modifiers.contains(.shift) { flags.insert(.shift) }
-            if modifiers.contains(.command) { flags.insert(.command) }
+        let functionNumber = Self.softwareFunctionKeyNumber(key)
+        if let usage = Self.softwareKeyHIDUsageMap[key] ?? functionNumber.flatMap({ Self.softwareFunctionKeyUsage($0) }) {
+            let flags = modifiers.uiKeyModifierFlags
             NotificationCenter.default.post(name: .ghosttyDidReceiveInput, object: self)
             if sendKeyViaGhostty(keyCode: usage, action: .press, modifiers: flags) {
                 _ = sendKeyViaGhostty(keyCode: usage, action: .release, modifiers: flags)
@@ -67,7 +61,7 @@ extension Ghostty.TerminalView: TerminalTouchKeyboardHost {
                 return
             }
         }
-        if let index = functionNumber, (1...12).contains(index) {
+        if let index = functionNumber {
             let fallback = ["\u{1b}OP", "\u{1b}OQ", "\u{1b}OR", "\u{1b}OS", "\u{1b}[15~", "\u{1b}[17~",
                             "\u{1b}[18~", "\u{1b}[19~", "\u{1b}[20~", "\u{1b}[21~", "\u{1b}[23~", "\u{1b}[24~"]
             keyPressed(fallback[index - 1], modifiers: modifiers)
