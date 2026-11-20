@@ -214,7 +214,7 @@ final class PhotoBackgroundEffect: TerminalEffect, ObservableObject {
 
     var hasPhoto: Bool { selectedPhotoID != nil }
 
-    private let ciContext = CIContext()
+    private lazy var ciContext = CIContext()
     private var store = PhotoBackgroundStore()
 
     // MARK: - Storage
@@ -503,6 +503,12 @@ final class PhotoBackgroundEffect: TerminalEffect, ObservableObject {
     private func applyFilter() {
         guard let original = originalImage else {
             filteredImage = nil
+            return
+        }
+
+        // Unfiltered photos skip Core Image so launch never initializes Metal here.
+        if imageFilter.ciFilterName == nil && !themeTintEnabled {
+            filteredImage = original
             return
         }
 
