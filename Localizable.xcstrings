@@ -10624,6 +10624,316 @@
         }
       }
     },
+    "%@ 5h" : {
+      "comment" : "Agent usage compact label: a model's five-hour window",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5 س"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5h"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5 h"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5t"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5 Std."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5h"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5 t"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5h"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5 שע׳"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5 ó"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5h"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5時間"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5시간"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5 t"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5u"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5 godz."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5h"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5h"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5h"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5 h"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5h"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5год"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5h"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5 小时"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 5 小時"
+          }
+        }
+      }
+    },
+    "%@ 7d" : {
+      "comment" : "Agent usage compact label: a model's seven-day window",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7 ي"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7d"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7 d"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7d"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7 Tg."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7d"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7 pv"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7j"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7 ימ׳"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7 nap"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7g"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7日"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7일"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7 d"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7d"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7 dni"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7d"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7d"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7z"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7 d"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7d"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7дн"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7 ngày"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7 天"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 7 天"
+          }
+        }
+      }
+    },
     "%@ control mode" : {
       "localizations" : {
         "ar" : {
@@ -46520,6 +46830,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在此輸入的密碼會儲存到鑰匙圈。留空則會在連線時提示輸入。"
+          }
+        }
+      }
+    },
+    "A password is saved for this address, but not for this route. Use it only if this is the same computer." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "توجد كلمة مرور محفوظة لهذا العنوان، ولكن ليس لهذا المسار. لا تستخدمها إلا إذا كان هذا هو الكمبيوتر نفسه."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hi ha una contrasenya desada per a aquesta adreça, però no per a aquesta ruta. Utilitzeu-la només si és el mateix ordinador."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pro tuto adresu je uložené heslo, ale ne pro tuto trasu. Použijte ho, jen pokud jde o stejný počítač."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der er gemt en adgangskode til denne adresse, men ikke til denne rute. Brug den kun, hvis det er den samme computer."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Für diese Adresse ist ein Passwort gespeichert, aber nicht für diese Route. Verwenden Sie es nur, wenn es sich um denselben Computer handelt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hay una contraseña guardada para esta dirección, pero no para esta ruta. Úsela solo si se trata del mismo ordenador."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tälle osoitteelle on tallennettu salasana, mutta ei tälle reitille. Käytä sitä vain, jos kyseessä on sama tietokone."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un mot de passe est enregistré pour cette adresse, mais pas pour cet itinéraire. Ne l'utilisez que s'il s'agit du même ordinateur."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "שמורה סיסמה עבור הכתובת הזו, אך לא עבור הנתיב הזה. השתמש בה רק אם מדובר באותו מחשב."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ehhez a címhez van mentett jelszó, de ehhez az útvonalhoz nincs. Csak akkor használja, ha ugyanarról a számítógépről van szó."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una password è salvata per questo indirizzo, ma non per questo percorso. Usala solo se si tratta dello stesso computer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このアドレスにはパスワードが保存されていますが、この経路用ではありません。同じコンピュータである場合にのみ使用してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 주소에 저장된 비밀번호가 있지만 이 경로용은 아닙니다. 같은 컴퓨터인 경우에만 사용하세요."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Et passord er lagret for denne adressen, men ikke for denne ruten. Bruk det bare hvis dette er den samme datamaskinen."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Er is een wachtwoord opgeslagen voor dit adres, maar niet voor deze route. Gebruik het alleen als dit dezelfde computer is."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dla tego adresu zapisano hasło, ale nie dla tej trasy. Użyj go tylko wtedy, gdy to ten sam komputer."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Há uma senha salva para este endereço, mas não para esta rota. Use-a somente se for o mesmo computador."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Existe uma palavra-passe guardada para este endereço, mas não para esta rota. Utilize-a apenas se for o mesmo computador."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Există o parolă salvată pentru această adresă, dar nu pentru această rută. Folosește-o doar dacă este același computer."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Za ta naslov je shranjeno geslo, vendar ne za to pot. Uporabite ga le, če gre za isti računalnik."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ett lösenord är sparat för den här adressen, men inte för den här rutten. Använd det bara om det är samma dator."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Для цієї адреси збережено пароль, але не для цього маршруту. Використовуйте його, лише якщо це той самий компʼютер."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã có mật khẩu được lưu cho địa chỉ này, nhưng không phải cho tuyến này. Chỉ dùng mật khẩu đó nếu đây là cùng một máy tính."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此地址已保存密码，但并非用于此路线。仅当这是同一台电脑时才使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此位址已儲存密碼，但並非用於此路線。僅在這是同一部電腦時才使用。"
           }
         }
       }
@@ -358032,6 +358496,161 @@
         }
       }
     },
+    "Google refused the saved sign-in. rootshell asks agy on that host to renew it in the background, at most every 30 minutes, and usage reappears once it has. If it stays expired, sign in to agy again there, then Refresh." : {
+      "comment" : "Agent usage help when an Antigravity sign-in has expired",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "رفض Google تسجيل الدخول المحفوظ. يطلب rootshell من agy على ذلك المضيف تجديده في الخلفية، مرة كل 30 دقيقة على الأكثر، وتظهر بيانات الاستخدام مجددًا بمجرد أن يتم ذلك. إذا ظلت صلاحيته منتهية، فسجّل الدخول إلى agy مرة أخرى هناك، ثم اضغط تحديث."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google ha rebutjat l'inici de sessió desat. rootshell demana a agy en aquest amfitrió que el renovi en segon pla, com a màxim cada 30 minuts, i l'ús torna a aparèixer un cop ho ha fet. Si continua caducat, torna a iniciar la sessió a agy allà i, després, prem «Actualitza»."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google odmítl uložené přihlášení. rootshell požádá agy na tom hostiteli, aby je na pozadí obnovil, nejvýše jednou za 30 minut, a jakmile se to stane, údaje o využití se znovu objeví. Pokud přihlášení zůstane neplatné, přihlaste se tam znovu do agy a potom zvolte Obnovit."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google afviste det gemte login. rootshell beder agy på den vært om at forny det i baggrunden, højst hvert 30. minut, og forbruget vises igen, når det er sket. Hvis det forbliver udløbet, så log ind på agy igen der, og tryk derefter på Opdater."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google hat die gespeicherte Anmeldung abgelehnt. rootshell bittet agy auf diesem Host, sie im Hintergrund zu erneuern, höchstens alle 30 Minuten, und die Nutzung erscheint wieder, sobald das geschehen ist. Bleibt sie abgelaufen, melden Sie sich dort erneut bei agy an, und wählen Sie dann „Aktualisieren“."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google rechazó el inicio de sesión guardado. rootshell pide a agy en ese host que lo renueve en segundo plano, como mucho cada 30 minutos, y el uso vuelve a aparecer en cuanto lo consigue. Si sigue caducado, vuelve a iniciar sesión en agy en ese host y, después, usa Actualizar."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google hylkäsi tallennetun kirjautumisen. rootshell pyytää kyseisen isännän agy-työkalua uusimaan sen taustalla enintään 30 minuutin välein, ja käyttötiedot palaavat näkyviin, kun se onnistuu. Jos kirjautuminen pysyy vanhentuneena, kirjaudu agy-työkaluun uudelleen kyseisellä isännällä ja valitse sitten Päivitä."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google a refusé la connexion enregistrée. rootshell demande à agy sur cet hôte de la renouveler en arrière-plan, au plus toutes les 30 minutes, et l'utilisation réapparaît une fois que c'est fait. Si elle reste expirée, reconnectez-vous à agy sur cet hôte, puis actualisez."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google דחה את פרטי ההתחברות השמורים. rootshell מבקש מ-agy במארח הזה לחדש אותם ברקע, לכל היותר פעם ב-30 דקות, ונתוני השימוש יופיעו שוב ברגע שזה יקרה. אם תוקפם עדיין פג, התחבר שוב ל-agy במארח הזה, ואז רענן."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Google elutasította a mentett bejelentkezést. A rootshell megkéri az adott gazdagépen futó agy eszközt, hogy a háttérben újítsa meg, legfeljebb 30 percenként, és a használati adatok ezt követően újra megjelennek. Ha továbbra is lejárt marad, jelentkezzen be újra az agy eszközbe az adott gazdagépen, majd válassza a Frissítés lehetőséget."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google ha rifiutato l'accesso salvato. rootshell chiede ad agy su quell'host di rinnovarlo in background, al massimo ogni 30 minuti, e l'utilizzo ricompare quando ci riesce. Se resta scaduto, accedi di nuovo ad agy su quell'host, quindi seleziona Aggiorna."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Googleが保存済みのサインイン情報を拒否しました。rootshellはそのホストのagyに、バックグラウンドでの更新を最大30分に1回依頼します。更新されると使用状況が再び表示されます。期限切れのままの場合は、そのホストでagyに再度サインインしてから「更新」してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google에서 저장된 로그인을 거부했습니다. rootshell은 해당 호스트의 agy에 백그라운드에서 갱신하도록 최대 30분에 한 번 요청하며, 갱신되면 사용량이 다시 표시됩니다. 계속 만료된 상태이면 해당 호스트에서 agy에 다시 로그인한 다음 새로 고침하세요."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google avviste den lagrede innloggingen. rootshell ber agy på den verten om å fornye den i bakgrunnen, høyst hvert 30. minutt, og forbruket vises igjen når det er gjort. Hvis den forblir utløpt, logg inn på agy på nytt der, og velg deretter Oppdater."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google heeft de opgeslagen aanmelding geweigerd. rootshell vraagt agy op die host om die op de achtergrond te vernieuwen, hooguit eens per 30 minuten, en het gebruik verschijnt weer zodra dat gelukt is. Blijft die verlopen, meld je dan daar opnieuw aan bij agy en kies daarna Vernieuwen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google odrzucił zapisane logowanie. rootshell prosi agy na tym hoście o jego odnowienie w tle, nie częściej niż co 30 minut, a zużycie pojawi się ponownie, gdy to nastąpi. Jeśli logowanie pozostanie wygasłe, zaloguj się tam ponownie do agy, a następnie wybierz Odśwież."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Google rejeitou o login salvo. O rootshell pede ao agy nesse host que o renove em segundo plano, no máximo a cada 30 minutos, e o uso reaparece quando isso acontecer. Se continuar expirado, faça login no agy novamente nesse host e, em seguida, toque em Atualizar."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Google rejeitou o início de sessão guardado. O rootshell pede ao agy nesse anfitrião que o renove em segundo plano, no máximo a cada 30 minutos, e a utilização volta a aparecer quando isso acontecer. Se continuar expirado, inicie sessão novamente no agy nesse anfitrião e, em seguida, toque em Atualizar."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google a respins autentificarea salvată. rootshell îi cere lui agy de pe acea gazdă să o reînnoiască în fundal, cel mult o dată la 30 de minute, iar utilizarea reapare după ce a reușit. Dacă rămâne expirată, autentifică-te din nou la agy acolo, apoi apasă Reîmprospătează."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google je zavrnil shranjeno prijavo. rootshell v ozadju prosi agy na tem gostitelju, naj jo obnovi, največ vsakih 30 minut, poraba pa se znova prikaže, ko se to zgodi. Če prijava ostane potekla, se tam znova prijavite v agy, nato pa izberite Osveži."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google avvisade den sparade inloggningen. rootshell ber agy på den värden att förnya den i bakgrunden, högst var 30:e minut, och användningen visas igen när det är klart. Om den förblir utgången loggar du in på agy igen där och väljer sedan Uppdatera."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google відхилив збережені дані входу. rootshell просить agy на тому хості оновити їх у фоновому режимі, не частіше ніж раз на 30 хвилин, і дані про використання зʼявляться знову, щойно це станеться. Якщо термін дії так і не поновиться, знову увійдіть в agy на тому хості, після чого натисніть «Оновити»."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google đã từ chối thông tin đăng nhập đã lưu. rootshell sẽ yêu cầu agy trên máy chủ đó gia hạn nó trong nền, tối đa 30 phút một lần, và mức sử dụng sẽ xuất hiện trở lại sau khi gia hạn xong. Nếu vẫn hết hạn, hãy đăng nhập lại vào agy trên máy chủ đó, rồi nhấn Làm mới."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google 拒绝了已保存的登录信息。rootshell 会请求该主机上的 agy 在后台续期，最多每 30 分钟一次，续期后用量将重新显示。如果仍然过期，请在该主机上重新登录 agy，然后轻点“刷新”。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google 拒絕了已儲存的登入資訊。rootshell 會要求該主機上的 agy 在背景中更新，最多每 30 分鐘一次，更新後用量便會再次顯示。如果仍然過期，請在該主機上重新登入 agy，然後重新整理。"
+          }
+        }
+      }
+    },
     "Got it" : {
       "localizations" : {
         "ar" : {
@@ -470494,6 +471113,161 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mac"
+          }
+        }
+      }
+    },
+    "macOS will not release Antigravity's saved sign-in to a shell it did not start, so this connection cannot read it. Start tmux on that Mac once from its own desktop session and usage is read through the tmux server, or keep the Antigravity app open there, which answers directly." : {
+      "comment" : "Agent usage help when a remote Mac will not release Antigravity credentials",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لا يتيح macOS تسجيل دخول Antigravity المحفوظ لصدفة لم يبدأها بنفسه، لذا يتعذّر على هذا الاتصال قراءته. شغّل tmux على ذلك الـ Mac مرة واحدة من جلسة سطح المكتب الخاصة به، فتُقرأ بيانات الاستخدام عبر خادم tmux، أو أبقِ تطبيق Antigravity مفتوحًا هناك، فهو يجيب مباشرةً."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS no lliura l'inici de sessió desat d'Antigravity a un intèrpret d'ordres que no ha iniciat ell mateix, de manera que aquesta connexió no el pot llegir. Inicia tmux en aquest Mac un cop des de la seva pròpia sessió d'escriptori i l'ús es llegirà a través del servidor de tmux, o bé deixa oberta allà l'app Antigravity, que respon directament."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS nevydá uložené přihlášení Antigravity shellu, který sám nespustil, takže je toto připojení nemůže přečíst. Spusťte na tom Macu jednou tmux přímo z jeho vlastní plochy a využití se pak čte přes server tmux, nebo tam nechte otevřenou aplikaci Antigravity, která odpovídá přímo."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS udleverer ikke Antigravitys gemte login til en shell, som styresystemet ikke selv har startet, så denne forbindelse kan ikke læse det. Start tmux på den Mac én gang fra dens egen skrivebordssession, så læses forbruget via tmux-serveren, eller hold Antigravity-appen åben der, da den svarer direkte."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS gibt die gespeicherte Antigravity-Anmeldung nicht an eine Shell weiter, die es nicht selbst gestartet hat, deshalb kann diese Verbindung sie nicht lesen. Starten Sie tmux auf diesem Mac einmal aus dessen eigener Desktop-Sitzung, dann wird die Nutzung über den tmux-Server gelesen, oder lassen Sie die Antigravity-App dort geöffnet, denn sie antwortet direkt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS no permite que un shell que no ha iniciado él mismo acceda al inicio de sesión guardado de Antigravity, por lo que esta conexión no puede leerlo. Inicia tmux una vez en ese Mac desde su propia sesión de escritorio y el uso se leerá a través del servidor de tmux, o mantén abierta allí la app Antigravity, que responde directamente."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS ei luovuta Antigravityn tallennettua kirjautumista komentotulkille, jota se ei ole itse käynnistänyt, joten tämä yhteys ei voi lukea sitä. Käynnistä tmux kyseisellä Macilla kerran sen omasta työpöytäistunnosta, jolloin käyttötiedot luetaan tmux-palvelimen kautta, tai pidä Antigravity-sovellus siellä auki, sillä se vastaa suoraan."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS ne transmet pas la connexion Antigravity enregistrée à un shell qu'il n'a pas lancé, si bien qu'elle ne peut pas être lue depuis cette connexion. Lancez tmux une fois sur ce Mac depuis sa propre session de bureau, l'utilisation est alors lue via le serveur tmux, ou gardez l'app Antigravity ouverte sur ce Mac, qui répond directement."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS אינו מוסר את פרטי ההתחברות השמורים של Antigravity למעטפת שהוא לא הפעיל, ולכן חיבור זה אינו יכול לקרוא אותם. הפעל פעם אחת את tmux ב-Mac הזה מתוך הפעלת שולחן העבודה שלו, ונתוני השימוש ייקראו דרך שרת tmux, או השאר את אפליקציית Antigravity פתוחה שם, והיא תשיב ישירות."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A macOS nem adja ki az Antigravity mentett bejelentkezését olyan shellnek, amelyet nem ő indított, ezért ez a kapcsolat nem tudja beolvasni. Indítsa el egyszer a tmuxot azon a Macen a saját asztali munkamenetéből, így a használat a tmux-kiszolgálón keresztül olvasható, vagy tartsa ott nyitva az Antigravity alkalmazást, amely közvetlenül válaszol."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS non concede l'accesso salvato di Antigravity a una shell che non ha avviato, quindi questa connessione non può leggerlo. Avvia tmux su quel Mac una volta dalla sua sessione desktop, così l'utilizzo viene letto tramite il server tmux, oppure lascia aperta lì l'app Antigravity, che risponde direttamente."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOSは、自身が起動していないシェルにAntigravityの保存済みサインイン情報を渡さないため、この接続からは読み取れません。そのMacのデスクトップセッションから一度tmuxを起動すれば、使用状況をtmuxサーバー経由で読み取れます。または、そのMacでAntigravityアプリを開いたままにしておくと、アプリが直接応答します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS는 자신이 시작하지 않은 셸에 Antigravity의 저장된 로그인 정보를 제공하지 않으므로 이 연결에서는 읽을 수 없습니다. 해당 Mac의 자체 데스크탑 세션에서 tmux를 한 번 실행하면 tmux 서버를 통해 사용량을 읽습니다. 또는 그곳에서 Antigravity 앱을 열어 두면 앱이 직접 응답합니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS gir ikke Antigravitys lagrede innlogging til et skall den ikke selv startet, så denne tilkoblingen kan ikke lese den. Start tmux på den Macen én gang fra dens egen skrivebordsøkt, så leses forbruket gjennom tmux-serveren, eller la Antigravity-appen stå åpen der, så svarer den direkte."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS geeft de opgeslagen aanmelding van Antigravity niet vrij aan een shell die het zelf niet heeft gestart, dus deze verbinding kan die niet lezen. Start tmux één keer op die Mac vanuit de eigen bureaubladsessie, dan wordt het gebruik via de tmux-server gelezen, of houd daar de Antigravity-app open, die direct antwoordt."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS nie udostępnia zapisanego logowania Antigravity powłoce, której sam nie uruchomił, więc to połączenie nie może go odczytać. Uruchom raz tmux na tym Macu z jego własnej sesji graficznej, a zużycie będzie odczytywane przez serwer tmux, albo pozostaw tam otwartą aplikację Antigravity, która odpowiada bezpośrednio."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O macOS não libera o login salvo do Antigravity para um shell que ele não iniciou, então esta conexão não consegue lê-lo. Inicie o tmux nesse Mac uma vez a partir da própria sessão de área de trabalho dele, e o uso passa a ser lido pelo servidor tmux, ou mantenha o app Antigravity aberto nesse Mac, que responde diretamente."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O macOS não disponibiliza o início de sessão guardado do Antigravity a uma shell que não tenha iniciado, pelo que esta ligação não o consegue ler. Inicie o tmux nesse Mac uma vez a partir da sessão de ambiente de trabalho do próprio Mac, e a utilização passa a ser lida através do servidor tmux, ou mantenha a app Antigravity aberta nesse Mac, que responde diretamente."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS nu pune autentificarea salvată a Antigravity la dispoziția unui shell pe care nu l-a pornit el, așa că această conexiune nu o poate citi. Pornește o dată tmux pe acel Mac dintr-o sesiune de desktop proprie, iar utilizarea este citită prin serverul tmux, sau ține deschisă acolo aplicația Antigravity, care răspunde direct."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS ne izda shranjene prijave za Antigravity lupini, ki je ni zagnal sam, zato je ta povezava ne more prebrati. Na tem Macu enkrat zaženite tmux iz njegove namizne seje, saj se poraba nato prebere prek strežnika tmux, ali pa tam pustite odprto aplikacijo Antigravity, ki odgovori neposredno."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS lämnar inte ut Antigravitys sparade inloggning till ett skal som macOS inte har startat, så den här anslutningen kan inte läsa den. Starta tmux på den Macen en gång från dess egen skrivbordssession, så läses användningen via tmux-servern, eller håll Antigravity-appen öppen där, eftersom den svarar direkt."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS не надає збережені дані входу Antigravity оболонці, яку він не запускав, тому це зʼєднання не може їх прочитати. Один раз запустіть tmux на тому Mac із його власного сеансу робочого стола, і дані про використання читатимуться через сервер tmux, або тримайте там відкритою програму Antigravity, яка відповідає напряму."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS sẽ không cấp thông tin đăng nhập đã lưu của Antigravity cho một shell mà nó không khởi động, nên kết nối này không thể đọc được. Hãy khởi động tmux trên máy Mac đó một lần từ phiên desktop của chính máy, khi đó mức sử dụng sẽ được đọc qua máy chủ tmux, hoặc giữ ứng dụng Antigravity mở trên máy đó, vì ứng dụng sẽ trả lời trực tiếp."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 不会把 Antigravity 保存的登录信息提供给并非由它启动的 shell，因此此连接无法读取。在那台 Mac 上从它自己的桌面会话中启动一次 tmux，用量便可通过 tmux 服务器读取；或者在那台 Mac 上保持 Antigravity App 打开，它会直接响应。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 不會將 Antigravity 已儲存的登入資訊提供給並非由它啟動的 shell，因此此連線無法讀取。在該 Mac 上從它自己的桌面工作階段啟動一次 tmux，用量便可透過 tmux 伺服器讀取；或在該 Mac 上保持 Antigravity App 開啟，它會直接回應。"
           }
         }
       }
@@ -706498,6 +707272,161 @@
         }
       }
     },
+    "Session (%@)" : {
+      "comment" : "Agent usage window title for a specific model's five-hour window",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "جلسة (%@)"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessió (%@)"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Relace (%@)"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session (%@)"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sitzung (%@)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sesión (%@)"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Istunto (%@)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session (%@)"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הפעלה (%@)"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Munkamenet (%@)"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessione (%@)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "セッション（%@）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션(%@)"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Økt (%@)"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessie (%@)"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sesja (%@)"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessão (%@)"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessão (%@)"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sesiune (%@)"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seja (%@)"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session (%@)"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сеанс (%@)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phiên (%@)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话（%@）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作階段（%@）"
+          }
+        }
+      }
+    },
     "Session (5h)" : {
       "comment" : "Agent usage window title: five-hour session",
       "localizations" : {
@@ -706649,6 +707578,161 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "工作階段（5 小時）"
+          }
+        }
+      }
+    },
+    "Session (Gemini)" : {
+      "comment" : "Antigravity usage window title: Gemini five-hour pool",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "جلسة (Gemini)"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessió (Gemini)"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Relace (Gemini)"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session (Gemini)"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sitzung (Gemini)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sesión (Gemini)"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Istunto (Gemini)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session (Gemini)"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הפעלה (Gemini)"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Munkamenet (Gemini)"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessione (Gemini)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "セッション（Gemini）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션(Gemini)"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Økt (Gemini)"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessie (Gemini)"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sesja (Gemini)"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessão (Gemini)"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessão (Gemini)"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sesiune (Gemini)"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seja (Gemini)"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session (Gemini)"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сеанс (Gemini)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phiên (Gemini)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话（Gemini）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作階段（Gemini）"
           }
         }
       }
@@ -820251,6 +821335,160 @@
         }
       }
     },
+    "The jump route changed. Enter the password for the new route." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تغيّر مسار القفز. أدخل كلمة المرور للمسار الجديد."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La ruta de salt ha canviat. Introduïu la contrasenya de la ruta nova."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trasa přes Jump Host se změnila. Zadejte heslo pro novou trasu."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jump-ruten er ændret. Indtast adgangskoden til den nye rute."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Jump-Route hat sich geändert. Geben Sie das Passwort für die neue Route ein."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La ruta de salto ha cambiado. Introduzca la contraseña de la nueva ruta."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hyppyreitti muuttui. Syötä salasana uudelle reitille."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'itinéraire via le jump host a changé. Saisissez le mot de passe pour le nouvel itinéraire."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "נתיב ה-Jump השתנה. הזן את הסיסמה עבור הנתיב החדש."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A jump útvonal megváltozott. Adja meg a jelszót az új útvonalhoz."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il percorso tramite jump host è cambiato. Inserisci la password per il nuovo percorso."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ジャンプホストの経路が変更されました。新しい経路のパスワードを入力してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "점프 호스트 경로가 변경되었습니다. 새 경로의 비밀번호를 입력하세요."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ruten via mellomvert er endret. Skriv inn passordet for den nye ruten."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De jump-route is gewijzigd. Voer het wachtwoord voor de nieuwe route in."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trasa przez host pośredni się zmieniła. Wprowadź hasło dla nowej trasy."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A rota pelo jump host mudou. Digite a senha para a nova rota."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A rota pelo anfitrião de salto mudou. Introduza a palavra-passe para a nova rota."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ruta prin jump host s-a schimbat. Introdu parola pentru noua rută."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pot prek posredniškega gostitelja se je spremenila. Vnesite geslo za novo pot."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jump-rutten har ändrats. Ange lösenordet för den nya rutten."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Маршрут через проміжний хост змінився. Введіть пароль для нового маршруту."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tuyến jump đã thay đổi. Nhập mật khẩu cho tuyến mới."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳板路线已更改。请输入新路线的密码。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳板路線已變更。請輸入新路線的密碼。"
+          }
+        }
+      }
+    },
     "The key couldn't be saved to the keychain." : {
       "comment" : "Weather API key error",
       "localizations" : {
@@ -910001,6 +911239,160 @@
         }
       }
     },
+    "Use Saved Password" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "استخدام كلمة المرور المحفوظة"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utilitzar la contrasenya desada"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Použít uložené heslo"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brug gemt adgangskode"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gespeichertes Passwort verwenden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar contraseña guardada"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Käytä tallennettua salasanaa"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utiliser le mot de passe enregistré"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "השתמש בסיסמה השמורה"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mentett jelszó használata"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa password salvata"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済みパスワードを使用"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 비밀번호 사용"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bruk lagret passord"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opgeslagen wachtwoord gebruiken"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Użyj zapisanego hasła"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar Senha Salva"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar palavra-passe guardada"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folosește parola salvată"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uporabi shranjeno geslo"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Använd sparat lösenord"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Використати збережений пароль"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dùng mật khẩu đã lưu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用已保存的密码"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用已儲存的密碼"
+          }
+        }
+      }
+    },
     "Use Seamless Loop" : {
       "localizations" : {
         "ar" : {
@@ -941672,6 +943064,161 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "週（所有模型）"
+          }
+        }
+      }
+    },
+    "Week (Gemini)" : {
+      "comment" : "Antigravity usage window title: Gemini weekly pool",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "أسبوع (Gemini)"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Setmana (Gemini)"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Týden (Gemini)"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uge (Gemini)"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Woche (Gemini)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semana (Gemini)"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Viikko (Gemini)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semaine (Gemini)"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "שבוע (Gemini)"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hét (Gemini)"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settimana (Gemini)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "週（Gemini）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주간(Gemini)"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uke (Gemini)"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Week (Gemini)"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tydzień (Gemini)"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semana (Gemini)"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semana (Gemini)"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Săptămână (Gemini)"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teden (Gemini)"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vecka (Gemini)"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тиждень (Gemini)"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tuần (Gemini)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "周（Gemini）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "週（Gemini）"
           }
         }
       }
