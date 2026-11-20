@@ -237,7 +237,7 @@ extension Ghostty.TerminalView {
             }
 
             if isSelecting {
-                let pixelPoint = viewToPixelCoordinates(location)
+                let pixelPoint = viewToPixelCoordinates(touchSelectionDragPoint(for: location))
                 ghostty_surface_mouse_pos(surface, pixelPoint.x, pixelPoint.y, Ghostty.Input.Mods.none.cMods)
                 noteSelectionScrollIndicatorActivity()
                 updateCaptureMagnifier(at: location)
@@ -248,8 +248,10 @@ extension Ghostty.TerminalView {
             selectionDelayTimer = nil
 
             if isSelecting {
-                let pixelPoint = viewToPixelCoordinates(location)
-                ghostty_surface_mouse_pos(surface, pixelPoint.x, pixelPoint.y, Ghostty.Input.Mods.none.cMods)
+                if let releasePoint = touchSelectionReleasePoint(for: location) {
+                    let pixelPoint = viewToPixelCoordinates(releasePoint)
+                    ghostty_surface_mouse_pos(surface, pixelPoint.x, pixelPoint.y, Ghostty.Input.Mods.none.cMods)
+                }
                 sendMouseButton(GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_LEFT)
                 hideSelectionMagnifier()
                 isSelecting = false
@@ -288,6 +290,7 @@ extension Ghostty.TerminalView {
         let pixelPoint = viewToPixelCoordinates(startPoint)
         ghostty_surface_mouse_pos(surface, pixelPoint.x, pixelPoint.y, Ghostty.Input.Mods.none.cMods)
         sendMouseButton(GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT)
+        noteTouchSelectionPress(at: startPoint)
         showCaptureMagnifier(at: startPoint)
         triggerHapticFeedback()
 
@@ -455,6 +458,7 @@ extension Ghostty.TerminalView {
             let pixelPoint = viewToPixelCoordinates(location)
             ghostty_surface_mouse_pos(surface, pixelPoint.x, pixelPoint.y, Ghostty.Input.Mods.none.cMods)
             sendMouseButton(GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT)
+            noteTouchSelectionPress(at: location)
             showCaptureMagnifier(at: location)
 
             triggerHapticFeedback()
@@ -465,7 +469,7 @@ extension Ghostty.TerminalView {
         case .changed:
             guard let surface = surface else { return }
             if isSelecting {
-                let pixelPoint = viewToPixelCoordinates(location)
+                let pixelPoint = viewToPixelCoordinates(touchSelectionDragPoint(for: location))
                 ghostty_surface_mouse_pos(surface, pixelPoint.x, pixelPoint.y, Ghostty.Input.Mods.none.cMods)
                 noteSelectionScrollIndicatorActivity()
                 updateCaptureMagnifier(at: location)
@@ -473,8 +477,10 @@ extension Ghostty.TerminalView {
 
         case .ended, .cancelled, .failed:
             if isSelecting, let surface = surface {
-                let pixelPoint = viewToPixelCoordinates(location)
-                ghostty_surface_mouse_pos(surface, pixelPoint.x, pixelPoint.y, Ghostty.Input.Mods.none.cMods)
+                if let releasePoint = touchSelectionReleasePoint(for: location) {
+                    let pixelPoint = viewToPixelCoordinates(releasePoint)
+                    ghostty_surface_mouse_pos(surface, pixelPoint.x, pixelPoint.y, Ghostty.Input.Mods.none.cMods)
+                }
                 sendMouseButton(GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_LEFT)
                 hideSelectionMagnifier()
                 reloadInputViews()
@@ -4018,6 +4024,7 @@ extension Ghostty.TerminalView {
             // viewToPixelCoordinates is the identity (the surface knows its content
             // scale), matching every other mouse_pos call site.
             let pixelPoint = viewToPixelCoordinates(location)
+            noteTouchSelectionPress(at: location)
             let draggingStart = which == .start
             let owner = Unmanaged.passRetained(self)
             Self.ghosttyAPIQueue.async {
@@ -4056,7 +4063,7 @@ extension Ghostty.TerminalView {
             // Pass the unclamped finger location so the core's edge test can
             // start auto-scrolling when the finger reaches the top/bottom of the
             // viewport and extend the selection into scrollback.
-            let pixelPoint = viewToPixelCoordinates(location)
+            let pixelPoint = viewToPixelCoordinates(touchSelectionDragPoint(for: location))
             let owner = Unmanaged.passRetained(self)
             Self.ghosttyAPIQueue.async {
                 ghostty_surface_mouse_pos(surfacePtr, pixelPoint.x, pixelPoint.y, mods)
@@ -4075,12 +4082,14 @@ extension Ghostty.TerminalView {
             hideSelectionMagnifier()
 
             // End the native drag with a normal left-button release (queued after
-            // the final position), which stops any active auto-scroll.
+            // any final position), which stops any active auto-scroll.
             let endLocation = location
-            let pixelPoint = viewToPixelCoordinates(location)
+            let releasePixelPoint = touchSelectionReleasePoint(for: location).map(viewToPixelCoordinates)
             let owner = Unmanaged.passRetained(self)
             Self.ghosttyAPIQueue.async {
-                ghostty_surface_mouse_pos(surfacePtr, pixelPoint.x, pixelPoint.y, mods)
+                if let releasePixelPoint {
+                    ghostty_surface_mouse_pos(surfacePtr, releasePixelPoint.x, releasePixelPoint.y, mods)
+                }
                 ghostty_surface_mouse_button(surfacePtr, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, mods)
                 let hasSelection = ghostty_surface_has_selection(surfacePtr)
                 DispatchQueue.main.async {

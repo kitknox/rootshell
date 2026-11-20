@@ -31,6 +31,13 @@ extension Ghostty.TerminalView {
         static let minimumWheelReportsPerSecond: CGFloat = 2
         static let maximumWheelReportsPerSecond: CGFloat = 10
         static let fullSpeedOvershoot: CGFloat = 100
+        /// Less room than this (a minimum touch target) past a touch selection's
+        /// edge row is too little to drag into.
+        static let touchSelectionComfortableReach: CGFloat = 44
+        /// A finger's reported location can't get within ~16pt of a physical
+        /// screen edge (measured on Duo's outer display with a case), so a band
+        /// against one reaches this far from it.
+        static let touchSelectionScreenEdgeBand: CGFloat = 24
     }
 
     private static var captureAutoScrollDirectionKey: UInt8 = 0
@@ -38,6 +45,20 @@ extension Ghostty.TerminalView {
     private static var captureAutoScrollDisplayLinkKey: UInt8 = 0
     private static var captureAutoScrollPinnedPositionKey: UInt8 = 0
     private static var captureAutoScrollEdgeDragPositionKey: UInt8 = 0
+    private static var touchSelectionLastLocationKey: UInt8 = 0
+
+    /// Raw finger location of the last touch selection press or drag sample.
+    private var touchSelectionLastLocation: CGPoint? {
+        get { (objc_getAssociatedObject(self, &Self.touchSelectionLastLocationKey) as? NSValue)?.cgPointValue }
+        set {
+            objc_setAssociatedObject(
+                self,
+                &Self.touchSelectionLastLocationKey,
+                newValue.map { NSValue(cgPoint: $0) },
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
 
     private var captureAutoScrollDirection: CaptureAutoScrollDirection {
         get {
@@ -149,6 +170,76 @@ extension Ghostty.TerminalView {
         captureAutoScrollEdgeDragPosition = .zero
     }
 
+    /// Records the raw location a touch selection pressed at.
+    func noteTouchSelectionPress(at point: CGPoint) {
+        touchSelectionLastLocation = point
+    }
+
+    /// Where a touch selection drag sample reports to the core. The core scrolls
+    /// up only at the surface's top pixel and down only past the grid bottom.
+    /// Under the status bar (worse past a case lip) or above the home-indicator
+    /// strip there is too little room to get there, so the edge row's band
+    /// stands in for it.
+    func touchSelectionDragPoint(for point: CGPoint) -> CGPoint {
+        touchSelectionLastLocation = point
+        guard let window, let geometry = captureAutoScrollGeometry() else { return point }
+        let edgeBand = max(
+            CaptureAutoScrollConstants.minimumEdgeBand,
+            geometry.cellHeightPoints * CaptureAutoScrollConstants.edgeBandCellMultiplier
+        )
+        let comfortableReach = max(
+            CaptureAutoScrollConstants.touchSelectionComfortableReach,
+            geometry.cellHeightPoints
+        )
+
+        let screenEdges = touchSelectionScreenEdges(of: window)
+        let topEdgeBand = screenEdges.top
+            ? max(edgeBand, CaptureAutoScrollConstants.touchSelectionScreenEdgeBand)
+            : edgeBand
+        let bottomEdgeBand = screenEdges.bottom
+            ? max(edgeBand, CaptureAutoScrollConstants.touchSelectionScreenEdgeBand)
+            : edgeBand
+
+        let windowSafeTop = CGPoint(x: 0, y: window.bounds.minY + window.safeAreaInsets.top)
+        let reachableTop = convert(windowSafeTop, from: window).y
+        let topBand = geometry.gridTop - reachableTop < comfortableReach
+            ? max(geometry.gridTop, reachableTop) + topEdgeBand
+            : geometry.gridTop
+        if point.y > 0, point.y < topBand {
+            return CGPoint(x: point.x, y: -geometry.cellHeightPoints / 2)
+        }
+
+        let windowSafeBottom = CGPoint(x: 0, y: window.bounds.maxY - window.safeAreaInsets.bottom)
+        let reachableBottom = convert(windowSafeBottom, from: window).y
+        guard reachableBottom - geometry.gridBottom < comfortableReach,
+              point.y >= min(geometry.gridBottom, reachableBottom) - bottomEdgeBand
+        else { return point }
+        // Just past the core's trigger (grid bottom - 2pt) but inside the
+        // surface, where its smooth-scroll hit test still applies.
+        return CGPoint(x: point.x, y: max(point.y, geometry.gridBottom - 1))
+    }
+
+    /// Whether the window's top and bottom are bare physical screen edges: no
+    /// safe-area inset there, and flush with the screen.
+    private func touchSelectionScreenEdges(of window: UIWindow) -> (top: Bool, bottom: Bool) {
+        guard let screen = window.windowScene?.screen else { return (false, false) }
+        let frame = window.convert(window.bounds, to: screen.coordinateSpace)
+        let screenBounds = screen.bounds
+        return (
+            top: window.safeAreaInsets.top == 0 && frame.minY <= screenBounds.minY + 0.5,
+            bottom: window.safeAreaInsets.bottom == 0 && frame.maxY >= screenBounds.maxY - 0.5
+        )
+    }
+
+    /// The final position to report before a touch selection release, or nil
+    /// when the finger hasn't moved since the last press or sample: a fresh
+    /// remap of an unmoved point would move the endpoint on lift.
+    func touchSelectionReleasePoint(for point: CGPoint) -> CGPoint? {
+        defer { touchSelectionLastLocation = nil }
+        guard point != touchSelectionLastLocation else { return nil }
+        return touchSelectionDragPoint(for: point)
+    }
+
     private func startCaptureAutoScrollIfNeeded() {
         guard captureAutoScrollDisplayLink == nil else { return }
 
@@ -241,7 +332,9 @@ extension Ghostty.TerminalView {
         guard cellWidth > 0, cellHeight > 0 else { return nil }
 
         let padX = CGFloat(PaddingManager.shared.effectivePaddingX)
-        let padY = CGFloat(viewportPadY(cellHeight: Double(cellHeight)) ?? Double(PaddingManager.shared.effectivePaddingY))
+        // The core's unshifted top padding: balance is off, so it is the scaled
+        // configured padding plus the top inset.
+        let padY = HerdrGeometry.padding(PaddingManager.shared.effectivePaddingY, scale: scale) + topInsetPoints
         let gridWidth = CGFloat(size.columns) * cellWidth
         let gridHeight = CGFloat(size.rows) * cellHeight
         let gridLeft = min(max(bounds.minX, padX), bounds.maxX)
