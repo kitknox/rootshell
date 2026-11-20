@@ -61,6 +61,15 @@ class KeyboardToolbarManager {
 
     @ObservationIgnored private var isReloading = false
 
+    /// Set while an undoable edit, an undo or a redo changes the toolbar.
+    @ObservationIgnored private var isRecordingEdit = false
+    /// The toolbar as the undo history last left it; nil with no history.
+    @ObservationIgnored private var recordedState: EditSnapshot?
+    /// The undo managers holding that history.
+    @ObservationIgnored private let historyHolders = NSHashTable<UndoManager>.weakObjects()
+    /// Changes whenever the undo history does, which SwiftUI cannot see for itself.
+    private(set) var historyRevision = 0
+
     // MARK: - Observable Properties
 
     /// The terminal's layout, which every other context shows until it has its own.
@@ -423,11 +432,22 @@ class KeyboardToolbarManager {
 
     // MARK: - Layout Mutations
 
-    nonisolated enum ToolbarSection: Equatable, Sendable {
+    nonisolated enum ToolbarSection: Hashable, Sendable {
         case pinnedLeading
         case mainRow
         case pinnedTrailing
         case drawer(Int)
+
+        /// A lone drawer row is "Drawer"; more are numbered.
+        func title(drawerRows: Int) -> String {
+            switch self {
+            case .pinnedLeading: return String(localized: "Pinned Left")
+            case .mainRow: return String(localized: "Main Row")
+            case .pinnedTrailing: return String(localized: "Pinned Right")
+            case .drawer(let index):
+                return drawerRows == 1 ? String(localized: "Drawer") : String(localized: "Drawer \(index + 1)")
+            }
+        }
     }
 
     /// The optional groups a layout can turn on.
@@ -525,71 +545,73 @@ class KeyboardToolbarManager {
         }
     }
 
-    /// Replaces every row in a single mutation. Used by the UIKit drag editor,
-    /// which computes the complete new ordering from its diffable snapshot.
-    /// A nil pinned group leaves that group as it is.
-    func setLayout(pinnedLeading: [KeySlot]? = nil, mainRow: [KeySlot], pinnedTrailing: [KeySlot]? = nil,
-                   drawerRows: [[KeySlot]], in context: ToolbarContext) {
-        update(context) { layout in
-            if let pinnedLeading, layout.pinnedLeading != nil { layout.pinnedLeading = pinnedLeading }
-            if let pinnedTrailing, layout.pinnedTrailing != nil { layout.pinnedTrailing = pinnedTrailing }
-            layout.mainRow = mainRow
-            layout.drawerRows = drawerRows
+    /// The rows a layout has, in display order.
+    func sections(in context: ToolbarContext) -> [ToolbarSection] {
+        let layout = self.layout(for: context)
+        var sections: [ToolbarSection] = []
+        if layout.pinnedLeading != nil { sections.append(.pinnedLeading) }
+        sections.append(.mainRow)
+        if layout.pinnedTrailing != nil { sections.append(.pinnedTrailing) }
+        sections += layout.drawerRows.indices.map { ToolbarSection.drawer($0) }
+        return sections
+    }
+
+    func slots(in section: ToolbarSection, of context: ToolbarContext) -> [KeySlot] {
+        let layout = self.layout(for: context)
+        switch section {
+        case .pinnedLeading: return layout.pinnedLeading ?? []
+        case .mainRow: return layout.mainRow
+        case .pinnedTrailing: return layout.pinnedTrailing ?? []
+        case .drawer(let index): return layout.drawerRows.indices.contains(index) ? layout.drawerRows[index] : []
         }
     }
 
-    /// Moves a key to the end of the main row or a pinned group, or to the
-    /// front of a drawer row.
-    func moveKey(_ slot: KeySlot, to section: ToolbarSection, in context: ToolbarContext) {
+    /// The row a key is placed in; nil for a hidden or unplaced key.
+    func section(holding slot: KeySlot, in context: ToolbarContext) -> ToolbarSection? {
+        if let keyID = slot.keyID, layout(for: context).hiddenKeys.contains(keyID) { return nil }
+        return sections(in: context).first { slots(in: $0, of: context).contains(slot) }
+    }
+
+    /// Puts keys in a row, ahead of `anchor` or at the end. A hidden key comes
+    /// back and a placed one moves.
+    func placeKeys(_ slots: [KeySlot], in section: ToolbarSection, before anchor: KeySlot? = nil,
+                   in context: ToolbarContext) {
+        let slots = slots.filter { slot in
+            slot != anchor && (slot.customID.map { customKey(for: $0) != nil } ?? true)
+        }
+        guard !slots.isEmpty else { return }
         update(context) { layout in
-            layout.remove(slot)
+            for slot in slots {
+                layout.remove(slot)
+                if let keyID = slot.keyID { layout.hiddenKeys.remove(keyID) }
+            }
+            func inserting(into row: [KeySlot]) -> [KeySlot] {
+                var row = row
+                row.insert(contentsOf: slots, at: anchor.flatMap { row.firstIndex(of: $0) } ?? row.count)
+                return row
+            }
             switch section {
             case .pinnedLeading where layout.pinnedLeading != nil:
-                layout.pinnedLeading?.append(slot)
+                layout.pinnedLeading = inserting(into: layout.pinnedLeading ?? [])
             case .pinnedTrailing where layout.pinnedTrailing != nil:
-                layout.pinnedTrailing?.append(slot)
+                layout.pinnedTrailing = inserting(into: layout.pinnedTrailing ?? [])
             case .pinnedLeading, .pinnedTrailing, .mainRow:
-                layout.mainRow.append(slot)
+                layout.mainRow = inserting(into: layout.mainRow)
             case .drawer(let index):
                 let clamped = max(0, min(layout.drawerRows.count - 1, index))
-                layout.drawerRows[clamped].insert(slot, at: 0)
+                layout.drawerRows[clamped] = inserting(into: layout.drawerRows[clamped])
             }
         }
     }
 
-    /// Moves a key to the start or end of the row that already holds it.
-    func moveKey(_ slot: KeySlot, toStart: Bool, in context: ToolbarContext) {
+    /// Takes keys off a toolbar: a built-in key is hidden, a custom key keeps
+    /// its definition.
+    func removeKeys(_ slots: [KeySlot], in context: ToolbarContext) {
         update(context) { layout in
-            func reposition(_ row: [KeySlot]) -> [KeySlot]? {
-                guard row.contains(slot) else { return nil }
-                let rest = row.filter { $0 != slot }
-                return toStart ? [slot] + rest : rest + [slot]
+            for slot in slots {
+                layout.remove(slot)
+                if let keyID = slot.keyID { layout.hiddenKeys.insert(keyID) }
             }
-            if let row = layout.pinnedLeading.flatMap(reposition) {
-                layout.pinnedLeading = row
-            } else if let row = reposition(layout.mainRow) {
-                layout.mainRow = row
-            } else if let row = layout.pinnedTrailing.flatMap(reposition) {
-                layout.pinnedTrailing = row
-            } else if let index = layout.drawerRows.firstIndex(where: { $0.contains(slot) }),
-                      let row = reposition(layout.drawerRows[index]) {
-                layout.drawerRows[index] = row
-            }
-        }
-    }
-
-    func hideKey(_ keyID: KeyID, in context: ToolbarContext) {
-        update(context) { layout in
-            layout.remove(.builtIn(keyID))
-            layout.hiddenKeys.insert(keyID)
-        }
-    }
-
-    func unhideKey(_ keyID: KeyID, in context: ToolbarContext) {
-        update(context) { layout in
-            guard layout.hiddenKeys.remove(keyID) != nil else { return }
-            // Add back to the first drawer row by default
-            layout.drawerRows[0].append(.builtIn(keyID))
         }
     }
 
@@ -609,6 +631,101 @@ class KeyboardToolbarManager {
         customLayouts = [:]
         customKeys = []
         notifyChange()
+    }
+
+    // MARK: - Undo
+
+    /// Everything a toolbar edit can change.
+    private struct EditSnapshot: Equatable {
+        var config: ToolbarLayoutConfig
+        var customLayouts: [ToolbarContext: ToolbarLayoutConfig]
+        var customKeys: [CustomKey]
+        var keyColors: [String: String]
+    }
+
+    /// The parts of that state one edit changed, as they were before it. Undo
+    /// puts back only these, so it leaves later and unrelated changes alone.
+    private struct EditPatch {
+        var config: ToolbarLayoutConfig?
+        /// A context's own layout; a nil value is a context that had none.
+        var customLayouts: [ToolbarContext: ToolbarLayoutConfig?] = [:]
+        var customKeys: [CustomKey]?
+        var keyColors: [String: String]?
+
+        var isEmpty: Bool {
+            config == nil && customLayouts.isEmpty && customKeys == nil && keyColors == nil
+        }
+    }
+
+    private var editSnapshot: EditSnapshot {
+        EditSnapshot(config: config, customLayouts: customLayouts, customKeys: customKeys, keyColors: keyColors)
+    }
+
+    /// What turns the state now back into `before`.
+    private func patch(restoring before: EditSnapshot) -> EditPatch {
+        var patch = EditPatch()
+        if config != before.config { patch.config = before.config }
+        for context in Self.secondaryContexts where customLayouts[context] != before.customLayouts[context] {
+            patch.customLayouts.updateValue(before.customLayouts[context], forKey: context)
+        }
+        if customKeys != before.customKeys { patch.customKeys = before.customKeys }
+        if keyColors != before.keyColors { patch.keyColors = before.keyColors }
+        return patch
+    }
+
+    /// Applies a patch and returns the one that reverses it.
+    private func apply(_ patch: EditPatch) -> EditPatch {
+        let before = editSnapshot
+        isRecordingEdit = true
+        if let config = patch.config { self.config = config }
+        for (context, layout) in patch.customLayouts { customLayouts[context] = layout }
+        if let customKeys = patch.customKeys { self.customKeys = customKeys }
+        if let keyColors = patch.keyColors { self.keyColors = keyColors }
+        notifyChange()
+        isRecordingEdit = false
+        return self.patch(restoring: before)
+    }
+
+    /// Runs an edit and registers its undo, which in turn registers the redo.
+    func undoably(_ name: String, with undoManager: UndoManager?, _ edit: () -> Void) {
+        let before = editSnapshot
+        isRecordingEdit = true
+        edit()
+        isRecordingEdit = false
+        register(patch(restoring: before), named: name, with: undoManager)
+    }
+
+    private func register(_ patch: EditPatch, named name: String, with undoManager: UndoManager?) {
+        guard !patch.isEmpty else { return }
+        // History kept anywhere else was made against a state this edit has replaced.
+        retireHistory(except: undoManager)
+        recordedState = editSnapshot
+        guard let undoManager else { return }
+        historyHolders.add(undoManager)
+        undoManager.registerUndo(withTarget: self) { [weak undoManager] manager in
+            manager.register(manager.apply(patch), named: name, with: undoManager)
+        }
+        undoManager.setActionName(name)
+        historyRevision += 1
+    }
+
+    /// Drops undo history the toolbar no longer matches. An undo puts back
+    /// whole layouts, so one made before a change from elsewhere would undo
+    /// that change too.
+    private func retireHistory(except keeper: UndoManager? = nil) {
+        for holder in historyHolders.allObjects where holder !== keeper {
+            holder.removeAllActions(withTarget: self)
+            historyHolders.remove(holder)
+        }
+        if keeper == nil { recordedState = nil }
+        historyRevision += 1
+    }
+
+    /// Forgets the history one undo manager holds, when its screen goes away.
+    func forgetHistory(in undoManager: UndoManager) {
+        undoManager.removeAllActions(withTarget: self)
+        historyHolders.remove(undoManager)
+        historyRevision += 1
     }
 
     // MARK: - Custom Key CRUD
@@ -640,38 +757,6 @@ class KeyboardToolbarManager {
         customKeys.first { $0.id == id }
     }
 
-    /// Custom keys a layout places nowhere.
-    func unplacedCustomKeys(in context: ToolbarContext) -> [CustomKey] {
-        let placedIDs = Set(layout(for: context).placedSlots.compactMap(\.customID))
-        return customKeys.filter { !placedIDs.contains($0.id) }
-    }
-
-    /// Removes a custom key from a layout without deleting its definition.
-    func removeCustomKeyFromLayout(id: UUID, in context: ToolbarContext) {
-        update(context) { $0.remove(.custom(id)) }
-    }
-
-    /// Adds a custom key slot to the specified section if the definition exists
-    /// and the key isn't already placed in any row.
-    func addCustomKeyToLayout(id: UUID, section: ToolbarSection, in context: ToolbarContext) {
-        guard customKey(for: id) != nil else { return }
-        let slot = KeySlot.custom(id)
-        update(context) { layout in
-            guard !layout.placedSlots.contains(slot) else { return }
-            switch section {
-            case .pinnedLeading where layout.pinnedLeading != nil:
-                layout.pinnedLeading?.append(slot)
-            case .pinnedTrailing where layout.pinnedTrailing != nil:
-                layout.pinnedTrailing?.append(slot)
-            case .pinnedLeading, .pinnedTrailing, .mainRow:
-                layout.mainRow.append(slot)
-            case .drawer(let index):
-                let clamped = max(0, min(layout.drawerRows.count - 1, index))
-                layout.drawerRows[clamped].append(slot)
-            }
-        }
-    }
-
     // MARK: - Capacity & Effective Layout
 
     /// How many standard buttons fit in the main row before runtime additions.
@@ -681,11 +766,13 @@ class KeyboardToolbarManager {
     }
 
     /// A context's main-row capacity: its minimum key width, less whatever
-    /// its pinned keys need back. `omitting` slots take no room.
+    /// its pinned keys need back. `omitting` slots take no room. `proposed`
+    /// stands in for the layout's pinned keys, to try a layout before it is made.
     func mainRowCapacity(for context: ToolbarContext, availableWidth: CGFloat, reservedMainRowSlots: Int = 0,
-                         sizes: KeyboardSizes, omitting omitted: Set<KeySlot> = []) -> Int {
+                         sizes: KeyboardSizes, omitting omitted: Set<KeySlot> = [],
+                         pinned proposed: [KeySlot]? = nil) -> Int {
         let layout = self.layout(for: context)
-        let pinned = validSlots((layout.pinnedLeading ?? []) + (layout.pinnedTrailing ?? []), in: layout)
+        let pinned = proposed ?? validSlots((layout.pinnedLeading ?? []) + (layout.pinnedTrailing ?? []), in: layout)
             .filter { !omitted.contains($0) }
         return KeyboardToolbarOverflow.capacity(
             usual: mainRowCapacity(availableWidth: availableWidth, sizes: sizes),
@@ -796,6 +883,8 @@ class KeyboardToolbarManager {
     }
 
     private func notifyChange() {
+        // A change that no undoable edit made: sync, another screen, a reset.
+        if !isRecordingEdit, let recordedState, recordedState != editSnapshot { retireHistory() }
         NotificationCenter.default.post(name: Self.layoutDidChangeNotification, object: nil)
     }
 }

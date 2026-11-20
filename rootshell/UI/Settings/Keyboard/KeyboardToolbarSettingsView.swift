@@ -18,6 +18,17 @@ extension ToolbarContext {
     }
 }
 
+/// Ends the toolbar's undo history with the screen that made it, so an undo
+/// somewhere else in the window cannot reach back into it.
+private final class ToolbarHistoryScope {
+    weak var undoManager: UndoManager?
+
+    deinit {
+        guard let undoManager else { return }
+        Task { @MainActor in KeyboardToolbarManager.shared.forgetHistory(in: undoManager) }
+    }
+}
+
 struct KeyboardToolbarSettingsView: View {
     @Environment(\.sheetThemeColors) private var sheetThemeColors
     #if os(visionOS)
@@ -32,6 +43,27 @@ struct KeyboardToolbarSettingsView: View {
     @State private var previewMetrics = ToolbarLayoutPreviewMetrics()
     @State private var showingResetConfirmation = false
     @State private var showingResetAllConfirmation = false
+    @State private var isSelecting = false
+    @State private var selection: Set<KeySlot> = []
+    @State private var collapsed: Set<KeyboardToolbarManager.ToolbarSection> = []
+    /// The key the preview flashes, and the one the list scrolls to.
+    @State private var previewPulse: ToolbarKeyPulse?
+    @State private var listReveal: ToolbarKeyPulse?
+    @State private var pulseToken = 0
+    @State private var editorRefreshToken = 0
+    @State private var historyScope = ToolbarHistoryScope()
+    @State private var listHeight: CGFloat = 0
+    @State private var addKeyTarget: AddKeyTarget?
+    @State private var editingCustomKey: CustomKey?
+    @State private var showingNewCustomKey = false
+    @State private var showingSave = false
+    @State private var saveName = ""
+    /// An edit waiting on whether it may change the Terminal toolbar too.
+    @State private var pendingSharedEdit: PendingSharedEdit?
+    /// Toolbars the user chose to edit together with the Terminal toolbar.
+    @State private var sharedEditsAllowed: Set<ToolbarContext> = []
+    @Environment(\.undoManager) private var undoManager
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Setting(Settings.Keyboard.touchEnabled) private var terminalKeyboard
     @Setting(Settings.ScreenSharing.floatingToolbarDefault) private var floatingBar
 
@@ -49,6 +81,24 @@ struct KeyboardToolbarSettingsView: View {
     private var surfaces: [ToolbarPreviewSurface] {
         ToolbarPreviewSurface.available(for: context, terminalKeyboard: terminalKeyboard, floatingBar: floatingBar)
     }
+    /// The preview stays put only where it leaves most of the height to the
+    /// list: not on a phone on its side, and not once its drawer rows stack up
+    /// on a short display.
+    private var pinsPreview: Bool {
+        guard verticalSizeClass != .compact else { return false }
+        let rows = 2 + (layout.drawerRows.lastIndex { !$0.isEmpty } ?? -1)
+        return listHeight == 0 || CGFloat(rows) * 46 + 20 <= listHeight * 0.3
+    }
+
+    private struct AddKeyTarget: Identifiable {
+        let section: KeyboardToolbarManager.ToolbarSection
+        var id: KeyboardToolbarManager.ToolbarSection { section }
+    }
+
+    private struct PendingSharedEdit {
+        let run: (ToolbarContext) -> Void
+    }
+
     /// A choice this toolbar does not offer falls back to its first surface.
     private var previewSurface: ToolbarPreviewSurface {
         chosenSurface.flatMap { surfaces.contains($0) ? $0 : nil } ?? surfaces[0]
@@ -71,17 +121,19 @@ struct KeyboardToolbarSettingsView: View {
             }
             toolbarLayoutSection
             customKeysSection
-            hiddenKeysSection
             relatedSection
-            resetSection
         }
         .themedList()
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { listHeight = $0 }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if pinsPreview { pinnedPreview }
+        }
         // No text input on this screen, so keyboard avoidance is pure downside:
         // when the sheet is presented from the keyboard toolbar the keyboard is
         // still animating away, and on iPad the List latches its bottom inset
         // as a permanent stretch of blank scrollable space after the last section.
         .ignoresSafeArea(.keyboard)
-        .navigationTitle("Toolbar Keys")
+        .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             #if os(visionOS)
@@ -91,13 +143,74 @@ struct KeyboardToolbarSettingsView: View {
                 }
             }
             #endif
-            ToolbarItem(placement: .navigationBarTrailing) {
-                EditButton()
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Button(isSelecting ? "Done" : "Select") {
+                    setSelecting(!isSelecting)
+                }
+                moreMenu
+            }
+            if isSelecting {
+                ToolbarItemGroup(placement: .bottomBar) { selectionBar }
             }
         }
+        .navigationDestination(item: $editingCustomKey) { key in
+            CustomKeyEditorView(existingKey: key, context: context,
+                                onSave: { manager.updateCustomKey($0) },
+                                onDelete: { manager.deleteCustomKey(id: key.id) })
+        }
+        .navigationDestination(isPresented: $showingNewCustomKey) {
+            CustomKeyEditorView(context: context, onSave: { key in
+                edit(String(localized: "Add Custom Key"), keys: [.custom(key.id)]) {
+                    manager.createCustomKey(key, in: $0)
+                }
+            })
+        }
+        .sheet(item: $addKeyTarget) { target in
+            ToolbarAddKeySheet(context: context, section: target.section, add: { slot in
+                edit(String(localized: "Add Key"), keys: [slot]) {
+                    manager.placeKeys([slot], in: target.section, in: $0)
+                }
+            }, create: { key in
+                edit(String(localized: "Add Key"), keys: [.custom(key.id)]) {
+                    manager.createCustomKey(key, in: $0)
+                    manager.placeKeys([.custom(key.id)], in: target.section, in: $0)
+                }
+            })
+            .themedSubSheet(sheetThemeColors)
+        }
+        .alert("Change the Terminal Toolbar Too?", isPresented: Binding(
+            get: { pendingSharedEdit != nil },
+            set: { if !$0 { pendingSharedEdit = nil } }
+        ), presenting: pendingSharedEdit) { pending in
+            Button("Change Both") {
+                sharedEditsAllowed.insert(context)
+                pending.run(.terminal)
+            }
+            Button("Customize \(context.displayName) Only") {
+                manager.undoably(String(localized: "Customize Toolbar"), with: undoManager) {
+                    manager.splitLayout(for: context)
+                }
+                pending.run(context)
+            }
+            Button("Cancel", role: .cancel) {
+                // The list may already show the change that was called off.
+                editorRefreshToken += 1
+            }
+        } message: { _ in
+            Text("\(context.displayName) uses the Terminal toolbar, so this changes both. Customizing gives \(context.displayName) a copy of its own and leaves the Terminal toolbar as it is.")
+        }
+        .alert("Save Layout", isPresented: $showingSave) {
+            TextField("Name", text: $saveName)
+            Button("Save") { manager.saveLayout(of: context, named: saveName) }
+            Button("Cancel", role: .cancel) {}
+        }
+        // The history outlives a visit to a subpage and ends with this screen.
+        .onAppear { historyScope.undoManager = undoManager }
+        .onChange(of: undoManager) { historyScope.undoManager = undoManager }
         .confirmationDialog(resetTitle, isPresented: $showingResetConfirmation) {
             Button(role: .destructive) {
-                manager.resetLayout(for: context)
+                manager.undoably(String(localized: "Reset Toolbar"), with: undoManager) { manager.resetLayout(for: context) }
+                sharedEditsAllowed.remove(context)
             } label: {
                 context == .terminal ? Text("Reset") : Text("Use Terminal Toolbar")
             }
@@ -106,7 +219,10 @@ struct KeyboardToolbarSettingsView: View {
         }
         .confirmationDialog("Reset All Toolbars?", isPresented: $showingResetAllConfirmation) {
             Button("Reset", role: .destructive) {
-                manager.resetToDefaults()
+                manager.undoably(String(localized: "Reset All Toolbars"), with: undoManager) {
+                    manager.resetToDefaults()
+                }
+                sharedEditsAllowed.removeAll()
             }
         } message: {
             Text("This will restore the default Terminal toolbar, remove the Screen Sharing and KVM toolbars' own layouts, and delete all custom keys. Saved layouts are kept.")
@@ -123,6 +239,7 @@ struct KeyboardToolbarSettingsView: View {
                     context = $0
                     // Each toolbar opens on the surface it appears on first.
                     chosenSurface = nil
+                    setSelecting(false)
                 }
             )) {
                 ForEach(ToolbarContext.allCases, id: \.self) { context in
@@ -144,14 +261,181 @@ struct KeyboardToolbarSettingsView: View {
                 get: { previewSurface },
                 set: { chosenSurface = $0 }
             ))
-            ToolbarLayoutPreview(toolbar: context, surface: previewSurface, showsDrawers: true,
-                                 metrics: $previewMetrics)
-                .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
-                .themedRow()
+            if !pinsPreview {
+                preview
+                    .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
+                    .themedRow()
+            }
         } header: {
-            Text("Preview")
+            if !pinsPreview { Text("Preview") }
         } footer: {
-            Text(previewFooter)
+            Text(previewFooter + " " + String(localized: "Tap a key to find it in the list. Touch and hold a key to drag it to a new place."))
+        }
+    }
+
+    private var preview: some View {
+        ToolbarLayoutPreview(toolbar: context, surface: previewSurface, showsDrawers: true,
+                             metrics: $previewMetrics, pulse: previewPulse,
+                             actions: ToolbarPreviewActions(selectKey: { slot in
+                                 listReveal = nextPulse(slot)
+                             }, moveKey: movePreviewKey))
+    }
+
+    /// The preview held above the list, so it shows what each edit does.
+    private var pinnedPreview: some View {
+        VStack(spacing: 0) {
+            preview
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            Divider()
+        }
+        .background(sheetThemeColors?.background ?? Color(uiColor: .systemGroupedBackground))
+    }
+
+    private func nextPulse(_ slot: KeySlot) -> ToolbarKeyPulse {
+        pulseToken += 1
+        return ToolbarKeyPulse(slot: slot, token: pulseToken)
+    }
+
+    // MARK: - Edits
+
+    /// Runs an action on the layout edits should change. While this toolbar
+    /// still shows the Terminal's, it asks first which of the two to change.
+    @discardableResult
+    private func onEditableLayout(_ action: @escaping (ToolbarContext) -> Void) -> Bool {
+        guard hasOwnLayout || sharedEditsAllowed.contains(context) else {
+            pendingSharedEdit = PendingSharedEdit(run: action)
+            return false
+        }
+        action(editedContext)
+        return true
+    }
+
+    /// One undoable change to the layout. The preview flashes the first of `keys`.
+    @discardableResult
+    private func edit(_ name: String, keys: [KeySlot] = [], _ change: @escaping (ToolbarContext) -> Void) -> Bool {
+        onEditableLayout { target in
+            manager.undoably(name, with: undoManager) { change(target) }
+            if let key = keys.first { previewPulse = nextPulse(key) }
+        }
+    }
+
+    /// A drag in the preview dropped a key at a place the preview worked out.
+    private func movePreviewKey(_ slot: KeySlot, to section: KeyboardToolbarManager.ToolbarSection,
+                                before anchor: KeySlot?) {
+        edit(String(localized: "Move Key"), keys: [slot]) { target in
+            manager.placeKeys([slot], in: section, before: anchor, in: target)
+        }
+    }
+
+    // MARK: - Selecting
+
+    /// While selecting, the title counts the keys picked.
+    private var navigationTitle: String {
+        guard isSelecting else { return String(localized: "Toolbar Keys") }
+        let count = selectedKeys.count
+        return count == 0 ? String(localized: "Select Keys") : String(localized: "\(count) Selected")
+    }
+
+    /// The selected keys still on the toolbar, in the order the layout places them.
+    private var selectedKeys: [KeySlot] {
+        layout.placedSlots.filter(selection.contains)
+    }
+
+    private func setSelecting(_ selecting: Bool) {
+        isSelecting = selecting
+        selection = []
+    }
+
+    @ViewBuilder
+    private var selectionBar: some View {
+        let keys = selectedKeys
+        let drawerRows = layout.drawerRows.count
+        Menu("Move To") {
+            ForEach(manager.sections(in: editedContext), id: \.self) { section in
+                Button {
+                    // The selection lasts until the edit runs, which may wait on a question.
+                    edit(String(localized: "Move Keys"), keys: keys) {
+                        manager.placeKeys(keys, in: section, in: $0)
+                        setSelecting(false)
+                    }
+                } label: {
+                    Label(section.title(drawerRows: drawerRows), systemImage: section.symbolName)
+                }
+            }
+        }
+        .disabled(keys.isEmpty)
+        Spacer()
+        // A built-in key is hidden; a custom key only leaves this toolbar.
+        Button(keys.contains { $0.customID != nil } ? "Remove" : "Hide", role: .destructive) {
+            edit(String(localized: "Remove Keys")) {
+                manager.removeKeys(keys, in: $0)
+                setSelecting(false)
+            }
+        }
+        .disabled(keys.isEmpty)
+    }
+
+    // MARK: - More Menu
+
+    private var moreMenu: some View {
+        // Read here so the Undo and Redo rows are redrawn when the history changes.
+        let _ = manager.historyRevision
+        return Menu {
+            // The navigation bar can scroll away on a small display; this menu stays.
+            Button {
+                setSelecting(!isSelecting)
+            } label: {
+                if isSelecting {
+                    Label("Done Selecting", systemImage: "checkmark.circle.fill")
+                } else {
+                    Label("Select Keys", systemImage: "checkmark.circle")
+                }
+            }
+
+            Divider()
+            Button {
+                undoManager?.undo()
+            } label: {
+                Label(undoManager?.undoMenuItemTitle ?? String(localized: "Undo"), systemImage: "arrow.uturn.backward")
+            }
+            .disabled(undoManager?.canUndo != true)
+            Button {
+                undoManager?.redo()
+            } label: {
+                Label(undoManager?.redoMenuItemTitle ?? String(localized: "Redo"), systemImage: "arrow.uturn.forward")
+            }
+            .disabled(undoManager?.canRedo != true)
+
+            Divider()
+            Button {
+                saveName = manager.suggestedSaveName(for: context)
+                showingSave = true
+            } label: {
+                Label("Save Layout…", systemImage: "tray.and.arrow.down")
+            }
+
+            Divider()
+            if hasOwnLayout {
+                Button(role: .destructive) {
+                    showingResetConfirmation = true
+                } label: {
+                    if context == .terminal {
+                        Label("Reset to Defaults", systemImage: "arrow.counterclockwise")
+                    } else {
+                        Label("Use Terminal Toolbar", systemImage: "arrow.uturn.backward")
+                    }
+                }
+                .disabled(!manager.isCustomized(context))
+            }
+            Button(role: .destructive) {
+                showingResetAllConfirmation = true
+            } label: {
+                Label("Reset All Toolbars", systemImage: "trash")
+            }
+            .disabled(!manager.isCustomized)
+        } label: {
+            Label("More", systemImage: "ellipsis.circle")
         }
     }
 
@@ -251,7 +535,9 @@ struct KeyboardToolbarSettingsView: View {
     private var sharedLayoutSection: some View {
         Section {
             Button {
-                manager.splitLayout(for: context)
+                manager.undoably(String(localized: "Customize Toolbar"), with: undoManager) {
+                    manager.splitLayout(for: context)
+                }
             } label: {
                 Label("Customize This Toolbar", systemImage: "plus.square.on.square")
             }
@@ -276,7 +562,18 @@ struct KeyboardToolbarSettingsView: View {
             toolbar: editedContext,
             themeColors: sheetThemeColors,
             capacity: previewMetrics.capacity,
+            overflowing: previewMetrics.overflowing,
             marksHostBarKeys: context.usesGlassBar,
+            isSelecting: isSelecting,
+            selection: $selection,
+            collapsed: $collapsed,
+            reveal: listReveal,
+            refreshToken: editorRefreshToken,
+            actions: ToolbarLayoutEditorActions(
+                edit: { name, keys, change in edit(name, keys: keys, change) },
+                record: { name, change in manager.undoably(name, with: undoManager, change) },
+                addKey: { section in onEditableLayout { _ in addKeyTarget = AddKeyTarget(section: section) } },
+                editCustomKey: { editingCustomKey = manager.customKey(for: $0) }),
             contentHeight: $editorContentHeight
         )
         // The editor is bound to one layout; another toolbar needs a new editor.
@@ -320,13 +617,9 @@ struct KeyboardToolbarSettingsView: View {
                 .themedRow()
             }
 
-            NavigationLink {
-                CustomKeyEditorView(
-                    context: context,
-                    onSave: { newKey in
-                        manager.createCustomKey(newKey, in: editedContext)
-                    }
-                )
+            // A new key joins this toolbar's first drawer row, so a shared layout asks first.
+            Button {
+                onEditableLayout { _ in showingNewCustomKey = true }
             } label: {
                 Label("New Custom Key", systemImage: "plus.circle")
             }
@@ -334,62 +627,7 @@ struct KeyboardToolbarSettingsView: View {
         } header: {
             Text("Custom Keys")
         } footer: {
-            Text("Create buttons that send key sequences. Custom keys are shared by every toolbar; each toolbar chooses where to place them.")
-        }
-    }
-
-    // MARK: - Hidden Keys Section
-
-    private var hiddenKeysSection: some View {
-        let hiddenKeys = layout.hiddenKeys.sorted { $0.rawValue < $1.rawValue }
-        let unplacedKeys = manager.unplacedCustomKeys(in: editedContext)
-        return Section {
-            if hiddenKeys.isEmpty && unplacedKeys.isEmpty {
-                Text("No hidden keys.")
-                    .foregroundStyle(.secondary)
-                    .font(.subheadline)
-                    .themedRow()
-            } else {
-                ForEach(hiddenKeys, id: \.self) { keyID in
-                    Button {
-                        manager.unhideKey(keyID, in: editedContext)
-                    } label: {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(.green)
-                            keyBadge(symbol: keyID.iconName, text: keyID.keyValue)
-                            Text(keyID.displayName)
-                                .foregroundStyle(.primary)
-                        }
-                    }
-                    .themedRow()
-                }
-                ForEach(unplacedKeys) { key in
-                    Button {
-                        manager.addCustomKeyToLayout(id: key.id, section: .drawer(0), in: editedContext)
-                    } label: {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(.green)
-                            keyBadge(symbol: key.iconName, text: String(key.label.prefix(2)))
-                            Text(key.label)
-                                .foregroundStyle(.primary)
-                        }
-                    }
-                    .themedRow()
-                    .swipeActions(edge: .trailing) {
-                        Button("Delete", role: .destructive) {
-                            manager.deleteCustomKey(id: key.id)
-                        }
-                    }
-                }
-            }
-        } header: {
-            Text("Hidden Keys")
-        } footer: {
-            if !hiddenKeys.isEmpty || !unplacedKeys.isEmpty {
-                Text("Tap to restore a hidden key to the drawer. Swipe left on a custom key to delete it.")
-            }
+            Text("Create buttons that send key sequences. Custom keys are shared by every toolbar; each toolbar places them from a row's + button.")
         }
     }
 
@@ -423,41 +661,7 @@ struct KeyboardToolbarSettingsView: View {
         }
     }
 
-    // MARK: - Reset Section
-
-    private var resetSection: some View {
-        Section {
-            if hasOwnLayout {
-                Button(role: .destructive) {
-                    showingResetConfirmation = true
-                } label: {
-                    HStack {
-                        Spacer()
-                        if context == .terminal {
-                            Label("Reset to Defaults", systemImage: "arrow.counterclockwise")
-                        } else {
-                            Label("Use Terminal Toolbar", systemImage: "arrow.uturn.backward")
-                        }
-                        Spacer()
-                    }
-                }
-                .disabled(!manager.isCustomized(context))
-                .themedRow()
-            }
-
-            Button(role: .destructive) {
-                showingResetAllConfirmation = true
-            } label: {
-                HStack {
-                    Spacer()
-                    Label("Reset All Toolbars", systemImage: "trash")
-                    Spacer()
-                }
-            }
-            .disabled(!manager.isCustomized)
-            .themedRow()
-        }
-    }
+    // MARK: - Reset
 
     private var resetTitle: String {
         context == .terminal
@@ -467,25 +671,7 @@ struct KeyboardToolbarSettingsView: View {
 
     private var resetMessage: String {
         context == .terminal
-            ? String(localized: "This will restore the default key layout. Custom keys stay available under Hidden Keys.")
+            ? String(localized: "This will restore the default key layout. Custom keys stay available from each row's + button.")
             : String(localized: "This removes this toolbar's own layout. It will show the Terminal toolbar again.")
-    }
-
-    // MARK: - Badge Views
-
-    private func keyBadge(symbol: String?, text: String) -> some View {
-        Group {
-            if let symbol {
-                Image(systemName: symbol)
-                    .font(.caption)
-            } else {
-                Text(text)
-                    .font(.system(.caption, design: .monospaced))
-            }
-        }
-        .foregroundStyle(.tint)
-        .frame(width: 28, height: 28)
-        .background(sheetThemeColors?.rowBackground ?? Color(uiColor: .tertiarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }

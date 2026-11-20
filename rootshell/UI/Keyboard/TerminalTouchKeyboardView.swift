@@ -669,6 +669,42 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     /// Width the gaps beside the pinned sections take from the row.
     private var toolbarSectionGaps: CGFloat = 0
     private var configuredDrawers: [[Model.Key]] = []
+    /// The layout slot each configured toolbar key stands for.
+    private var slotsByToolbarKey: [Model.Key: KeySlot] = [:]
+
+    /// The toolbar keys in the main row and the open drawers, for a settings preview to hit-test.
+    func previewToolbarKeys() -> [ToolbarPreviewKey] {
+        var keys: [ToolbarPreviewKey] = []
+        func add(_ caps: some Sequence<TerminalTouchKeycap>) {
+            for cap in caps {
+                guard let slot = slotsByToolbarKey[cap.key] else { continue }
+                keys.append(ToolbarPreviewKey(slot: slot, frame: cap.convert(cap.bounds, to: self), scrollView: nil))
+            }
+        }
+        func add(_ buttons: [TerminalTouchDrawerButton], in row: UIScrollView, drawer: Int?) {
+            for button in buttons {
+                guard let slot = slotsByToolbarKey[button.keycap.key] else { continue }
+                keys.append(ToolbarPreviewKey(slot: slot, frame: button.convert(button.bounds, to: self),
+                                              scrollView: row, drawer: drawer))
+            }
+        }
+        // In the order the row draws: a scrolling middle sits between the pinned ends.
+        let leading = toolbarMiddleRow == nil ? controls.count : toolbarPinned.leading
+        add(controls.prefix(leading))
+        if let toolbarMiddleRow { add(toolbarMiddleButtons, in: toolbarMiddleRow, drawer: nil) }
+        add(controls.dropFirst(leading))
+        for (index, (row, buttons)) in zip(toolbarDrawerIndices, zip(toolbarDrawerRows, toolbarDrawerButtons)) {
+            add(buttons, in: row, drawer: index)
+        }
+        return keys
+    }
+
+    /// Main-row keys this width sends to the drawer.
+    var overflowedToolbarSlots: Set<KeySlot> {
+        let shown = Set(controls.map(\.key) + toolbarMiddleKeys)
+        let configured = configuredLeading + configuredMain + configuredTrailing
+        return Set(configured.filter { !shown.contains($0) }.compactMap { slotsByToolbarKey[$0] })
+    }
     private var rows: [[TerminalTouchKeycap]] = []
     private var controls: [TerminalTouchKeycap] = []
     private let background = UIView()
@@ -1510,6 +1546,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
 
     private func loadToolbarConfiguration() {
         guard !hidesToolbar else {
+            slotsByToolbarKey.removeAll()
             configuredDrawerToggle = nil
             configuredLeading = []
             configuredMain = []
@@ -1524,7 +1561,7 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
         }
         let manager = KeyboardToolbarManager.shared
         let toolbarLayout = manager.layout(for: toolbarContext)
-        func key(for slot: KeySlot) -> Model.Key? {
+        func makeKey(for slot: KeySlot) -> Model.Key? {
             let glyphColor = manager.glyphColorHex(for: slot)
             switch slot {
             case .custom(let id):
@@ -1558,6 +1595,12 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
                                  glyphColor: glyphColor)
             }
         }
+        slotsByToolbarKey.removeAll()
+        func key(for slot: KeySlot) -> Model.Key? {
+            let key = makeKey(for: slot)
+            if let key { slotsByToolbarKey[key] = slot }
+            return key
+        }
         configuredDrawerToggle = key(for: .builtIn(.drawerToggle))
         configuredLeading = (toolbarLayout.pinnedLeading ?? []).compactMap(key)
         configuredMain = toolbarLayout.mainRow.compactMap(key)
@@ -1575,10 +1618,25 @@ final class TerminalTouchKeyboardView: UIView, KeyboardButtonDelegate, UIGesture
     /// Keys the toolbar row holds at a width, for the configured layout.
     private func toolbarSlots(width: CGFloat) -> Int {
         let pinned = configuredLeading + configuredTrailing
-        return Model.toolbarCapacity(
-            width: toolbarWidth(width), minimumKeyWidth: configuredMinimumKeyWidth, pinned: pinned.count,
-            drawerToggle: configuredDrawerToggle.map { !pinned.contains($0) } ?? false,
-            scrolls: configuredMainScrolls)
+        return toolbarCapacity(width: width, pinned: pinned.count,
+                               togglePinned: configuredDrawerToggle.map(pinned.contains) ?? false,
+                               scrolls: configuredMainScrolls)
+    }
+
+    private func toolbarCapacity(width: CGFloat, pinned: Int, togglePinned: Bool, scrolls: Bool) -> Int {
+        Model.toolbarCapacity(
+            width: toolbarWidth(width), minimumKeyWidth: configuredMinimumKeyWidth, pinned: pinned,
+            drawerToggle: configuredDrawerToggle != nil && !togglePinned, scrolls: scrolls)
+    }
+
+    /// The toolbar row's capacity were these keys the pinned ones, for a
+    /// settings preview to try a layout. A row that scrolls counts its slots
+    /// one way and one that overflows another.
+    func previewToolbarCapacity(leading: [KeySlot], trailing: [KeySlot], scrolling: Bool) -> Int {
+        let pinned = leading + trailing
+        return toolbarCapacity(width: max(0, bounds.width - safeAreaInsets.left - safeAreaInsets.right),
+                               pinned: pinned.count, togglePinned: pinned.contains(.builtIn(.drawerToggle)),
+                               scrolls: scrolling)
     }
 
     /// The one fitting of the configured rows. Building the keys and checking
