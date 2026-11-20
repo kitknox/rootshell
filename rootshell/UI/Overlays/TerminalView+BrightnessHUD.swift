@@ -106,6 +106,27 @@ extension Ghostty.TerminalView {
         #endif
     }
 
+    /// The HUD's bottom offset, clear of the band drawn under the toolbar and keyboard.
+    /// A short pane shrinks the 80 pt gap; one shorter than the HUD keeps its top
+    /// (the slider) at the pane's top.
+    private func brightnessHUDBottomOffset(hudHeight: CGFloat) -> CGFloat {
+        let room = bounds.height - bottomUnderlap - hudHeight
+        let gap = room >= 0 ? min(80, room / 2) : room
+        return -(bottomUnderlap + gap)
+    }
+
+    private func brightnessHUDHeight(_ host: UIHostingController<BrightnessBoostHUDView>) -> CGFloat {
+        let height = host.view.intrinsicContentSize.height
+        return height > 0 ? height : host.sizeThatFits(in: bounds.size).height
+    }
+
+    /// Re-fit the HUD after the pane's size or underlap changes.
+    func updateBrightnessHUDPlacement() {
+        guard let host = brightnessHUDHost, let constraint = brightnessHUDBottomConstraint else { return }
+        let offset = brightnessHUDBottomOffset(hudHeight: brightnessHUDHeight(host))
+        if constraint.constant != offset { constraint.constant = offset }
+    }
+
     /// Toggle the brightness HUD: open it if hidden, dismiss it if shown.
     func toggleBrightnessHUD() {
         if brightnessHUDHost != nil {
@@ -142,11 +163,14 @@ extension Ghostty.TerminalView {
         host.view.translatesAutoresizingMaskIntoConstraints = false
 
         addSubview(host.view)
+        let bottom = host.view.bottomAnchor.constraint(
+            equalTo: bottomAnchor, constant: brightnessHUDBottomOffset(hudHeight: brightnessHUDHeight(host)))
         NSLayoutConstraint.activate([
             host.view.centerXAnchor.constraint(equalTo: centerXAnchor),
-            host.view.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -80),
+            bottom,
         ])
         brightnessHUDHost = host
+        brightnessHUDBottomConstraint = bottom
 
         LifecycleDebugLogger.shared.checkpoint("FG.hdr.hud.show", ms: nil, [
             ("headroom", Double(headroom)),
@@ -186,6 +210,7 @@ extension Ghostty.TerminalView {
         }, completion: { [weak self] _ in
             host.view.removeFromSuperview()
             self?.brightnessHUDHost = nil
+            self?.brightnessHUDBottomConstraint = nil
         })
     }
 }

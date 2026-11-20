@@ -1285,6 +1285,8 @@ extension Ghostty {
         /// (iOS/iPadOS/Catalyst/visionOS) — unlike the dimension overlay, the
         /// brightness HUD is reachable on Catalyst via the hardware keybind.
         var brightnessHUDHost: UIHostingController<BrightnessBoostHUDView>?
+        /// Follows the pane's visible height so the HUD stays above the toolbar and keyboard.
+        var brightnessHUDBottomConstraint: NSLayoutConstraint?
         /// Auto-hide timer for the brightness HUD.
         var brightnessHUDHideTask: Task<Void, Never>?
 
@@ -3887,6 +3889,7 @@ extension Ghostty {
         
         override func layoutSubviews() {
             super.layoutSubviews()
+            updateBrightnessHUDPlacement()
 
             // On Mac Catalyst, batch the sublayer-frame change with the
             // surface-size update inside one CATransaction so Core Animation
