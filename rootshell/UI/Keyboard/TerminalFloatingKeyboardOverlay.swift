@@ -11,7 +11,7 @@ extension Notification.Name {
 /// installed on the keyboard never do.
 enum TerminalTouchKeyboardEvent {
     case modifiersChanged(KeyModifiers)
-    case dismiss, pinHidden, switchToSystemKeyboard, compose, paste, tabs, customize
+    case dismiss, pinHidden, oneShotKeyboard, switchToSystemKeyboard, compose, paste, tabs, customize
     case toolbarAction(String)
     case modifierDoublePress(KeyModifiers)
     case heightChanged
@@ -163,6 +163,7 @@ final class TerminalTouchKeyboardWindowState {
         keyboard.onModifiersChanged = { [weak self] in self?.owner?.handleTouchKeyboardEvent(.modifiersChanged($0)) }
         keyboard.onDismiss = { [weak self] in self?.owner?.handleTouchKeyboardEvent(.dismiss) }
         keyboard.onPinHidden = { [weak self] in self?.owner?.handleTouchKeyboardEvent(.pinHidden) }
+        keyboard.onOneShotKeyboard = { [weak self] in self?.owner?.handleTouchKeyboardEvent(.oneShotKeyboard) }
         keyboard.onModifierDoublePress = { [weak self] in self?.owner?.handleTouchKeyboardEvent(.modifierDoublePress($0)) }
         keyboard.onSwitchKeyboard = { [weak self] in self?.owner?.handleTouchKeyboardEvent(.switchToSystemKeyboard) }
         keyboard.onCompose = { [weak self] in self?.owner?.handleTouchKeyboardEvent(.compose) }

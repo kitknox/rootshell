@@ -581,6 +581,9 @@ class KeyboardToolbarView: UIView {
     /// Callback when the dismiss button is long-pressed to pin the keyboard hidden
     var onPinHiddenRequested: (() -> Void)?
 
+    /// A one-shot custom key finished sending and wants the keyboard for one input.
+    var onOneShotKeyboardRequested: (() -> Void)?
+
     /// Callback when tab switcher button is tapped
     var onTabSwitcherRequested: (() -> Void)?
 
@@ -2503,12 +2506,17 @@ extension KeyboardToolbarView: KeyboardButtonDelegate {
             if let uuid = UUID(uuidString: uuidString),
                let customKey = KeyboardToolbarManager.shared.customKey(for: uuid) {
 
+                // A one-shot key opens the keyboard only once its own keys
+                // are out, so they never count as the one input.
+                let opensKeyboard = customKey.showsKeyboardOnce ? onOneShotKeyboardRequested : nil
+
                 // Simple single-character custom keys (no baked-in modifiers)
                 // go through the normal key path so toolbar modifiers apply.
                 if let plainChar = customKey.plainCharacter {
                     let combinedModifiers = combinedModifiersIncludingSystemShift(modifiers)
                     self.delegate?.keyPressed(String(plainChar), modifiers: combinedModifiers)
                     clearOneShotModifiers()
+                    opensKeyboard?()
                     return
                 }
 
@@ -2516,10 +2524,11 @@ extension KeyboardToolbarView: KeyboardButtonDelegate {
                 if let input = customKey.plainSpecialKeyInput, !combinedModifiers.isEmpty {
                     self.delegate?.keyPressed(input, modifiers: combinedModifiers)
                     clearOneShotModifiers()
+                    opensKeyboard?()
                     return
                 }
 
-                sendCustomKeySequence(customKey.sequence)
+                sendCustomKeySequence(customKey.sequence, completion: opensKeyboard)
             }
             clearOneShotModifiers()
             return
@@ -2572,8 +2581,8 @@ extension KeyboardToolbarView: KeyboardButtonDelegate {
     /// Send a custom key sequence to the terminal. Forwards to the shared
     /// `KeyboardButtonDelegate.sendSequenceSteps` so the toolbar and the
     /// swipe-gesture system go through the same per-step + post-ESC delay logic.
-    private func sendCustomKeySequence(_ steps: [SequenceStep]) {
-        delegate?.sendSequenceSteps(steps)
+    private func sendCustomKeySequence(_ steps: [SequenceStep], completion: (() -> Void)? = nil) {
+        delegate?.sendSequenceSteps(steps, completion: completion)
     }
 }
 

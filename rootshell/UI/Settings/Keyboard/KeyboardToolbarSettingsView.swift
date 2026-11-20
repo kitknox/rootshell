@@ -294,6 +294,7 @@ struct KeyboardToolbarSettingsView: View {
                 NavigationLink {
                     CustomKeyEditorView(
                         existingKey: key,
+                        context: context,
                         onSave: { updatedKey in
                             manager.updateCustomKey(updatedKey)
                         },
@@ -321,6 +322,7 @@ struct KeyboardToolbarSettingsView: View {
 
             NavigationLink {
                 CustomKeyEditorView(
+                    context: context,
                     onSave: { newKey in
                         manager.createCustomKey(newKey, in: editedContext)
                     }

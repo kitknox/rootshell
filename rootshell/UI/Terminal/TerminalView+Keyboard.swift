@@ -754,7 +754,7 @@ extension Ghostty.TerminalView {
                 if controlByte == 3,
                    let localSession = session as? LocalShellSession,
                    !localSession.hasActiveEmbeddedSession {
-                    localSession.interrupt()
+                    interruptLocalShell(localSession)
                     localHandled = true
                 }
                 #endif
@@ -772,7 +772,7 @@ extension Ghostty.TerminalView {
                         guard let self = self else { return }
                         if let localSession = self.session as? LocalShellSession,
                            !localSession.hasActiveEmbeddedSession {
-                            localSession.interrupt()
+                            self.interruptLocalShell(localSession)
                         } else {
                             self.sendUserInput(controlData)
                         }
@@ -918,7 +918,7 @@ extension Ghostty.TerminalView {
                 if let localSession = session as? LocalShellSession,
                    !localSession.hasActiveEmbeddedSession {
                     NotificationCenter.default.post(name: .ghosttyDidReceiveInput, object: self)
-                    localSession.interrupt()
+                    interruptLocalShell(localSession)
                     localHandled = true
                 }
                 #endif
@@ -2809,7 +2809,7 @@ extension Ghostty.TerminalView {
                 #if !targetEnvironment(macCatalyst)
                 if controlByte == 3, let localSession = session as? LocalShellSession {
                     if !localSession.hasActiveEmbeddedSession {
-                        localSession.interrupt()
+                        interruptLocalShell(localSession)
                         return
                     }
                 }

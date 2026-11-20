@@ -31,11 +31,11 @@ extension KeyboardButtonDelegate {
     /// a 50ms delay after any step whose data ends with ESC (0x1B). Prevents the
     /// terminal app from interpreting ESC + next-char as Alt+key. Used by both the
     /// keyboard toolbar's custom keys and the swipe gesture binding system.
-    func sendSequenceSteps(_ steps: [SequenceStep]) {
-        guard !steps.isEmpty else { return }
+    /// `completion` runs once the last step is out, after any ESC delay.
+    func sendSequenceSteps(_ steps: [SequenceStep], completion: (() -> Void)? = nil) {
         var index = 0
         func sendNext() {
-            guard index < steps.count else { return }
+            guard index < steps.count else { completion?(); return }
             let step = steps[index]
             index += 1
             let data = step.terminalData()
