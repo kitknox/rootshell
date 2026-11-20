@@ -15,9 +15,20 @@ struct VPNSettingsView: View {
     @State private var vpnManager = VPNManager.shared
     #if !CHINA_BUILD
     @State private var tailnetEngine = TailnetInAppEngine.shared
+    @State private var wholeDeviceTailnetStatus: TailnetStatus?
+    @State private var wholeDeviceTailnetStatusGeneration: Int?
+    @State private var wholeDeviceTailnetStatusConnectedSince: Date?
     #endif
+    private enum DisconnectTarget: Equatable {
+        case vpn(generation: Int, profileID: UUID?, profileName: String?)
+        #if !CHINA_BUILD
+        case inAppTailnet
+        #endif
+    }
+
     @State private var profileManager = ConnectionProfileManager.shared
-    @State private var showDisconnectConfirmation = false
+    @State private var vpnConnectionGeneration = 0
+    @State private var pendingDisconnect: DisconnectTarget?
     @Environment(\.openHTTPCapture) private var openHTTPCapture
 
     var body: some View {
@@ -30,7 +41,6 @@ struct VPNSettingsView: View {
             quickConnectSection
             #endif
             statusSection
-            disconnectSection
             vpnProfilesSection
             #if !CHINA_BUILD
             tailscaleSection
@@ -45,11 +55,65 @@ struct VPNSettingsView: View {
         .navigationTitle("VPN")
         #if !CHINA_BUILD
         .onAppear { vpnManager.reloadLastVPN() }
+        .task(id: tailnetStatusTaskKey) {
+            await pollTailnetStatusIfNeeded()
+        }
         #endif
         #if STANDALONE && targetEnvironment(macCatalyst)
         // The launch-time check misses a host that was still rebinding its socket.
         .task { await vpnManager.refreshStatusFromSystem() }
         #endif
+        .onChange(of: vpnManager.status) { oldStatus, newStatus in
+            if oldStatus.isActive && !newStatus.isActive {
+                vpnConnectionGeneration += 1
+                if case .vpn = pendingDisconnect {
+                    pendingDisconnect = nil
+                }
+                #if !CHINA_BUILD
+                clearWholeDeviceTailnetStatus()
+                #endif
+            }
+            #if !CHINA_BUILD
+            if (newStatus.isActive || newStatus == .disconnecting),
+               case .inAppTailnet = pendingDisconnect {
+                pendingDisconnect = nil
+            }
+            #endif
+        }
+        .onChange(of: vpnManager.activeProfileID) { oldID, newID in
+            guard oldID != newID else { return }
+            vpnConnectionGeneration += 1
+            if case .vpn = pendingDisconnect {
+                pendingDisconnect = nil
+            }
+            #if !CHINA_BUILD
+            clearWholeDeviceTailnetStatus()
+            #endif
+        }
+        #if !CHINA_BUILD
+        .onChange(of: tailnetEngine.isRunning) { _, isRunning in
+            if !isRunning, case .inAppTailnet = pendingDisconnect {
+                pendingDisconnect = nil
+            }
+        }
+        #endif
+        .confirmationDialog(
+            disconnectDialogTitle,
+            isPresented: Binding(
+                get: { pendingDisconnect != nil },
+                set: { if !$0 { pendingDisconnect = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Disconnect", role: .destructive) {
+                if let target = pendingDisconnect {
+                    pendingDisconnect = nil
+                    disconnect(target)
+                }
+            }
+        } message: {
+            Text(disconnectDialogMessage)
+        }
     }
 
     #if !CHINA_BUILD
@@ -58,7 +122,8 @@ struct VPNSettingsView: View {
     /// One-tap reconnect to the last VPN, while nothing is connected.
     @ViewBuilder
     private var quickConnectSection: some View {
-        if !vpnManager.status.isActive, let target = VPNQuickConnectCard.lastTarget() {
+        if !vpnManager.status.isActive && vpnManager.status != .disconnecting,
+           let target = VPNQuickConnectCard.lastTarget() {
             Section {
                 VPNQuickConnectCard(target: target)
                     .themedRow()
@@ -175,9 +240,21 @@ struct VPNSettingsView: View {
     // MARK: - Status Section
 
     private var statusSection: some View {
-        Section("Status") {
-            VPNStatusRow()
-                .themedRow()
+        Section(statusSectionHeader) {
+            #if !CHINA_BUILD
+            VPNStatusRow(
+                tailnetStatus: wholeDeviceTailnetStatus,
+                onRequestDisconnect: canDisconnectActiveConnection ? { requestDisconnectCurrentConnection() } : nil
+            )
+            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+            .themedRow()
+            #else
+            VPNStatusRow(
+                onRequestDisconnect: canDisconnectActiveConnection ? { requestDisconnectCurrentConnection() } : nil
+            )
+            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+            .themedRow()
+            #endif
 
             if vpnManager.extensionApprovalPending {
                 Label(
@@ -186,78 +263,203 @@ struct VPNSettingsView: View {
                 )
                 .font(.subheadline)
                 .foregroundStyle(.orange)
+                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 .themedRow()
             }
 
             if vpnManager.status.isActive {
-                if let since = vpnManager.connectedSince {
-                    LabeledContent("Uptime") {
-                        Text(since, style: .timer)
-                            .foregroundStyle(.secondary)
-                    }
-                    .themedRow()
-                }
-                if let stats = vpnManager.statistics {
-                    VPNStatsGrid(stats: stats)
-                        .themedRow()
-                }
-
-                if vpnManager.trafficHistory.count >= 2 {
-                    VPNTrafficChart(snapshots: vpnManager.trafficHistory)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                        .themedRow()
-                }
+                activeVisualizationRows(
+                    stats: vpnManager.statistics,
+                    snapshots: vpnManager.trafficHistory,
+                    isInAppTailnet: false
+                )
             }
             #if !CHINA_BUILD
-            if !vpnManager.status.isActive && tailnetEngine.isRunning {
-                if let since = tailnetEngine.connectedSince {
-                    LabeledContent("Uptime") {
-                        Text(since, style: .timer)
-                            .foregroundStyle(.secondary)
-                    }
-                    .themedRow()
-                }
-                if let stats = tailnetEngine.statistics {
-                    VPNStatsGrid(stats: stats)
-                        .themedRow()
-                }
-                if tailnetEngine.trafficHistory.count >= 2 {
-                    VPNTrafficChart(snapshots: tailnetEngine.trafficHistory)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                        .themedRow()
-                }
+            if !vpnManager.status.isActive && vpnManager.status != .disconnecting && tailnetEngine.isRunning {
+                activeVisualizationRows(
+                    stats: tailnetEngine.statistics,
+                    snapshots: tailnetEngine.trafficHistory,
+                    isInAppTailnet: true
+                )
             }
             #endif
         }
     }
 
-    // MARK: - Disconnect Section
-
     @ViewBuilder
-    private var disconnectSection: some View {
-        if vpnManager.status.isActive {
-            Section {
-                Button("Disconnect VPN", role: .destructive) {
-                    showDisconnectConfirmation = true
-                }
-                .confirmationDialog(
-                    "Disconnect VPN?",
-                    isPresented: $showDisconnectConfirmation,
-                    titleVisibility: .visible
-                ) {
-                    Button("Disconnect", role: .destructive) {
-                        Task {
-                            try? await vpnManager.stopVPN()
-                        }
-                    }
-                } message: {
-                    let name = vpnManager.activeProfileName ?? "the active profile"
-                    Text("This will end your connection to \(name).")
-                }
+    private func activeVisualizationRows(
+        stats: VPNStatistics?,
+        snapshots: [VPNTrafficSnapshot],
+        isInAppTailnet: Bool
+    ) -> some View {
+        VPNTrafficChart(
+            snapshots: snapshots,
+            totalBytesIn: stats?.bytesIn,
+            totalBytesOut: stats?.bytesOut
+        )
+        .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+        .themedRow()
+
+        if let stats {
+            VPNConnectionHealthView(stats: stats)
+                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 .themedRow()
+        }
+
+        let activeProfile = !isInAppTailnet ? vpnManager.activeProfileID.flatMap { profileManager.profile(for: $0) } : nil
+        let isLocalCapture = !isInAppTailnet && vpnManager.activeProfileID == VPNDirectProfile.id
+
+        #if !CHINA_BUILD
+        let isWholeDeviceTailnet = !isInAppTailnet && vpnManager.activeProfileID == VPNTailnetProfile.id
+        VPNTunnelDetailsDisclosure(
+            stats: stats,
+            profile: activeProfile,
+            isLocalCapture: isLocalCapture,
+            isTailnet: isWholeDeviceTailnet,
+            isInAppTailnet: isInAppTailnet,
+            tailnetStatus: isInAppTailnet ? tailnetEngine.status : wholeDeviceTailnetStatus
+        )
+        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+        .themedRow()
+        #else
+        VPNTunnelDetailsDisclosure(
+            stats: stats,
+            profile: activeProfile,
+            isLocalCapture: isLocalCapture
+        )
+        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+        .themedRow()
+        #endif
+    }
+
+    private var statusSectionHeader: String {
+        if vpnManager.status.isActive || vpnManager.status == .disconnecting {
+            return String(localized: "Active Connection", comment: "VPN settings section header when connected")
+        }
+        #if !CHINA_BUILD
+        if tailnetEngine.isRunning {
+            return String(localized: "Active Connection", comment: "VPN settings section header when in-app Tailscale is running")
+        }
+        #endif
+        return String(localized: "Status", comment: "VPN settings section header when disconnected")
+    }
+
+    private var canDisconnectActiveConnection: Bool {
+        if vpnManager.status.isActive || vpnManager.status == .disconnecting {
+            return true
+        }
+        #if !CHINA_BUILD
+        if tailnetEngine.isRunning {
+            return true
+        }
+        #endif
+        return false
+    }
+
+    private var disconnectDialogTitle: String {
+        switch pendingDisconnect {
+        #if !CHINA_BUILD
+        case .inAppTailnet:
+            return String(localized: "Disconnect Tailscale?", comment: "Disconnect confirmation title for in-app Tailscale")
+        #endif
+        case .vpn, .none:
+            return String(localized: "Disconnect VPN?", comment: "Disconnect confirmation title for active VPN")
+        }
+    }
+
+    private var disconnectDialogMessage: String {
+        switch pendingDisconnect {
+        #if !CHINA_BUILD
+        case .inAppTailnet:
+            return String(localized: "This will disconnect Tailscale inside rootshell.", comment: "Disconnect confirmation message for in-app Tailscale")
+        #endif
+        case .vpn(_, _, let profileName):
+            let name = profileName ?? String(localized: "the active profile", comment: "Fallback active VPN profile name")
+            return String(localized: "This will end your connection to \(name).", comment: "Disconnect confirmation message for active VPN")
+        case .none:
+            return ""
+        }
+    }
+
+    private func requestDisconnectCurrentConnection() {
+        if vpnManager.status.isActive {
+            pendingDisconnect = .vpn(
+                generation: vpnConnectionGeneration,
+                profileID: vpnManager.activeProfileID,
+                profileName: vpnManager.activeProfileName
+            )
+        } else if vpnManager.status != .disconnecting {
+            #if !CHINA_BUILD
+            if tailnetEngine.isRunning {
+                pendingDisconnect = .inAppTailnet
+            }
+            #endif
+        }
+    }
+
+    private func disconnect(_ target: DisconnectTarget) {
+        Task {
+            switch target {
+            case .vpn(let generation, let profileID, _):
+                guard vpnConnectionGeneration == generation,
+                      vpnManager.status.isActive,
+                      vpnManager.activeProfileID == profileID else { return }
+                try? await vpnManager.stopVPN()
+            #if !CHINA_BUILD
+            case .inAppTailnet:
+                guard !vpnManager.status.isActive,
+                      vpnManager.status != .disconnecting,
+                      tailnetEngine.isRunning else { return }
+                await tailnetEngine.turnOff()
+            #endif
             }
         }
     }
+
+    #if !CHINA_BUILD
+    private var tailnetStatusTaskKey: String {
+        let isTailnet = vpnManager.isTunnelUp && vpnManager.activeProfileID == VPNTailnetProfile.id
+        let since = vpnManager.connectedSince?.timeIntervalSinceReferenceDate ?? -1
+        return "\(isTailnet)-\(vpnConnectionGeneration)-\(vpnManager.activeProfileID?.uuidString ?? "none")-\(since)"
+    }
+
+    private func clearWholeDeviceTailnetStatus() {
+        wholeDeviceTailnetStatus = nil
+        wholeDeviceTailnetStatusGeneration = nil
+        wholeDeviceTailnetStatusConnectedSince = nil
+    }
+
+    private func pollTailnetStatusIfNeeded() async {
+        guard vpnManager.isTunnelUp,
+              vpnManager.activeProfileID == VPNTailnetProfile.id else {
+            clearWholeDeviceTailnetStatus()
+            return
+        }
+        let expectedGeneration = vpnConnectionGeneration
+        let expectedConnectedSince = vpnManager.connectedSince
+        if wholeDeviceTailnetStatusGeneration != expectedGeneration
+            || wholeDeviceTailnetStatusConnectedSince != expectedConnectedSince {
+            clearWholeDeviceTailnetStatus()
+        }
+        while !Task.isCancelled {
+            let fetched = await vpnManager.tailnetStatus()
+            guard !Task.isCancelled,
+                  vpnConnectionGeneration == expectedGeneration,
+                  vpnManager.isTunnelUp,
+                  vpnManager.activeProfileID == VPNTailnetProfile.id,
+                  vpnManager.connectedSince == expectedConnectedSince else {
+                return
+            }
+            if let fetched {
+                wholeDeviceTailnetStatus = fetched
+                wholeDeviceTailnetStatusGeneration = expectedGeneration
+                wholeDeviceTailnetStatusConnectedSince = expectedConnectedSince
+            }
+            try? await Task.sleep(for: .seconds(3))
+        }
+    }
+    #endif
 
     // MARK: - VPN Profiles Section
 
@@ -309,62 +511,6 @@ struct VPNSettingsView: View {
 
     private var vpnCapableProfiles: [ConnectionProfile] {
         profileManager.profiles.filter(\.isVPNCapable)
-    }
-}
-
-// MARK: - VPN Stats Grid (compact single-row layout)
-
-private struct VPNStatsGrid: View {
-    let stats: VPNStatistics
-
-    var body: some View {
-        VStack(spacing: 6) {
-            if let mode = stats.tsshMode {
-                statRow("Transport", mode)
-                if let mtu = stats.tsshMTU, mtu > 0 {
-                    statRow("TSSH MTU", "\(mtu)")
-                }
-                if let tunMTU = stats.tunMTU, tunMTU > 0 {
-                    statRow("TUN MTU", "\(tunMTU)")
-                }
-                if let port = stats.tsshPort {
-                    statRow("Port", "\(port)")
-                }
-            }
-            statRow("Downloaded", stats.formattedBytesIn)
-            statRow("Uploaded", stats.formattedBytesOut)
-            statRow("Active Flows", "\(stats.activeConnections)")
-            if stats.activeTCPConnections > 0 || stats.activeUDPConnections > 0 {
-                statRow("TCP / UDP", "\(stats.activeTCPConnections) / \(stats.activeUDPConnections)")
-            }
-            if stats.tcpCapacityDrops + stats.udpCapacityDrops > 0 {
-                statRow("Flow Drops", "TCP \(stats.tcpCapacityDrops), UDP \(stats.udpCapacityDrops)", valueColor: .orange)
-            }
-            if stats.extensionPhysFootprintBytes > 0 {
-                statRow("Ext Memory", stats.formattedExtensionMemory)
-            }
-            if stats.extensionMemoryBudgetBytes > 0 {
-                let usagePercent = stats.effectiveMemoryUsagePercent
-                let color: Color = usagePercent >= 90 ? .red : (usagePercent >= 75 ? .orange : .secondary)
-                statRow("Mem Budget", stats.formattedMemoryBudgetUsage, valueColor: color)
-            }
-            if stats.goHeapAllocBytes > 0 {
-                statRow("Go Heap", stats.formattedGoHeapAlloc)
-            }
-        }
-        .padding(.vertical, 2)
-    }
-
-    private func statRow(_ label: String, _ value: String, valueColor: Color = .secondary) -> some View {
-        HStack {
-            Text(label)
-                .font(.subheadline)
-            Spacer()
-            Text(value)
-                .font(.subheadline)
-                .foregroundStyle(valueColor)
-                .monospacedDigit()
-        }
     }
 }
 

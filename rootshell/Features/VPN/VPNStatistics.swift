@@ -224,8 +224,27 @@ struct VPNStatistics: Codable, Sendable, Equatable {
         ByteCountFormatter.string(fromByteCount: extensionPhysFootprintBytes, countStyle: .binary)
     }
 
+    var formattedMemoryBudget: String {
+        ByteCountFormatter.string(fromByteCount: extensionMemoryBudgetBytes, countStyle: .binary)
+    }
+
     var formattedGoHeapAlloc: String {
         ByteCountFormatter.string(fromByteCount: goHeapAllocBytes, countStyle: .binary)
+    }
+
+    /// Human-readable transport label combining runtime mode and transport type.
+    var displayTransportLabel: String? {
+        if let mode = tsshMode, !mode.isEmpty {
+            return "TSSH (\(mode))"
+        }
+        switch transportType.lowercased() {
+        case "ssh": return "SSH"
+        case "tssh": return "TSSH"
+        case "tailscale": return "Tailscale"
+        case "direct": return "Direct"
+        case "": return nil
+        default: return transportType.uppercased()
+        }
     }
 
     var formattedMemoryBudgetUsage: String {

@@ -225,7 +225,7 @@ struct TailnetSettingsView: View {
             }
             if isWholeDevice, let egress = status?.egress {
                 LabeledContent(String(localized: "SSH Egress", comment: "Tailscale SSH egress status row")) {
-                    Text(egressText(egress)).foregroundStyle(egress.state == "failed" ? .orange : .secondary)
+                    Text(egress.localizedStateText).foregroundStyle(egress.state == "failed" ? .orange : .secondary)
                 }
                 .themedRow()
             }
@@ -513,16 +513,6 @@ struct TailnetSettingsView: View {
         case "NeedsMachineAuth": return String(localized: "Waiting for Admin Approval", comment: "Tailscale state")
         case "Starting": return String(localized: "Starting…", comment: "Tailscale state")
         default: return String(localized: "Connecting…", comment: "Tailscale state")
-        }
-    }
-
-    private func egressText(_ egress: TailnetStatus.Egress) -> String {
-        switch egress.state {
-        case "connected": return String(localized: "Connected", comment: "Tailscale SSH egress state")
-        case "connecting": return String(localized: "Connecting…", comment: "Tailscale SSH egress state")
-        case "waitingForTailnet": return String(localized: "Waiting for Tailscale", comment: "Tailscale SSH egress state")
-        case "failed": return egress.error ?? String(localized: "Failed", comment: "Tailscale SSH egress state")
-        default: return String(localized: "Off", comment: "Tailscale SSH egress state")
         }
     }
 

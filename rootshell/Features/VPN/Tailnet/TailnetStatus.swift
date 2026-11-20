@@ -38,6 +38,26 @@ nonisolated struct TailnetStatus: Decodable, Sendable, Equatable {
         var state: String
         var host: String?
         var error: String?
+
+        /// True when SSH egress is inactive (e.g. "idle", "off", or empty).
+        var isOff: Bool {
+            switch state {
+            case "connected", "connecting", "waitingForTailnet", "failed":
+                return false
+            default:
+                return true
+            }
+        }
+
+        var localizedStateText: String {
+            switch state {
+            case "connected": return String(localized: "Connected", comment: "Tailscale SSH egress state")
+            case "connecting": return String(localized: "Connecting…", comment: "Tailscale SSH egress state")
+            case "waitingForTailnet": return String(localized: "Waiting for Tailscale", comment: "Tailscale SSH egress state")
+            case "failed": return error ?? String(localized: "Failed", comment: "Tailscale SSH egress state")
+            default: return String(localized: "Off", comment: "Tailscale SSH egress state")
+            }
+        }
     }
 
     var state: String
