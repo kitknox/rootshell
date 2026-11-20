@@ -9,16 +9,13 @@ extension LocalShellSession {
 
         switch result {
         case .success(let config):
-            let pingCommand = PingCommand(config: config, output: { [weak self] text in
-                self?.onOutput?(text)
-            })
-
-            pingCommand.onComplete = { [weak self] in
-                guard let self else { return }
+            let pingCommand = PingCommand(config: config, output: outputSink.emitString)
+            pingCommand.onComplete = { [weak self, weak pingCommand] status in
+                guard let self, let pingCommand, self.activePingCommand === pingCommand else { return }
                 self.activePingCommand = nil
                 self.sessionMode = .localShell
-                self.lastCommandSucceeded = !pingCommand.didFail
-                self.scriptCommandExitCode = pingCommand.didFail ? 1 : 0
+                self.lastCommandSucceeded = status == 0
+                self.scriptCommandExitCode = status
 
                 // Avoid emitting a prompt/title update while the session is shutting down.
                 guard self.isRunning else { return }

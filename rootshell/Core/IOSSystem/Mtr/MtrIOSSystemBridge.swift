@@ -76,11 +76,8 @@ private func mtrIOSSystemEntry(
                         writer.write(text.replacingOccurrences(of: "\r\n", with: "\n"))
                     }
                 )
-                // start() holds self weakly, so this closure's strong capture is what
-                // keeps the command alive; clearing it afterwards breaks the cycle.
                 command.onComplete = {
                     writer.finish(exitStatus: command.didFail ? 1 : 0)
-                    command.onComplete = nil
                 }
                 command.start()
             }

@@ -336,6 +336,7 @@
 		F95F66F45A2A58F968B83428 /* VimRuntime.bundle in Resources */ = {isa = PBXBuildFile; fileRef = 47A51A922EEDC704000D76E0 /* VimRuntime.bundle */; platformFilters = (ios, xros, ); };
 		F9641A2175775B2B2284EFF2 /* AppIconRadicalDracula.icon in Resources */ = {isa = PBXBuildFile; fileRef = 478D16DE2F9FC42B007B574B /* AppIconRadicalDracula.icon */; };
 		FA804455DA96B007ACED884C /* network_ios in Frameworks */ = {isa = PBXBuildFile; platformFilters = (ios, xros, ); productRef = 47NWPKG12FF10000AABB0001 /* network_ios */; };
+		F21C4D500000000000000001 /* rootshell/Core/Networking/Ping/ICMPProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21C4D500000000000000002 /* rootshell/Core/Networking/Ping/ICMPProbe.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -763,6 +764,7 @@
 		F210A5E10000000000000002 /* rootshell/Features/TSSH/Transport/TSSHResizeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/TSSH/Transport/TSSHResizeController.swift; sourceTree = SOURCE_ROOT; };
 		F210A5E20000000000000002 /* rootshell/Core/Persistence/TerminalAlternateScreenSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Persistence/TerminalAlternateScreenSnapshot.swift; sourceTree = SOURCE_ROOT; };
 		F210A5E30000000000000002 /* rootshell/Core/Persistence/TerminalRestorationSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Persistence/TerminalRestorationSnapshot.swift; sourceTree = SOURCE_ROOT; };
+		F21C4D500000000000000002 /* rootshell/Core/Networking/Ping/ICMPProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Networking/Ping/ICMPProbe.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -2400,6 +2402,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F21C4D500000000000000001 /* rootshell/Core/Networking/Ping/ICMPProbe.swift in Sources */,
 				F210A5E20000000000000001 /* rootshell/Core/Persistence/TerminalAlternateScreenSnapshot.swift in Sources */,
 				F210A5E30000000000000001 /* rootshell/Core/Persistence/TerminalRestorationSnapshot.swift in Sources */,
 				F210A5E10000000000000001 /* rootshell/Features/TSSH/Transport/TSSHResizeController.swift in Sources */,

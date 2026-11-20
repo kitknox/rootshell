@@ -3,7 +3,7 @@
 import Foundation
 
 /// Per-hop statistics tracking with ring buffer for stripchart display.
-struct HopStatistics {
+nonisolated struct HopStatistics {
     /// All IPs seen at this TTL (ECMP load balancing)
     var addresses: [String] = []
     /// Resolved hostnames keyed by IP
@@ -13,6 +13,8 @@ struct HopStatistics {
 
     var sent: Int = 0
     var received: Int = 0
+    private(set) var dropped = 0
+    private(set) var timed = 0
     var lastRTT: Double = 0             // milliseconds
     var bestRTT: Double = .infinity
     var worstRTT: Double = 0
@@ -24,8 +26,14 @@ struct HopStatistics {
     var worstJitter: Double = 0
     var interarrivalJitter: Double = 0  // RFC 1889 running estimate
 
-    /// Ring buffer for stripchart display (nil = timeout)
-    var samples: [Double?]
+    enum Sample {
+        case empty
+        case reply(rtt: Double?)
+        case timeout
+    }
+
+    /// Ring buffer in arrival order, including replies without kernel timing.
+    var samples: [Sample]
     var sampleIndex: Int = 0
 
     /// Number of log(rtt) samples accumulated for geometric mean
@@ -33,41 +41,38 @@ struct HopStatistics {
 
     init(maxSamples: Int) {
         let safeMaxSamples = max(1, maxSamples)
-        self.samples = [Double?](repeating: nil, count: safeMaxSamples)
+        self.samples = [Sample](repeating: .empty, count: safeMaxSamples)
     }
 
     // MARK: - Computed Properties
 
     var lossPercent: Double {
-        guard sent > 0 else { return 0 }
-        return Double(sent - received) / Double(sent) * 100.0
+        let settled = received + dropped
+        guard settled > 0 else { return 0 }
+        return Double(dropped) / Double(settled) * 100.0
     }
 
     var avgRTT: Double {
-        guard received > 0 else { return 0 }
-        return sumRTT / Double(received)
+        guard timed > 0 else { return 0 }
+        return sumRTT / Double(timed)
     }
 
     var stddev: Double {
-        guard received > 1 else { return 0 }
+        guard timed > 1 else { return 0 }
         let avg = avgRTT
-        let variance = sumRTTSquared / Double(received) - avg * avg
+        let variance = sumRTTSquared / Double(timed) - avg * avg
         return variance > 0 ? sqrt(variance) : 0
     }
 
     var avgJitter: Double {
-        let jitterSamples = received > 1 ? received - 1 : 0
+        let jitterSamples = timed > 1 ? timed - 1 : 0
         guard jitterSamples > 0 else { return 0 }
         return sumJitter / Double(jitterSamples)
     }
 
     var geometricMean: Double {
-        guard received > 0 else { return 0 }
-        return exp(logRTTSum / Double(received))
-    }
-
-    var dropped: Int {
-        return max(0, sent - received)
+        guard timed > 0, bestRTT > 0 else { return 0 }
+        return exp(logRTTSum / Double(timed))
     }
 
     /// Primary display address (first seen)
@@ -83,8 +88,13 @@ struct HopStatistics {
 
     // MARK: - Mutations
 
-    mutating func recordProbe(rtt: Double, fromAddress: String) {
+    mutating func recordProbe(rtt: Double?, fromAddress: String) {
         received += 1
+        if !addresses.contains(fromAddress) { addresses.append(fromAddress) }
+        samples[sampleIndex % samples.count] = .reply(rtt: rtt)
+        sampleIndex += 1
+        guard let rtt else { return }
+        timed += 1
         lastRTT = rtt
         bestRTT = min(bestRTT, rtt)
         worstRTT = max(worstRTT, rtt)
@@ -106,24 +116,14 @@ struct HopStatistics {
             interarrivalJitter += (jitter - interarrivalJitter) / 16.0
         }
         previousRTT = rtt
-
-        // Ring buffer
-        if !samples.isEmpty {
-            samples[sampleIndex % samples.count] = rtt
-            sampleIndex += 1
-        }
-
-        // Track address (ECMP)
-        if !addresses.contains(fromAddress) {
-            addresses.append(fromAddress)
-        }
     }
 
     mutating func recordTimeout() {
+        dropped += 1
         // Note: sent is already incremented by recordSent() when the probe is dispatched.
         // Do NOT increment sent here — that would double-count.
         if !samples.isEmpty {
-            samples[sampleIndex % samples.count] = nil
+            samples[sampleIndex % samples.count] = .timeout
             sampleIndex += 1
         }
     }
@@ -135,6 +135,8 @@ struct HopStatistics {
     mutating func reset() {
         sent = 0
         received = 0
+        dropped = 0
+        timed = 0
         lastRTT = 0
         bestRTT = .infinity
         worstRTT = 0
@@ -148,13 +150,14 @@ struct HopStatistics {
         logRTTSum = 0
         sampleIndex = 0
         for i in samples.indices {
-            samples[i] = nil
+            samples[i] = .empty
         }
         // Keep addresses and hostnames
     }
 }
 
 /// Complete trace state containing all hops
+@MtrActor
 final class MtrTrace {
     static let maxSamples = 400
 

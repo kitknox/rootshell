@@ -4,7 +4,7 @@ import Foundation
 
 /// Parser for ping/ping6 command-line arguments
 /// Follows the SSHCommandParser pattern with tokenization and flag parsing
-struct PingCommandParser {
+nonisolated struct PingCommandParser {
     private static let maxPatternHexLength = 1024
 
     /// Parsed ping configuration

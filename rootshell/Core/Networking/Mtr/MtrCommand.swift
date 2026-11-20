@@ -5,8 +5,72 @@ import OSLog
 
 /// Main orchestrator for the mtr (rootshell traceroute) command.
 /// Ties together probe engine, statistics, display, DNS resolution, and reporting.
+@globalActor
+actor MtrActor {
+    static let shared = MtrActor()
+}
+
+/// Preserve input order while the probe loop, statistics and report rendering
+/// run independently of the terminal's main actor.
 @MainActor
 final class MtrCommand {
+    private enum Event: Sendable {
+        case input(Data)
+        case resize(UInt16, UInt16)
+        case cancel
+    }
+
+    private let events = AsyncStream<Event>.makeStream()
+    private let config: MtrCommandParser.MtrConfig
+    private let cols: UInt16
+    private let rows: UInt16
+    private let output: @Sendable (String) -> Void
+    var onComplete: (() -> Void)?
+    private(set) var didFail = false
+
+    init(config: MtrCommandParser.MtrConfig, cols: UInt16, rows: UInt16,
+         output: @escaping @Sendable (String) -> Void) {
+        self.config = config
+        self.cols = cols
+        self.rows = rows
+        self.output = output
+    }
+
+    func start() {
+        let theme = config.reportMode == nil ? MtrDisplay.MtrThemeColors.fromTheme() : nil
+        let (stream, continuation) = events
+        Task { @MtrActor [config, cols, rows, output] in
+            let worker = MtrWorker(config: config, cols: cols, rows: rows, theme: theme, output: output)
+            worker.onComplete = { continuation.finish() }
+            worker.start()
+            for await event in stream {
+                guard !worker.hasCompleted else { break }
+                switch event {
+                case .input(let data): worker.sendInput(data)
+                case .resize(let cols, let rows): worker.resize(cols: cols, rows: rows)
+                case .cancel: worker.cancel()
+                }
+            }
+            let failed = worker.didFail
+            await self.complete(failed: failed)
+        }
+    }
+
+    private func complete(failed: Bool) {
+        didFail = failed
+        let callback = onComplete
+        onComplete = nil
+        callback?()
+    }
+
+    func sendInput(_ data: Data) { events.continuation.yield(.input(data)) }
+    func resize(cols: UInt16, rows: UInt16) { events.continuation.yield(.resize(cols, rows)) }
+    func cancel() { events.continuation.yield(.cancel) }
+}
+
+@MtrActor
+private final class MtrWorker {
+
     private nonisolated static let logger = Logger(subsystem: "com.kk2.rootshell", category: "mtr")
 
     let config: MtrCommandParser.MtrConfig
@@ -46,11 +110,15 @@ final class MtrCommand {
 
     private var cols: UInt16
     private var rows: UInt16
-    private var hasCompleted: Bool = false
+    private(set) var hasCompleted = false
+    private let theme: MtrDisplay.MtrThemeColors?
+    private var generation = 0
+    private var lastSendError: Int32?
     private static let maxRecordedRTTMilliseconds: Double = 3_600_000 // 1 hour cap for corrupted timestamps
 
     init(config: MtrCommandParser.MtrConfig, cols: UInt16, rows: UInt16,
-         output: @escaping (String) -> Void) {
+         theme: MtrDisplay.MtrThemeColors?, output: @escaping (String) -> Void) {
+        self.theme = theme
         self.config = config
         self.mutableConfig = config
         self.cols = cols
@@ -84,6 +152,7 @@ final class MtrCommand {
     func sendInput(_ data: Data) {
         // Always handle Ctrl-C, even in non-interactive (report) mode
         if data.contains(0x03) {
+            didFail = true
             cancel()
             return
         }
@@ -91,6 +160,7 @@ final class MtrCommand {
         guard let text = String(data: data, encoding: .utf8) else { return }
 
         for char in text {
+            guard !hasCompleted else { break }
             handleKeypress(char)
         }
     }
@@ -107,18 +177,22 @@ final class MtrCommand {
     // MARK: - Main Run Loop
 
     private func run() async {
+        guard !Task.isCancelled else { return }
         #if !CHINA_BUILD
         // In-app Tailscale is one WireGuard hop with no TTL to walk.
         if await TailnetDialer.route(config.target) != nil {
+            guard !Task.isCancelled else { return }
             output("mtr: route tracing isn't available for hosts reached through Tailscale in rootshell. Use ping.\r\n")
             didFail = true
             finish()
             return
         }
         #endif
+        guard !Task.isCancelled else { return }
         // Resolve hostname
         let engine = MtrProbeEngine(isIPv6: config.addressFamily == .ipv6)
         guard let addrInfo = await engine.resolveHost(config.target, family: config.addressFamily) else {
+            guard !Task.isCancelled else { return }
             output("mtr: cannot resolve \(config.target): Unknown host\r\n")
             didFail = true
             finish()
@@ -131,7 +205,8 @@ final class MtrCommand {
         }
 
         self.addrInfoPtr = addrInfo
-        targetIP = engine.extractIPAddress(addrInfo)
+        let resolvedIP = engine.extractIPAddress(addrInfo)
+        targetIP = resolvedIP
         targetHost = config.target
 
         // Determine actual IP version from resolution
@@ -166,7 +241,7 @@ final class MtrCommand {
         }
 
         // Open socket
-        guard actualEngine.openSocket(tos: config.tos) else {
+        guard actualEngine.openSocket(targetIP: resolvedIP, tos: config.tos) else {
             let err = String(cString: strerror(errno))
             output("mtr: socket: \(err)\r\n")
             didFail = true
@@ -177,7 +252,7 @@ final class MtrCommand {
 
         // Setup DNS resolver callbacks
         resolver.onHostnameResolved = { [weak self] ip, hostname in
-            guard let self else { return }
+            guard let self, !self.hasCompleted else { return }
             // Update trace data
             for i in self.trace.hops.indices {
                 if self.trace.hops[i].addresses.contains(ip) {
@@ -202,8 +277,8 @@ final class MtrCommand {
         }
 
         // Setup display/reporter
-        if isInteractive {
-            let disp = MtrDisplay(cols: cols, rows: rows, output: output)
+        if let theme {
+            let disp = MtrDisplay(cols: cols, rows: rows, theme: theme, output: output)
             self.display = disp
             disp.enterAlternateScreen()
         } else {
@@ -235,7 +310,9 @@ final class MtrCommand {
             await runOneRound(skipExpire: useGrace)
             guard !hasCompleted else { break }
             cycleCount += 1
-
+            // A whole round can drain nonblocking when every send is behind its
+            // deadline. Give queued input, including cancellation, an actor turn.
+            await Task.yield()
         }
 
         // Final drain: collect remaining in-flight responses and expire unmatched.
@@ -245,18 +322,18 @@ final class MtrCommand {
         // any extra grace the user requested.
         if !Task.isCancelled, !hasCompleted, !isInteractive, let engine = probeEngine {
             let drainTime = mutableConfig.probeTimeout + mutableConfig.graceTime
-            let drainEnd = CFAbsoluteTimeGetCurrent() + drainTime
+            let drainEnd = ICMPProbe.continuousNow + drainTime
             while !Task.isCancelled && !hasCompleted && engine.hasInFlightProbes {
-                let remaining = drainEnd - CFAbsoluteTimeGetCurrent()
-                guard remaining > 0 else { break }
-                let lateResults = await engine.receiveProbes(timeout: min(0.5, remaining))
+                let remaining = drainEnd - ICMPProbe.continuousNow
+                let lateResults = await engine.receiveProbes(timeout: max(0, min(0.5, remaining)))
                 guard !hasCompleted else { break }
                 for result in lateResults {
                     processResult(result)
                 }
+                if remaining <= 0 { break }
             }
             // Expire anything still unmatched
-            let timeouts = engine.expireProbes(olderThan: 0)
+            let timeouts = engine.expireProbes(all: true)
             for result in timeouts {
                 processResult(result)
             }
@@ -265,6 +342,7 @@ final class MtrCommand {
         // Finalize (skip if cancel() already handled cleanup)
         if !Task.isCancelled, !hasCompleted {
             if let reportMode = config.reportMode {
+                didFail = !trace.hops.contains { $0.received > 0 }
                 printFinalReport(reportMode)
             } else if isInteractive {
                 display?.exitAlternateScreen()
@@ -289,10 +367,10 @@ final class MtrCommand {
 
         // Only probe up to destination TTL once known (real mtr behavior).
         // Before destination is found, probe all TTLs up to maxTTL.
-        let effectiveMaxTTL = trace.destinationTTL ?? maxTTL
+        let effectiveMaxTTL = min(trace.destinationTTL ?? maxTTL, maxTTL)
 
         // Guard against invalid range (e.g. user set firstTTL > maxTTL interactively).
-        // Sleep for the interval to avoid busy-spinning the MainActor when the outer
+        // Sleep for the interval to avoid busy-spinning when the outer
         // loop has no inter-round delay.
         guard firstTTL <= effectiveMaxTTL else {
             let ns = min(mutableConfig.interval, 60) * 1_000_000_000
@@ -307,6 +385,8 @@ final class MtrCommand {
         // This makes each round take ~interval time, collecting responses between sends.
         let numHops = effectiveMaxTTL - firstTTL + 1
         let probeDelay = mutableConfig.interval / Double(numHops)
+        let timeout = mutableConfig.probeTimeout + (skipExpire ? mutableConfig.graceTime : 0)
+        var nextSend = ICMPProbe.now
 
         // Send one probe per TTL, collecting responses between probes
         // so we can detect the destination mid-round and stop sending.
@@ -321,13 +401,31 @@ final class MtrCommand {
             let hopIndex = ttl - 1
 
             guard let addrInfo = addrInfoPtr else { return }
-            _ = engine.sendProbe(
+            let sent = engine.sendProbe(
                 ttl: ttl,
                 target: addrInfo,
                 packetSize: mutableConfig.packetSize,
-                bitPattern: mutableConfig.bitPattern
+                bitPattern: mutableConfig.bitPattern,
+                timeout: timeout
             )
-            trace.hops[hopIndex].recordSent()
+            if sent {
+                trace.hops[hopIndex].recordSent()
+                lastSendError = nil
+            } else {
+                // A temporary route or buffer failure should not end a trace or
+                // count as network loss. Continue draining earlier probes.
+                let error = errno
+                if lastSendError != error {
+                    let message = String(cString: strerror(error))
+                    switch mutableConfig.reportMode {
+                    case .json, .xml, .csv, .raw:
+                        Self.logger.error("mtr: send probe: \(message)")
+                    case nil, .report, .reportWide:
+                        output("mtr: send probe: \(message)\r\n")
+                    }
+                    lastSendError = error
+                }
+            }
 
             // Start DNS/AS resolution for known addresses
             if !mutableConfig.numeric {
@@ -343,10 +441,13 @@ final class MtrCommand {
 
             // Wait probeDelay between sends, draining responses so we
             // learn destinationTTL as early as possible.
-            let earlyResults = await engine.receiveProbes(timeout: probeDelay)
+            let roundGeneration = generation
+            nextSend += probeDelay
+            let earlyResults = await engine.receiveProbes(timeout: max(0, nextSend - ICMPProbe.now))
             // After await, cancel() may have already exited alt screen and shown prompt.
             // Bail out to avoid redraw() clearing the main screen.
             guard !hasCompleted else { return }
+            guard roundGeneration == generation else { return }
             if !earlyResults.isEmpty {
                 for result in earlyResults {
                     processResult(result)
@@ -357,7 +458,7 @@ final class MtrCommand {
 
         // Expire timed-out probes (skip on last round when grace period will handle it)
         if !skipExpire {
-            let timeouts = engine.expireProbes(olderThan: mutableConfig.probeTimeout)
+            let timeouts = engine.expireProbes()
             for result in timeouts {
                 processResult(result)
             }
@@ -385,9 +486,10 @@ final class MtrCommand {
         switch result {
         case .timeExceeded(let rawHopIP, let rtt, let ttl, _):
             let hopIP = translateNAT64(rawHopIP)
-            let safeRTT = sanitizedRTT(rtt)
+            let safeRTT = rtt.map(sanitizedRTT)
             let hopIndex = ttl - 1
             guard hopIndex >= 0, hopIndex < trace.hops.count else { return }
+            let isNewAddress = !trace.hops[hopIndex].addresses.contains(hopIP)
             trace.hops[hopIndex].recordProbe(rtt: safeRTT, fromAddress: hopIP)
 
             // Start DNS resolution
@@ -400,17 +502,18 @@ final class MtrCommand {
 
             // Raw mode output
             if case .raw = mutableConfig.reportMode {
-                if !trace.hops[hopIndex].addresses.contains(hopIP) || trace.hops[hopIndex].addresses.first == hopIP && trace.hops[hopIndex].received == 1 {
+                if isNewAddress {
                     reporter?.emitRawHop(ttl: hopIndex, ip: hopIP)
                 }
-                reporter?.emitRawPing(ttl: hopIndex, rttMicroseconds: rawRTTMicroseconds(from: safeRTT))
+                if let safeRTT { reporter?.emitRawPing(ttl: hopIndex, rttMicroseconds: rawRTTMicroseconds(from: safeRTT)) }
             }
 
         case .echoReply(let rawHopIP, let rtt, let ttl, _):
             let hopIP = translateNAT64(rawHopIP)
-            let safeRTT = sanitizedRTT(rtt)
+            let safeRTT = rtt.map(sanitizedRTT)
             let hopIndex = ttl - 1
             guard hopIndex >= 0, hopIndex < trace.hops.count else { return }
+            let isNewAddress = !trace.hops[hopIndex].addresses.contains(hopIP)
             trace.hops[hopIndex].recordProbe(rtt: safeRTT, fromAddress: hopIP)
             trace.destinationReached = true
             // Destination TTL is the MINIMUM TTL that reaches the target.
@@ -430,10 +533,10 @@ final class MtrCommand {
             }
 
             if case .raw = mutableConfig.reportMode {
-                if trace.hops[hopIndex].received == 1 {
+                if isNewAddress {
                     reporter?.emitRawHop(ttl: hopIndex, ip: hopIP)
                 }
-                reporter?.emitRawPing(ttl: hopIndex, rttMicroseconds: rawRTTMicroseconds(from: safeRTT))
+                if let safeRTT { reporter?.emitRawPing(ttl: hopIndex, rttMicroseconds: rawRTTMicroseconds(from: safeRTT)) }
             }
 
         case .timeout(let ttl, _):
@@ -481,7 +584,7 @@ final class MtrCommand {
         switch inputState {
         case .promptingInterval(var buffer):
             if char == "\r" || char == "\n" {
-                if let val = Double(buffer), val > 0 {
+                if let val = Double(buffer), val.isFinite, val > 0 {
                     mutableConfig.interval = val
                 }
                 inputState = .normal
@@ -612,6 +715,7 @@ final class MtrCommand {
             mutableConfig.numeric.toggle()
             redraw()
         case "r":
+            generation &+= 1
             trace.reset(keepAddresses: true)
             probeEngine?.clearInFlight()
             display?.resetScroll()

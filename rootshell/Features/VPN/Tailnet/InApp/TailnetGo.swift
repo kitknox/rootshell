@@ -10,6 +10,7 @@
 #if !CHINA_BUILD
 
 import Foundation
+import os
 @preconcurrency import TrzszSSH
 
 nonisolated enum TailnetGo {
@@ -140,11 +141,42 @@ nonisolated enum TailnetGo {
         }
     }
 
-    static func ping(host: String, timeout: Duration) async -> PingResult {
-        let json = (try? await run { IosbridgeTailnetPing(host, timeout.milliseconds) }) ?? ""
-        return (try? JSONDecoder().decode(PingResult.self, from: Data(json.utf8)))
-            ?? PingResult(error: "Tailscale ping failed")
+    #if !targetEnvironment(macCatalyst)
+    enum PingEvent: Sendable {
+        case started
+        case completed(PingResult, at: TimeInterval)
     }
+
+    static func ping(host: String, waitTime: TimeInterval, deadline: ICMPDeadline) -> AsyncStream<PingEvent> {
+        AsyncStream { events in
+            // Only a probe still waiting for the queue can be ended by this timer.
+            // Once admitted, Go enforces the budget and its return time decides -t.
+            let pending = OSAllocatedUnfairLock(initialState: true)
+            @Sendable func claimPending() -> Bool {
+                pending.withLock { pending in
+                    defer { pending = false }
+                    return pending
+                }
+            }
+            let timer = deadline.onExpiry {
+                if claimPending() { events.finish() }
+            }
+            events.onTermination = { _ in timer?.cancel() }
+            queue.async {
+                defer { events.finish() }
+                guard claimPending() else { return }
+                timer?.cancel()
+                guard let timeoutMs = deadline.bridgeTimeoutMilliseconds(waitTime: waitTime, now: ICMPProbe.continuousNow),
+                      case .enqueued = events.yield(.started) else { return }
+                let json = IosbridgeTailnetPing(host, timeoutMs)
+                let completedAt = ICMPProbe.continuousNow
+                let result = (try? JSONDecoder().decode(PingResult.self, from: Data(json.utf8)))
+                    ?? PingResult(error: "Tailscale ping failed")
+                events.yield(.completed(result, at: completedAt))
+            }
+        }
+    }
+    #endif
 
     static func startProxy() async throws -> ProxyInfo {
         let json: String = try await run {

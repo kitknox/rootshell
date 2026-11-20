@@ -4,7 +4,7 @@ import Foundation
 
 /// Parser for mtr/mtr6 command-line arguments.
 /// Follows the PingCommandParser pattern with tokenization and flag parsing.
-struct MtrCommandParser {
+nonisolated struct MtrCommandParser {
 
     /// Parsed mtr configuration
     struct MtrConfig: Sendable {
@@ -123,7 +123,7 @@ struct MtrCommandParser {
                         guard let val = consumeArgValue(flags: flags, flagIndex: &flagIndex, tokens: tokens, tokenIndex: &i) else {
                             return .error("option requires an argument -- i")
                         }
-                        guard let interval = Double(val), interval > 0 else {
+                        guard let interval = Double(val), interval.isFinite, interval > 0 else {
                             return .error("invalid interval: \(val)")
                         }
                         config.interval = interval
@@ -171,7 +171,7 @@ struct MtrCommandParser {
                         guard let val = consumeArgValue(flags: flags, flagIndex: &flagIndex, tokens: tokens, tokenIndex: &i) else {
                             return .error("option requires an argument -- G")
                         }
-                        guard let grace = Double(val), grace >= 0 else {
+                        guard let grace = Double(val), grace.isFinite, grace >= 0 else {
                             return .error("invalid grace time: \(val)")
                         }
                         config.graceTime = grace
@@ -285,7 +285,7 @@ struct MtrCommandParser {
                 let value = parts.count > 1 ? String(parts[1]) : ""
                 switch name {
                 case "interval":
-                    guard let interval = Double(value), interval > 0 else {
+                    guard let interval = Double(value), interval.isFinite, interval > 0 else {
                         return "invalid interval: \(value)"
                     }
                     config.interval = interval

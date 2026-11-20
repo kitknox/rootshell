@@ -6,7 +6,7 @@ import OSLog
 
 /// Async reverse DNS resolution with caching and AS number lookup.
 /// Non-blocking: display renders IPs immediately, replaces with hostnames when resolved.
-@MainActor
+@MtrActor
 final class MtrDNSResolver {
     private nonisolated static let logger = Logger(subsystem: "com.kk2.rootshell", category: "mtr-dns")
 

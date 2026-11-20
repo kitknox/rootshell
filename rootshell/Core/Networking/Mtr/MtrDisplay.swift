@@ -5,7 +5,7 @@ import Foundation
 /// TUI rendering for mtr using ANSI escape sequences.
 /// Supports truecolor (24-bit RGB) derived from the user's terminal theme,
 /// with a toggle to fall back to classic 16-color ANSI mode.
-@MainActor
+@MtrActor
 final class MtrDisplay {
     let output: (String) -> Void
 
@@ -25,7 +25,7 @@ final class MtrDisplay {
     // MARK: - Theme Color System
 
     /// Semantic colors derived from the user's terminal theme palette.
-    struct MtrThemeColors {
+    struct MtrThemeColors: Sendable {
         let fg: (UInt8, UInt8, UInt8)
         let dim: (UInt8, UInt8, UInt8)
         let good: (UInt8, UInt8, UInt8)       // palette green
@@ -35,7 +35,7 @@ final class MtrDisplay {
         let blue: (UInt8, UInt8, UInt8)       // palette blue
         let magenta: (UInt8, UInt8, UInt8)    // palette magenta
 
-        static func fromTheme() -> MtrThemeColors {
+        @MainActor static func fromTheme() -> MtrThemeColors {
             let tc = SpinnerAnimator.ThemeColors.fromThemeManager()
             return MtrThemeColors(
                 fg: tc.foreground,
@@ -98,11 +98,11 @@ final class MtrDisplay {
         useTruecolor ? 7 : 5
     }
 
-    init(cols: UInt16, rows: UInt16, output: @escaping (String) -> Void) {
+    init(cols: UInt16, rows: UInt16, theme: MtrThemeColors, output: @escaping (String) -> Void) {
         self.cols = cols
         self.rows = rows
         self.output = output
-        self.theme = MtrThemeColors.fromTheme()
+        self.theme = theme
     }
 
     // MARK: - Screen Management
@@ -402,7 +402,7 @@ final class MtrDisplay {
             }
 
             // Numbers (mode 2 with truecolor gradient)
-            if showNumbers && hop.received > 0 {
+            if showNumbers && hop.timed > 0 {
                 if useTruecolor && hop.bestRTT > 0 {
                     let lastStr = String(format: "%5.1f", hop.lastRTT)
                     let avgStr = String(format: "%5.1f", hop.avgRTT)
@@ -441,23 +441,19 @@ final class MtrDisplay {
         var bar = ""
         guard !hop.samples.isEmpty else { return String(repeating: " ", count: width) }
 
-        guard hop.received > 0 else {
-            return String(repeating: " ", count: width)
-        }
-
-        let bestRTT = hop.bestRTT
-        guard bestRTT > 0 else {
-            return String(repeating: "\u{2581}", count: min(width, hop.sampleIndex))
-        }
-
-        let sampleCount = min(width, hop.sampleIndex)
+        let sampleCount = min(width, hop.sampleIndex, hop.samples.count)
         let startIndex = max(0, hop.sampleIndex - sampleCount)
 
         for i in startIndex..<hop.sampleIndex {
             let sample = hop.samples[i % hop.samples.count]
 
-            if let rtt = sample {
-                let ratio = rtt / bestRTT
+            switch sample {
+            case .empty:
+                bar += " "
+            case .reply(nil):
+                bar += "·"
+            case .reply(let rtt?):
+                let ratio = hop.bestRTT > 0 ? rtt / hop.bestRTT : 1
                 // Scale: 1x=block0, 2x=block2, 5x=block5, 10x+=block7
                 let scaled = log2(max(1, ratio)) * 2
                 let blockIndex: Int
@@ -480,8 +476,7 @@ final class MtrDisplay {
                         bar += "\u{1b}[31m\(blocks[blockIndex])\u{1b}[0m"
                     }
                 }
-            } else {
-                // Timeout
+            case .timeout:
                 if useTruecolor {
                     bar += "\(fg(theme.critical))?\(CSI)0m"
                 } else {
@@ -544,6 +539,7 @@ final class MtrDisplay {
             buf += "  Ctrl-L    Force redraw\r\n"
             buf += "\r\n  Press h to close this help\r\n"
         }
+        buf += "\r\n  Chart: · reply without RTT, ? timeout\r\n"
         return buf
     }
 
@@ -588,31 +584,31 @@ final class MtrDisplay {
         case "R": return String(format: "%6d", hop.received)
         case "S": return String(format: "%6d", hop.sent)
         case "N":
-            guard hop.received > 0 else { return "     -" }
+            guard hop.timed > 0 else { return "     -" }
             return String(format: "%6.1f", hop.lastRTT)
         case "B":
-            guard hop.received > 0 else { return "     -" }
+            guard hop.timed > 0 else { return "     -" }
             return String(format: "%6.1f", hop.bestRTT)
         case "A":
-            guard hop.received > 0 else { return "     -" }
+            guard hop.timed > 0 else { return "     -" }
             return String(format: "%6.1f", hop.avgRTT)
         case "W":
-            guard hop.received > 0 else { return "     -" }
+            guard hop.timed > 0 else { return "     -" }
             return String(format: "%6.1f", hop.worstRTT)
         case "V":
-            guard hop.received > 1 else { return "     -" }
+            guard hop.timed > 1 else { return "     -" }
             return String(format: "%6.1f", hop.stddev)
         case "G":
-            guard hop.received > 0 else { return "     -" }
+            guard hop.timed > 0 else { return "     -" }
             return String(format: "%6.1f", hop.geometricMean)
         case "J":
-            guard hop.received > 1 else { return "     -" }
+            guard hop.timed > 1 else { return "     -" }
             return String(format: "%6.1f", hop.avgJitter)
         case "M":
-            guard hop.received > 1 else { return "     -" }
+            guard hop.timed > 1 else { return "     -" }
             return String(format: "%6.1f", hop.worstJitter)
         case "X":
-            guard hop.received > 1 else { return "     -" }
+            guard hop.timed > 1 else { return "     -" }
             return String(format: "%6.1f", hop.interarrivalJitter)
         default: return "     -"
         }
@@ -655,26 +651,26 @@ final class MtrDisplay {
             return "\(fg(theme.critical))\(value)\(CSI)0m"
 
         case "N":
-            guard hop.received > 0, hop.bestRTT > 0 else { return value }
+            guard hop.timed > 0, hop.bestRTT > 0 else { return value }
             let ratio = hop.lastRTT / hop.bestRTT
             return "\(fg(latencyColor(ratio: ratio)))\(value)\(CSI)0m"
 
         case "B":
-            guard hop.received > 0 else { return value }
+            guard hop.timed > 0 else { return value }
             return "\(fg(theme.good))\(value)\(CSI)0m"
 
         case "A":
-            guard hop.received > 0, hop.bestRTT > 0 else { return value }
+            guard hop.timed > 0, hop.bestRTT > 0 else { return value }
             let ratio = hop.avgRTT / hop.bestRTT
             return "\(fg(latencyColor(ratio: ratio)))\(value)\(CSI)0m"
 
         case "W":
-            guard hop.received > 0, hop.bestRTT > 0 else { return value }
+            guard hop.timed > 0, hop.bestRTT > 0 else { return value }
             let ratio = hop.worstRTT / hop.bestRTT
             return "\(fg(latencyColor(ratio: ratio)))\(value)\(CSI)0m"
 
         case "V":
-            guard hop.received > 1, hop.avgRTT > 0 else { return value }
+            guard hop.timed > 1, hop.avgRTT > 0 else { return value }
             let relStddev = hop.stddev / hop.avgRTT
             if relStddev > 0.5 { return "\(fg(theme.critical))\(value)\(CSI)0m" }
             if relStddev > 0.2 { return "\(fg(theme.warning))\(value)\(CSI)0m" }

@@ -17,8 +17,8 @@ extension LocalShellSession {
                 output: { text in sink.emitString(text) }
             )
 
-            mtrCommand.onComplete = { [weak self] in
-                guard let self else { return }
+            mtrCommand.onComplete = { [weak self, weak mtrCommand] in
+                guard let self, let mtrCommand, self.activeMtrCommand === mtrCommand else { return }
                 self.activeMtrCommand = nil
                 self.sessionMode = .localShell
                 self.lastCommandSucceeded = !mtrCommand.didFail

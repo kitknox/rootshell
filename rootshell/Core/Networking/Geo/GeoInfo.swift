@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct GeoInfo: Codable, Sendable {
+nonisolated struct GeoInfo: Codable, Sendable {
     let asNumber: String        // "AS12345"
     let asName: String?         // "Cloudflare, Inc."
     let asDomain: String?       // "cloudflare.com"

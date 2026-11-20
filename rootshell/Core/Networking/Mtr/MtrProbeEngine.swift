@@ -5,83 +5,62 @@ import Darwin
 import OSLog
 
 // IPv6 socket option constants not exposed to Swift on iOS
-private let kIPV6_RECVHOPLIMIT: Int32 = 37
-private let kIPV6_2292HOPLIMIT: Int32 = 20
-private let kIPV6_HOPLIMIT: Int32 = 47
-private let kSCM_TIMESTAMP: Int32 = 2
-
+nonisolated private let kIPV6_RECVHOPLIMIT: Int32 = 37
 /// ICMP probe engine for mtr - sends probes at varying TTLs and parses
 /// both Echo Reply and Time Exceeded responses.
-@MainActor
+@MtrActor
 final class MtrProbeEngine {
     private nonisolated static let logger = Logger(subsystem: "com.kk2.rootshell", category: "mtr-probe")
-
-    /// Atomic identifier counter shared with PingCommand
-    private static let identifierLock = UnfairLock()
-    private nonisolated(unsafe) static var nextIdentifier: UInt16 = 1
-
-    static func allocateIdentifier() -> UInt16 {
-        identifierLock.withLock {
-            let id = nextIdentifier
-            nextIdentifier &+= 1
-            return id
-        }
-    }
 
     // MARK: - Types
 
     enum ProbeResult: Sendable {
-        case timeExceeded(hopIP: String, rtt: Double, ttl: Int, seq: UInt16)
-        case echoReply(hopIP: String, rtt: Double, ttl: Int, seq: UInt16)
+        case timeExceeded(hopIP: String, rtt: Double?, ttl: Int, seq: UInt16)
+        case echoReply(hopIP: String, rtt: Double?, ttl: Int, seq: UInt16)
         case timeout(ttl: Int, seq: UInt16)
     }
 
     struct InFlightProbe: Sendable {
         let ttl: Int
-        let sequenceNumber: UInt16
-        let sendTime: timeval
-    }
-
-    private struct ControlInfo {
-        var ttl: Int = 0
-        var receiveTime: timeval?
+        let identity: ICMPProbe.Identity
+        let deadline: ICMPDeadline
+        let size: Int
     }
 
     // MARK: - Properties
 
     let isIPv6: Bool
     private var socketFD: Int32 = -1
-    private let identifier: UInt16
+    private var targetIP = ""
+    private var identity = ICMPProbe.Identity()
+    private var checkedKernelID = false
     private var kernelIdentifier: UInt16?
-    private let payloadNonce: UInt64
     private var sequenceCounter: UInt16 = 0
+    private var rotateIdentity = false
     private var inFlightProbes: [UInt16: InFlightProbe] = [:]
 
-    private static let payloadNonceSize = MemoryLayout<UInt64>.size
-    private static let payloadTimestampSize = MemoryLayout<timeval>.size
+    private var recvBuf = [UInt8](repeating: 0, count: 65536)
+    private var controlBuf = [UInt8](repeating: 0, count: 256)
 
     init(isIPv6: Bool) {
         self.isIPv6 = isIPv6
-        self.identifier = Self.allocateIdentifier()
-        self.payloadNonce = UInt64.random(in: UInt64.min...UInt64.max)
     }
 
     // MARK: - Socket Lifecycle
 
-    func openSocket(tos: Int = 0) -> Bool {
+    func openSocket(targetIP: String, tos: Int = 0) -> Bool {
+        self.targetIP = targetIP
         let proto = isIPv6 ? IPPROTO_ICMPV6 : IPPROTO_ICMP
         socketFD = socket(isIPv6 ? AF_INET6 : AF_INET, SOCK_DGRAM, proto)
         guard socketFD >= 0 else { return false }
 
-        // Non-blocking so recvmsg() returns EAGAIN instead of blocking MainActor
         let flags = fcntl(socketFD, F_GETFL, 0)
-        if flags >= 0 {
-            _ = fcntl(socketFD, F_SETFL, flags | O_NONBLOCK)
+        guard flags >= 0, fcntl(socketFD, F_SETFL, flags | O_NONBLOCK) == 0,
+              ICMPProbe.enableTimestamps(on: socketFD) else {
+            closeSocket()
+            return false
         }
-
-        // Enable ancillary data
         var on: Int32 = 1
-        setsockopt(socketFD, SOL_SOCKET, SO_TIMESTAMP, &on, socklen_t(MemoryLayout<Int32>.size))
         if isIPv6 {
             setsockopt(socketFD, IPPROTO_IPV6, kIPV6_RECVHOPLIMIT, &on, socklen_t(MemoryLayout<Int32>.size))
         } else {
@@ -112,18 +91,25 @@ final class MtrProbeEngine {
 
     // MARK: - Sending Probes
 
-    /// Send an ICMP echo request at the given TTL. Returns the sequence number used.
-    func sendProbe(ttl: Int, target: UnsafeMutablePointer<addrinfo>, packetSize: Int, bitPattern: Int) -> UInt16 {
+    /// Send an ICMP echo request at the given TTL. Track only datagrams accepted by the socket.
+    func sendProbe(ttl: Int, target: UnsafeMutablePointer<addrinfo>, packetSize: Int, bitPattern: Int, timeout: TimeInterval) -> Bool {
         // Set TTL for this probe
         var ttlVal = Int32(ttl)
-        if isIPv6 {
-            setsockopt(socketFD, IPPROTO_IPV6, IPV6_UNICAST_HOPS, &ttlVal, socklen_t(MemoryLayout<Int32>.size))
-        } else {
-            setsockopt(socketFD, IPPROTO_IP, IP_TTL, &ttlVal, socklen_t(MemoryLayout<Int32>.size))
-        }
+        let level = isIPv6 ? IPPROTO_IPV6 : IPPROTO_IP
+        let option = isIPv6 ? IPV6_UNICAST_HOPS : IP_TTL
+        guard setsockopt(socketFD, level, option, &ttlVal, socklen_t(MemoryLayout<Int32>.size)) == 0 else { return false }
 
+        if rotateIdentity {
+            identity = ICMPProbe.Identity()
+            rotateIdentity = false
+        }
         let seq = sequenceCounter
         sequenceCounter &+= 1
+        rotateIdentity = sequenceCounter == 0
+        guard inFlightProbes[seq] == nil else {
+            errno = ENOBUFS
+            return false
+        }
 
         // Build ICMP packet
         let headerSize = 8
@@ -137,14 +123,14 @@ final class MtrProbeEngine {
         packet[2] = 0
         packet[3] = 0
         // Identifier
-        packet[4] = UInt8(identifier >> 8)
-        packet[5] = UInt8(identifier & 0xFF)
+        packet[4] = UInt8(identity.identifier >> 8)
+        packet[5] = UInt8(identity.identifier & 0xFF)
         // Sequence number
         packet[6] = UInt8(seq >> 8)
         packet[7] = UInt8(seq & 0xFF)
 
-        // Embed nonce + timestamp in payload
-        let payloadPrefixBytes = embedPayloadPrefix(into: &packet, headerSize: headerSize, packetSize: packetSize)
+        // Echoed nonce identifies the session even through NAT64.
+        let payloadPrefixBytes = identity.writeNonce(into: &packet)
 
         // Fill remaining with bit pattern
         let dataStart = headerSize + payloadPrefixBytes
@@ -160,19 +146,12 @@ final class MtrProbeEngine {
 
         // IPv4 needs manual checksum
         if !isIPv6 {
-            let cksum = icmpChecksum(packet)
+            let cksum = ICMPProbe.checksum(packet)
             packet[2] = UInt8(cksum >> 8)
             packet[3] = UInt8(cksum & 0xFF)
         }
 
-        // Record send time
-        var sendTime = timeval()
-        gettimeofday(&sendTime, nil)
-
-        // Track in-flight
-        inFlightProbes[seq] = InFlightProbe(ttl: ttl, sequenceNumber: seq, sendTime: sendTime)
-
-        // Send
+        let deadline = ICMPDeadline(timeout: timeout)
         let sent = sendto(
             socketFD,
             packet,
@@ -182,60 +161,50 @@ final class MtrProbeEngine {
             target.pointee.ai_addrlen
         )
 
-        if sent < 0 {
-            let err = String(cString: strerror(errno))
-            Self.logger.error("sendto failed for TTL \(ttl): \(err)")
+        guard sent == totalSize else { return false }
+        if !checkedKernelID {
+            kernelIdentifier = ICMPProbe.localIdentifier(on: socketFD)
+            checkedKernelID = true
         }
-
-        // Learn kernel identifier after first send
-        if kernelIdentifier == nil {
-            learnKernelIdentifier()
-        }
-
-        return seq
+        var wireIdentity = identity
+        wireIdentity.identifier = kernelIdentifier ?? identity.identifier
+        inFlightProbes[seq] = InFlightProbe(ttl: ttl, identity: wireIdentity, deadline: deadline, size: packetSize)
+        return true
     }
 
     // MARK: - Receiving Probes
 
-    /// Collect probe results with a timeout. Returns all results received.
-    /// Uses non-blocking recvmsg() + cooperative Task.sleep to avoid blocking MainActor.
+    /// Drain queued datagrams at both ends of the window. An unrelated packet
+    /// consumes one datagram, but does not end a drain or delay the next reply.
     func receiveProbes(timeout: TimeInterval) async -> [ProbeResult] {
-        let deadline = CFAbsoluteTimeGetCurrent() + timeout
+        let deadline = ICMPProbe.continuousNow + timeout
         var results: [ProbeResult] = []
-
         while !Task.isCancelled {
-            let remaining = deadline - CFAbsoluteTimeGetCurrent()
-            guard remaining > 0 else { break }
-
-            // Non-blocking drain: read all available packets
-            while let result = receiveOnePacket() {
-                results.append(result)
+            var count = 0
+            while count < 256 {
+                guard case .packet(let result) = receiveOnePacket() else { break }
+                if let result { results.append(result) }
+                count += 1
             }
-
-            // Yield MainActor via cooperative sleep
-            try? await Task.sleep(nanoseconds: 5_000_000) // 5ms
+            let remaining = deadline - ICMPProbe.continuousNow
+            guard remaining > 0 else { break }
+            if count == 256 {
+                await Task.yield()
+            } else {
+                try? await Task.sleep(for: .seconds(min(0.005, remaining)))
+            }
         }
-
         return results
     }
 
-    /// Check for timed-out probes and return timeout results.
-    func expireProbes(olderThan timeout: TimeInterval) -> [ProbeResult] {
-        var now = timeval()
-        gettimeofday(&now, nil)
-        let nowAbs = Double(now.tv_sec) + Double(now.tv_usec) / 1_000_000.0
+    func expireProbes(all: Bool = false) -> [ProbeResult] {
+        let now = ICMPProbe.continuousNow
         var results: [ProbeResult] = []
-
-        let expired = inFlightProbes.filter { (_, probe) in
-            let sendAbs = Double(probe.sendTime.tv_sec) + Double(probe.sendTime.tv_usec) / 1_000_000.0
-            return (nowAbs - sendAbs) >= timeout
-        }
-
-        for (seq, probe) in expired {
+        for (seq, probe) in inFlightProbes {
+            guard all || now >= probe.deadline.continuousEnd else { continue }
             results.append(.timeout(ttl: probe.ttl, seq: seq))
             inFlightProbes.removeValue(forKey: seq)
         }
-
         return results
     }
 
@@ -251,23 +220,27 @@ final class MtrProbeEngine {
 
     // MARK: - Private Receive
 
-    private func receiveOnePacket() -> ProbeResult? {
-        guard socketFD >= 0 else { return nil }
+    private enum ReadResult {
+        case empty
+        case packet(ProbeResult?)
+    }
 
-        var recvBuf = [UInt8](repeating: 0, count: 65536)
-        var controlBuf = [UInt8](repeating: 0, count: 256)
+    private func receiveOnePacket() -> ReadResult {
+        guard socketFD >= 0 else { return .empty }
+
         var srcAddr = sockaddr_storage()
         var iov = iovec()
         var msg = msghdr()
 
-        let (bytesRead, controlInfo): (Int, ControlInfo) = recvBuf.withUnsafeMutableBufferPointer { bufPtr in
+        var readAt: ICMPClockSample?
+        let (bytesRead, controlInfo): (Int, ICMPProbe.ControlInfo) = recvBuf.withUnsafeMutableBufferPointer { bufPtr in
             controlBuf.withUnsafeMutableBufferPointer { ctlPtr in
                 withUnsafeMutablePointer(to: &iov) { iovPtr in
                     withUnsafeMutablePointer(to: &srcAddr) { addrPtr in
                         addrPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
                             guard let recvBase = bufPtr.baseAddress,
                                   let controlBase = ctlPtr.baseAddress else {
-                                return (-1, ControlInfo())
+                                return (-1, ICMPProbe.ControlInfo())
                             }
 
                             iovPtr.pointee.iov_base = UnsafeMutableRawPointer(recvBase)
@@ -281,7 +254,8 @@ final class MtrProbeEngine {
                             msg.msg_controllen = socklen_t(ctlPtr.count)
 
                             let n = recvmsg(socketFD, &msg, 0)
-                            let info = n > 0 ? extractControlInfo(msg: &msg, maxLength: ctlPtr.count) : ControlInfo()
+                            if n >= 8 { readAt = .now }
+                            let info = ICMPProbe.controlInfo(msg: msg, capacity: ctlPtr.count)
                             return (n, info)
                         }
                     }
@@ -289,7 +263,8 @@ final class MtrProbeEngine {
             }
         }
 
-        guard bytesRead >= 8 else { return nil }
+        guard bytesRead >= 0 else { return .empty }
+        guard let readAt, bytesRead >= 8 else { return .packet(nil) }
 
         // Handle IPv4 header prefix
         var icmpOffset = 0
@@ -297,10 +272,11 @@ final class MtrProbeEngine {
             let versionNibble = (recvBuf[0] & 0xF0) >> 4
             if versionNibble == 4 {
                 icmpOffset = Int(recvBuf[0] & 0x0F) * 4
+                guard icmpOffset >= 20 else { return .packet(nil) }
             }
         }
 
-        guard bytesRead >= icmpOffset + 8 else { return nil }
+        guard bytesRead >= icmpOffset + 8 else { return .packet(nil) }
 
         let icmpType = recvBuf[icmpOffset]
         let sourceIP = extractSourceAddress(&srcAddr)
@@ -310,119 +286,40 @@ final class MtrProbeEngine {
         // Time Exceeded: IPv4 type 11, IPv6 type 3
         let timeExceededType: UInt8 = isIPv6 ? 3 : 11
 
-        if icmpType == echoReplyType {
-            return handleEchoReply(recvBuf: recvBuf, icmpOffset: icmpOffset, bytesRead: bytesRead,
-                                   sourceIP: sourceIP, controlInfo: controlInfo)
-        } else if icmpType == timeExceededType {
-            return handleTimeExceeded(recvBuf: recvBuf, icmpOffset: icmpOffset, bytesRead: bytesRead,
-                                      sourceIP: sourceIP, controlInfo: controlInfo)
-        }
-
-        return nil
-    }
-
-    private func handleEchoReply(recvBuf: [UInt8], icmpOffset: Int, bytesRead: Int,
-                                  sourceIP: String, controlInfo: ControlInfo) -> ProbeResult? {
-        // Filter by kernel identifier
-        let recvIdentifier = UInt16(recvBuf[icmpOffset + 4]) << 8 | UInt16(recvBuf[icmpOffset + 5])
-        if let expectedID = kernelIdentifier, recvIdentifier != expectedID {
-            return nil
-        }
-
-        let recvSeq = UInt16(recvBuf[icmpOffset + 6]) << 8 | UInt16(recvBuf[icmpOffset + 7])
-        let dataOffset = icmpOffset + 8
-        let dataLen = bytesRead - dataOffset
-
-        // Check nonce
-        if !payloadNonceMatches(buffer: recvBuf, payloadOffset: dataOffset, payloadLength: dataLen) {
-            return nil
-        }
-
-        // Look up in-flight probe
-        guard let probe = inFlightProbes.removeValue(forKey: recvSeq) else { return nil }
-
-        let rtt = calculateRTT(
-            buffer: recvBuf, payloadOffset: dataOffset, payloadLength: dataLen,
-            sendTime: probe.sendTime, receiveTime: controlInfo.receiveTime
-        )
-
-        return .echoReply(hopIP: sourceIP, rtt: rtt, ttl: probe.ttl, seq: recvSeq)
-    }
-
-    private func handleTimeExceeded(recvBuf: [UInt8], icmpOffset: Int, bytesRead: Int,
-                                     sourceIP: String, controlInfo: ControlInfo) -> ProbeResult? {
-        // Time Exceeded structure:
-        // [ICMP TE header: type(1) code(1) checksum(2) unused(4) = 8 bytes]
-        // [Embedded original IP header: variable length]
-        // [Embedded original ICMP Echo: type(1) code(1) checksum(2) id(2) seq(2) = 8 bytes]
-        // [Embedded payload: nonce(8) + timestamp(16)]
-
-        let teHeaderEnd = icmpOffset + 8  // End of Time Exceeded ICMP header
-
-        // Parse embedded IP header to find embedded ICMP.
-        // Under NAT64, the outer packet is IPv6 (Time Exceeded) but the embedded
-        // original packet may still be IPv4 if the carrier gateway didn't fully
-        // translate the inner header.  Check the actual version nibble.
-        let embeddedIPOffset = teHeaderEnd
-        guard bytesRead > embeddedIPOffset else { return nil }
-        let embeddedVersionNibble = (recvBuf[embeddedIPOffset] & 0xF0) >> 4
-        let embeddedICMPOffset: Int
-
-        if embeddedVersionNibble == 6 {
-            // IPv6: fixed 40-byte header
-            embeddedICMPOffset = embeddedIPOffset + 40
-        } else if embeddedVersionNibble == 4 {
-            // IPv4: IHL field gives length in 32-bit words (also handles NAT64)
-            let embeddedIHL = Int(recvBuf[embeddedIPOffset] & 0x0F) * 4
-            guard embeddedIHL >= 20 else { return nil }
-            embeddedICMPOffset = embeddedIPOffset + embeddedIHL
+        let seq: UInt16
+        let probe: InFlightProbe
+        if icmpType == echoReplyType && sourceIP == targetIP {
+            let identifier = UInt16(recvBuf[icmpOffset + 4]) << 8 | UInt16(recvBuf[icmpOffset + 5])
+            seq = UInt16(recvBuf[icmpOffset + 6]) << 8 | UInt16(recvBuf[icmpOffset + 7])
+            let dataOffset = icmpOffset + 8
+            let dataLen = bytesRead - dataOffset
+            guard let match = inFlightProbes[seq], match.size == dataLen,
+                  match.identity.identifier == identifier, recvBuf[icmpOffset + 1] == 0,
+                  match.identity.matchesNonce(in: recvBuf, offset: dataOffset, length: dataLen) else { return .packet(nil) }
+            probe = match
+        } else if icmpType == timeExceededType && recvBuf[icmpOffset + 1] == 0 {
+            guard let quote = ICMPProbe.EchoQuote(in: recvBuf, ipOffset: icmpOffset + 8, end: bytesRead),
+                  let match = inFlightProbes[quote.sequence],
+                  quote.matches(match.identity, sentSize: match.size, in: recvBuf) else { return .packet(nil) }
+            seq = quote.sequence
+            probe = match
         } else {
-            return nil
+            return .packet(nil)
         }
 
-        // Need at least 8 bytes for embedded ICMP header
-        guard bytesRead >= embeddedICMPOffset + 8 else { return nil }
-
-        // Verify embedded ICMP is Echo Request.
-        // Accept both IPv4 (type 8) and IPv6 (type 128) — under NAT64 the
-        // embedded packet type may not match the outer IP version.
-        let embeddedType = recvBuf[embeddedICMPOffset]
-        guard embeddedType == 8 || embeddedType == 128 else { return nil }
-
-        let embeddedSeq = UInt16(recvBuf[embeddedICMPOffset + 6]) << 8 | UInt16(recvBuf[embeddedICMPOffset + 7])
-
-        // Check nonce first — it survives NAT64 intact, whereas the kernel
-        // identifier may be rewritten by carrier gateways.
-        let embeddedPayloadOffset = embeddedICMPOffset + 8
-        let embeddedPayloadLen = bytesRead - embeddedPayloadOffset
-        if embeddedPayloadLen >= Self.payloadNonceSize {
-            if !payloadNonceMatches(buffer: recvBuf, payloadOffset: embeddedPayloadOffset, payloadLength: embeddedPayloadLen) {
-                return nil
+        switch probe.deadline.classify(controlInfo, read: readAt) {
+        case .beforeStart:
+            return .packet(nil)
+        case .expired:
+            inFlightProbes.removeValue(forKey: seq)
+            return .packet(.timeout(ttl: probe.ttl, seq: seq))
+        case .timely(let rtt):
+            inFlightProbes.removeValue(forKey: seq)
+            if icmpType == echoReplyType {
+                return .packet(.echoReply(hopIP: sourceIP, rtt: rtt, ttl: probe.ttl, seq: seq))
             }
-        } else {
-            // No nonce available — fall back to identifier check
-            let embeddedIdentifier = UInt16(recvBuf[embeddedICMPOffset + 4]) << 8 | UInt16(recvBuf[embeddedICMPOffset + 5])
-            if let expectedID = kernelIdentifier, embeddedIdentifier != expectedID {
-                return nil
-            }
+            return .packet(.timeExceeded(hopIP: sourceIP, rtt: rtt, ttl: probe.ttl, seq: seq))
         }
-
-        // Look up in-flight probe
-        guard let probe = inFlightProbes.removeValue(forKey: embeddedSeq) else { return nil }
-
-        // Calculate RTT from embedded timestamp if available, otherwise from send time
-        let rtt: Double
-        if embeddedPayloadLen >= Self.payloadNonceSize + Self.payloadTimestampSize {
-            rtt = calculateRTT(
-                buffer: recvBuf, payloadOffset: embeddedPayloadOffset, payloadLength: embeddedPayloadLen,
-                sendTime: probe.sendTime, receiveTime: controlInfo.receiveTime
-            )
-        } else {
-            // Fall back to send time
-            rtt = calculateRTTFromSendTime(sendTime: probe.sendTime, receiveTime: controlInfo.receiveTime)
-        }
-
-        return .timeExceeded(hopIP: sourceIP, rtt: rtt, ttl: probe.ttl, seq: embeddedSeq)
     }
 
     // MARK: - DNS Resolution
@@ -470,198 +367,6 @@ final class MtrProbeEngine {
 
     func determineIsIPv6(_ addrInfo: UnsafeMutablePointer<addrinfo>) -> Bool {
         addrInfo.pointee.ai_family == AF_INET6
-    }
-
-    // MARK: - Private Helpers
-
-    private func learnKernelIdentifier() {
-        if isIPv6 {
-            var addr6 = sockaddr_in6()
-            var len = socklen_t(MemoryLayout<sockaddr_in6>.size)
-            let result = withUnsafeMutablePointer(to: &addr6) { ptr in
-                ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                    getsockname(socketFD, sockPtr, &len)
-                }
-            }
-            if result == 0 {
-                let id = UInt16(bigEndian: addr6.sin6_port)
-                if id != 0 { kernelIdentifier = id }
-            }
-        } else {
-            var addr4 = sockaddr_in()
-            var len = socklen_t(MemoryLayout<sockaddr_in>.size)
-            let result = withUnsafeMutablePointer(to: &addr4) { ptr in
-                ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                    getsockname(socketFD, sockPtr, &len)
-                }
-            }
-            if result == 0 {
-                let id = UInt16(bigEndian: addr4.sin_port)
-                if id != 0 { kernelIdentifier = id }
-            }
-        }
-    }
-
-    private func embedPayloadPrefix(into packet: inout [UInt8], headerSize: Int, packetSize: Int) -> Int {
-        guard packetSize > 0 else { return 0 }
-
-        var payloadOffset = 0
-
-        // Session nonce first
-        let nonceBytesToWrite = min(Self.payloadNonceSize, packetSize)
-        var nonce = payloadNonce.littleEndian
-        withUnsafeBytes(of: &nonce) { nonceBytes in
-            for index in 0..<nonceBytesToWrite {
-                packet[headerSize + index] = nonceBytes[index]
-            }
-        }
-        payloadOffset += nonceBytesToWrite
-
-        // Timestamp follows nonce
-        let remaining = packetSize - payloadOffset
-        if remaining >= Self.payloadTimestampSize {
-            var tv = timeval()
-            gettimeofday(&tv, nil)
-            withUnsafeBytes(of: &tv) { tvBytes in
-                for index in 0..<Self.payloadTimestampSize {
-                    packet[headerSize + payloadOffset + index] = tvBytes[index]
-                }
-            }
-            payloadOffset += Self.payloadTimestampSize
-        }
-
-        return payloadOffset
-    }
-
-    private func icmpChecksum(_ data: [UInt8]) -> UInt16 {
-        var sum: UInt32 = 0
-        var i = 0
-
-        while i < data.count - 1 {
-            sum += UInt32(data[i]) << 8 | UInt32(data[i + 1])
-            i += 2
-        }
-        if i < data.count {
-            sum += UInt32(data[i]) << 8
-        }
-        while sum >> 16 != 0 {
-            sum = (sum & 0xFFFF) + (sum >> 16)
-        }
-        return ~UInt16(sum & 0xFFFF)
-    }
-
-    private func payloadNonceMatches(buffer: [UInt8], payloadOffset: Int, payloadLength: Int) -> Bool {
-        guard payloadLength >= Self.payloadNonceSize else { return payloadLength == 0 }
-
-        var nonce = payloadNonce.littleEndian
-        return withUnsafeBytes(of: &nonce) { nonceBytes in
-            for index in 0..<Self.payloadNonceSize {
-                guard payloadOffset + index < buffer.count else { return false }
-                if buffer[payloadOffset + index] != nonceBytes[index] {
-                    return false
-                }
-            }
-            return true
-        }
-    }
-
-    private func calculateRTT(buffer: [UInt8], payloadOffset: Int, payloadLength: Int,
-                               sendTime: timeval, receiveTime: timeval?) -> Double {
-        let timestampOffset = payloadOffset + Self.payloadNonceSize
-        let requiredLength = Self.payloadNonceSize + Self.payloadTimestampSize
-        guard payloadLength >= requiredLength else {
-            return calculateRTTFromSendTime(sendTime: sendTime, receiveTime: receiveTime)
-        }
-
-        var embeddedSendTime = timeval()
-        withUnsafeMutableBytes(of: &embeddedSendTime) { sendPtr in
-            for index in 0..<Self.payloadTimestampSize {
-                guard timestampOffset + index < buffer.count else { return }
-                sendPtr[index] = buffer[timestampOffset + index]
-            }
-        }
-
-        let sendAbs = Double(embeddedSendTime.tv_sec) + Double(embeddedSendTime.tv_usec) / 1_000_000.0
-        let recvTimeval: timeval = receiveTime ?? {
-            var now = timeval()
-            gettimeofday(&now, nil)
-            return now
-        }()
-        let recvAbs = Double(recvTimeval.tv_sec) + Double(recvTimeval.tv_usec) / 1_000_000.0
-        return max(0, (recvAbs - sendAbs) * 1000.0)
-    }
-
-    private func calculateRTTFromSendTime(sendTime: timeval, receiveTime: timeval?) -> Double {
-        let recvTimeval: timeval = receiveTime ?? {
-            var now = timeval()
-            gettimeofday(&now, nil)
-            return now
-        }()
-        let sendAbs = Double(sendTime.tv_sec) + Double(sendTime.tv_usec) / 1_000_000.0
-        let recvAbs = Double(recvTimeval.tv_sec) + Double(recvTimeval.tv_usec) / 1_000_000.0
-        return max(0, (recvAbs - sendAbs) * 1000.0)
-    }
-
-    private func extractControlInfo(msg: inout msghdr, maxLength: Int) -> ControlInfo {
-        guard let controlBase = msg.msg_control else { return ControlInfo() }
-        let controlLen = min(maxLength, Int(msg.msg_controllen))
-        let headerSize = MemoryLayout<cmsghdr>.size
-        let alignMask = MemoryLayout<Int>.size - 1
-        var offset = 0
-        var info = ControlInfo()
-
-        while offset + headerSize <= controlLen {
-            let cmsgPtr = controlBase.advanced(by: offset)
-            let cmsg = cmsgPtr.assumingMemoryBound(to: cmsghdr.self).pointee
-            let cmsgLen = Int(cmsg.cmsg_len)
-
-            guard cmsgLen >= headerSize else { break }
-            guard cmsgLen <= controlLen - offset else { break }
-
-            let cmsgDataLen = cmsgLen - headerSize
-
-            if isIPv6 {
-                if cmsg.cmsg_level == IPPROTO_IPV6 && (cmsg.cmsg_type == kIPV6_HOPLIMIT || cmsg.cmsg_type == kIPV6_2292HOPLIMIT) {
-                    guard cmsgDataLen >= MemoryLayout<Int32>.size else {
-                        offset += ((cmsgLen + alignMask) & ~alignMask)
-                        continue
-                    }
-                    let dataPtr = cmsgPtr.advanced(by: headerSize)
-                    var ttlValue: Int32 = 0
-                    memcpy(&ttlValue, dataPtr, MemoryLayout<Int32>.size)
-                    info.ttl = Int(ttlValue)
-                }
-            } else {
-                if cmsg.cmsg_level == IPPROTO_IP && cmsg.cmsg_type == IP_RECVTTL {
-                    let dataPtr = cmsgPtr.advanced(by: headerSize)
-                    if cmsgDataLen >= MemoryLayout<Int32>.size {
-                        var ttlValue: Int32 = 0
-                        memcpy(&ttlValue, dataPtr, MemoryLayout<Int32>.size)
-                        info.ttl = Int(ttlValue)
-                    } else if cmsgDataLen >= MemoryLayout<UInt8>.size {
-                        info.ttl = Int(dataPtr.assumingMemoryBound(to: UInt8.self).pointee)
-                    }
-                }
-            }
-
-            if cmsg.cmsg_level == SOL_SOCKET &&
-               cmsg.cmsg_type == kSCM_TIMESTAMP &&
-               cmsgDataLen >= MemoryLayout<timeval>.size {
-                let dataPtr = cmsgPtr.advanced(by: headerSize)
-                var recvTime = timeval()
-                memcpy(&recvTime, dataPtr, MemoryLayout<timeval>.size)
-                if recvTime.tv_sec > 0 || recvTime.tv_usec > 0 {
-                    info.receiveTime = recvTime
-                }
-            }
-
-            guard cmsgLen <= Int.max - alignMask else { break }
-            let alignedLen = (cmsgLen + alignMask) & ~alignMask
-            guard alignedLen > 0 else { break }
-            offset += alignedLen
-        }
-
-        return info
     }
 
     // MARK: - NAT64 Support

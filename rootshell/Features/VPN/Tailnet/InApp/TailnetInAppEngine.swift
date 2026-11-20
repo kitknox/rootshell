@@ -269,6 +269,7 @@ final class TailnetInAppEngine {
     /// Starts the engine if needed and waits for it to come online. False
     /// when it needs a sign-in (the login page is offered) or times out.
     func ensureRunning(timeout: Duration = .seconds(10)) async -> Bool {
+        guard !Task.isCancelled else { return false }
         if TailnetGo.isRunning { return true }
         do {
             try await start()
@@ -282,14 +283,20 @@ final class TailnetInAppEngine {
         }
         let deadline = ContinuousClock.now + timeout
         while ContinuousClock.now < deadline {
+            guard !Task.isCancelled else { return false }
             if TailnetGo.isRunning { return true }
             if status?.needsLogin == true {
                 Self.logger.info("In-app Tailscale needs sign-in")
                 TailnetLoginCoordinator.shared.watch()
                 return false
             }
-            try? await Task.sleep(for: .milliseconds(200))
+            do {
+                try await Task.sleep(for: .milliseconds(200))
+            } catch {
+                return false
+            }
         }
+        guard !Task.isCancelled else { return false }
         let running = TailnetGo.isRunning
         if !running {
             Self.logger.error("In-app Tailscale not running after \(String(describing: timeout), privacy: .public) (state \(self.status?.state ?? "none", privacy: .public))")

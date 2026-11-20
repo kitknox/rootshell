@@ -4,7 +4,7 @@ import Foundation
 
 /// Non-interactive report output formats for mtr.
 /// Used when -r, -w, -C, -j, -x, or -l is specified.
-@MainActor
+@MtrActor
 final class MtrReporter {
     let output: (String) -> Void
 
@@ -40,14 +40,7 @@ final class MtrReporter {
             let truncatedHost = padRight(String(hostStr.prefix(hostWidth)), width: hostWidth)
             let line = String(format: "%3d.|-- ", ttl) +
                 truncatedHost +
-                String(format: " %5.1f%%  %4d  %5.1f  %5.1f  %5.1f  %5.1f  %5.1f\r\n",
-                       hop.lossPercent,
-                       hop.sent,
-                       hop.received > 0 ? hop.lastRTT : 0,
-                       hop.received > 0 ? hop.avgRTT : 0,
-                       hop.received > 0 ? hop.bestRTT : 0,
-                       hop.received > 0 ? hop.worstRTT : 0,
-                       hop.received > 1 ? hop.stddev : 0)
+                reportColumns(hop)
             output(line)
         }
     }
@@ -87,14 +80,7 @@ final class MtrReporter {
             let paddedHost = padRight(hostStrings[i], width: hostWidth)
             let line = String(format: "%3d.|-- ", ttl) +
                 paddedHost +
-                String(format: " %5.1f%%  %4d  %5.1f  %5.1f  %5.1f  %5.1f  %5.1f\r\n",
-                       hop.lossPercent,
-                       hop.sent,
-                       hop.received > 0 ? hop.lastRTT : 0,
-                       hop.received > 0 ? hop.avgRTT : 0,
-                       hop.received > 0 ? hop.bestRTT : 0,
-                       hop.received > 0 ? hop.worstRTT : 0,
-                       hop.received > 1 ? hop.stddev : 0)
+                reportColumns(hop)
             output(line)
         }
     }
@@ -114,7 +100,8 @@ final class MtrReporter {
             let hostname = config.numeric ? ip : (resolver.cachedHostname(for: ip) ?? ip)
             let status = hop.addresses.isEmpty ? "??" : "OK"
 
-            let line = "1.0;\(status);\(targetHost);\(ttl);\(hostname);\(formatCSVFloat(hop.lossPercent));\(hop.sent);\(formatCSVFloat(hop.received > 0 ? hop.lastRTT : 0));\(formatCSVFloat(hop.received > 0 ? hop.avgRTT : 0));\(formatCSVFloat(hop.received > 0 ? hop.bestRTT : 0));\(formatCSVFloat(hop.received > 0 ? hop.worstRTT : 0));\(formatCSVFloat(hop.received > 1 ? hop.stddev : 0))\r\n"
+            let times = timingColumns(hop).map { $0.value.map(formatCSVFloat) ?? "" }
+            let line = "1.0;\(status);\(targetHost);\(ttl);\(hostname);\(formatCSVFloat(hop.lossPercent));\(hop.sent);\(times.joined(separator: ";"))\r\n"
             output(line)
         }
     }
@@ -147,11 +134,9 @@ final class MtrReporter {
             json += "        \"host\": \"\(escapeJSON(hostname))\",\r\n"
             json += "        \"Loss%\": \(formatJSONFloat(hop.lossPercent)),\r\n"
             json += "        \"Snt\": \(hop.sent),\r\n"
-            json += "        \"Last\": \(formatJSONFloat(hop.received > 0 ? hop.lastRTT : 0)),\r\n"
-            json += "        \"Avg\": \(formatJSONFloat(hop.received > 0 ? hop.avgRTT : 0)),\r\n"
-            json += "        \"Best\": \(formatJSONFloat(hop.received > 0 ? hop.bestRTT : 0)),\r\n"
-            json += "        \"Wrst\": \(formatJSONFloat(hop.received > 0 ? hop.worstRTT : 0)),\r\n"
-            json += "        \"StDev\": \(formatJSONFloat(hop.received > 1 ? hop.stddev : 0))\r\n"
+            json += timingColumns(hop).map { name, value in
+                "        \"\(name)\": \(value.map(formatJSONFloat) ?? "null")"
+            }.joined(separator: ",\r\n") + "\r\n"
             json += "      }"
             if i < hopCount - 1 { json += "," }
             json += "\r\n"
@@ -180,11 +165,9 @@ final class MtrReporter {
             xml += "  <HUB COUNT=\"\(ttl)\" HOST=\"\(escapeXML(hostname))\""
             xml += " Loss=\"\(formatJSONFloat(hop.lossPercent))\""
             xml += " Snt=\"\(hop.sent)\""
-            xml += " Last=\"\(formatJSONFloat(hop.received > 0 ? hop.lastRTT : 0))\""
-            xml += " Avg=\"\(formatJSONFloat(hop.received > 0 ? hop.avgRTT : 0))\""
-            xml += " Best=\"\(formatJSONFloat(hop.received > 0 ? hop.bestRTT : 0))\""
-            xml += " Wrst=\"\(formatJSONFloat(hop.received > 0 ? hop.worstRTT : 0))\""
-            xml += " StDev=\"\(formatJSONFloat(hop.received > 1 ? hop.stddev : 0))\""
+            for (name, value) in timingColumns(hop) {
+                if let value { xml += " \(name)=\"\(formatJSONFloat(value))\"" }
+            }
             xml += " />\r\n"
         }
 
@@ -212,6 +195,27 @@ final class MtrReporter {
     }
 
     // MARK: - Helpers
+
+    private func timingColumns(_ hop: HopStatistics) -> [(name: String, value: Double?)] {
+        // Keep the existing zero sentinel for unanswered hops. A reply without
+        // a kernel timestamp still establishes reachability but supplies no RTT.
+        let missing: Double? = hop.received == 0 ? 0 : nil
+        return [
+            ("Last", hop.timed > 0 ? hop.lastRTT : missing),
+            ("Avg", hop.timed > 0 ? hop.avgRTT : missing),
+            ("Best", hop.timed > 0 ? hop.bestRTT : missing),
+            ("Wrst", hop.timed > 0 ? hop.worstRTT : missing),
+            ("StDev", hop.timed > 0 ? hop.stddev : missing)
+        ]
+    }
+
+    private func reportColumns(_ hop: HopStatistics) -> String {
+        let times = timingColumns(hop).map { column in
+            column.value.map { String(format: "%5.1f", $0) } ?? "    -"
+        }
+        return String(format: " %5.1f%%  %4d  ", hop.lossPercent, hop.sent) +
+            times.joined(separator: "  ") + "\r\n"
+    }
 
     private func formatDate() -> String {
         let formatter = DateFormatter()
