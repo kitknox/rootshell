@@ -3,6 +3,41 @@
 All notable changes to the rootshell app for iPhone, iPad, Vision Pro, and Mac, newest first.
 Versions are listed as `release-build`, matching the version shown in Settings, About.
 
+## 1.0.16-181 - November 21, 2026
+
+### Screen Sharing and KVM
+
+- **Remember Last Screen** is on by default. Saved profiles show a softened, dated image until live video arrives and a thumbnail in the profile list. Images are encrypted, stay on this device, and are excluded from backups and sync. Use Forget Last Screen to delete one image, or turn off Remember Last Screen in Screen Sharing settings to delete them all.
+- **Password prompts** scroll on short panes, including on the iPhone Duo’s outer display with the keyboard open.
+- **iPad remote sessions** use smaller keys in floating and docked toolbars, and trackpad pinch-to-zoom is smoother.
+- **Input method editors** for languages such as Japanese, Chinese, and Korean show underlined composition text and its cursor or selection above the keyboard. Text is sent to the remote computer when you commit it.
+
+### Toolbar Keys
+
+- **Live preview** lets you tap a key to find it in the list or touch and hold to drag it. The preview stays visible while you scroll when space allows. Switch between system keyboard, Terminal Keyboard, and floating or docked Glass Bar previews where available.
+- **Toolbar editing** lets you use the + on any row to search built-in and custom keys, restore hidden keys, move existing keys, or create a custom key. Collapse rows, see which keys overflow into drawers, and select several keys to move or remove together. Undo and Redo are in More.
+- **Shared layouts** let you choose whether to edit both toolbars or create a separate layout when Screen Sharing or KVM shares the Terminal toolbar.
+- **Show Keyboard for One Key** lets a Terminal custom key on iPhone and iPad send an optional sequence, open the hidden keyboard for your next key, and hide it again. You can assign it to a terminal swipe gesture.
+- **Toolbar Command shortcuts** work with the system keyboard and Terminal Keyboard, including arrow keys, function keys, and two-key shortcuts. Unassigned Command-letter combinations no longer insert stray letters.
+
+### VPN and Tailscale
+
+- **VPN settings** show connection status, uptime, and transport. Disconnect asks for confirmation, and Local Capture can open HTTP Capture from the connection card.
+- **Traffic charts** let you scrub one or five minutes of activity and see live rates, totals, peaks, and a warning when updates stall. See TCP and UDP flows, capacity drops, and extension memory where available.
+- **Tunnel Details** shows diagnostics, saved profile settings, and Tailscale details. Whole Device Tailscale refreshes peer information and SSH egress status while Settings is open.
+- **tssh** resumes faster over in-app Tailscale. Tailscale starts earlier during tab restoration, and tssh retries as soon as it’s ready. Required tailnet or exit-node routes stay enforced.
+- **Local shell curl** works again after returning to rootshell on iOS with Tailscale in rootshell Only mode and Use in Local Shell enabled. rootshell now restores the local proxy if iOS closed it in the background.
+- **Bundled Tailscale** moves from 1.104.5 to 1.104.7. This helps direct connections survive brief address changes and handles duplicate WireGuard handshake replies. The component now uses Go 1.27.4, which includes security fixes.
+
+### Other Fixes
+
+- **Mouse and trackpad button releases** are sent immediately in the iPad terminal, making clicks and drags more responsive.
+- **Terminal selection** scrolls when dragged near the top or bottom on iPhone, including with the keyboard hidden or on the Duo’s outer display.
+- **HDR brightness slider** stays above the Glass Bar and keyboard, including in short split panes.
+- **Tab logos, Tab Exposé captions, and the tab switch indicator** use artwork suited to the background behind them, including Theme Gradient.
+- **Local shell** no longer crashes when typing combining characters.
+- **Photo background setup** no longer crashes during launch.
+
 ## 1.0.16-180 - November 19, 2026
 
 ### Terminal
