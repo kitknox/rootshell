@@ -69,7 +69,9 @@ extension TerminalKeyboardAccessoryHost {
     var keyboardAccessoryOmitsBottomSafeAreaStrip: Bool { false }
     var keyboardHostBottomUnderlap: CGFloat { 0 }
     var keyboardHideIntentWindow: UIWindow? { nil }
-    var keyboardSizes: KeyboardSizes { KeyboardSizes.accessory(traitCollection: keyboardHostView.traitCollection) }
+    var keyboardSizes: KeyboardSizes {
+        KeyboardSizes.accessory(traitCollection: keyboardHostView.traitCollection, context: keyboardToolbarContext)
+    }
     var keyboardToolbarContext: ToolbarContext { .terminal }
     var keyboardGlassBarIsFloating: Bool? { nil }
     func keyboardSendModifierDoublePress(_ modifier: KeyModifiers) {}

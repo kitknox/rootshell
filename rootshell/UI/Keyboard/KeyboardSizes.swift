@@ -115,12 +115,17 @@ struct KeyboardSizes {
             fontSize: button.fontSize, symbolSize: button.symbolSize))
     }
 
-    /// The terminal and Screen Sharing toolbars keep the Duo's regular-width
-    /// inner display on phone sizes.
     /// The size class picks the preset; the display's toolbar size then scales it.
-    static func accessory(traitCollection: UITraitCollection) -> KeyboardSizes {
+    /// The Duo's regular-width inner display stays on phone sizes. So does a
+    /// remote screen's bar on iPad, which sits over the desktop it controls.
+    static func accessory(traitCollection: UITraitCollection, context: ToolbarContext) -> KeyboardSizes {
+        #if os(visionOS) || targetEnvironment(macCatalyst)
+        let overRemoteScreen = false
+        #else
+        let overRemoteScreen = context.usesGlassBar
+        #endif
         let preset: KeyboardSizes
-        if DuoHingeEvents.hasHinge {
+        if DuoHingeEvents.hasHinge || overRemoteScreen {
             preset = traitCollection.verticalSizeClass == .compact ? .iPhoneLandscape : .iPhonePortrait
         } else {
             preset = current(traitCollection: traitCollection)

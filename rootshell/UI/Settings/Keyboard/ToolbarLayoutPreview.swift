@@ -374,7 +374,7 @@ final class ToolbarLayoutPreviewHostView: UIView {
         // The window's size classes pick the key sizes, as they do for the
         // live toolbar. This view's own can differ inside a sheet.
         let traits = window?.traitCollection ?? traitCollection
-        let sizes = KeyboardSizes.accessory(traitCollection: traits)
+        let sizes = KeyboardSizes.accessory(traitCollection: traits, context: context)
         var fullWidth = window?.bounds.width ?? bounds.width
         if traits.userInterfaceIdiom == .phone, traits.verticalSizeClass == .compact, let window {
             // A phone in landscape keeps the toolbar clear of both side insets.
