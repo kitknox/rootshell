@@ -1865,38 +1865,58 @@ struct VNCOverlayCard<Icon: View, Content: View>: View {
         )
     }
 
+    /// Below this pane height (a Duo outer display, a short split, or any
+    /// phone with the keyboard up) the card tightens its chrome.
+    private static var compactHeight: CGFloat { 560 }
+
     var body: some View {
         ZStack {
             Color.black.opacity(0.32)
                 .ignoresSafeArea()
 
-            VStack(spacing: 16) {
-                icon()
-                    .frame(width: 48, height: 48)
-
-                VStack(spacing: 4) {
-                    Text(title)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.center)
-
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
+            // Scrolls only when the card is taller than the pane, so the
+            // field and every button stay reachable; otherwise centered.
+            GeometryReader { proxy in
+                let compact = proxy.size.height < Self.compactHeight
+                ScrollView {
+                    panel(compact: compact)
+                        .frame(maxWidth: .infinity, minHeight: proxy.size.height)
                 }
-
-                content()
+                .scrollBounceBehavior(.basedOnSize)
+                .scrollDismissesKeyboard(.interactively)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 22)
-            .frame(maxWidth: 420)
-            .vncOverlayGlassBackground(tint: glassTint)
-            .padding(24)
         }
         .tint(paneTheme?.accent ?? .accentColor)
         .transition(.opacity.combined(with: .scale(scale: 0.97)))
+    }
+
+    private func panel(compact: Bool) -> some View {
+        VStack(spacing: compact ? 10 : 16) {
+            icon()
+                .frame(width: 48, height: 48)
+                .scaleEffect(compact ? 0.75 : 1)
+                .frame(width: compact ? 36 : 48, height: compact ? 36 : 48)
+
+            VStack(spacing: compact ? 2 : 4) {
+                Text(title)
+                    .font(compact ? .headline : .title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+
+            content()
+        }
+        .padding(.horizontal, compact ? 18 : 24)
+        .padding(.vertical, compact ? 16 : 22)
+        .frame(maxWidth: 420)
+        .vncOverlayGlassBackground(tint: glassTint)
+        .padding(compact ? 12 : 24)
     }
 }
 
@@ -1988,6 +2008,7 @@ struct UnconfirmedSavedPasswordOption: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Button(action: onUse) {
                 Text("Use Saved Password").frame(maxWidth: .infinity)
             }
