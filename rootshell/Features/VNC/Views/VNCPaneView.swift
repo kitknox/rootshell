@@ -1793,16 +1793,16 @@ private struct VNCSessionOverlay: View {
 
 /// Connected-but-no-framebuffer gap in standard mode, owned by rootshell
 /// (the package's equivalent card is suppressed by hostOwnsRecoveryChrome).
-/// Isolated in its own leaf view so the hot per-frame `currentImage`
-/// observation invalidates only this cheap body, mirroring the package's
-/// StandardFramebufferContent split. High Performance mode renders video
+/// Observes `isPresentingPicture` instead of `currentImage` so per-frame
+/// Standard IOSurface updates never invalidate this view or materialize a
+/// `CGImage` copy on the main thread. High Performance mode renders video
 /// directly and never had a waiting card.
 private struct VNCFirstFrameWaitCard: View {
     let subtitle: String
     @Bindable var session: VNCSession
 
     var body: some View {
-        if !session.isHighPerformanceMode, session.currentImage == nil {
+        if !session.isHighPerformanceMode, !session.isPresentingPicture {
             VNCConnectingCard(
                 subtitle: subtitle,
                 status: String(localized: "Waiting for first screen update…"),
