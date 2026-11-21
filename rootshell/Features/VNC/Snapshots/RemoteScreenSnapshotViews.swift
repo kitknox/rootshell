@@ -31,27 +31,33 @@ private struct RemoteScreenLastSeenImage: View {
     let snapshot: RemoteScreenSnapshot
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Color.black
+        GeometryReader { proxy in
+            ZStack(alignment: .top) {
+                Color.black
 
-            Image(decorative: snapshot.image, scale: 1)
-                .resizable()
-                .interpolation(.medium)
-                .aspectRatio(contentMode: .fit)
-                // Opaque keeps the picture's edges where the live one will be.
-                .blur(radius: 10, opaque: true)
-                .saturation(0.85)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Image(decorative: snapshot.image, scale: 1)
+                    .resizable()
+                    .interpolation(.medium)
+                    .aspectRatio(contentMode: .fit)
+                    // Opaque keeps the picture's edges where the live one will be.
+                    .blur(radius: 10, opaque: true)
+                    .saturation(0.85)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Label(Self.caption(for: snapshot.capturedAt), systemImage: "clock.arrow.circlepath")
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(.ultraThinMaterial, in: Capsule())
-                .environment(\.colorScheme, .dark)
-                // Clear of the home indicator in the full-screen takeover.
-                .padding(.bottom, 28)
+                // At the top: the HUD toolbar floats from the bottom corner or
+                // docks along the bottom, and its drawer rows open upward.
+                Label(Self.caption(for: snapshot.capturedAt), systemImage: "clock.arrow.circlepath")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .environment(\.colorScheme, .dark)
+                    // The full-screen takeover ignores the safe area; the caption must not.
+                    .padding(.top, proxy.safeAreaInsets.top + 12)
+                    .padding(.horizontal, max(proxy.safeAreaInsets.leading, proxy.safeAreaInsets.trailing) + 12)
+            }
         }
         .clipped()
     }
