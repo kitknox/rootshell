@@ -472,6 +472,11 @@ struct VPNStatusRow: View {
     }
 
     private var tileTint: Color {
+        #if !CHINA_BUILD
+        if isTailnet || showsInAppTailnet {
+            return Color.accentColor
+        }
+        #endif
         switch vpnManager.status {
         case .connected:
             return .green
@@ -480,11 +485,6 @@ struct VPNStatusRow: View {
         case .disconnecting:
             return .yellow
         default:
-            #if !CHINA_BUILD
-            if showsInAppTailnet && engine.isRunning {
-                return .green
-            }
-            #endif
             return Color.accentColor
         }
     }
