@@ -121,12 +121,20 @@ private struct KVMScreenContent: View {
             touchGestures: touchGestures,
             brightnessGain: brightnessGain,
             // Close Connection runs the pre-disconnect action first.
-            disconnect: { pane.runPreDisconnectAction { session.disconnect() } },
+            disconnect: {
+                pane.runPreDisconnectAction {
+                    pane.snapshots.captureNow()
+                    session.disconnect()
+                }
+            },
             hudMenuExtras: VNCHUDMenuExtras(
                 actions: { KVMHUDMenuExtras(pane: pane, slot: .actions) },
                 display: { KVMHUDMenuExtras(pane: pane, slot: .display) },
                 keyboard: { KVMHUDMenuExtras(pane: pane, slot: .keyboard) },
                 session: { KVMHUDMenuExtras(pane: pane, slot: .session) }))
+        .screenPlaceholder {
+            RemoteScreenLastSeenPlaceholder(recorder: pane.snapshots)
+        }
         #if !os(visionOS) && !targetEnvironment(macCatalyst)
         .hudAccessory(
             isEnabled: pane.keyboardCoordinator?.hudModel.barEnabled ?? false,

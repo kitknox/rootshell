@@ -373,6 +373,14 @@ nonisolated extension Settings {
             "screenSharingFloatingToolbarDefault", default: true, group: .screenSharing,
             configKey: "screen-sharing-floating-toolbar-default",
             title: String(localized: "Floating Keyboard Toolbar", comment: "Setting title"))
+        static let rememberLastScreen = SettingKey(
+            "screenSharingRememberLastScreen", default: true, group: .screenSharing,
+            configKey: "screen-sharing-remember-last-screen",
+            title: String(localized: "Remember Last Screen", comment: "Setting title"))
+        /// Profile IDs whose saved screen could not be deleted yet.
+        static let snapshotPendingDeletions = AnySettingDefinition.opaque(
+            "screenSharingSnapshotPendingDeletions", group: .screenSharing,
+            title: String(localized: "Saved Screens Awaiting Deletion", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
             clipboardSyncDefault.erased, panningDefault.erased,
@@ -381,7 +389,8 @@ nonisolated extension Settings {
             controlOptionAsCommandDefault.erased, routeReservedShortcutsToVNCDefault.erased,
             touchHoldDelay.erased, showsHeldButton.erased,
             swipeUpAction.erased, swipeDownAction.erased, swipeLeftAction.erased, swipeRightAction.erased,
-            fourFingerNavigation.erased, floatingToolbarDefault.erased,
+            fourFingerNavigation.erased, floatingToolbarDefault.erased, rememberLastScreen.erased,
+            snapshotPendingDeletions,
         ]
     }
 

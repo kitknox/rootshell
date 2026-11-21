@@ -7,6 +7,7 @@
 //
 
 import Combine
+import CoreVideo
 import SwiftUI
 import UIKit
 import os
@@ -25,6 +26,8 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
     let session: KVMSession
     let loginPassword: KVMLoginPasswordAssistant
     let keyboardCapture: VNCKeyboardCapture
+    /// The last screen seen, shown until the session draws its own.
+    let snapshots: RemoteScreenSnapshotRecorder
     let initialViewportPanningMode: RemoteViewportPanningMode
     let initialPointerMode: RemotePointerMode
 
@@ -52,14 +55,20 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
         didSet { refreshPanePresentationTitle() }
     }
     var sourceProfileID: UUID? {
-        didSet { loginPassword.profileID = sourceProfileID }
+        didSet {
+            loginPassword.profileID = sourceProfileID
+            snapshots.profileID = sourceProfileID
+        }
     }
     var restorationState: RestorationState = .none
     /// A typed password for this pane's first attempt, used only if the
     /// route it was typed for is still the pane's route.
     var passwordHandoff: RemoteScreenPasswordHandoff?
     /// The route the session's password, or the open prompt, belongs to.
-    @Published private(set) var route: RemoteScreenRoute?
+    @Published private(set) var route: RemoteScreenRoute? {
+        // The route can move between attempts; snapshots follow the session.
+        didSet { snapshots.endpoint = route?.snapshotEndpoint }
+    }
     /// The prompt reopened because the jump route moved under it.
     @Published private(set) var promptRouteChanged = false
 
@@ -125,6 +134,21 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
         self.loginPassword = KVMLoginPasswordAssistant(
             session: session,
             detectsLoginScreen: config.promptForHostPasswordAtLoginScreen)
+        // The renderer keeps its last frame across a reconnect, so only a
+        // frame from this connection counts.
+        self.snapshots = RemoteScreenSnapshotRecorder(
+            endpoint: config.currentRoute.snapshotEndpoint,
+            canPersist: RemoteScreenSnapshotRecorder.savedProfilePoints,
+            hasLivePicture: { [session] in session.hasFirstFrame }
+        ) { [session] in
+            guard session.hasFirstFrame, let frame = session.renderer.latestComposedFrame else { return nil }
+            return .surfaces([RemoteScreenSnapshotRecorder.Surface(
+                pixelBuffer: frame,
+                region: CGRect(
+                    x: 0, y: 0,
+                    width: CVPixelBufferGetWidth(frame),
+                    height: CVPixelBufferGetHeight(frame)))])
+        }
         switch ScreenSharingPanningDefault.current {
         case .edge: initialViewportPanningMode = .edge
         case .continuous: initialViewportPanningMode = .continuous
@@ -437,6 +461,7 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
         if state.isConnected {
             requestFullScreenIfNeeded()
         }
+        snapshots.sessionConnectionChanged(isConnected: state.isConnected)
         noteVideoTransition(
             connected: state.isConnected, firstFrame: firstFrame,
             videoSize: videoSize, sourceOnline: sourceOnline)
@@ -497,6 +522,8 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
             return
         }
 
+        // Before the action: after it the screen is locked or dark.
+        snapshots.captureClosingFrame()
         preDisconnectCompletion = disconnect
         preDisconnectPhase = .running
         preDisconnectTask = Task { [weak self] in
@@ -528,6 +555,7 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
         preDisconnectTask = nil
         preDisconnectCompletion = nil
         preDisconnectPhase = nil
+        snapshots.resumeCaptures()
     }
 
     private func finishPreDisconnect() {
@@ -651,6 +679,8 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
 
     @discardableResult
     override func pauseRendererForBackground(timeoutNanoseconds: UInt64 = 200_000_000) -> Bool {
+        // The app may not come back: keep the screen as it is now.
+        snapshots.captureNow()
         #if targetEnvironment(macCatalyst)
         session.renderer.setPresentationSuspended(true)
         #else
@@ -692,6 +722,8 @@ final class KVMPaneView: SplitPaneView, ObservableObject {
         preDisconnectCompletion = nil
         fullScreenController?.paneDidClose(self)
         keyboardCapture.onReservedHostShortcut = nil
+        snapshots.captureNow()
+        snapshots.stop()
         session.disconnect()
         session.onFramePresented = nil
         loginPassword.reset()

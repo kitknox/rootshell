@@ -94,6 +94,8 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
     let session: VNCSession
     let clipboardSynchronizer: VNCClipboardSynchronizer
     let keyboardCapture: VNCKeyboardCapture
+    /// The last screen seen, shown until the session draws its own.
+    let snapshots: RemoteScreenSnapshotRecorder
     fileprivate let initialViewportPanningMode: RemoteViewportPanningMode
     fileprivate let initialPointerMode: RemotePointerMode
 
@@ -139,7 +141,9 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
     }
 
     /// Profile that created this pane (usage recording, future editing).
-    var sourceProfileID: UUID?
+    var sourceProfileID: UUID? {
+        didSet { snapshots.profileID = sourceProfileID }
+    }
 
     var restorationState: RestorationState = .none
 
@@ -203,7 +207,10 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
     /// route it was typed for is still the pane's route.
     var passwordHandoff: RemoteScreenPasswordHandoff?
     /// The route the session's password, or the open prompt, belongs to.
-    @Published private(set) var route: RemoteScreenRoute?
+    @Published private(set) var route: RemoteScreenRoute? {
+        // The route can move between attempts; snapshots follow the session.
+        didSet { snapshots.endpoint = route?.snapshotEndpoint }
+    }
     /// The prompt reopened because the jump route moved under it.
     @Published private(set) var promptRouteChanged = false
 
@@ -294,6 +301,24 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
         let session = VNCSession(configuration: config.toPackageConfiguration())
         self.session = session
         self.clipboardSynchronizer = VNCClipboardSynchronizer(session: session)
+        // The session reports what its view shows: the selected display
+        // only, and every display that is on screen.
+        self.snapshots = RemoteScreenSnapshotRecorder(
+            endpoint: config.currentRoute.snapshotEndpoint,
+            canPersist: RemoteScreenSnapshotRecorder.savedProfilePoints,
+            hasLivePicture: { [session] in session.isPresentingPicture }
+        ) { [session] in
+            switch session.presentedFrame {
+            case .image(let image)?:
+                return .image(image)
+            case .surfaces(let surfaces)?:
+                return .surfaces(surfaces.map {
+                    RemoteScreenSnapshotRecorder.Surface(pixelBuffer: $0.pixelBuffer, region: $0.region)
+                })
+            case nil:
+                return nil
+            }
+        }
         // Ordinary VNC hardware input is always active for the focused pane.
         // The user-facing toggle chooses the destination for four reserved
         // host chords; its own shortcut always remains local.
@@ -348,6 +373,8 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
         session.userDisconnectHandler = { [weak self] in
             guard let self else { return }
             self.runPreDisconnectAction { [weak self] in
+                // Disconnecting resets the frame the snapshot is taken from.
+                self?.snapshots.captureNow()
                 self?.session.disconnect()
             }
         }
@@ -646,6 +673,8 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
             return
         }
 
+        // Before the action: after it the screen is locked or logged out.
+        snapshots.captureClosingFrame()
         preDisconnectCompletion = disconnect
         preDisconnectPhase = .running
         let session = self.session
@@ -681,6 +710,7 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
         preDisconnectTask = nil
         preDisconnectCompletion = nil
         preDisconnectPhase = nil
+        snapshots.resumeCaptures()
     }
 
     private func finishPreDisconnect() {
@@ -817,6 +847,7 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
 
         applyClipboardSyncDefault(encryption: encryption)
         logConnectionStateChangeIfNeeded(state)
+        snapshots.sessionConnectionChanged(isConnected: state.isConnected)
 
         if state.isConnected, !serverName.isEmpty {
             let resolved = userOverrideTitle ?? serverName
@@ -1150,6 +1181,8 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
         // queued-but-unpresented samples; an enqueue during the locked-screen
         // secure snapshot gets the process killed. Cleared by
         // setOcclusion(true) and by resumePresentationAfterForeground().
+        // The app may not come back: keep the screen as it is now.
+        snapshots.captureNow()
         session.suspendsDisplayPresentation = true
         VNCDebugLogger.shared.lifecycle("presentationSuspended", [
             ("reason", "pauseRendererForBackground"),
@@ -1210,6 +1243,9 @@ final class VNCPaneView: SplitPaneView, ObservableObject {
         fullScreenController?.paneDidClose(self)
         clipboardSynchronizer.invalidate()
         keyboardCapture.onReservedHostShortcut = nil
+        // Before the disconnect resets the frame it is taken from.
+        snapshots.captureNow()
+        snapshots.stop()
         session.disconnect()
         keyboardCoordinator?.tearDown()
         keyboardCoordinator = nil
@@ -1523,6 +1559,9 @@ struct VNCPaneRootView: View {
                         },
                         session: { VNCConnectionInfoMenuItem(pane: pane) })
                 )
+                .screenPlaceholder {
+                    RemoteScreenLastSeenPlaceholder(recorder: pane.snapshots)
+                }
                 #if !os(visionOS) && !targetEnvironment(macCatalyst)
                 .hudAccessory(
                     isEnabled: pane.keyboardCoordinator?.hudModel.barEnabled ?? false,

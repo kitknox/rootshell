@@ -38,6 +38,7 @@ final class ConnectionProfileManager {
         themeStore.reload()
         store.reload()
         restoreProfileThemesFromDisk()
+        pruneRemoteScreenSnapshots()
         updateProfilesFromStore()
     }
 
@@ -294,6 +295,7 @@ final class ConnectionProfileManager {
         if previous.connectionProtocol == .kvm, profile.connectionProtocol != .kvm {
             deleteKVMHostPassword(profileID: profile.id)
         }
+        pruneRemoteScreenSnapshots()
         updateProfilesFromStore()
 
         Self.logger.info("Updated profile '\(profile.name)'")
@@ -305,9 +307,26 @@ final class ConnectionProfileManager {
         KeybindManager.shared.clearProfileShortcut(profileID: id)
         // Deleting here reaches every device through iCloud Keychain.
         deleteKVMHostPassword(profileID: id)
+        pruneRemoteScreenSnapshots()
         updateProfilesFromStore()
 
         Self.logger.info("Deleted profile \(id.uuidString)")
+    }
+
+    /// Deletes saved screens whose profile was deleted or is no longer a
+    /// remote screen. Run after every change to the store, synced ones
+    /// included: a deletion or protocol change made on another device
+    /// arrives as an ordinary record. A profile repointed at another
+    /// computer keeps its file until its row finds the mismatch.
+    private func pruneRemoteScreenSnapshots() {
+        RemoteScreenSnapshotStore.shared.prune { id in
+            // Only a record that says so removes a screen. A missing one
+            // proves nothing: a file that failed to read or decode, or a
+            // directory that failed to list, looks the same from here.
+            guard let profile = store.record(for: id) else { return true }
+            return !profile.isDeleted
+                && (profile.connectionProtocol == .vnc || profile.connectionProtocol == .kvm)
+        }
     }
 
     private func deleteKVMHostPassword(profileID: UUID) {
@@ -683,6 +702,7 @@ final class ConnectionProfileManager {
 
         let failureCount = failures.count
         Self.logger.info("Applied \(applied) remote changes to profiles (\(failureCount) failures)")
+        pruneRemoteScreenSnapshots()
         updateProfilesFromStore()
         return (applied, failures)
     }
@@ -716,6 +736,7 @@ final class ConnectionProfileManager {
 
         if deletedCount > 0 {
             Self.logger.info("Applied \(deletedCount) remote deletions to profiles")
+            pruneRemoteScreenSnapshots()
             updateProfilesFromStore()
         }
     }
@@ -730,6 +751,7 @@ final class ConnectionProfileManager {
         themeStore.reload()
         store.reload()
         restoreProfileThemesFromDisk()
+        pruneRemoteScreenSnapshots()
         updateProfilesFromStore()
     }
 

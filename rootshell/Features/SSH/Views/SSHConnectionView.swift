@@ -4199,6 +4199,8 @@ extension SSHConnectionView {
             
             Divider()
             
+            ForgetRemoteScreenSnapshotButton(profileID: profile.id)
+
             Button(role: .destructive) {
                 profileToDelete = profile
             } label: {

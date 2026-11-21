@@ -521,6 +521,8 @@ struct ProfilesBrowseSheet: View {
 
         Divider()
 
+        ForgetRemoteScreenSnapshotButton(profileID: profile.id)
+
         Button(role: .destructive) {
             profileToDelete = profile
         } label: {
@@ -749,6 +751,12 @@ struct ProfileRow: View {
             }
 
             Spacer(minLength: 8)
+
+            // Last screen seen on a Screen Sharing or KVM profile.
+            if RemoteScreenSnapshotStore.shared.capturedAt[profile.id] != nil,
+               let endpoint = profile.remoteScreenSnapshotEndpoint {
+                RemoteScreenProfileThumbnail(profileID: profile.id, endpoint: endpoint)
+            }
 
             // Keyboard shortcut — trailing, sized to read clearly beside the text block
             if let shortcut = keybindManager.shortcutDescription(forProfileID: profile.id) {

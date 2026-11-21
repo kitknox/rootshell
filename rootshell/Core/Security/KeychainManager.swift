@@ -1169,6 +1169,69 @@ class KeychainManager {
         }
     }
 
+    // MARK: - Remote Screen Snapshot Encryption Key Storage
+
+    private let remoteScreenSnapshotService = "com.rootshell.remotescreen.snapshotkey"
+
+    /// One key per app: every rootshell build shares this access group but
+    /// keeps its own snapshot files, and deleting the key is how one build
+    /// turns the feature off. A shared key would take the others' files too.
+    private var remoteScreenSnapshotKeyQuery: [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: remoteScreenSnapshotService,
+            kSecAttrAccount as String: Bundle.main.bundleIdentifier ?? "default",
+            kSecAttrAccessGroup as String: accessGroup
+        ]
+    }
+
+    /// Adds `keyData` unless a key exists, and returns the key in effect.
+    /// Never replaces one: every saved screen is sealed with it, and a
+    /// lookup that failed for a moment does not mean it is gone.
+    /// Device-only and never synced, so snapshots stay unreadable off this device.
+    func addRemoteScreenSnapshotKey(_ keyData: Data) throws -> Data {
+        var query = remoteScreenSnapshotKeyQuery
+        query[kSecValueData as String] = keyData
+        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        query[kSecAttrSynchronizable as String] = false
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status == errSecDuplicateItem {
+            return try loadRemoteScreenSnapshotKey()
+        }
+        guard status == errSecSuccess else {
+            Self.logger.error("addRemoteScreenSnapshotKey failed - Status: \(status) (\(Self.keychainErrorString(status)))")
+            throw KeychainError.unexpectedStatus(status)
+        }
+        return keyData
+    }
+
+    func loadRemoteScreenSnapshotKey() throws -> Data {
+        var query = remoteScreenSnapshotKeyQuery
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status != errSecItemNotFound else {
+            throw KeychainError.itemNotFound
+        }
+        guard status == errSecSuccess else {
+            throw KeychainError.unexpectedStatus(status)
+        }
+        guard let data = result as? Data else {
+            throw KeychainError.dataConversionFailed
+        }
+        return data
+    }
+
+    func deleteRemoteScreenSnapshotKey() throws {
+        let status = SecItemDelete(remoteScreenSnapshotKeyQuery as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.unexpectedStatus(status)
+        }
+    }
+
     // MARK: - Auto-Redact List Storage
 
     // The auto-redact strings are PII by definition, so the whole encoded

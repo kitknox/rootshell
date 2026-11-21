@@ -26,6 +26,7 @@ struct ScreenSharingSettingsView: View {
     @Setting(Settings.ScreenSharing.swipeLeftAction) private var swipeLeftAction
     @Setting(Settings.ScreenSharing.swipeRightAction) private var swipeRightAction
     @Setting(Settings.ScreenSharing.fourFingerNavigation) private var fourFingerNavigation
+    @Setting(Settings.ScreenSharing.rememberLastScreen) private var rememberLastScreen
     @State private var downloadStore = VNCDownloadStore.shared
 
     private var resolvedClipboardSyncDefault: ScreenSharingClipboardSyncDefault {
@@ -274,6 +275,25 @@ struct ScreenSharingSettingsView: View {
                 SettingGroupHeader("KVM", group: .screenSharing)
             } footer: {
                 Text("Draws a dot where your pointer is, ahead of the remote computer’s own pointer in the video. Sets the default for new KVM sessions; change it for the current session from the Screen Sharing menu.")
+            }
+
+            Section {
+                Toggle(isOn: $rememberLastScreen) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "photo.on.rectangle")
+                        Text("Remember Last Screen")
+                    }
+                    .settingRow(Settings.ScreenSharing.rememberLastScreen)
+                }
+                .themedRow()
+                .onChange(of: rememberLastScreen) { _, enabled in
+                    // The store also deletes on its own; this makes it immediate.
+                    if !enabled { RemoteScreenSnapshotStore.shared.removeAll() }
+                }
+            } header: {
+                SettingGroupHeader("Last Screen", group: .screenSharing)
+            } footer: {
+                Text("Keeps a picture of the last screen seen on each Screen Sharing and KVM connection. It shows softened while the connection is made again, and as a thumbnail beside a saved profile. Pictures are encrypted, stay on this device, and are never synced or backed up. Turn this off to delete them.")
             }
 
             Section {
