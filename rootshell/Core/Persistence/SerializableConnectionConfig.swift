@@ -801,6 +801,65 @@ nonisolated struct SerializableConnectionConfig: Codable, Equatable, Sendable {
             ?? false
     }
 
+    /// Endpoints the device actually dials when restoring this config, used to
+    /// pre-warm in-app Tailscale at launch without starting it for targets
+    /// reachable only from a remote bastion.
+    ///
+    /// - Plain SSH and relayed TSSH dial only the first jump hop when a jump is configured.
+    /// - Mosh and non-relayed TSSH use the SSH jump for bootstrap and then dial UDP
+    ///   directly to the target host, so both the first jump hop and target are included.
+    /// - Direct VNC/KVM dial the screen host; tunneled VNC/KVM dial only their jump's endpoints.
+    @MainActor
+    var restorableHosts: [String] {
+        var hosts: [String] = []
+        func appendSSHEndpoints(_ ssh: SSHConfigSafe, includeDirectUDPTarget: Bool) {
+            if let jump = ssh.jumpHost, !jump.host.isEmpty {
+                hosts.append(jump.host)
+                guard includeDirectUDPTarget else { return }
+            }
+            if !ssh.host.isEmpty { hosts.append(ssh.host) }
+            if let ip = ssh.cachedIP, !ip.isEmpty { hosts.append(ip) }
+        }
+        func appendLiveSSHEndpoints(_ ssh: SSHConfig, includeDirectUDPTarget: Bool) {
+            if let jump = ssh.jumpHost, !jump.host.isEmpty {
+                hosts.append(jump.host)
+                guard includeDirectUDPTarget else { return }
+            }
+            if !ssh.host.isEmpty { hosts.append(ssh.host) }
+            if let ip = ssh.cachedIP, !ip.isEmpty { hosts.append(ip) }
+        }
+        func appendRemoteScreenEndpoint(host: String, jump: VNCConfigSafe.JumpSafe) {
+            switch jump {
+            case .none:
+                if !host.isEmpty { hosts.append(host) }
+            case .sshConfig(let ssh):
+                appendSSHEndpoints(ssh, includeDirectUDPTarget: false)
+            case .sshProfile(let id):
+                if let profile = ConnectionProfileManager.shared.profile(for: id) {
+                    appendLiveSSHEndpoints(profile.sshConfig, includeDirectUDPTarget: false)
+                }
+            case .tsshProfile(let id):
+                if let profile = ConnectionProfileManager.shared.profile(for: id) {
+                    appendLiveSSHEndpoints(
+                        profile.sshConfig,
+                        includeDirectUDPTarget: profile.sshConfig.jumpHost?.tsshRelay == nil
+                    )
+                }
+            }
+        }
+        if let ssh = sshConfig { appendSSHEndpoints(ssh, includeDirectUDPTarget: false) }
+        if let mosh = moshConfig { appendSSHEndpoints(mosh.sshConfig, includeDirectUDPTarget: true) }
+        if let trzsz = trzszConfig {
+            appendSSHEndpoints(
+                trzsz.sshConfig,
+                includeDirectUDPTarget: trzsz.sshConfig.jumpHost?.tsshRelay == nil
+            )
+        }
+        if let vnc = vncConfig { appendRemoteScreenEndpoint(host: vnc.host, jump: vnc.jump) }
+        if let kvm = kvmConfig { appendRemoteScreenEndpoint(host: kvm.host, jump: kvm.jump) }
+        return hosts
+    }
+
     /// Display name for UI
     var displayName: String {
         switch type {

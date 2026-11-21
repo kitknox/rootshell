@@ -85,6 +85,7 @@ enum TSSHCallGateError: LocalizedError {
     case configCreationFailed
     case forwarderCreationFailed(String)
     case connectFailed(String)
+    case tailnetNotReady
 
     var errorDescription: String? {
         switch self {
@@ -100,6 +101,8 @@ enum TSSHCallGateError: LocalizedError {
             return "Failed to create port forwarder: \(msg)"
         case .connectFailed(let msg):
             return "TSSH connect failed: \(msg)"
+        case .tailnetNotReady:
+            return "Tailscale is not ready yet"
         }
     }
 }
@@ -246,9 +249,21 @@ actor TSSHCallGate {
     func connect(_ params: TSSHTransportParams, via proxyRef: TSSHTransportRef? = nil) async throws -> TSSHTransportRef {
         #if !CHINA_BUILD
         // A resumed session skips the resolvers that start in-app Tailscale on
-        // demand; bring it up before Go picks the UDP path.
+        // demand; bring it up before Go picks the UDP path. If a host that
+        // requires the in-app engine (tailnet target or exit-node route) has no
+        // tailnet route — whether Tailscale isn't running or the exit node is
+        // unavailable — fail fast instead of falling back to an OS UDP dial.
         if proxyRef == nil {
-            _ = await TailnetDialer.route(params.host)
+            let tailnetIP = await TailnetDialer.route(params.host)
+            if tailnetIP == nil,
+               await TailnetDialer.blocksDirectFallback(for: params.host) {
+                if !TailnetGo.isRunning {
+                    throw TSSHCallGateError.tailnetNotReady
+                }
+                throw TSSHCallGateError.connectFailed(
+                    "Tailscale has no route to \(params.host) (check exit node or tailnet status)"
+                )
+            }
         }
         #endif
         guard let config = IosbridgeNewTransportConfig() else {

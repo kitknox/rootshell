@@ -240,6 +240,12 @@ nonisolated struct AppWindowState: Codable, Equatable, Sendable {
         }
         return ids
     }
+
+    /// All hostnames and cached IPs across restorable leaves.
+    @MainActor
+    var restorableHosts: [String] {
+        windows.flatMap(\.tabs).flatMap(\.splitTree.allLeaves).flatMap { $0.connectionConfig.restorableHosts }
+    }
 }
 
 // MARK: - Restoration Errors

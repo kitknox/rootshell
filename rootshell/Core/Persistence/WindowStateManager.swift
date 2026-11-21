@@ -460,6 +460,9 @@ final class WindowStateManager {
             requestedRegularRestorationWindowCount = 0
             regularRestorationActivationRetryCount = 0
             restoreFrameConnectIndex = 0
+            #if !CHINA_BUILD
+            TailnetInAppEngine.shared.prewarmIfNeeded(for: state)
+            #endif
             return state
 
         } catch {

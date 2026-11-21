@@ -116,28 +116,107 @@ nonisolated final class TailnetRouting: Sendable {
         return state.peerNames.contains(name)
     }
 
-    /// Whether a connection to host should start the engine on demand. With
-    /// an exit node every remote host goes through the tailnet.
-    func wantsEngine(for host: String) -> Bool {
+    /// Whether reaching host requires the in-app engine (regardless of
+    /// connect-on-demand). With an exit node every remote host goes through
+    /// the tailnet.
+    func requiresEngine(for host: String) -> Bool {
         let state = state
-        guard state.enabled, state.onDemand else { return false }
-        if looksLikeTailnet(host) { return true }
+        guard state.enabled else { return false }
+        if looksLikeTailnet(host) || wasRouted(host) { return true }
         return state.exitNode && !Self.isLocal(Self.normalize(host), allowLAN: state.exitNodeAllowLAN)
     }
 
-    static func isTailscaleIP(_ host: String) -> Bool {
-        let octets = host.split(separator: ".").compactMap { Int($0) }
-        if octets.count == 4 { return octets[0] == 100 && (64...127).contains(octets[1]) }
-        return host.hasPrefix("fd7a:115c:a1e0:")
+    /// Whether a connection to host should start the engine on demand. With
+    /// an exit node every remote host goes through the tailnet.
+    func wantsEngine(for host: String) -> Bool {
+        guard state.onDemand else { return false }
+        return requiresEngine(for: host)
     }
 
-    private static func isLocal(_ host: String, allowLAN: Bool) -> Bool {
-        if host == "localhost" || host.hasSuffix(".local") || host.hasPrefix("127.") || host == "::1" { return true }
-        guard allowLAN else { return false }
-        let octets = host.split(separator: ".").compactMap { Int($0) }
-        guard octets.count == 4 else { return false }
-        return octets[0] == 10 || (octets[0] == 172 && (16...31).contains(octets[1]))
-            || (octets[0] == 192 && octets[1] == 168) || (octets[0] == 169 && octets[1] == 254)
+    /// Whether launch should pre-warm the engine for a set of restored hosts,
+    /// overlapping control-plane login with window/PTY setup.
+    func shouldPrewarm(forHosts hosts: [String]) -> Bool {
+        let state = state
+        guard state.enabled else { return false }
+        if !state.onDemand { return true }
+        return hosts.contains { requiresEngine(for: $0) }
+    }
+
+    private enum ParsedIP {
+        case v4(UInt8, UInt8, UInt8, UInt8)
+        case v6([UInt8])
+    }
+
+    private static func parseIP(_ host: String) -> ParsedIP? {
+        let stripped = host.split(separator: "%", maxSplits: 1).first.map(String.init) ?? host
+        var addr4 = in_addr()
+        if inet_pton(AF_INET, stripped, &addr4) == 1 {
+            return withUnsafeBytes(of: &addr4) { raw in
+                .v4(raw[0], raw[1], raw[2], raw[3])
+            }
+        }
+        var addr6 = in6_addr()
+        if inet_pton(AF_INET6, stripped, &addr6) == 1 {
+            let bytes = withUnsafeBytes(of: &addr6) { Array($0) }
+            // Unmap ::ffff:a.b.c.d to match Go's netip.Addr.Unmap().
+            if bytes.count == 16,
+               bytes[0..<10].allSatisfy({ $0 == 0 }),
+               bytes[10] == 0xff, bytes[11] == 0xff {
+                return .v4(bytes[12], bytes[13], bytes[14], bytes[15])
+            }
+            return .v6(bytes)
+        }
+        return nil
+    }
+
+    private static func isTailscaleV6(_ bytes: [UInt8]) -> Bool {
+        bytes.count == 16
+            && bytes[0] == 0xfd && bytes[1] == 0x7a
+            && bytes[2] == 0x11 && bytes[3] == 0x5c
+            && bytes[4] == 0xa1 && bytes[5] == 0xe0
+    }
+
+    static func isIPAddress(_ host: String) -> Bool {
+        parseIP(normalize(host)) != nil
+    }
+
+    static func isTailscaleIP(_ host: String) -> Bool {
+        guard let ip = parseIP(normalize(host)) else { return false }
+        switch ip {
+        case .v4(let b0, let b1, _, _):
+            return b0 == 100 && (64...127).contains(b1)
+        case .v6(let bytes):
+            return isTailscaleV6(bytes)
+        }
+    }
+
+    /// Matches Go's `inAppTailnet.routes(ip)`: loopback, unspecified,
+    /// link-local unicast, and multicast are always local; private IPv4
+    /// (RFC 1918) and private IPv6 ULA (fc00::/7, excluding Tailscale's
+    /// fd7a:115c:a1e0::/48) are local when `allowLAN` is true.
+    static func isLocal(_ host: String, allowLAN: Bool) -> Bool {
+        let norm = normalize(host)
+        if norm == "localhost" || norm.hasSuffix(".local") { return true }
+        guard let ip = parseIP(norm) else { return false }
+        switch ip {
+        case .v4(let b0, let b1, let b2, let b3):
+            if b0 == 127
+                || (b0 == 0 && b1 == 0 && b2 == 0 && b3 == 0)
+                || (b0 == 169 && b1 == 254)
+                || (b0 & 0xf0) == 224 {
+                return true
+            }
+            guard allowLAN else { return false }
+            return b0 == 10 || (b0 == 172 && (16...31).contains(b1)) || (b0 == 192 && b1 == 168)
+        case .v6(let bytes):
+            guard bytes.count == 16 else { return false }
+            let zeroPrefix = bytes[0..<15].allSatisfy { $0 == 0 }
+            if zeroPrefix && (bytes[15] == 0 || bytes[15] == 1) { return true }
+            if bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80 { return true }
+            if bytes[0] == 0xff { return true }
+            guard allowLAN else { return false }
+            return (bytes[0] & 0xfe) == 0xfc && !isTailscaleV6(bytes)
+        }
     }
 }
 
@@ -164,9 +243,9 @@ nonisolated enum TailnetDialer {
         let state = routing.state
         guard state.enabled else { return nil }
         if !TailnetGo.isRunning {
-            var wanted = routing.wantsEngine(for: host)
+            var wanted = routing.requiresEngine(for: host)
             // A name the OS can't resolve may be a MagicDNS name not cached yet.
-            if !wanted, state.onDemand, isName(host), await !osResolves(host) {
+            if !wanted, isName(host), await !osResolves(host) {
                 wanted = true
             }
             guard wanted else { return nil }
@@ -183,11 +262,73 @@ nonisolated enum TailnetDialer {
         return ip
     }
 
+    /// Whether falling back to an OS dial for `host` after `route(_:)` returned
+    /// nil must be refused — e.g. a tailnet target, or a non-local destination
+    /// while an exit node is selected (including when Tailscale is Running
+    /// without a route through the exit node).
+    static func blocksDirectFallback(for host: String) async -> Bool {
+        let routing = TailnetRouting.shared
+        let state = routing.state
+        guard routing.requiresEngine(for: host) else { return false }
+        if !TailnetGo.isRunning
+            || routing.looksLikeTailnet(host)
+            || routing.wasRouted(host)
+            || !state.exitNodeAllowLAN
+            || TailnetRouting.isIPAddress(host) {
+            return true
+        }
+        // Hostname with exitNodeAllowLAN enabled while Tailscale is Running:
+        // permit direct fallback only if OS DNS resolves it exclusively to
+        // local/LAN addresses.
+        return await !osResolvesOnlyLocal(host, allowLAN: true)
+    }
+
     private static let logger = Logger(subsystem: "com.rootshell", category: "TailnetRouting")
 
     private static func isName(_ host: String) -> Bool {
         let name = TailnetRouting.normalize(host)
-        return !name.isEmpty && !name.contains(":") && name.split(separator: ".").contains { Int($0) == nil }
+        return !name.isEmpty && !TailnetRouting.isIPAddress(name)
+    }
+
+    /// Whether the system resolver resolves `host` to at least one address and
+    /// every returned address is local/LAN (fail-closed on timeout/error).
+    private static func osResolvesOnlyLocal(_ host: String, allowLAN: Bool) async -> Bool {
+        await withCheckedContinuation { continuation in
+            let once = OSAllocatedUnfairLock(initialState: false)
+            let finish: @Sendable (Bool) -> Void = { result in
+                guard once.withLock({ done in defer { done = true }; return !done }) else { return }
+                continuation.resume(returning: result)
+            }
+            DispatchQueue.global(qos: .userInitiated).async {
+                var hints = addrinfo()
+                hints.ai_socktype = SOCK_STREAM
+                var result: UnsafeMutablePointer<addrinfo>?
+                let status = getaddrinfo(host, nil, &hints, &result)
+                defer { if let result { freeaddrinfo(result) } }
+                guard status == 0, var ptr = result else {
+                    finish(false)
+                    return
+                }
+                var sawAddress = false
+                while true {
+                    let info = ptr.pointee
+                    var hostBuf = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                    if let addr = info.ai_addr,
+                       getnameinfo(addr, info.ai_addrlen, &hostBuf, socklen_t(hostBuf.count), nil, 0, NI_NUMERICHOST) == 0 {
+                        let ip = String(cString: hostBuf)
+                        sawAddress = true
+                        if !TailnetRouting.isLocal(ip, allowLAN: allowLAN) {
+                            finish(false)
+                            return
+                        }
+                    }
+                    guard let next = info.ai_next else { break }
+                    ptr = next
+                }
+                finish(sawAddress)
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2) { finish(false) }
+        }
     }
 
     /// Whether the system resolver knows host, waiting at most two seconds.

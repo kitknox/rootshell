@@ -779,6 +779,24 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
 
         var currentClientId = credentials.clientId
         var backoff = Self.resumeInitialBackoff
+        #if !CHINA_BUILD
+        let wakeOnTailnet: Bool = {
+            let routing = TailnetRouting.shared
+            guard routing.state.enabled else { return false }
+            if let firstRelayHost = credentials.relayChain.first?.host {
+                if routing.requiresEngine(for: firstRelayHost) { return true }
+                if let jumpHost = config.sshConfig.jumpHost?.host,
+                   routing.requiresEngine(for: jumpHost) {
+                    return true
+                }
+                return false
+            }
+            return routing.requiresEngine(for: credentials.host)
+                || routing.requiresEngine(for: config.sshConfig.host)
+        }()
+        #else
+        let wakeOnTailnet = false
+        #endif
 
         while true {
             if userInitiatedDisconnect {
@@ -808,6 +826,13 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
 
             if relayRebuildRequested {
                 relayRebuildRequested = false
+                #if !CHINA_BUILD
+                let tailnetGenBeforeRebuild = TailnetInAppEngine.shared.runningGeneration
+                let tailnetWasDownBeforeRebuild = wakeOnTailnet && !TailnetGo.isRunning
+                #else
+                let tailnetGenBeforeRebuild: UInt64 = 0
+                let tailnetWasDownBeforeRebuild = false
+                #endif
                 do {
                     let rebuilt = try await TrzszSpawnHelper.rebuildRelay(
                         config: config, onHostKeyValidation: onHostKeyValidation,
@@ -832,7 +857,13 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
                     effectiveTransportMTU = requiredMTU
                 } catch {
                     publishRoamBannerState(.connectionLost(reason: error.localizedDescription))
-                    await sleepCancellable(seconds: backoff)
+                    let wokeEarly = await sleepCancellable(
+                        seconds: backoff,
+                        wakeOnTailnetReady: wakeOnTailnet,
+                        tailnetRunningGenBeforeAttempt: tailnetGenBeforeRebuild,
+                        tailnetWasDownBeforeAttempt: tailnetWasDownBeforeRebuild
+                    )
+                    if wokeEarly { backoff = Self.resumeInitialBackoff }
                     continue
                 }
             }
@@ -912,6 +943,14 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
             // (fired inside connectGoTransport) sees it and skips the launch command.
             wasResumed = true
 
+            #if !CHINA_BUILD
+            let tailnetRunningGenBeforeAttempt = TailnetInAppEngine.shared.runningGeneration
+            let tailnetWasDownBeforeAttempt = wakeOnTailnet && !TailnetGo.isRunning
+            #else
+            let tailnetRunningGenBeforeAttempt: UInt64 = 0
+            let tailnetWasDownBeforeAttempt = false
+            #endif
+
             do {
                 try await connectGoTransport(
                     host: credentials.host,
@@ -987,24 +1026,75 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
                 }
                 // Keep credentials and stay in .resumingSession — server may still be alive.
 
-                await sleepCancellable(seconds: backoff)
-                backoff = min(backoff * 2, Self.resumeMaxBackoff)
+                let wokeEarly = await sleepCancellable(
+                    seconds: backoff,
+                    wakeOnTailnetReady: wakeOnTailnet,
+                    tailnetRunningGenBeforeAttempt: tailnetRunningGenBeforeAttempt,
+                    tailnetWasDownBeforeAttempt: tailnetWasDownBeforeAttempt
+                )
+                if wokeEarly {
+                    ResumeDebugLogger.shared.log("[\(debugPrefix)] RETRY woken early: in-app Tailscale became Running")
+                    backoff = Self.resumeInitialBackoff
+                } else {
+                    backoff = min(backoff * 2, Self.resumeMaxBackoff)
+                }
             }
         }
     }
 
     /// Sleeps for the given duration in 500ms slices, returning early when
-    /// the user closes the tab or the enclosing task is cancelled. Used by
-    /// the resume retry backoff so `terminate()` interrupts within ~500ms.
-    private func sleepCancellable(seconds: TimeInterval) async {
-        let sliceNs: UInt64 = 500_000_000
-        var remainingNs = UInt64(max(0, seconds) * 1_000_000_000)
-        while remainingNs > 0 {
-            if userInitiatedDisconnect || Task.isCancelled { return }
-            let chunk = min(remainingNs, sliceNs)
-            try? await Task.sleep(nanoseconds: chunk)
-            remainingNs -= chunk
+    /// the user closes the tab, the enclosing task is cancelled, or (when
+    /// `wakeOnTailnetReady` is set) in-app Tailscale transitions to `Running`.
+    /// Returns `true` when woken early by Tailscale becoming ready.
+    @discardableResult
+    private func sleepCancellable(
+        seconds: TimeInterval,
+        wakeOnTailnetReady: Bool = false,
+        tailnetRunningGenBeforeAttempt: UInt64 = 0,
+        tailnetWasDownBeforeAttempt: Bool = false
+    ) async -> Bool {
+        #if !CHINA_BUILD
+        if wakeOnTailnetReady,
+           TailnetInAppEngine.shared.runningGeneration != tailnetRunningGenBeforeAttempt
+            || (tailnetWasDownBeforeAttempt && TailnetGo.isRunning) {
+            return true
         }
+        #endif
+        @MainActor final class WakeFlag { var woken = false }
+        let wakeFlag = WakeFlag()
+        let sleepTask = Task { @MainActor in
+            let sliceNs: UInt64 = 500_000_000
+            var remainingNs = UInt64(max(0, seconds) * 1_000_000_000)
+            while remainingNs > 0 {
+                if userInitiatedDisconnect || Task.isCancelled { return }
+                let chunk = min(remainingNs, sliceNs)
+                try? await Task.sleep(nanoseconds: chunk)
+                remainingNs -= chunk
+            }
+        }
+        #if !CHINA_BUILD
+        let observer: NSObjectProtocol? = wakeOnTailnetReady
+            ? NotificationCenter.default.addObserver(
+                forName: TailnetInAppEngine.didBecomeRunningNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                MainActor.assumeIsolated {
+                    wakeFlag.woken = true
+                    sleepTask.cancel()
+                }
+            }
+            : nil
+        defer {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+        }
+        #endif
+        await withTaskCancellationHandler {
+            await sleepTask.value
+        } onCancel: {
+            sleepTask.cancel()
+        }
+        return wakeFlag.woken
     }
 
     // MARK: - SSH Spawn Path

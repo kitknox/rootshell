@@ -18,6 +18,10 @@ import UIKit
 final class TailnetInAppEngine {
     static let shared = TailnetInAppEngine()
 
+    /// Posted on the main actor when the in-app Tailscale engine transitions to
+    /// `Running`, so sessions sleeping in reconnect backoff can retry right away.
+    static let didBecomeRunningNotification = Notification.Name("TailnetInAppEngineDidBecomeRunning")
+
     private static let logger = Logger(subsystem: "com.rootshell", category: "TailnetInApp")
 
     private(set) var status: TailnetStatus?
@@ -30,6 +34,11 @@ final class TailnetInAppEngine {
     private(set) var connectedSince: Date?
     private var startTask: Task<Void, Error>?
     private var trafficTask: Task<Void, Never>?
+    /// Continuations awaiting `Running` (or early exit on `needsLogin`/`stop`).
+    private var readyWaiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
+    /// Monotonically incremented each time the engine transitions to `Running`,
+    /// so callers can detect transitions that occurred while an error crossed actors.
+    private(set) var runningGeneration: UInt64 = 0
     #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
     private var feedsLiveActivity = false
     #endif
@@ -88,22 +97,30 @@ final class TailnetInAppEngine {
             return
         }
         resetTask = Task {
-            await resetSockets()
-            // After the reset, so the network check's rebind doesn't race it.
-            TailnetPathMonitor.shared.refresh()
+            let resetSucceeded = await resetSockets()
+            // After the reset, so a netmon rebind doesn't race BindClose/BindUpdate.
+            // When ResetSockets succeeded it already rebound and re-STUNned, so only
+            // push an event if the physical interface changed; on failure force a check.
+            if isStarted {
+                TailnetPathMonitor.shared.refresh(forceImmediate: !resetSucceeded)
+            }
             resetTask = nil
         }
         #endif
     }
 
     #if !targetEnvironment(macCatalyst)
-    private func resetSockets() async {
+    /// Returns true if sockets were rebound cleanly (or the engine was
+    /// restarted cleanly after a stuck reset); false on a bind/restart failure
+    /// so the caller forces a fallback network refresh.
+    private func resetSockets() async -> Bool {
         let started = ContinuousClock.now
         let stops = stopCount
         Self.debugLog("socket reset started")
         do {
             try await TailnetGo.resetSockets()
             Self.debugLog("socket reset finished in \(ContinuousClock.now - started)")
+            return true
         } catch let error as TailnetGo.GoError where error.isResetStuck {
             // The engine is wedged; a fresh one replaces the force quit this
             // used to take. Sessions re-dial through it.
@@ -111,7 +128,7 @@ final class TailnetInAppEngine {
             // waited also called stop(); recovering would undo it.
             guard stopCount == stops else {
                 Self.debugLog("socket reset stuck; engine already stopped elsewhere")
-                return
+                return false
             }
             Self.logger.error("Tailscale socket reset stuck; restarting the engine")
             Self.debugLog("socket reset stuck; restarting the engine")
@@ -119,35 +136,51 @@ final class TailnetInAppEngine {
             let mode = TailnetModeSettings.load()
             guard stopCount == stops + 1, mode.effectiveMode == .rootshellOnly, mode.inAppEnabled else {
                 Self.debugLog("engine stopped elsewhere; not restarting")
-                return
+                return false
             }
             do {
                 try await start()
+                return true
             } catch is CancellationError {
                 Self.debugLog("restart overruled by a stop")
+                return false
             } catch {
                 lastError = error.localizedDescription
                 Self.debugLog("restart failed: \(error.localizedDescription)")
+                return false
             }
         } catch {
             Self.logger.error("Tailscale socket reset failed: \(error.localizedDescription, privacy: .public)")
             Self.debugLog("socket reset failed: \(error.localizedDescription)")
+            return false
         }
     }
     #endif
 
     // MARK: - Lifecycle
 
-    /// Applies saved settings at launch; without connect-on-demand a turned-on
-    /// engine starts right away.
+    /// Applies saved settings at launch; starts the engine immediately when
+    /// always-on is selected or any restored tab targets a tailnet host.
     func appDidLaunch() {
         syncRouting()
         let mode = TailnetModeSettings.load()
         guard mode.effectiveMode == .rootshellOnly, mode.inAppEnabled else { return }
-        Task {
-            await updateShellProxy()
-            if !mode.connectOnDemand { try? await start() }
-        }
+        Task { await updateShellProxy() }
+        prewarmIfNeeded(for: WindowStateManager.shared.pendingRestoration)
+    }
+
+    /// Starts the in-app engine ahead of session restoration when always-on is
+    /// configured or any restored tab targets a tailnet host, overlapping
+    /// control-plane login with window and PTY initialization.
+    func prewarmIfNeeded(for state: AppWindowState?) {
+        syncRouting()
+        guard !isStarted, startTask == nil else { return }
+        let mode = TailnetModeSettings.load()
+        guard mode.effectiveMode == .rootshellOnly, mode.inAppEnabled else { return }
+        let hosts = state?.restorableHosts ?? []
+        guard !mode.connectOnDemand || TailnetRouting.shared.shouldPrewarm(forHosts: hosts) else { return }
+        Self.debugLog(mode.connectOnDemand ? "prewarming for restored tailnet tabs" : "starting on launch")
+        Task { try? await start() }
     }
 
     /// Turns rootshell Only on and starts the engine, showing the login page
@@ -248,6 +281,7 @@ final class TailnetInAppEngine {
     func stop() async {
         stopCount += 1
         startTask?.cancel()
+        resolveReadyWaiters(running: false)
         guard isStarted else { return }
         Self.logger.info("Stopping in-app Tailscale")
         let started = ContinuousClock.now
@@ -259,6 +293,7 @@ final class TailnetInAppEngine {
         status = nil
         stopTrafficSampling()
         TailnetRouting.shared.update { $0.routedHosts = [] }
+        resolveReadyWaiters(running: false)
     }
 
     /// The Whole Device VPN is about to start with the same node key.
@@ -281,28 +316,71 @@ final class TailnetInAppEngine {
             Self.debugLog("ensureRunning start failed: \(error.localizedDescription)")
             return false
         }
-        let deadline = ContinuousClock.now + timeout
-        while ContinuousClock.now < deadline {
-            guard !Task.isCancelled else { return false }
-            if TailnetGo.isRunning { return true }
+        guard !Task.isCancelled else { return false }
+        if TailnetGo.isRunning { return true }
+        if status?.needsLogin == true {
+            Self.logger.info("In-app Tailscale needs sign-in")
+            TailnetLoginCoordinator.shared.watch()
+            return false
+        }
+
+        let waiterID = UUID()
+        let timeoutTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: timeout)
+            self?.finishReadyWaiter(id: waiterID, result: TailnetGo.isRunning)
+        }
+        defer { timeoutTask.cancel() }
+
+        let running = await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                if Task.isCancelled {
+                    continuation.resume(returning: false)
+                    return
+                }
+                if TailnetGo.isRunning {
+                    continuation.resume(returning: true)
+                    return
+                }
+                if status?.needsLogin == true {
+                    Self.logger.info("In-app Tailscale needs sign-in")
+                    TailnetLoginCoordinator.shared.watch()
+                    continuation.resume(returning: false)
+                    return
+                }
+                readyWaiters[waiterID] = continuation
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.finishReadyWaiter(id: waiterID, result: false)
+            }
+        }
+
+        guard !Task.isCancelled else { return false }
+        let finalRunning = running || TailnetGo.isRunning
+        if !finalRunning {
             if status?.needsLogin == true {
                 Self.logger.info("In-app Tailscale needs sign-in")
                 TailnetLoginCoordinator.shared.watch()
-                return false
-            }
-            do {
-                try await Task.sleep(for: .milliseconds(200))
-            } catch {
-                return false
+            } else {
+                Self.logger.error("In-app Tailscale not running after \(String(describing: timeout), privacy: .public) (state \(self.status?.state ?? "none", privacy: .public))")
+                Self.debugLog("not running after \(timeout) (state \(status?.state ?? "none"))")
             }
         }
-        guard !Task.isCancelled else { return false }
-        let running = TailnetGo.isRunning
-        if !running {
-            Self.logger.error("In-app Tailscale not running after \(String(describing: timeout), privacy: .public) (state \(self.status?.state ?? "none", privacy: .public))")
-            Self.debugLog("not running after \(timeout) (state \(status?.state ?? "none"))")
+        return finalRunning
+    }
+
+    private func finishReadyWaiter(id: UUID, result: Bool) {
+        guard let continuation = readyWaiters.removeValue(forKey: id) else { return }
+        continuation.resume(returning: result)
+    }
+
+    private func resolveReadyWaiters(running: Bool) {
+        guard !readyWaiters.isEmpty else { return }
+        let waiters = readyWaiters
+        readyWaiters.removeAll()
+        for continuation in waiters.values {
+            continuation.resume(returning: running)
         }
-        return running
     }
 
     // MARK: - Commands
@@ -366,6 +444,7 @@ final class TailnetInAppEngine {
             Self.debugLog("state \(newStatus?.state ?? "none")")
         }
         let wasRegistered = status?.registered == true
+        let wasRunning = status?.isRunning == true
         status = newStatus
         updateTrafficSampling()
         guard let newStatus else { return }
@@ -374,6 +453,16 @@ final class TailnetInAppEngine {
         VPNTailnetProfile.recordBackendState(newStatus.state)
         if newStatus.isRunning {
             cachePeers(newStatus)
+            resolveReadyWaiters(running: true)
+            if !wasRunning {
+                runningGeneration &+= 1
+                NotificationCenter.default.post(name: Self.didBecomeRunningNotification, object: nil)
+            }
+        } else if newStatus.needsLogin {
+            // Only wake active `ensureRunning()` callers (which will start the
+            // login watcher themselves). Passive status polls from Settings must
+            // not reopen a dismissed sign-in sheet or restart after sign-out.
+            resolveReadyWaiters(running: false)
         }
     }
 

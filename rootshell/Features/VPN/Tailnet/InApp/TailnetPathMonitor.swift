@@ -21,6 +21,7 @@ nonisolated final class TailnetPathMonitor: @unchecked Sendable {
     // Queue-confined.
     private var monitor: NWPathMonitor?
     private var published: String?
+    private var pendingRecheck: DispatchWorkItem?
 
     /// Starts watching and reports the current interface before returning,
     /// so the engine starts on the right network (waits at most a second).
@@ -50,6 +51,8 @@ nonisolated final class TailnetPathMonitor: @unchecked Sendable {
 
     func stop() {
         queue.async { [self] in
+            pendingRecheck?.cancel()
+            pendingRecheck = nil
             monitor?.cancel()
             monitor = nil
             published = nil
@@ -58,13 +61,19 @@ nonisolated final class TailnetPathMonitor: @unchecked Sendable {
 
     /// Asks Tailscale to re-check its network, e.g. back from the background.
     /// The cached path can lag a change made while suspended, so it checks
-    /// again once the monitor has caught up.
-    func refresh() {
+    /// again once the monitor has caught up — only publishing on that follow-up
+    /// if the interface actually changed, avoiding a redundant second rebind.
+    func refresh(forceImmediate: Bool = true) {
         queue.async { [self] in
-            if let path = monitor?.currentPath { publish(path, force: true) }
-        }
-        queue.asyncAfter(deadline: .now() + 2) { [self] in
-            if let path = monitor?.currentPath { publish(path, force: true) }
+            if let path = monitor?.currentPath { publish(path, force: forceImmediate) }
+            pendingRecheck?.cancel()
+            let recheck = DispatchWorkItem { [weak self] in
+                guard let self, let path = self.monitor?.currentPath else { return }
+                self.pendingRecheck = nil
+                self.publish(path, force: false)
+            }
+            pendingRecheck = recheck
+            queue.asyncAfter(deadline: .now() + 2, execute: recheck)
         }
     }
 
