@@ -79,6 +79,7 @@ final class TailnetInAppEngine {
         #if !targetEnvironment(macCatalyst)
         let away = backgroundedAt.map { ContinuousClock.now - $0 }
         backgroundedAt = nil
+        if away != nil { refreshShellProxy() }
         #endif
         guard isStarted else { return }
         #if targetEnvironment(macCatalyst)
@@ -558,6 +559,15 @@ final class TailnetInAppEngine {
             TailnetRouting.shared.update { $0.shellProxyEnvironment = nil }
         }
     }
+
+    #if !targetEnvironment(macCatalyst)
+    /// iOS may reclaim the proxy's listener while suspended; Go then rebinds on
+    /// a new port, which the shell picks up from the refreshed environment.
+    private func refreshShellProxy() {
+        guard TailnetRouting.shared.state.shellProxyEnvironment != nil else { return }
+        Task { await updateShellProxy() }
+    }
+    #endif
 
     // MARK: - Peer cache
 
