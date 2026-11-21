@@ -222,6 +222,9 @@ extension Ghostty.TerminalView {
     /// Whether the window's top and bottom are bare physical screen edges: no
     /// safe-area inset there, and flush with the screen.
     private func touchSelectionScreenEdges(of window: UIWindow) -> (top: Bool, bottom: Bool) {
+        #if os(visionOS)
+        return (false, false)
+        #else
         guard let screen = window.windowScene?.screen else { return (false, false) }
         let frame = window.convert(window.bounds, to: screen.coordinateSpace)
         let screenBounds = screen.bounds
@@ -229,6 +232,7 @@ extension Ghostty.TerminalView {
             top: window.safeAreaInsets.top == 0 && frame.minY <= screenBounds.minY + 0.5,
             bottom: window.safeAreaInsets.bottom == 0 && frame.maxY >= screenBounds.maxY - 0.5
         )
+        #endif
     }
 
     /// The final position to report before a touch selection release, or nil

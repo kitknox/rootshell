@@ -1883,7 +1883,9 @@ struct VNCOverlayCard<Icon: View, Content: View>: View {
                         .frame(maxWidth: .infinity, minHeight: proxy.size.height)
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                #if !os(visionOS)
                 .scrollDismissesKeyboard(.interactively)
+                #endif
             }
         }
         .tint(paneTheme?.accent ?? .accentColor)
