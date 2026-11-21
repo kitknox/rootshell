@@ -271,6 +271,12 @@ nonisolated enum AgentUsageProbeCommand {
     /// not protocol framing, so no nonce (same as `copilotSourceSeparator`).
     static let antigravityPartPrefix = "::AGPART:"
 
+    /// Bytes the host keeps from any one Antigravity HTTP response, status
+    /// marker included. At most three parts are emitted, so they stay under
+    /// the app's 1 MiB read cap; an oversized response loses its marker and
+    /// counts as a failed call.
+    static let antigravityResponseMaxBytes = 256 * 1024
+
     /// Antigravity's quota, asked on the host so neither the language server's
     /// CSRF token nor the Google token ever leaves it.
     ///
@@ -285,7 +291,8 @@ nonisolated enum AgentUsageProbeCommand {
     ///    without a keyring. Daily host first, then production.
     ///
     /// Secrets reach curl on stdin (`-H @-`), never in argv, and loopback
-    /// calls skip any proxy so the CSRF token stays on the machine. The
+    /// calls skip any proxy so the CSRF token stays on the machine. Each
+    /// response passes through `head -c` before the shell holds it. The
     /// desktop scan stops calling after 10 s and the whole section after 24 s,
     /// so Google always gets a turn and the section ends with a marker inside
     /// the probe deadline rather than being cut off. When Google
@@ -300,13 +307,13 @@ nonisolated enum AgentUsageProbeCommand {
         printf '::AGB_\#(nonce)::\n'
         _agsvc=/exa.language_server_pb.LanguageServerService
         _agbody='{"metadata":{"ideName":"antigravity","extensionName":"antigravity","ideVersion":"unknown","locale":"en"}}'
-        _agout=''; _agauth=0; _aglocked=0; _agfound=0; _agren=0; _agvia=''; _agtok=''
+        _agout=''; _agauth=0; _aglocked=0; _agfound=0; _agren=0; _agvia=''; _agtok=''; _agcap=\#(antigravityResponseMaxBytes)
         _agnow=$(date +%s); _aglend=$((_agnow + 10)); _agend=$((_agnow + 24))
         _agtime() { _agleft=$(($2 - $(date +%s))); [ "$_agleft" -gt 0 ] || return 1; [ "$_agleft" -lt "$1" ] || _agleft=$1; }
         _agwatch() { _agws=$1; shift; "$@" 2>/dev/null & _agwp=$!; ( sleep "$_agws"; kill "$_agwp" ) >/dev/null 2>&1 & _agww=$!; wait "$_agwp"; _agwr=$?; kill "$_agww" 2>/dev/null; return "$_agwr"; }
         _aglspost() {
           _agtime 3 "$_aglend" || return 1
-          _agr=$(printf 'X-Codeium-Csrf-Token: %s\n' "$2" | curl -sk --noproxy '*' --max-time "$_agleft" -X POST "$1" -H 'Content-Type: application/json' -H 'Connect-Protocol-Version: 1' -H @- -d "$_agbody" -w '\n::AGHTTP:%{http_code}::' 2>/dev/null)
+          _agr=$(printf 'X-Codeium-Csrf-Token: %s\n' "$2" | curl -sk --noproxy '*' --max-time "$_agleft" -X POST "$1" -H 'Content-Type: application/json' -H 'Connect-Protocol-Version: 1' -H @- -d "$_agbody" -w '\n::AGHTTP:%{http_code}::' 2>/dev/null | head -c "$_agcap")
           _agc=${_agr##*::AGHTTP:}; _agc=${_agc%%::*}; _agr=${_agr%::AGHTTP:*}
           [ "$_agc" = 200 ] || return 1
           case "$_agr" in *"$3"*|*"${5:-$3}"*) printf '::AGPART:%s::\n%s\n' "$4" "$_agr"; return 0;; esac
@@ -373,7 +380,7 @@ nonisolated enum AgentUsageProbeCommand {
         _agcc() {
           for _agh in https://daily-cloudcode-pa.googleapis.com https://cloudcode-pa.googleapis.com; do
             _agtime 6 "$_agend" || return 1
-            _agr=$(printf 'Authorization: Bearer %s\n' "$_agtok" | curl -s --max-time "$_agleft" -X POST "$_agh/v1internal:$1" -H 'Content-Type: application/json' -H 'Accept: application/json' -H "User-Agent: $_agua" -H @- -d '{}' -w '\n::AGHTTP:%{http_code}::' 2>/dev/null)
+            _agr=$(printf 'Authorization: Bearer %s\n' "$_agtok" | curl -s --max-time "$_agleft" -X POST "$_agh/v1internal:$1" -H 'Content-Type: application/json' -H 'Accept: application/json' -H "User-Agent: $_agua" -H @- -d '{}' -w '\n::AGHTTP:%{http_code}::' 2>/dev/null | head -c "$_agcap")
             _agc=${_agr##*::AGHTTP:}; _agc=${_agc%%::*}; _agr=${_agr%::AGHTTP:*}
             case "$_agc" in
               # 401 is the token everywhere; 403 may be one host or method,
