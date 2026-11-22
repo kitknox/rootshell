@@ -135,6 +135,9 @@ final class AgentUsageCenter {
             credentialStates.removeAll()
             probesRerunPending.removeAll()
             antigravityStates.removeAll()
+            antigravityTokens.removeAll()
+            antigravityRefusedDigests.removeAll()
+            antigravityNeedsRenewal.removeAll()
             // Nothing will land to settle these, so they cannot be left
             // spinning behind a closed feature.
             refreshingProviders.removeAll()
@@ -164,6 +167,8 @@ final class AgentUsageCenter {
                 antigravityStates.removeValue(forKey: key.hostKey)
                 antigravityProbeHealth[key.hostKey]?.recordSuccess()
                 antigravitySkipLocalUntil.removeValue(forKey: key.hostKey)
+                // A refused token gets one more chance, as on the other lanes.
+                antigravityRefusedDigests.removeValue(forKey: key.hostKey)
             }
         } else if provider.yieldsUsageReport {
             for key in presence.hostProviders where key.provider == provider {
@@ -172,6 +177,8 @@ final class AgentUsageCenter {
         }
 
         for key in presence.hostProviders where key.provider == provider {
+            // A busy-slot wait from an earlier pass must not hold this one back.
+            probeDeferredUntil.removeValue(forKey: key.hostKey)
             // Re-read the host: the usual reason a person reaches for this
             // is that they just signed in, unlocked something, or resumed an
             // agent, and all three are invisible to us until we look again.
@@ -239,8 +246,11 @@ final class AgentUsageCenter {
         for provider in refreshingProviders {
             let liveHosts = presence.hostProviders
                 .filter { $0.provider == provider }
+            // A probe waiting out a busy slot is still pending: settling here
+            // would end the spinner and drop the retry back to the slow wait.
             let probing = liveHosts.contains {
                 probesInFlight.contains($0.hostKey) || antigravityProbesInFlight.contains($0.hostKey)
+                    || (probeDeferredUntil[$0.hostKey].map { $0 > Date() } ?? false)
             }
             let fetching = liveHosts.contains { key in
                 guard let accountKey = credentialStates[key]?.accountKey else { return false }
@@ -420,10 +430,21 @@ final class AgentUsageCenter {
     @ObservationIgnored private var antigravityStates: [String: AntigravityProbeState] = [:]
     /// When each host last started a background `agy models`.
     @ObservationIgnored private var antigravityRenewals: [String: Date] = [:]
+    /// In flight per host: a probe, or an in-app Google fetch.
     @ObservationIgnored private var antigravityProbesInFlight: Set<String> = []
+    /// The host's Google sign-in while it keeps working, so a pass asks Google
+    /// straight from the app with no exec channel. Memory only, never logged;
+    /// dropped on any failed fetch, host departure, or disable, and re-read
+    /// from the host after `antigravityTokenReuse` so an account switch shows.
+    @ObservationIgnored private var antigravityTokens:
+        [String: (token: AgentUsageAntigravityToken, readAt: Date)] = [:]
+    /// Digests of tokens Google refused, so the same token is not asked again.
+    @ObservationIgnored private var antigravityRefusedDigests: [String: Set<String>] = [:]
+    /// Hosts whose token Google refused: the next probe starts `agy models`.
+    @ObservationIgnored private var antigravityNeedsRenewal: Set<String> = []
     @ObservationIgnored private var antigravityProbeHealth: [String: AgentRepositoryHostProbeHealth] = [:]
     /// Hosts whose desktop app answered with nothing usable: until then, the
-    /// probe goes straight to Google.
+    /// probe skips it and hands back the sign-in for Google.
     @ObservationIgnored private var antigravitySkipLocalUntil: [String: Date] = [:]
     /// Hosts whose probe found the transport busy, and when to try again.
     @ObservationIgnored private var probeDeferredUntil: [String: Date] = [:]
@@ -519,6 +540,7 @@ final class AgentUsageCenter {
             return false
         }
         antigravityStates[hostKey] = AntigravityProbeState(checkedAt: now, status: status)
+        if status == .ok { antigravityNeedsRenewal.remove(hostKey) }
         // Google had nothing either: the desktop is the only source left, so
         // it is asked again next time rather than skipped for half an hour.
         if skippedLocal, status != .ok {
@@ -856,19 +878,26 @@ final class AgentUsageCenter {
         }
         for (hostKey, providers) in probeTargets {
             guard let owner = presence.owners[hostKey] else { continue }
-            if probeDeferred(hostKey: hostKey, now: now) { continue }
+            let deferred = probeDeferred(hostKey: hostKey, now: now)
             // Antigravity probes alone: its section makes slow network calls,
             // and a timeout must not cost the batch its answers. The two
             // never overlap on a host, since tssh allows one probe per session.
             let batch = providers.filter { $0 != .antigravity }
-            if !batch.isEmpty, !antigravityProbesInFlight.contains(hostKey),
+            if !deferred, !batch.isEmpty, !antigravityProbesInFlight.contains(hostKey),
                hostProbeHealth[hostKey]?.canStart(now: now) != false {
                 dispatchProbe(hostKey: hostKey, providers: batch.sorted { $0.rawValue < $1.rawValue },
                               owner: owner, now: now)
             }
-            if providers.contains(.antigravity), !probesInFlight.contains(hostKey),
+            if providers.contains(.antigravity),
                antigravityProbeHealth[hostKey]?.canStart(now: now) != false {
-                dispatchAntigravityProbe(hostKey: hostKey, owner: owner, now: now)
+                // A held sign-in needs no exec channel, so no probe slot.
+                if let held = antigravityTokens[hostKey],
+                   now.timeIntervalSince(held.readAt) < AgentUsageTuning.antigravityTokenReuse {
+                    dispatchAntigravityFetch(hostKey: hostKey, token: held.token, now: now)
+                } else if !deferred, !probesInFlight.contains(hostKey) {
+                    antigravityTokens.removeValue(forKey: hostKey)
+                    dispatchAntigravityProbe(hostKey: hostKey, owner: owner, now: now)
+                }
             }
         }
 
@@ -902,6 +931,8 @@ final class AgentUsageCenter {
         let liveAntigravity = Set(liveAntigravityHosts(presence))
         let departedAntigravity = Set(antigravitySnapshots.keys)
             .union(antigravityStates.keys)
+            .union(antigravityTokens.keys)
+            .union(antigravityRefusedDigests.keys)
             .filter { !liveAntigravity.contains($0) }
         guard !departed.isEmpty || !departedOMP.isEmpty || !departedAntigravity.isEmpty
         else { return }
@@ -923,6 +954,9 @@ final class AgentUsageCenter {
         for hostKey in departedAntigravity {
             antigravitySnapshots.removeValue(forKey: hostKey)
             antigravityStates.removeValue(forKey: hostKey)
+            antigravityTokens.removeValue(forKey: hostKey)
+            antigravityRefusedDigests.removeValue(forKey: hostKey)
+            antigravityNeedsRenewal.remove(hostKey)
         }
         revision &+= 1
     }
@@ -1041,7 +1075,10 @@ final class AgentUsageCenter {
     /// that outlived its caller's deadline. Not a host failure: nothing ran.
     /// Both probes wait a short beat and try again, with no backoff.
     private func deferProbes(hostKey: String) {
-        probeDeferredUntil[hostKey] = Date().addingTimeInterval(AgentUsageTuning.probeBusyRetry)
+        // Someone is watching a Refresh spinner, so retry sooner.
+        let retry = refreshingProviders.isEmpty
+            ? AgentUsageTuning.probeBusyRetry : AgentUsageTuning.probeBusyRetryManual
+        probeDeferredUntil[hostKey] = Date().addingTimeInterval(retry)
         refresh()
     }
 
@@ -1066,7 +1103,8 @@ final class AgentUsageCenter {
         let skipLocal = antigravitySkipLocalUntil[hostKey].map { $0 > now } ?? false
         let (command, nonce) = AgentUsageProbeCommand.command(
             providers: [.antigravity], pathPrefix: SSHConfig.remoteExecPathPrefix,
-            antigravityRenewal: antigravityRenewalAllowed(hostKey: hostKey, now: now),
+            antigravityRenewal: antigravityNeedsRenewal.contains(hostKey)
+                && antigravityRenewalAllowed(hostKey: hostKey, now: now),
             antigravitySkipLocal: skipLocal)
         let dispatchedEpoch = epoch
         let hostTag = Self.tag(hostKey)
@@ -1105,11 +1143,30 @@ final class AgentUsageCenter {
                 return
             }
             let now = Date()
-            let complete = self.applyAntigravityReadout(
-                result?.readouts[.antigravity],
-                renewed: result?.antigravityRenewed ?? false,
-                skippedLocal: skipLocal,
-                hostKey: hostKey, now: now)
+            let complete: Bool
+            if let token = result?.antigravityToken {
+                let digest = AgentUsageTokenDigest.of(token.accessToken)
+                if self.antigravityRefusedDigests[hostKey]?.contains(digest) == true {
+                    // Re-armed here: a desktop answer in between clears it.
+                    self.antigravityNeedsRenewal.insert(hostKey)
+                    complete = self.applyAntigravityReadout(
+                        .signInExpired,
+                        renewed: result?.antigravityRenewed ?? false,
+                        skippedLocal: skipLocal,
+                        hostKey: hostKey, now: now)
+                } else {
+                    // The pass below asks Google with it straight away.
+                    self.antigravityTokens[hostKey] = (token, now)
+                    self.antigravityStates.removeValue(forKey: hostKey)
+                    complete = true
+                }
+            } else {
+                complete = self.applyAntigravityReadout(
+                    result?.readouts[.antigravity],
+                    renewed: result?.antigravityRenewed ?? false,
+                    skippedLocal: skipLocal,
+                    hostKey: hostKey, now: now)
+            }
             var health = self.antigravityProbeHealth[hostKey] ?? AgentRepositoryHostProbeHealth()
             if complete {
                 health.recordSuccess()
@@ -1119,6 +1176,62 @@ final class AgentUsageCenter {
                     baseDelay: AgentUsageTuning.probeBackoffBase,
                     maximumDelay: AgentUsageTuning.probeBackoffMax)
             }
+            self.antigravityProbeHealth[hostKey] = health
+            self.refresh()
+        }
+    }
+
+    /// Asks Google from the app with the host's held sign-in. Anything short
+    /// of fresh numbers drops the token, so the next pass probes the host
+    /// again (desktop app first, then a re-read sign-in).
+    private func dispatchAntigravityFetch(
+        hostKey: String,
+        token: AgentUsageAntigravityToken,
+        now: Date
+    ) {
+        guard antigravityProbesInFlight.insert(hostKey).inserted else { return }
+        var health = antigravityProbeHealth[hostKey] ?? AgentRepositoryHostProbeHealth()
+        health.recordStarted(now: now)
+        antigravityProbeHealth[hostKey] = health
+        let dispatchedEpoch = epoch
+        let hostTag = Self.tag(hostKey)
+
+        Task { @MainActor [weak self] in
+            var payload: String?
+            var refused = false
+            do {
+                payload = try await AgentUsageAPIClient.fetchAntigravityPayload(token)
+            } catch AgentUsageAPIError.unauthorized {
+                refused = true
+            } catch {
+                Self.logger.error("antigravity fetch failed host=\(hostTag, privacy: .public)")
+            }
+            guard let self else { return }
+            self.antigravityProbesInFlight.remove(hostKey)
+            guard self.epoch == dispatchedEpoch, self.canWork else {
+                if self.canWork { self.refresh() }
+                return
+            }
+            let now = Date()
+            if refused {
+                self.antigravityTokens.removeValue(forKey: hostKey)
+                self.antigravityRefusedDigests[hostKey, default: []]
+                    .insert(AgentUsageTokenDigest.of(token.accessToken))
+                self.antigravityNeedsRenewal.insert(hostKey)
+                // Probe now: it starts the renewal and reads the sign-in back.
+                self.antigravityStates.removeValue(forKey: hostKey)
+            } else {
+                let skipping = self.antigravitySkipLocalUntil[hostKey].map { $0 > now } ?? false
+                _ = self.applyAntigravityReadout(
+                    payload.map { .payload($0) } ?? .unreadable(keychainLocked: false),
+                    renewed: false, skippedLocal: skipping,
+                    hostKey: hostKey, now: now)
+                if self.antigravityStates[hostKey]?.status != .ok {
+                    self.antigravityTokens.removeValue(forKey: hostKey)
+                }
+            }
+            var health = self.antigravityProbeHealth[hostKey] ?? AgentRepositoryHostProbeHealth()
+            health.recordSuccess()
             self.antigravityProbeHealth[hostKey] = health
             self.refresh()
         }
