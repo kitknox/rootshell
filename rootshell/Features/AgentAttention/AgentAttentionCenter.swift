@@ -1531,6 +1531,13 @@ final class AgentAttentionCenter {
         }
     }
 
+    /// A title arrived, before coalescing. Output that only sets the title
+    /// raises no content edge, so this keeps it counting as pane activity.
+    func noteTitleActivity(terminal: Ghostty.TerminalView) {
+        guard wasEnabled, let monitor = monitors[terminal.uuid] else { return }
+        monitor.noteActivity()
+    }
+
     /// Title change from the terminal (already coalesced at 75ms).
     /// Runs identity + title-only rules with zero screen reads.
     func noteTitleChanged(terminal: Ghostty.TerminalView, title: String) {

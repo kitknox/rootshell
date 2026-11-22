@@ -92,14 +92,7 @@ struct WindowAccessor: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
-        #if targetEnvironment(macCatalyst)
-        (uiView as? TransparentWindowView)?.updateWindowTitle(windowTitle)
-        #else
-        if let transparentView = uiView as? TransparentWindowView {
-            transparentView.pendingSceneTitle = windowTitle
-            transparentView.applySceneTitle()
-        }
-        #endif
+        (uiView as? TransparentWindowView)?.setWindowTitle(windowTitle)
     }
 }
 
@@ -116,6 +109,45 @@ private class TransparentWindowView: UIView {
     /// runs on every SwiftUI update of the accessor, and the OS-side write
     /// (FrontBoard scene settings / AppKit titlebar) is far from free.
     private var lastAppliedTitle: String?
+
+    /// The OS-level title shows only in the app switcher, dock menu and
+    /// Mission Control, never in the window, so a title that keeps changing
+    /// (a spinner) is written through at most this often.
+    private static let osTitleInterval: TimeInterval = 1
+    private var lastOSTitleWriteUptime: TimeInterval = 0
+    private var osTitleTask: Task<Void, Never>?
+
+    /// Title from SwiftUI. The first change is written at once; changes
+    /// inside the interval land together when it ends.
+    func setWindowTitle(_ title: String) {
+        #if targetEnvironment(macCatalyst)
+        pendingWindowTitle = title
+        #else
+        pendingSceneTitle = title
+        #endif
+        guard title != lastAppliedTitle, osTitleTask == nil else { return }
+        let wait = Self.osTitleInterval
+            - (ProcessInfo.processInfo.systemUptime - lastOSTitleWriteUptime)
+        guard wait > 0 else {
+            writePendingWindowTitle()
+            return
+        }
+        osTitleTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(wait))
+            guard let self, !Task.isCancelled else { return }
+            self.osTitleTask = nil
+            self.writePendingWindowTitle()
+        }
+    }
+
+    private func writePendingWindowTitle() {
+        lastOSTitleWriteUptime = ProcessInfo.processInfo.systemUptime
+        #if targetEnvironment(macCatalyst)
+        if let title = pendingWindowTitle { updateWindowTitle(title) }
+        #else
+        applySceneTitle()
+        #endif
+    }
 
     #if targetEnvironment(macCatalyst)
     /// Window title to apply once the view is in a window (macCatalyst)

@@ -1481,6 +1481,10 @@ extension Ghostty {
 
         // Title change debouncing (like macOS implementation)
         var titleChangeTimer: Timer?
+        /// Latest title waiting out the quiet interval, and when it ends.
+        var pendingTitleChange: String?
+        var titleChangeDeadline: TimeInterval = 0
+        static let titleChangeQuietInterval: TimeInterval = 0.075
 
         // Progress report auto-removal timer
         var progressReportTimer: Timer?
@@ -5203,42 +5207,65 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
             handleHerdrTitleChange(title)
             return
         }
-        // Coalesce rapid title changes with a timer (0.075s, like macOS)
-        // This prevents flickering and excessive updates
-        titleChangeTimer?.invalidate()
+        // Title-only output raises no content edge, so it reports its own
+        // activity.
+        AgentAttentionCenter.shared.noteTitleActivity(terminal: self)
+        // Coalesce rapid title changes (0.075s, like macOS): the latest title
+        // applies once no newer one arrived for that long. A burst moves the
+        // deadline and shares one timer instead of replacing it per title.
+        pendingTitleChange = title
+        titleChangeDeadline = ProcessInfo.processInfo.systemUptime + Self.titleChangeQuietInterval
+        if titleChangeTimer == nil {
+            armTitleChangeTimer(after: Self.titleChangeQuietInterval)
+        }
+    }
+
+    private func armTitleChangeTimer(after delay: TimeInterval) {
         titleChangeTimer = Timer.scheduledTimer(
-            withTimeInterval: 0.075,
+            withTimeInterval: delay,
             repeats: false
         ) { [weak self] _ in
             // Timer fires on the run loop that scheduled it (main).
             MainActor.assumeIsolated {
                 guard let self = self else { return }
-                let signpost = TmuxPipelineSignposts.begin("osc.title")
-                defer { TmuxPipelineSignposts.end("osc.title", signpost) }
-                if self.suppressesTitleUpdate() {
-                    Ghostty.logger.debug("Swallowed transient mid-switch title: \(title)")
+                self.titleChangeTimer = nil
+                let remaining = self.titleChangeDeadline - ProcessInfo.processInfo.systemUptime
+                if remaining > 0.001 {
+                    self.armTitleChangeTimer(after: remaining)
                     return
                 }
-                if self.consumesCommandEcho(title) {
-                    Ghostty.logger.debug("Swallowed command-echo title: \(title)")
-                    return
-                }
-                // Always cache the session-provided title so foreground replay has it.
-                self.sessionProvidedTitle = title
-                // Agent identity/state from title rules (cheap, no screen
-                // read); works while backgrounded so codex's "Action
-                // Required" title can notify.
-                AgentAttentionCenter.shared.noteTitleChanged(terminal: self, title: title)
-                // Skip the @Published write while the resume gate is up. The atomic
-                // (not UIApplication state) is canonical because the gate stays
-                // true through the deferred-resume window, after applicationState
-                // has already flipped to .active. replayCachedSessionStateOnForeground()
-                // pushes the cached value into `self.title` on resume.
-                guard !Ghostty.isAppBackgroundedAtomic else { return }
-                if self.userOverrideTitle == nil {
-                    self.title = title
-                }
+                guard let title = self.pendingTitleChange else { return }
+                self.pendingTitleChange = nil
+                self.applyCoalescedTitleChange(title)
             }
+        }
+    }
+
+    private func applyCoalescedTitleChange(_ title: String) {
+        let signpost = TmuxPipelineSignposts.begin("osc.title")
+        defer { TmuxPipelineSignposts.end("osc.title", signpost) }
+        if suppressesTitleUpdate() {
+            Ghostty.logger.debug("Swallowed transient mid-switch title: \(title)")
+            return
+        }
+        if consumesCommandEcho(title) {
+            Ghostty.logger.debug("Swallowed command-echo title: \(title)")
+            return
+        }
+        // Always cache the session-provided title so foreground replay has it.
+        sessionProvidedTitle = title
+        // Agent identity/state from title rules (cheap, no screen
+        // read); works while backgrounded so codex's "Action
+        // Required" title can notify.
+        AgentAttentionCenter.shared.noteTitleChanged(terminal: self, title: title)
+        // Skip the @Published write while the resume gate is up. The atomic
+        // (not UIApplication state) is canonical because the gate stays
+        // true through the deferred-resume window, after applicationState
+        // has already flipped to .active. replayCachedSessionStateOnForeground()
+        // pushes the cached value into `self.title` on resume.
+        guard !Ghostty.isAppBackgroundedAtomic else { return }
+        if userOverrideTitle == nil {
+            self.title = title
         }
     }
 
