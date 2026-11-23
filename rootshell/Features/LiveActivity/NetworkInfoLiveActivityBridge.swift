@@ -25,6 +25,10 @@ final class NetworkInfoLiveActivityBridge {
 
     private var resolveTask: Task<Void, Never>?
     private var resolveRequestScheduled = false
+    /// Identifies the one live lifecycle retry; clearing it voids any queued callback.
+    private var resolveLifecycleRetryToken: UInt64?
+    private var resolveLifecycleRetryNextToken: UInt64 = 0
+    private var resolveLifecycleDeferralAttempt = 0
     private var lastResolveStartedAt: Date?
     private var cancellables = Set<AnyCancellable>()
     private var foregroundObserver: (any NSObjectProtocol)?
@@ -38,6 +42,8 @@ final class NetworkInfoLiveActivityBridge {
     /// backed-up notifications during scene activation.
     private nonisolated static let foregroundDeferralSeconds: TimeInterval = 0.5
     private nonisolated static let resolveCooldownSeconds: TimeInterval = 1.0
+    private nonisolated static let resolveLifecycleDeferralMaxAttempts = 64
+    private nonisolated static let resolveLifecycleDeferralDelay: TimeInterval = 0.25
 
     /// Minimum age of the last resolve before a location-diary freshness hint
     /// may trigger another one. The diary delivers CL fixes continuously
@@ -206,6 +212,8 @@ final class NetworkInfoLiveActivityBridge {
         resolveTask?.cancel()
         resolveTask = nil
         resolveRequestScheduled = false
+        resolveLifecycleRetryToken = nil
+        resolveLifecycleDeferralAttempt = 0
         cancellables.removeAll()
 
         if let observer = foregroundObserver {
@@ -261,11 +269,36 @@ final class NetworkInfoLiveActivityBridge {
               !ForegroundActivationGate.shared.isUnsafeForSceneMutation,
               UIApplication.shared.applicationState == .active else {
             LifecycleDebugLogger.shared.bumpSuppression("liveActivity_network")
-            ForegroundActivationGate.shared.runWhenSafe(reason: "liveActivity.resolve.\(reason)") { [weak self] in
-                self?.requestResolve(reason: reason)
+            // Always retry asynchronously: runWhenSafe runs its block inline
+            // when the gate is clear and the app is active, but the
+            // backgrounded flag or quiet window can still hold, which recursed
+            // until the stack overflowed.
+            guard resolveLifecycleRetryToken == nil else { return }
+            guard resolveLifecycleDeferralAttempt < Self.resolveLifecycleDeferralMaxAttempts else {
+                resolveLifecycleDeferralAttempt = 0
+                LifecycleDebugLogger.shared.checkpoint("LiveNetwork.resolve.deferredDropped", ms: nil, [
+                    ("reason", reason),
+                    ("backgrounded", Ghostty.isAppBackgroundedAtomic),
+                    ("quiet", Ghostty.isInResumeQuietWindowAtomic),
+                    ("appState", String(describing: UIApplication.shared.applicationState)),
+                ])
+                return
+            }
+            resolveLifecycleRetryNextToken &+= 1
+            let token = resolveLifecycleRetryNextToken
+            resolveLifecycleRetryToken = token
+            resolveLifecycleDeferralAttempt += 1
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.resolveLifecycleDeferralDelay) { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self, self.isRunning, self.resolveLifecycleRetryToken == token else { return }
+                    self.resolveLifecycleRetryToken = nil
+                    self.requestResolve(reason: reason)
+                }
             }
             return
         }
+        resolveLifecycleRetryToken = nil
+        resolveLifecycleDeferralAttempt = 0
 
         guard !resolveRequestScheduled else {
             LifecycleDebugLogger.shared.bumpSuppression("liveActivity_network_resolve")
