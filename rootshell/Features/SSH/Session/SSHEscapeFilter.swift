@@ -15,8 +15,7 @@ import Foundation
 /// starting with `~.` will NOT disconnect the session. Paste markers themselves do
 /// not update the line-start tracking; the last *content* byte before the closing
 /// marker determines whether a subsequent `~.` (typed after the paste) triggers.
-@MainActor
-final class SSHEscapeFilter {
+nonisolated final class SSHEscapeFilter {
     /// Whether escape processing is active. Disabled filter passes all bytes through.
     var enabled: Bool = true
 
@@ -66,6 +65,15 @@ final class SSHEscapeFilter {
     func filter(_ data: Data) -> Data {
         guard enabled else { return data }
         guard !data.isEmpty else { return data }
+
+        // Zero-allocation fast path: common interactive typing and pastes without
+        // ESC or a line-start escape character pass straight through untouched.
+        let isPlain = data.withUnsafeBytes { raw -> Bool in
+            guard plainRunEnd(raw, from: 0) == raw.count else { return false }
+            lastWasNewline = Self.isNewline(raw[raw.count - 1])
+            return true
+        }
+        if isPlain { return data }
 
         var out = Data()
         out.reserveCapacity(data.count)

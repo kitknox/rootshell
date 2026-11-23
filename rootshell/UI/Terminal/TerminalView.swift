@@ -1057,8 +1057,10 @@ extension Ghostty {
         /// 0 = none.
         nonisolated(unsafe) var tmuxGatewayOwnerKey: Int = 0
 
-        // Serial queue for PTY master reads
-        let readQueue = DispatchQueue(label: "com.rootshell.pty.read", qos: .userInitiated)
+        // Serial queue for PTY master / Ghostty response-pipe reads.
+        // `.userInteractive` keeps encoded keystrokes and terminal query replies
+        // on P-cores with minimal scheduling latency.
+        let readQueue = DispatchQueue(label: "com.rootshell.pty.read", qos: .userInteractive)
 
         /// Owns the terminal output byte path: buffered writes, scrollback
         /// restore gating, and mouse-capture coalescing.

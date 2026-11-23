@@ -23,7 +23,7 @@ struct TerminalOutputCoalescingConfig: Sendable {
         }
 
         return TerminalOutputCoalescingConfig(
-            inputDebounceMs: envInt("GHOSTTY_OUTPUT_COALESCE_INPUT_DEBOUNCE_MS") ?? 120,
+            inputDebounceMs: envInt("GHOSTTY_OUTPUT_COALESCE_INPUT_DEBOUNCE_MS") ?? 400,
             minBatchIntervalMs: minMs,
             maxBatchIntervalMs: maxMs,
             debug: (envInt("GHOSTTY_OUTPUT_COALESCE_DEBUG") ?? 0) != 0
@@ -201,7 +201,14 @@ final class TerminalOutputPipeline {
         let outputCoalescer: TerminalOutputCoalescer? = useOutputCoalescer ? self.outputCoalescer : nil
         let bufferedWriter = self.bufferedWriter
         let scrollbackRestoreOutputGate = self.scrollbackRestoreOutputGate
-        let persistenceNotifyPending = OSAllocatedUnfairLock<Bool>(initialState: false)
+        struct PersistenceNotifyState {
+            var pending = false
+            var lastNotifiedUptimeNs: UInt64 = 0
+        }
+        let persistenceNotifyState = OSAllocatedUnfairLock(initialState: PersistenceNotifyState())
+        // ScrollbackPersistenceManager already debounces saves by 2s; throttling
+        // the MainActor wakeup to 250ms avoids spawning a Task on every keystroke echo.
+        let persistenceThrottleNs: UInt64 = 250_000_000
         // A new session starts with its connection progress on screen. The
         // sink keeps its session's id: output of a replaced session can still
         // arrive and must not count as the new one's.
@@ -235,15 +242,18 @@ final class TerminalOutputPipeline {
 
             guard !Ghostty.isAppBackgroundedAtomic else { return }
 
-            let shouldSpawn = persistenceNotifyPending.withLock { pending -> Bool in
-                guard !pending else { return false }
-                pending = true
+            let nowNs = DispatchTime.now().uptimeNanoseconds
+            let shouldSpawn = persistenceNotifyState.withLock { state -> Bool in
+                guard !state.pending else { return false }
+                guard nowNs &- state.lastNotifiedUptimeNs >= persistenceThrottleNs else { return false }
+                state.pending = true
+                state.lastNotifiedUptimeNs = nowNs
                 return true
             }
             guard shouldSpawn else { return }
 
             Task { @MainActor in
-                persistenceNotifyPending.withLock { $0 = false }
+                persistenceNotifyState.withLock { $0.pending = false }
                 guard !Ghostty.isAppBackgroundedAtomic else { return }
                 ScrollbackPersistenceManager.shared.notifyOutputReceived(terminalUUID: terminalUUID)
             }
@@ -266,6 +276,8 @@ nonisolated final class TerminalOutputCoalescer: @unchecked Sendable {
     private var currentDeadline: DispatchTime?
     private var enabledForFastPath = false
     private var disableFlushInProgress = false
+    private var inFlightEnqueues = 0
+    private var hasPendingBytes = false
     private var transitionGeneration: UInt64 = 0
     private var fastPathLock = os_unfair_lock()
     private var isEnabled = false
@@ -292,7 +304,10 @@ nonisolated final class TerminalOutputCoalescer: @unchecked Sendable {
             enabledForFastPath = true
         } else {
             enabledForFastPath = false
-            disableFlushInProgress = true
+            // Only hold new chunks behind the queue drain if bytes are actually
+            // buffered or an async enqueue is in flight; otherwise interactive
+            // echoes bypass the coalescer queue synchronously immediately.
+            disableFlushInProgress = (inFlightEnqueues > 0 || hasPendingBytes)
         }
         os_unfair_lock_unlock(&fastPathLock)
 
@@ -323,11 +338,13 @@ nonisolated final class TerminalOutputCoalescer: @unchecked Sendable {
     /// `mark` goes on with `data`, or with the batch `data` ends up in.
     func enqueue(_ data: Data, onWritten mark: TerminalWriteMark? = nil) {
         os_unfair_lock_lock(&fastPathLock)
-        let enabled = enabledForFastPath
-        let disablePending = disableFlushInProgress
+        let bypass = !enabledForFastPath && !disableFlushInProgress
+        if !bypass {
+            inFlightEnqueues += 1
+        }
         os_unfair_lock_unlock(&fastPathLock)
 
-        if !enabled && !disablePending {
+        if bypass {
             if debug {
                 let byteCount = data.count
                 Ghostty.logger.debug("OutputCoalescer direct bypass: \(byteCount) bytes")
@@ -339,11 +356,18 @@ nonisolated final class TerminalOutputCoalescer: @unchecked Sendable {
         queue.async {
             if !self.isEnabled {
                 self.write(data, mark)
+                os_unfair_lock_lock(&self.fastPathLock)
+                self.inFlightEnqueues -= 1
+                os_unfair_lock_unlock(&self.fastPathLock)
                 return
             }
 
             self.pending.append(data)
             if let mark { self.pendingMarks.append(mark) }
+            os_unfair_lock_lock(&self.fastPathLock)
+            self.hasPendingBytes = true
+            self.inFlightEnqueues -= 1
+            os_unfair_lock_unlock(&self.fastPathLock)
             if self.firstEnqueueTime == nil {
                 self.firstEnqueueTime = .now()
             }
@@ -383,6 +407,9 @@ nonisolated final class TerminalOutputCoalescer: @unchecked Sendable {
         guard !pending.isEmpty else {
             cancelTimerLocked()
             firstEnqueueTime = nil
+            os_unfair_lock_lock(&fastPathLock)
+            hasPendingBytes = false
+            os_unfair_lock_unlock(&fastPathLock)
             return
         }
 
@@ -393,6 +420,9 @@ nonisolated final class TerminalOutputCoalescer: @unchecked Sendable {
         cancelTimerLocked()
         firstEnqueueTime = nil
         write(output, mergedTerminalWriteMark(marks))
+        os_unfair_lock_lock(&fastPathLock)
+        hasPendingBytes = false
+        os_unfair_lock_unlock(&fastPathLock)
     }
 
     private func cancelTimerLocked() {
@@ -704,6 +734,13 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
             return
         }
 
+        // Guarantee non-blocking semantics so inline fast-path writes and
+        // DispatchSource drains can never block the caller thread.
+        let flags = fcntl(fd, F_GETFL)
+        if flags >= 0, (flags & O_NONBLOCK) == 0 {
+            _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
+        }
+
         let source = DispatchSource.makeWriteSource(fileDescriptor: fd, queue: queue)
         writeSource = source
         isSuspended = true
@@ -742,6 +779,68 @@ nonisolated final class TerminalBufferedPipeWriter: @unchecked Sendable {
             Ghostty.logger.warning("BufferedPipeWriter: no FD configured, dropping \(data.count) bytes")
             mark?(nil)
             return
+        }
+
+        // Fast path: when the queue is empty and the chunk fits within a single
+        // pipe buffer (<= 64 KiB), write non-blocking directly to the fd inline
+        // without resuming the DispatchSource or hopping to writeQueue.
+        if pendingByteCount == 0,
+           drainCallbacks.isEmpty,
+           droppedSinceLastDrain == 0,
+           data.count <= min(65536, maxBufferedBytes) {
+            let bytesWritten = data.withUnsafeBytes { ptr -> Int in
+                guard let basePtr = ptr.baseAddress else { return data.count }
+                return Darwin.write(fd, basePtr, data.count)
+            }
+
+            if bytesWritten == data.count {
+                totalWritten &+= bytesWritten
+                writtenToFd &+= UInt64(bytesWritten)
+                let reachedOffset: TerminalPipeOffset? = mark != nil
+                    ? TerminalPipeOffset(pipe: pipeGeneration, end: writtenToFd)
+                    : nil
+                os_unfair_lock_unlock(&bufferLock)
+                if let mark, let reachedOffset {
+                    mark(reachedOffset)
+                }
+                return
+            }
+
+            if bytesWritten > 0 {
+                totalWritten &+= bytesWritten
+                writtenToFd &+= UInt64(bytesWritten)
+                chunks.removeAll(keepingCapacity: true)
+                headIndex = 0
+                chunks.append(data)
+                headOffset = bytesWritten
+                pendingByteCount = data.count - bytesWritten
+                if keepingWhole {
+                    wholeEnd = writtenToFd + UInt64(pendingByteCount)
+                    tailIsSealed = true
+                } else {
+                    tailIsSealed = false
+                }
+                if let mark {
+                    marks.append((end: writtenToFd + UInt64(pendingByteCount), mark: mark))
+                }
+                if isSuspended {
+                    isSuspended = false
+                    source.resume()
+                }
+                os_unfair_lock_unlock(&bufferLock)
+                return
+            }
+
+            if bytesWritten < 0 {
+                let err = errno
+                if err != EAGAIN && err != EWOULDBLOCK && err != EINTR {
+                    os_unfair_lock_unlock(&bufferLock)
+                    Ghostty.logger.error("BufferedPipeWriter: inline write error \(err), dropping \(data.count) bytes")
+                    mark?(nil)
+                    return
+                }
+            }
+            // EAGAIN / EWOULDBLOCK / EINTR / 0: fall through to buffered queue + DispatchSource.
         }
 
         // The cap is for output that may be dropped. Bytes that must arrive

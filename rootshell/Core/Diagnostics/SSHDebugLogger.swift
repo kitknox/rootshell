@@ -137,8 +137,21 @@ final class SSHDebugLogger: Sendable {
             tsLog: { [weak self] text in
                 guard let self, self.isEnabled else { return }
                 self.event("NIOSSH", text)
-            }
+            },
+            initiallyEnabled: isEnabled
         )
+
+        // Keep NIOSSHDebug's lock-free atomic flag synchronized with the live
+        // UserDefaults toggle so NIOSSH skips timestamping and counter work
+        // whenever SSH debug logging is switched off.
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: nil
+        ) { [weak self] _ in
+            guard let self else { return }
+            NIOSSHDebug.shared.setEnabled(self.isEnabled)
+        }
     }
 
     private nonisolated func bootstrapSwiftLog() {

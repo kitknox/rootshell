@@ -29,21 +29,26 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
     let pty: TerminalPTY
     let config: SSHConfig
 
-    private(set) var isRunning: Bool = false
+    private(set) var isRunning: Bool = false {
+        didSet { directInput.setRunning(isRunning) }
+    }
     private(set) var client: SSHClient?
     private var jumpClient: SSHClient? // Keep reference to jump client for cleanup
     private var sessionTask: Task<Void, Never>?
-    private var stdinWriter: TTYStdinWriter?
+    private var stdinWriter: TTYStdinWriter? {
+        didSet { directInput.setWriter(stdinWriter) }
+    }
 
-    /// Ordered stdin pipeline: `sendInput` yields into this stream and a
-    /// single task performs the writes sequentially (mirrors SSHSession's
-    /// stdin AsyncStream). One unstructured Task per write raced: MainActor
-    /// serializes task STARTS, but `TTYStdinWriter.write` is a nonisolated
-    /// async function (hops off the actor), so once task A suspended at the
-    /// write, task B could start and both writes raced to the NIO event loop
-    /// — large pastes could reach the channel out of order.
-    private var stdinStreamContinuation: AsyncStream<ByteBuffer>.Continuation?
-    private var stdinWriterTask: Task<Void, Never>?
+    /// Lock-protected outbound stdin + escape-filter state shared between
+    /// `MainActor` (`sendInput`) and off-main fast paths (`TerminalResponsePipeline`
+    /// on `readQueue`). Calls `TTYStdinWriter.writeImmediate(_:)` directly onto the
+    /// channel's `.userInteractive` NIO event loop, eliminating `AsyncStream`,
+    /// `Task.detached`, `EventLoopPromise`, and `.contentProcessed` blocking.
+    private let directInput = DirectInputState()
+
+    /// Tracks the live channel's inbound output state so `adoptReplacement` and
+    /// `cleanup` can suppress late closing bytes synchronously.
+    private var activeOutputState: DirectChannelOutputState?
 
     /// Window changes had the same race as stdin: a Task per `setSize` could
     /// deliver the keyboard-up grid after the dismissed-keyboard grid, leaving
@@ -233,9 +238,6 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
     private var lastMainChannelGeneration = 0
     private var pendingChannelSwap: MainChannelSwap?
 
-    // OpenSSH-style escape-character filter (~. disconnect, ~? help, etc.)
-    private let escapeFilter = SSHEscapeFilter()
-
     /// Ensures onSessionEnd fires at most once. Set by `fireSessionEnd()`.
     private var didFireSessionEnd: Bool = false
 
@@ -283,24 +285,29 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
     }
 
     private func wireEscapeFilter() {
-        escapeFilter.onEcho = { [weak self] text in
-            self?.onOutput?(text)
-        }
-        escapeFilter.onDisconnect = { [weak self] in
-            // Defer the teardown to the next main-actor turn so sendInput unwinds
-            // cleanly before stop() starts tearing down the transport.
-            Task { @MainActor in
-                self?.stop()
+        let sink = outputSink
+        directInput.configureHandlers(
+            onEcho: { text in
+                sink.emit(Data(text.utf8))
+            },
+            onDisconnect: { [weak self] in
+                Task { @MainActor in
+                    self?.stop()
+                }
+            },
+            onShowConnectionInfo: { [weak self] in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.onOutput?(self.formatConnectionInfoForEcho())
+                }
+            },
+            onListForwards: { [weak self] in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.onOutput?(self.formatForwardsForEcho())
+                }
             }
-        }
-        escapeFilter.onShowConnectionInfo = { [weak self] in
-            guard let self else { return }
-            self.onOutput?(self.formatConnectionInfoForEcho())
-        }
-        escapeFilter.onListForwards = { [weak self] in
-            guard let self else { return }
-            self.onOutput?(self.formatForwardsForEcho())
-        }
+        )
     }
 
     private func formatConnectionInfoForEcho() -> String {
@@ -339,7 +346,7 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
         receivedExitStatus = false
         userInitiatedStop = false
         didFireSessionEnd = false
-        escapeFilter.reset()
+        directInput.resetEscapeFilter()
 
         Self.logger.info("Starting Citadel SSH connection to \(self.config.displayName)")
         SSHDebugLogger.shared.logMarker(
@@ -410,22 +417,28 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
             self.client = finalClient
             self.connectionStartTime = Date()
 
-            // Query negotiated algorithms from Citadel client
-            do {
-                if let algos = try await finalClient.getNegotiatedAlgorithms() {
-                    self.negotiatedKeyExchange = algos.keyExchange
-                    self.negotiatedHostKey = algos.hostKey
-                    self.negotiatedCipher = algos.cipher
-                    self.negotiatedMac = algos.mac
-                    Self.logger.info("Negotiated algorithms - KEX: \(algos.keyExchange), HostKey: \(algos.hostKey), Cipher: \(algos.cipher), MAC: \(algos.mac ?? "none")")
-                    SSHDebugLogger.shared.event(
-                        "KEX",
-                        "negotiated kex=\(algos.keyExchange) hostKey=\(algos.hostKey) cipher=\(algos.cipher) mac=\(algos.mac ?? "none")"
-                    )
+            // Read negotiated algorithms synchronously from the cached snapshot
+            // captured at auth completion (avoids an extra event-loop round-trip
+            // before opening the PTY). Fall back to the async query only if nil.
+            var negotiatedAlgos = finalClient.negotiatedAlgorithms
+            if negotiatedAlgos == nil {
+                do {
+                    negotiatedAlgos = try await finalClient.getNegotiatedAlgorithms()
+                } catch {
+                    Self.logger.warning("Could not query negotiated algorithms: \(error.localizedDescription)")
+                    SSHDebugLogger.shared.event("KEX", "query failed: \(error.localizedDescription)")
                 }
-            } catch {
-                Self.logger.warning("Could not query negotiated algorithms: \(error.localizedDescription)")
-                SSHDebugLogger.shared.event("KEX", "query failed: \(error.localizedDescription)")
+            }
+            if let algos = negotiatedAlgos {
+                self.negotiatedKeyExchange = algos.keyExchange
+                self.negotiatedHostKey = algos.hostKey
+                self.negotiatedCipher = algos.cipher
+                self.negotiatedMac = algos.mac
+                Self.logger.info("Negotiated algorithms - KEX: \(algos.keyExchange), HostKey: \(algos.hostKey), Cipher: \(algos.cipher), MAC: \(algos.mac ?? "none")")
+                SSHDebugLogger.shared.event(
+                    "KEX",
+                    "negotiated kex=\(algos.keyExchange) hostKey=\(algos.hostKey) cipher=\(algos.cipher) mac=\(algos.mac ?? "none")"
+                )
             }
 
             // Second race-window check: getNegotiatedAlgorithms() above is an
@@ -574,7 +587,8 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
             let jumpChannel = try await MPTCPBootstrap.connectPlainChannel(
                 host: jumpConnectHost,
                 port: jumpConfig.port,
-                timeout: min(timeout, Self.tcpConnectTimeoutCap)
+                timeout: min(timeout, Self.tcpConnectTimeoutCap),
+                interactive: true
             )
             if Task.isCancelled {
                 try? await jumpChannel.close()
@@ -771,7 +785,8 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
             let directChannel = try await MPTCPBootstrap.connectPlainChannel(
                 host: connectHost,
                 port: config.port,
-                timeout: min(timeout, Self.tcpConnectTimeoutCap)
+                timeout: min(timeout, Self.tcpConnectTimeoutCap),
+                interactive: true
             )
             if Task.isCancelled {
                 try? await directChannel.close()
@@ -863,23 +878,18 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
     }
 
     func sendInput(_ data: Data) {
-        guard isRunning, stdinWriter != nil, let continuation = stdinStreamContinuation else {
-            Self.logger.warning("Cannot send input: session not ready")
-            return
+        directInput.send(data)
+    }
+
+    /// Returns a `@Sendable` sink that runs `SSHEscapeFilter` and writes directly
+    /// onto the SSH channel's `.userInteractive` NIO event loop without hopping
+    /// through `@MainActor` or `AsyncStream`. Used by `TerminalResponsePipeline`
+    /// for Ghostty-encoded keys, terminal query replies, and tmux -CC gateways.
+    nonisolated func makeNonisolatedInputSink() -> @Sendable (Data) -> Void {
+        let input = directInput
+        return { data in
+            input.send(data)
         }
-
-        // Apply OpenSSH-style escape-character filtering (~. ~? ~# ~I ~~).
-        // Unknown and unsupported escapes fall through as literal bytes.
-        let filtered = escapeFilter.filter(data)
-        guard !filtered.isEmpty else { return }
-
-        // AsyncStream yields are strictly FIFO and the single writer task
-        // performs the writes sequentially, so bytes reach the channel in
-        // sendInput() call order. (A Task per write only serialized task
-        // STARTS; concurrent writes raced once the first one suspended.)
-        var buffer = ByteBufferAllocator().buffer(capacity: filtered.count)
-        buffer.writeBytes(filtered)
-        continuation.yield(buffer)
     }
 
     func setSize(_ size: TerminalPTY.TerminalSize) throws {
@@ -933,119 +943,77 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
 
     // MARK: - Private Methods
 
-    /// Handle PTY session I/O - extracted to share between withPTY and withPTYExec.
-    ///
-    /// `nonisolated` so the output iterator drains on the generic executor rather than
-    /// competing with UI work on MainActor. Only state mutation and the one-shot setup
-    /// hop through MainActor. Output dispatch goes through `outputSink`, which is
-    /// lock-protected and honours later rebinding of `onOutput`/`onOutputData`.
-    private nonisolated func handlePTYSession(
-        inbound: TTYOutput,
-        outbound: TTYStdinWriter,
+    /// One-shot MainActor activation for the initial PTY channel.
+    /// Installs `stdinWriter`, transitions to `.running` (clearing progress spinner
+    /// and flushing auth banners), starts port forwards & health monitoring, and
+    /// then opens `outputState` so all subsequent packets stream synchronously on
+    /// the NIO event loop with zero hops.
+    private func activateInitialPTYChannel(
+        _ outbound: TTYStdinWriter,
         generation: Int,
-        swap: MainChannelSwap?
-    ) async throws {
-        let sink = self.outputSink
-        var firstByteLogged = false
-        // A replacement's output is held until its ready marker; the old channel keeps the pane meanwhile.
-        var held: Data? = swap == nil ? nil : Data()
-        var scanner = swap.map { MainChannelMarkerScanner(marker: $0.readyMarker) }
+        outputState: DirectChannelOutputState
+    ) {
+        guard isRunning, !userInitiatedStop, mainChannelGeneration == generation else {
+            outputState.markCancelled()
+            outbound.close()
+            return
+        }
+        stdinWriter = outbound
+        activeOutputState = outputState
 
-        if swap == nil {
-            // One-shot setup on MainActor.
-            await MainActor.run {
-                self.installStdinPipeline(outbound)
+        Self.logger.info("SSH session ready, firing onReady callback")
+        transition(to: .running)
+        onReady?()
 
-                Self.logger.info("SSH session ready, firing onReady callback")
-                self.transition(to: .running)
-                self.onReady?()
+        // Open the output gate AFTER transition(to: .running) so progress clear
+        // and auth banners render before the remote shell prompt. Serialized on
+        // the channel's NIO event loop so live chunks cannot overtake buffered bytes.
+        outputState.openInitialReady(writer: outbound, sink: outputSink)
 
-                // Start port forwarding if configured
-                if self.config.portForwardConfig.hasActiveForwards, let client = self.client {
-                    let manager = PortForwardManager(client: client, config: self.config.portForwardConfig)
-                    manager.onForwardError = { forward, error in
-                        Self.logger.error("Port forward \(forward.displayString) failed: \(error.localizedDescription)")
-                    }
-                    self.portForwardManager = manager
+        // Start port forwarding if configured
+        if config.portForwardConfig.hasActiveForwards, let client = client {
+            let manager = PortForwardManager(client: client, config: config.portForwardConfig)
+            manager.onForwardError = { forward, error in
+                Self.logger.error("Port forward \(forward.displayString) failed: \(error.localizedDescription)")
+            }
+            portForwardManager = manager
 
-                    // Start forwards in background task (non-blocking)
-                    Task {
-                        await manager.startAllForwards()
-                    }
-                }
-
-                // Start health monitoring
-                self.startHealthMonitoring()
+            // Start forwards in background task (non-blocking)
+            Task {
+                await manager.startAllForwards()
             }
         }
 
-        // Output loop runs off MainActor — dispatches each chunk through OutputSink
-        // without an actor hop, matching SSHSession's zero-hop behavior while still
-        // honouring dynamic callback rebinding.
-        for try await output in inbound {
-            // A replaced channel is cancelled; its closing bytes (zmx's reset) are dropped.
-            if Task.isCancelled { break }
-            switch output {
-            case .stdout(let buffer), .stderr(let buffer):
-                if !firstByteLogged {
-                    firstByteLogged = true
-                    let n = buffer.readableBytes
-                    Self.logger.info("PTY session: first inbound byte received (n=\(n) bytes)")
-                }
-                guard let bytesView = buffer.getBytes(at: buffer.readerIndex, length: buffer.readableBytes) else { break }
-                let data = Data(bytesView)
-                guard var pending = held, let swap else {
-                    sink.emit(data)
-                    break
-                }
-                pending.append(data)
-                held = pending
-                guard scanner?.scan(data) == true else {
-                    guard pending.count <= MainChannelSwap.heldOutputLimit else {
-                        Self.logger.error("Replacement channel sent \(pending.count) bytes without its ready marker; abandoning")
-                        await swap.abandon()
-                        return
-                    }
-                    break
-                }
-                held = nil
-                guard await self.adoptReplacement(outbound, generation: generation, swap: swap) else { return }
-                sink.emit(pending)
-
-            case .exitStatus(let code):
-                // Shell exited normally - deterministic signal (user typed exit or Ctrl+D).
-                Self.logger.info("Received exit status: \(code)")
-                await MainActor.run {
-                    if self.mainChannelGeneration == generation {
-                        self.receivedExitStatus = true
-                    }
-                }
-            }
-        }
-
-        if !firstByteLogged {
-            Self.logger.error("PTY session ended before any inbound bytes — pty-req or shell-req likely rejected by server")
-        }
+        // Start health monitoring
+        startHealthMonitoring()
     }
 
     /// Moves the pane onto a replacement channel that has shown its ready
-    /// marker. Returns false when the swap was abandoned or the session ended.
-    private func adoptReplacement(_ outbound: TTYStdinWriter, generation: Int, swap: MainChannelSwap) -> Bool {
+    /// marker. Returns the retired channel's output state when adopted so the
+    /// caller can serialize retiring the old channel, emitting `MainChannelReset`,
+    /// and draining the new channel's buffered bytes on the shared NIO event loop;
+    /// returns `nil` when the swap was abandoned or the session ended.
+    private func adoptReplacement(
+        _ outbound: TTYStdinWriter,
+        generation: Int,
+        swap: MainChannelSwap,
+        outputState: DirectChannelOutputState
+    ) -> (adopted: Bool, retiring: DirectChannelOutputState?) {
         guard swap.isWaiting, isRunning, !userInitiatedStop, !Task.isCancelled else {
             swap.finish(.failure(MainChannelSwapError.unavailable))
-            return false
+            return (false, nil)
         }
-        finishStdinStream()
-        installStdinPipeline(outbound)
+        let previousOutputState = activeOutputState
+        stdinWriter = outbound
+        activeOutputState = outputState
         mainChannelGeneration = generation
-        receivedExitStatus = false
+        receivedExitStatus = outputState.receivedExitStatus
         sessionTask = swap.task
         swap.previous?.cancel()
-        outputSink.emit(MainChannelReset.bytes)
         try? setSize(pty.windowSize)
         Self.logger.info("Main PTY channel replaced (generation \(generation))")
         swap.finish(.success(()))
-        return true
+        return (true, previousOutputState)
     }
 
     private func startPTYSession() {
@@ -1259,6 +1227,8 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
                 return
             }
 
+            let outputState = DirectChannelOutputState(swapMarker: swap?.readyMarker)
+
             do {
                 let terminalSize = self.pty.windowSize
 
@@ -1292,18 +1262,104 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
 
                 Self.logger.info("PTY session: pty-req sent, awaiting first inbound byte")
 
-                // Use PTY with exec request for remote command/tmux, or plain PTY for interactive shell
-                if let execCommand = command {
-                    try await client.withPTYExec(ptyRequest, command: execCommand, environment: envVars, agentDelegate: agentDelegate) { [weak self] inbound, outbound in
-                        guard let self = self else { return }
-                        try await self.handlePTYSession(inbound: inbound, outbound: outbound, generation: generation, swap: swap)
+                let sink = self.outputSink
+
+                let triggerSwapAdoption: @Sendable (Data, TTYStdinWriter) -> Void = { [weak self] held, writer in
+                    guard let swap else { return }
+                    let adoptionTask = Task<Void, Never> { @MainActor [weak self] in
+                        let result: (adopted: Bool, retiring: DirectChannelOutputState?)
+                        if let self {
+                            result = self.adoptReplacement(
+                                writer,
+                                generation: generation,
+                                swap: swap,
+                                outputState: outputState
+                            )
+                        } else {
+                            swap.finish(.failure(MainChannelSwapError.unavailable))
+                            result = (false, nil)
+                        }
+                        outputState.finishSwapAdoption(
+                            adopted: result.adopted,
+                            held: held,
+                            writer: writer,
+                            retiring: result.retiring,
+                            sink: sink
+                        )
                     }
-                } else {
-                    try await client.withPTY(ptyRequest, environment: envVars, agentDelegate: agentDelegate) { [weak self] inbound, outbound in
-                        guard let self = self else { return }
-                        try await self.handlePTYSession(inbound: inbound, outbound: outbound, generation: generation, swap: swap)
+                    outputState.setSwapAdoptionTask(adoptionTask)
+                }
+
+                let onReadyHandler: @Sendable (TTYStdinWriter) -> Void = { [weak self] outbound in
+                    if let deferredHeld = outputState.setWriter(outbound) {
+                        triggerSwapAdoption(deferredHeld, outbound)
+                    }
+                    guard swap == nil else { return }
+                    let activationTask = Task<Void, Never> { @MainActor [weak self] in
+                        self?.activateInitialPTYChannel(outbound, generation: generation, outputState: outputState)
+                    }
+                    outputState.setInitialActivationTask(activationTask)
+                }
+
+                let onOutputHandler: @Sendable (ExecCommandOutput) -> Void = { output in
+                    switch output {
+                    case .stdout(let buffer), .stderr(let buffer):
+                        outputState.handleBytes(
+                            buffer,
+                            sink: sink,
+                            onFirstByte: { count in
+                                Self.logger.info("PTY session: first inbound byte received (n=\(count) bytes)")
+                            },
+                            onSwapReady: triggerSwapAdoption,
+                            onSwapAbandoned: { byteCount, writer in
+                                Self.logger.error("Replacement channel sent \(byteCount) bytes without its ready marker; abandoning")
+                                writer?.close()
+                                guard let swap else { return }
+                                Task { @MainActor in
+                                    swap.abandon()
+                                }
+                            }
+                        )
+
+                    case .exitStatus(let code):
+                        // Shell exited normally - deterministic signal (user typed exit or Ctrl+D).
+                        // Recorded synchronously on the NIO event loop inside per-channel state so
+                        // channel completion on MainActor cannot race ahead of an async actor hop
+                        // and misclassify a normal exit as an unexpected disconnect.
+                        Self.logger.info("Received exit status: \(code)")
+                        outputState.recordExitStatus()
                     }
                 }
+
+                // Use direct event-loop PTY callbacks to eliminate per-packet
+                // AsyncThrowingStream + Swift Concurrency executor hops.
+                if let execCommand = command {
+                    try await client.withPTYExecDirect(
+                        ptyRequest,
+                        command: execCommand,
+                        environment: envVars,
+                        agentDelegate: agentDelegate,
+                        onReady: onReadyHandler,
+                        onOutput: onOutputHandler
+                    )
+                } else {
+                    try await client.withPTYDirect(
+                        ptyRequest,
+                        environment: envVars,
+                        agentDelegate: agentDelegate,
+                        onReady: onReadyHandler,
+                        onOutput: onOutputHandler
+                    )
+                }
+
+                if !outputState.didReceiveAnyByte {
+                    Self.logger.error("PTY session ended before any inbound bytes — pty-req or shell-req likely rejected by server")
+                }
+
+                // Wait for any pending startup or replacement-adoption drain on the NIO
+                // event loop so a short-lived channel's buffered output (and swap reset)
+                // reaches the terminal BEFORE teardown or fireSessionEnd().
+                await outputState.waitForPendingDrainIfNeeded()
 
                 // Session ended - check if this was expected or not
                 await MainActor.run {
@@ -1316,14 +1372,18 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
                     let wasRunning = self.isRunning
                     self.isRunning = false
                     self.stdinWriter = nil
-                    self.finishStdinStream()
+                    self.activeOutputState = nil
 
                     // Use deterministic exit status check instead of network reachability heuristics
+                    let didReceiveExitStatus = self.receivedExitStatus || outputState.receivedExitStatus
+                    if didReceiveExitStatus {
+                        self.receivedExitStatus = true
+                    }
                     if self.userInitiatedStop {
                         // User explicitly closed the tab/window
                         Self.logger.info("Session ended (user-initiated stop)")
                         self.fireSessionEnd()
-                    } else if self.receivedExitStatus {
+                    } else if didReceiveExitStatus {
                         // Shell exited normally (user typed 'exit' or Ctrl+D)
                         Self.logger.info("Session ended normally (received exit status)")
                         self.fireSessionEnd()
@@ -1337,6 +1397,7 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
                 }
 
             } catch {
+                await outputState.waitForPendingDrainIfNeeded()
                 await MainActor.run {
                     guard self.mainChannelGeneration == generation else {
                         swap?.finish(.failure(error))
@@ -1356,14 +1417,18 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
 
                         self.isRunning = false
                         self.stdinWriter = nil
-                        self.finishStdinStream()
+                        self.activeOutputState = nil
 
                         // Use deterministic exit status check instead of network reachability heuristics
+                        let didReceiveExitStatus = self.receivedExitStatus || outputState.receivedExitStatus
+                        if didReceiveExitStatus {
+                            self.receivedExitStatus = true
+                        }
                         if self.userInitiatedStop {
                             // User explicitly closed the tab/window
                             Self.logger.info("Session error during user-initiated stop")
                             self.fireSessionEnd()
-                        } else if self.receivedExitStatus {
+                        } else if didReceiveExitStatus {
                             // Shell exited normally before the error (unlikely but handle it)
                             Self.logger.info("Session error after receiving exit status - treating as normal close")
                             self.fireSessionEnd()
@@ -1378,34 +1443,6 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
                             self.fireSessionEnd()
                         }
                     }
-                }
-            }
-        }
-    }
-
-    /// End the ordered stdin pipeline. Buffered-but-unwritten input drains
-    /// against the (now dead) writer and error-logs; the writer task then
-    /// exits its loop. Yields after finish() are silently dropped, which
-    /// preserves the escapeFilter `~.` deferred-stop contract.
-    private func finishStdinStream() {
-        stdinStreamContinuation?.finish()
-        stdinStreamContinuation = nil
-        stdinWriterTask = nil
-    }
-
-    /// Single ordered writer for stdin — see the property doc on
-    /// `stdinStreamContinuation`. Fresh stream per PTY channel; the
-    /// teardown paths finish() it so the loop exits.
-    private func installStdinPipeline(_ outbound: TTYStdinWriter) {
-        stdinWriter = outbound
-        let (stdinStream, stdinContinuation) = AsyncStream.makeStream(of: ByteBuffer.self)
-        stdinStreamContinuation = stdinContinuation
-        stdinWriterTask = Task.detached(priority: .userInitiated) {
-            for await buffer in stdinStream {
-                do {
-                    try await outbound.write(buffer)
-                } catch {
-                    Self.logger.error("Failed to write to SSH: \(error.localizedDescription)")
                 }
             }
         }
@@ -1473,10 +1510,11 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
     private func cleanup() {
         sessionTask?.cancel()
         sessionTask = nil
+        activeOutputState?.markCancelled()
+        activeOutputState = nil
         pendingChannelSwap?.abandon()
         stdinWriter = nil
         pendingResize = nil
-        finishStdinStream()
         agentManager = nil
         gpgForwardTask?.cancel()
         gpgForwardTask = nil
@@ -1761,6 +1799,358 @@ final class CitadelSSHSession: SSHTerminalSession, MainChannelReplacing {
 
     nonisolated deinit {
         sessionTask?.cancel()
+    }
+}
+
+/// Thread-safe outbound stdin + escape-filter pipeline for `CitadelSSHSession`.
+/// Runs `SSHEscapeFilter` and enqueues `TTYStdinWriter.writeImmediate(_:)` under
+/// one unfair lock so MainActor printable keystrokes and off-main Ghostty
+/// response-pipe keystrokes stay strictly FIFO with zero async hops.
+private nonisolated final class DirectInputState: @unchecked Sendable {
+    private static let logger = Logger(subsystem: "com.rootshell", category: "CitadelSSHSession")
+
+    private enum EscapeEffect {
+        case notReady
+        case echo(String)
+        case disconnect
+        case showConnectionInfo
+        case listForwards
+    }
+
+    private final class EffectCollector {
+        var effects: [EscapeEffect] = []
+    }
+
+    private struct State {
+        var isRunning = false
+        var writer: TTYStdinWriter?
+        let escapeFilter = SSHEscapeFilter()
+        let collector = EffectCollector()
+
+        init() {
+            let collector = self.collector
+            escapeFilter.onEcho = { text in collector.effects.append(.echo(text)) }
+            escapeFilter.onDisconnect = { collector.effects.append(.disconnect) }
+            escapeFilter.onShowConnectionInfo = { collector.effects.append(.showConnectionInfo) }
+            escapeFilter.onListForwards = { collector.effects.append(.listForwards) }
+        }
+    }
+
+    private struct Handlers {
+        var onEcho: (@Sendable (String) -> Void)?
+        var onDisconnect: (@Sendable () -> Void)?
+        var onShowConnectionInfo: (@Sendable () -> Void)?
+        var onListForwards: (@Sendable () -> Void)?
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
+    private let handlers = OSAllocatedUnfairLock(initialState: Handlers())
+
+    func configureHandlers(
+        onEcho: @escaping @Sendable (String) -> Void,
+        onDisconnect: @escaping @Sendable () -> Void,
+        onShowConnectionInfo: @escaping @Sendable () -> Void,
+        onListForwards: @escaping @Sendable () -> Void
+    ) {
+        handlers.withLock {
+            $0.onEcho = onEcho
+            $0.onDisconnect = onDisconnect
+            $0.onShowConnectionInfo = onShowConnectionInfo
+            $0.onListForwards = onListForwards
+        }
+    }
+
+    func setRunning(_ running: Bool) {
+        state.withLock { $0.isRunning = running }
+    }
+
+    func setWriter(_ writer: TTYStdinWriter?) {
+        state.withLock { $0.writer = writer }
+    }
+
+    func resetEscapeFilter() {
+        state.withLock { $0.escapeFilter.reset() }
+    }
+
+    func send(_ data: Data) {
+        let effects: [EscapeEffect] = state.withLock { s in
+            guard s.isRunning, let writer = s.writer else {
+                return [.notReady]
+            }
+            s.collector.effects.removeAll(keepingCapacity: true)
+            let filtered = s.escapeFilter.filter(data)
+            if !filtered.isEmpty {
+                var buffer = ByteBufferAllocator().buffer(capacity: filtered.count)
+                buffer.writeBytes(filtered)
+                writer.writeImmediate(buffer)
+            }
+            guard !s.collector.effects.isEmpty else { return [] }
+            let collected = s.collector.effects
+            s.collector.effects.removeAll(keepingCapacity: true)
+            return collected
+        }
+
+        guard !effects.isEmpty else { return }
+        let currentHandlers = handlers.withLock { $0 }
+        for effect in effects {
+            switch effect {
+            case .notReady:
+                Self.logger.warning("Cannot send input: session not ready")
+            case .echo(let text):
+                currentHandlers.onEcho?(text)
+            case .disconnect:
+                currentHandlers.onDisconnect?()
+            case .showConnectionInfo:
+                currentHandlers.onShowConnectionInfo?()
+            case .listForwards:
+                currentHandlers.onListForwards?()
+            }
+        }
+    }
+}
+
+/// Lock-protected per-channel inbound delivery state for `withPTYDirect` / `withPTYExecDirect`.
+/// Buffers only during the brief initial `.running` transition or a `replaceMainChannel` swap;
+/// in steady state (`.streaming`), passes chunks directly to `OutputSink` on the NIO event loop.
+///
+/// Buffered drains and the transition to `.streaming` are serialized on the channel's own NIO
+/// `EventLoop` so live packets delivered by `handleBytes` on that loop can never overtake
+/// buffered startup or replacement bytes.
+private nonisolated final class DirectChannelOutputState: @unchecked Sendable {
+    private enum Phase {
+        case awaitingInitialReady([Data])
+        case awaitingSwapMarker(held: Data, scanner: MainChannelMarkerScanner)
+        /// Ready marker arrived before `setWriter` completed; hold subsequent bytes until `setWriter` runs.
+        case awaitingSwapWriter(held: Data, pendingAfterMarker: [Data])
+        case adoptingSwap(pendingAfterMarker: [Data])
+        case streaming
+        case abandoned
+    }
+
+    private struct State {
+        var phase: Phase
+        var firstByteLogged = false
+        var receivedExitStatus = false
+        var writer: TTYStdinWriter?
+        var initialActivationTask: Task<Void, Never>?
+        var startupDrainFuture: EventLoopFuture<Void>?
+        var swapAdoptionTask: Task<Void, Never>?
+        var swapDrainFuture: EventLoopFuture<Void>?
+    }
+
+    private let state: OSAllocatedUnfairLock<State>
+
+    init(swapMarker: Data?) {
+        let initialPhase: Phase
+        if let swapMarker {
+            initialPhase = .awaitingSwapMarker(
+                held: Data(),
+                scanner: MainChannelMarkerScanner(marker: swapMarker)
+            )
+        } else {
+            initialPhase = .awaitingInitialReady([])
+        }
+        self.state = OSAllocatedUnfairLock(initialState: State(phase: initialPhase))
+    }
+
+    var didReceiveAnyByte: Bool {
+        state.withLock { $0.firstByteLogged }
+    }
+
+    var receivedExitStatus: Bool {
+        state.withLock { $0.receivedExitStatus }
+    }
+
+    func recordExitStatus() {
+        state.withLock { $0.receivedExitStatus = true }
+    }
+
+    func setInitialActivationTask(_ task: Task<Void, Never>) {
+        state.withLock { $0.initialActivationTask = task }
+    }
+
+    func setSwapAdoptionTask(_ task: Task<Void, Never>) {
+        state.withLock { $0.swapAdoptionTask = task }
+    }
+
+    /// Awaits completion of any pending initial activation or replacement adoption
+    /// and its serialized event-loop drain so a short-lived channel's buffered
+    /// output reaches the terminal before completion/teardown runs.
+    func waitForPendingDrainIfNeeded() async {
+        let activationTask = state.withLock { $0.initialActivationTask }
+        await activationTask?.value
+        if let drainFuture = state.withLock({ $0.startupDrainFuture }) {
+            _ = try? await drainFuture.get()
+        }
+
+        let adoptionTask = state.withLock { $0.swapAdoptionTask }
+        await adoptionTask?.value
+        if let swapFuture = state.withLock({ $0.swapDrainFuture }) {
+            _ = try? await swapFuture.get()
+        }
+    }
+
+    /// Stores the channel's writer. If a replacement channel's ready marker already
+    /// arrived before `onReady`, transitions to `.adoptingSwap` and returns the held
+    /// bytes so the caller can launch adoption immediately. If the channel was already
+    /// abandoned before `onReady`, closes the writer immediately.
+    func setWriter(_ writer: TTYStdinWriter) -> Data? {
+        enum Action {
+            case none
+            case adopt(Data)
+            case closeAbandoned
+        }
+        let action: Action = state.withLock { s in
+            s.writer = writer
+            switch s.phase {
+            case .awaitingSwapWriter(let held, let pending):
+                s.phase = .adoptingSwap(pendingAfterMarker: pending)
+                return .adopt(held)
+            case .abandoned:
+                return .closeAbandoned
+            default:
+                return .none
+            }
+        }
+        switch action {
+        case .none:
+            return nil
+        case .adopt(let held):
+            return held
+        case .closeAbandoned:
+            writer.close()
+            return nil
+        }
+    }
+
+    func markCancelled() {
+        state.withLock { $0.phase = .abandoned }
+    }
+
+    /// Drains initial buffered bytes and flips to `.streaming` on the channel's serial
+    /// NIO event loop so no later `handleBytes` delivery can overtake them.
+    func openInitialReady(writer: TTYStdinWriter, sink: OutputSink) {
+        let future = writer.eventLoop.submit { [state] in
+            let buffered: [Data]? = state.withLock { s in
+                guard case .awaitingInitialReady(let queued) = s.phase else { return nil }
+                s.phase = .streaming
+                return queued
+            }
+            guard let buffered else { return }
+            for chunk in buffered {
+                sink.emit(chunk)
+            }
+        }
+        state.withLock { $0.startupDrainFuture = future }
+    }
+
+    /// Finishes replacement adoption on the shared serial NIO event loop:
+    /// retires `retiring` (preventing any in-flight old-channel chunk from racing
+    /// past the reset), emits `MainChannelReset.bytes`, then emits `held` and
+    /// `pendingAfterMarker` before flipping to `.streaming`.
+    func finishSwapAdoption(
+        adopted: Bool,
+        held: Data,
+        writer: TTYStdinWriter,
+        retiring: DirectChannelOutputState?,
+        sink: OutputSink
+    ) {
+        if !adopted {
+            state.withLock { $0.phase = .abandoned }
+            writer.close()
+            return
+        }
+        let future = writer.eventLoop.submit { [state] in
+            retiring?.markCancelled()
+            let pending: [Data]? = state.withLock { s in
+                guard case .adoptingSwap(let pendingAfterMarker) = s.phase else { return nil }
+                s.phase = .streaming
+                return pendingAfterMarker
+            }
+            guard let pending else { return }
+            sink.emit(MainChannelReset.bytes)
+            sink.emit(held)
+            for chunk in pending {
+                sink.emit(chunk)
+            }
+        }
+        state.withLock { $0.swapDrainFuture = future }
+    }
+
+    func handleBytes(
+        _ buffer: ByteBuffer,
+        sink: OutputSink,
+        onFirstByte: (Int) -> Void,
+        onSwapReady: (Data, TTYStdinWriter) -> Void,
+        onSwapAbandoned: (Int, TTYStdinWriter?) -> Void
+    ) {
+        let count = buffer.readableBytes
+        guard count > 0 else { return }
+        // Single copy directly from ByteBuffer readable storage into Data.
+        let data = buffer.withUnsafeReadableBytes { Data($0) }
+
+        enum Action {
+            case emitDirect
+            case none
+            case swapReady(Data, TTYStdinWriter)
+            case swapAbandoned(Int, TTYStdinWriter?)
+        }
+
+        let (logFirst, action): (Bool, Action) = state.withLock { s in
+            let isFirst = !s.firstByteLogged
+            if isFirst { s.firstByteLogged = true }
+
+            switch s.phase {
+            case .streaming:
+                return (isFirst, .emitDirect)
+            case .abandoned:
+                return (isFirst, .none)
+            case .awaitingInitialReady(var queued):
+                queued.append(data)
+                s.phase = .awaitingInitialReady(queued)
+                return (isFirst, .none)
+            case .awaitingSwapWriter(let held, var pending):
+                pending.append(data)
+                s.phase = .awaitingSwapWriter(held: held, pendingAfterMarker: pending)
+                return (isFirst, .none)
+            case .adoptingSwap(var pending):
+                pending.append(data)
+                s.phase = .adoptingSwap(pendingAfterMarker: pending)
+                return (isFirst, .none)
+            case .awaitingSwapMarker(var held, var scanner):
+                held.append(data)
+                if scanner.scan(data) {
+                    if let writer = s.writer {
+                        s.phase = .adoptingSwap(pendingAfterMarker: [])
+                        return (isFirst, .swapReady(held, writer))
+                    } else {
+                        // Writer hasn't been delivered by onReady yet; wait for both.
+                        s.phase = .awaitingSwapWriter(held: held, pendingAfterMarker: [])
+                        return (isFirst, .none)
+                    }
+                }
+                if held.count > MainChannelSwap.heldOutputLimit {
+                    s.phase = .abandoned
+                    return (isFirst, .swapAbandoned(held.count, s.writer))
+                }
+                s.phase = .awaitingSwapMarker(held: held, scanner: scanner)
+                return (isFirst, .none)
+            }
+        }
+
+        if logFirst {
+            onFirstByte(count)
+        }
+        switch action {
+        case .emitDirect:
+            sink.emit(data)
+        case .none:
+            break
+        case .swapReady(let held, let writer):
+            onSwapReady(held, writer)
+        case .swapAbandoned(let totalBytes, let writer):
+            onSwapAbandoned(totalBytes, writer)
+        }
     }
 }
 

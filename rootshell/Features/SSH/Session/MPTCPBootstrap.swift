@@ -21,7 +21,17 @@ import os.log
 enum MPTCPBootstrap {
     private static let logger = Logger(subsystem: "com.rootshell", category: "MPTCPBootstrap")
 
-    /// Shared event loop group for all SSH connections.
+    /// Dedicated high-priority event loop group for interactive SSH terminal
+    /// sessions so keystrokes and echoes run on P-cores at `.userInteractive`
+    /// QoS and never queue behind bulk SFTP, Git, or background SSH traffic.
+    private static let interactiveEventLoopGroup: NIOTSEventLoopGroup = {
+        let cores = ProcessInfo.processInfo.activeProcessorCount
+        let loopCount = max(2, min(cores, 4))
+        return NIOTSEventLoopGroup(loopCount: loopCount, defaultQoS: .userInteractive)
+    }()
+
+    /// Shared event loop group for non-interactive SSH connections (SFTP, Git,
+    /// headless probes, Mosh/Trzsz spawners).
     /// Must be kept alive for the lifetime of any channels created on it.
     ///
     /// `loopCount` is bumped above the default of 1: NIOSSH's
@@ -39,7 +49,7 @@ enum MPTCPBootstrap {
     private static let tsEventLoopGroup: NIOTSEventLoopGroup = {
         let cores = ProcessInfo.processInfo.activeProcessorCount
         let loopCount = max(2, min(cores, 4))
-        return NIOTSEventLoopGroup(loopCount: loopCount)
+        return NIOTSEventLoopGroup(loopCount: loopCount, defaultQoS: .userInitiated)
     }()
 
     static var isEnabled: Bool {
@@ -68,7 +78,8 @@ enum MPTCPBootstrap {
     static func connectPlainChannel(
         host: String,
         port: Int,
-        timeout: TimeAmount = .seconds(30)
+        timeout: TimeAmount = .seconds(30),
+        interactive: Bool = false
     ) async throws -> Channel {
         #if !CHINA_BUILD
         if let channel = try await TailnetDialer.channel(host: host, port: port, timeout: timeout) {
@@ -76,19 +87,40 @@ enum MPTCPBootstrap {
             return channel
         }
         #endif
-        var bootstrap = NIOTSConnectionBootstrap(group: tsEventLoopGroup)
+        let group = interactive ? interactiveEventLoopGroup : tsEventLoopGroup
+        let tcpOptions = NWProtocolTCP.Options()
+        tcpOptions.noDelay = true
+        if interactive {
+            // Prevent Darwin TCP from stretching/delaying ACKs during
+            // interactive request/response exchanges (TCP_SENDMOREACKS).
+            tcpOptions.disableAckStretching = true
+        }
+        var bootstrap = NIOTSConnectionBootstrap(group: group)
             .connectTimeout(timeout)
+            .tcpOptions(tcpOptions)
             .channelOption(ChannelOptions.autoRead, value: false)
+            .channelOption(NIOTSChannelOptions.minimumIncompleteReceiveLength, value: 1)
+            .channelOption(NIOTSChannelOptions.maximumReceiveLength, value: 65536)
+        if interactive {
+            bootstrap = bootstrap.withQoS(.userInteractive)
+        }
         let mode: String
         if isEnabled {
             bootstrap = bootstrap.withMultipath(.interactive)
-            mode = "niots+multipath"
+            mode = interactive ? "niots+multipath+interactive" : "niots+multipath"
         } else {
-            mode = "niots"
+            mode = interactive ? "niots+interactive" : "niots"
         }
-        if shouldForceIPv4 && !isIPv6Literal(host) {
+        let forceIPv4 = shouldForceIPv4 && !isIPv6Literal(host)
+        if forceIPv4 || interactive {
             bootstrap = bootstrap.configureNWParameters { parameters in
-                if let ipOptions = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options {
+                if interactive {
+                    // Marks packets for low-latency interactive scheduling
+                    // (WMM AC_VI / Darwin FQ-CoDel interactive queue / DSCP).
+                    parameters.serviceClass = .interactiveVideo
+                }
+                if forceIPv4,
+                   let ipOptions = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options {
                     ipOptions.version = .v4
                 }
             }

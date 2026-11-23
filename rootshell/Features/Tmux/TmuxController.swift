@@ -3072,21 +3072,21 @@ extension Ghostty.TerminalView {
             sessionController.resetGatewayReportFilter()
             // The control stream is latency-sensitive.
             outputPipeline.setOutputCoalescingEnabled(false)
-            // Off-main keystroke fast path for local tmux only; network RTT dominates remote.
+            // Off-main keystroke fast path for local tmux and Citadel SSH gateways.
             let gatewayOwnerKey = Int(bitPattern: ownerSurface)
+            var fastWrite: (@Sendable (Data) -> Void)?
             #if targetEnvironment(macCatalyst)
             if let catalyst = session as? CatalystLocalShellSession {
-                let fastWrite = catalyst.makeNonisolatedInputSink()
-                sessionController.configureGatewayFastPath(
-                    fastWrite: fastWrite,
-                    ownerKey: gatewayOwnerKey
-                )
-            } else {
-                sessionController.clearGatewayFastPath()
+                fastWrite = catalyst.makeNonisolatedInputSink()
             }
-            #else
-            sessionController.clearGatewayFastPath()
             #endif
+            if fastWrite == nil, let citadel = session as? CitadelSSHSession {
+                fastWrite = citadel.makeNonisolatedInputSink()
+            }
+            sessionController.configureGatewayFastPath(
+                fastWrite: fastWrite,
+                ownerKey: gatewayOwnerKey
+            )
             tmuxGatewayOwnerKey = gatewayOwnerKey
             // ROOTSHELL-TMUX (id=tmux-detach-size-resync)
             tmuxDetachInProgressAtomic = false

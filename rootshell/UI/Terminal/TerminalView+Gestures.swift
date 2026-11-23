@@ -1661,7 +1661,13 @@ extension Ghostty.TerminalView {
     func noteUserInput(endsOneShotKeyboard: Bool = true) {
         guard !dictationDelivering else { return }
         userInputGeneration &+= 1
-        if endsOneShotKeyboard { noteOneShotKeyboardInput() }
+        if endsOneShotKeyboard {
+            noteOneShotKeyboardInput()
+            // Suppress mouse-captured output coalescing for EVERY input path,
+            // including Ghostty-encoded keys (arrows, Enter, Tab, Backspace,
+            // Ctrl-*, Alt-*, Escape, Kitty protocol) that bypass sendUserInput.
+            noteUserInputForOutputCoalescing()
+        }
     }
 
     /// The input a one-shot keyboard waits for. Deferred so the input views
@@ -1742,7 +1748,11 @@ extension Ghostty.TerminalView {
             sendTmuxDetach()
             return
         }
-        noteUserInputForOutputCoalescing()
+        // Normal typing already suppressed output coalescing in `noteUserInput()`;
+        // only dictation delivery bypasses `noteUserInput()` and still needs it here.
+        if dictationDelivering {
+            noteUserInputForOutputCoalescing()
+        }
         // Track that user has typed (for tmux discovery overlay)
         if !hasUserTyped { hasUserTyped = true }
         // Sessions (SSH or local shell) handle their own I/O. A tmux control

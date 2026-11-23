@@ -51,6 +51,9 @@ final class TerminalResponsePipeline {
         // Chunks read but not yet dispatched are dropped here. cancel() runs
         // only at teardown or right before adopting a new session, where late
         // delivery to the old/new session would be wrong anyway.
+        // Invalidate the fast-path generation BEFORE cancelling the source so
+        // an already-executing read handler cannot deliver into a subsequent session.
+        gatewayFastPath.invalidateSession()
         responseConsumerTask?.cancel()
         responseConsumerTask = nil
         responseEventContinuation?.finish()
@@ -104,6 +107,30 @@ final class TerminalResponsePipeline {
 
         let coalescer = TerminalResponsePasteCoalescer()
         let gatewayFastPath = self.gatewayFastPath
+        var sessionFastWrite: (@Sendable (Data) -> Void)?
+        #if targetEnvironment(macCatalyst)
+        if let catalyst = session as? CatalystLocalShellSession {
+            sessionFastWrite = catalyst.makeNonisolatedInputSink()
+        }
+        #endif
+        let directWrite: (@Sendable (Data) -> Void)?
+        if let citadel = session as? CitadelSSHSession {
+            let sink = citadel.makeNonisolatedInputSink()
+            directWrite = sink
+            if sessionFastWrite == nil {
+                sessionFastWrite = sink
+            }
+        } else {
+            directWrite = nil
+        }
+        // Rebind gateway fastWrite too when a surviving tmux controller spans a
+        // reconnect, so keystrokes never keep routing to the old stopped session.
+        let sessionGeneration = gatewayFastPath.beginSession(
+            directWrite: directWrite,
+            gatewayFastWrite: sessionFastWrite,
+            hasTmuxGateway: host.terminalResponseHasTmuxController,
+            gatewayOwnerKey: host.terminalResponseTmuxGatewayOwnerKey
+        )
 
         // Single ordered consumer: yields from the read queue are FIFO, and
         // one task dispatches them, so chunk order (and the stateful report
@@ -125,7 +152,7 @@ final class TerminalResponsePipeline {
             }
         }
 
-        source.setEventHandler { [coalescer, gatewayFastPath, continuation] in
+        source.setEventHandler { [coalescer, gatewayFastPath, sessionGeneration, continuation] in
             let bufferSize = 4096
             let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
             defer { buffer.deallocate() }
@@ -139,12 +166,15 @@ final class TerminalResponsePipeline {
                         continue
                     }
 
-                    if gatewayFastPath.dispatchIfConfigured(toDispatch) {
+                    switch gatewayFastPath.dispatch(toDispatch, generation: sessionGeneration) {
+                    case .handled:
+                        continue
+                    case .stale:
+                        return
+                    case .fallbackToMainActor:
+                        continuation.yield(.chunk(toDispatch))
                         continue
                     }
-
-                    continuation.yield(.chunk(toDispatch))
-                    continue
                 }
 
                 if bytesRead == 0 {
@@ -272,13 +302,56 @@ final class TerminalResponsePipeline {
 }
 
 private final class TerminalResponseGatewayFastPath: @unchecked Sendable {
+    enum DispatchResult {
+        case handled
+        case fallbackToMainActor
+        case stale
+    }
+
     private let lock = NSLock()
+    private var activeGeneration: UInt64 = 0
+    private var gatewayActive = false
     private var fastWrite: (@Sendable (Data) -> Void)?
+    private var directWrite: (@Sendable (Data) -> Void)?
     private var ownerKey = 0
     private var filterState: TerminalResponsePipeline.GatewayReportFilterState = .ground
 
+    func beginSession(
+        directWrite: (@Sendable (Data) -> Void)?,
+        gatewayFastWrite: (@Sendable (Data) -> Void)?,
+        hasTmuxGateway: Bool,
+        gatewayOwnerKey: Int
+    ) -> UInt64 {
+        lock.lock()
+        activeGeneration &+= 1
+        let generation = activeGeneration
+        self.directWrite = directWrite
+        if hasTmuxGateway {
+            self.gatewayActive = true
+            self.fastWrite = gatewayFastWrite
+            self.ownerKey = gatewayOwnerKey
+            self.filterState = .ground
+        } else {
+            self.gatewayActive = false
+            self.fastWrite = nil
+            self.ownerKey = 0
+            self.filterState = .ground
+        }
+        lock.unlock()
+        return generation
+    }
+
+    func invalidateSession() {
+        lock.lock()
+        activeGeneration &+= 1
+        self.directWrite = nil
+        self.fastWrite = nil
+        lock.unlock()
+    }
+
     func configure(fastWrite: (@Sendable (Data) -> Void)?, ownerKey: Int) {
         lock.lock()
+        self.gatewayActive = true
         self.fastWrite = fastWrite
         self.ownerKey = ownerKey
         self.filterState = .ground
@@ -287,6 +360,7 @@ private final class TerminalResponseGatewayFastPath: @unchecked Sendable {
 
     func clear() {
         lock.lock()
+        gatewayActive = false
         fastWrite = nil
         ownerKey = 0
         filterState = .ground
@@ -299,31 +373,47 @@ private final class TerminalResponseGatewayFastPath: @unchecked Sendable {
         lock.unlock()
     }
 
-    func dispatchIfConfigured(_ data: Data) -> Bool {
+    func dispatch(_ data: Data, generation: UInt64) -> DispatchResult {
         lock.lock()
-        guard let fastWrite else {
+        guard generation == activeGeneration else {
             lock.unlock()
-            return false
+            return .stale
         }
 
-        let filtered = TerminalResponsePipeline.stripTerminalReports(
-            from: data,
-            state: &filterState
-        )
-        let ownerKey = self.ownerKey
-        lock.unlock()
+        if gatewayActive {
+            guard let fastWrite else {
+                lock.unlock()
+                return .fallbackToMainActor
+            }
 
-        if ownerKey != 0 {
-            TmuxDebugLogger.shared.noteGatewayBytes(
-                owner: ownerKey,
-                raw: data.count,
-                filtered: filtered.count
+            let filtered = TerminalResponsePipeline.stripTerminalReports(
+                from: data,
+                state: &filterState
             )
+            let ownerKey = self.ownerKey
+            lock.unlock()
+
+            if ownerKey != 0 {
+                TmuxDebugLogger.shared.noteGatewayBytes(
+                    owner: ownerKey,
+                    raw: data.count,
+                    filtered: filtered.count
+                )
+            }
+            if !filtered.isEmpty {
+                fastWrite(filtered)
+            }
+            return .handled
         }
-        if !filtered.isEmpty {
-            fastWrite(filtered)
+
+        if let directWrite {
+            lock.unlock()
+            directWrite(data)
+            return .handled
         }
-        return true
+
+        lock.unlock()
+        return .fallbackToMainActor
     }
 }
 
