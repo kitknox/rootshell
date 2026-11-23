@@ -7083,7 +7083,7 @@
 			repositoryURL = "https://github.com/kitknox/vim-rootshell.git";
 			requirement = {
 				kind = exactVersion;
-				version = 0.2.1;
+				version = 0.2.2;
 			};
 		};
 		47A810B02EE40000005A0B9C /* XCRemoteSwiftPackageReference "Sparkle-rootshell" */ = {
