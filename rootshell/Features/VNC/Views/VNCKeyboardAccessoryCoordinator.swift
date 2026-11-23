@@ -15,14 +15,15 @@ import rootshellVNC
 /// `TerminalKeyboardAccessoryController` (full toolbar UI, hardware-keyboard
 /// rules, bottom reservation) and delivers one atomic input-view snapshot to
 /// `VNCKeyboardCapture` so the package responder reloads its primary and
-/// accessory views together. On iPhone and iPad the toolbar row is never an
+/// accessory views together. On iPhone, iPad and Mac the toolbar row is never an
 /// accessory: it lives in the pane's HUD bar (`RemoteScreenHUDToolbar`), which
 /// floats or docks along the bottom.
 ///
 /// The per-connection tri-state gates everything: `.off` never shows the
 /// toolbar, `.on` forces it, `.followAppSetting` defers to the controller's
 /// existing visibility logic (hardware-keyboard tracker + the
-/// `showToolbarWithHardwareKeyboard` app setting).
+/// `showToolbarWithHardwareKeyboard` app setting). On Mac that setting alone
+/// decides, and the bar is absent until the toolbar is on.
 @MainActor
 final class VNCKeyboardAccessoryCoordinator {
 
@@ -57,8 +58,12 @@ final class VNCKeyboardAccessoryCoordinator {
     /// keyboard is summoned again.
     private var manuallyDismissed = false
 
-    #if !os(visionOS) && !targetEnvironment(macCatalyst)
+    #if !os(visionOS)
     let hudModel = RemoteScreenHUDKeysModel()
+    #endif
+
+    #if targetEnvironment(macCatalyst)
+    private var toolbarSettingTask: Task<Void, Never>?
     #endif
 
     /// Bumped by every key this coordinator sends for the user. Hardware keys
@@ -73,7 +78,7 @@ final class VNCKeyboardAccessoryCoordinator {
         self.keyboardCapture = pane.keyboardCapture
         self.controller = TerminalKeyboardAccessoryController(host: self)
         controller.setupKeyboard(delegate: self)
-        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        #if !os(visionOS)
         // No collapsed toolbar button here; a double tap just hides the keys.
         controller.keyboardAccessory?.onCollapseRequested = { [weak self] in
             self?.keyboardSetSoftwareKeyboardRequested(false)
@@ -99,6 +104,17 @@ final class VNCKeyboardAccessoryCoordinator {
         reconcilePresentation(forceReload: true)
         observeSoftwareKeyboardRequest()
         observeCapture()
+        #if targetEnvironment(macCatalyst)
+        // The controller reloads its host only when its tracker-derived value changes.
+        toolbarSettingTask = Task { @MainActor [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: .keyboardToolbarHardwareSettingChanged) {
+                guard let self else { return }
+                if self.reconcilePresentation() {
+                    EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
+                }
+            }
+        }
+        #endif
         #if targetEnvironment(macCatalyst) && STANDALONE
         // Capture stays on under the credential prompts, which take local text.
         keyboardCapture.sendsSystemSpaceShortcuts = true
@@ -126,6 +142,10 @@ final class VNCKeyboardAccessoryCoordinator {
     }
 
     func tearDown() {
+        #if targetEnvironment(macCatalyst)
+        toolbarSettingTask?.cancel()
+        toolbarSettingTask = nil
+        #endif
         #if targetEnvironment(macCatalyst) && STANDALONE
         RemoteInputSourceHotKeys.shared.unregister(self)
         #endif
@@ -149,6 +169,10 @@ final class VNCKeyboardAccessoryCoordinator {
             controller.activeToolbarView?.clearModifiers()
         }
         manuallyDismissed = false
+        #if targetEnvironment(macCatalyst)
+        // Asked for by name: a strip folded earlier would answer with a bare chevron.
+        if effectivePreference == .on { hudModel.keysExpanded = true }
+        #endif
         controller.refreshTouchKeyboardToolbarRow()
         // The reset above also took down a detached card.
         controller.scheduleFloatingTouchKeyboardUpdate()
@@ -210,6 +234,20 @@ final class VNCKeyboardAccessoryCoordinator {
     #endif
 
     private var presentation: Presentation {
+        #if targetEnvironment(macCatalyst)
+        // A Mac has no software keyboard, and its hardware-keyboard tracking
+        // lapses across sleep: the preference and the app setting decide alone.
+        guard controller.keyboardAccessory != nil else { return .hidden }
+        switch effectivePreference {
+        case .off:
+            return .hidden
+        case .on:
+            return .accessoryOnly
+        case .followAppSetting:
+            return SettingsStore.shared.value(Settings.KeyboardToolbar.showWithHardwareKeyboard)
+                ? .accessoryOnly : .hidden
+        }
+        #else
         if manuallyDismissed {
             // Summoning the software keyboard again (HUD keyboard button)
             // revives the toolbar.
@@ -242,6 +280,17 @@ final class VNCKeyboardAccessoryCoordinator {
             return .systemKeyboardWithAccessory
         }
         return .accessoryOnly
+        #endif
+    }
+
+    /// What the HUD menu's Keyboard Toolbar item shows as checked.
+    var toolbarIsOn: Bool {
+        #if targetEnvironment(macCatalyst)
+        // Follow App Setting can leave nothing showing on Mac.
+        hudModel.stripAvailable
+        #else
+        effectivePreference != .off
+        #endif
     }
 
     /// Apply one coherent primary/accessory configuration. The package bumps
@@ -259,6 +308,11 @@ final class VNCKeyboardAccessoryCoordinator {
         guard forceReload || appliedInputViews != next else { return false }
         appliedInputViews = next
 
+        #if targetEnvironment(macCatalyst)
+        // The row is the HUD's and there is no keyboard to swap. The responder
+        // keeps the package default; even assigning it would reload its input views.
+        return true
+        #else
         var inputViews: VNCKeyboardInputViews
         switch presentation {
         case .hidden:
@@ -281,6 +335,7 @@ final class VNCKeyboardAccessoryCoordinator {
         keyboardCapture.inputViews = inputViews
         controller.updateBottomEdgeHomeGestureProtection()
         return true
+        #endif
     }
 
     /// Keep the atomic input-view snapshot aligned with package- and
@@ -367,10 +422,10 @@ final class VNCKeyboardAccessoryCoordinator {
 // MARK: - HUD toolbar strip
 
 extension VNCKeyboardAccessoryCoordinator {
-    /// On iPhone and iPad the toolbar row rides in the pane's HUD bar, floating
-    /// or docked along the bottom, and never as an input accessory.
+    /// On iPhone, iPad and Mac the toolbar row rides in the pane's HUD bar,
+    /// floating or docked along the bottom, and never as an input accessory.
     private var hostsToolbarInHUD: Bool {
-        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        #if !os(visionOS)
         true
         #else
         false
@@ -380,7 +435,7 @@ extension VNCKeyboardAccessoryCoordinator {
     /// Modifiers latched on the floating row, which the keys-only terminal
     /// keyboard beneath it knows nothing of.
     private var toolbarModifiers: KeyModifiers {
-        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        #if !os(visionOS)
         guard hudModel.isFloating, hudModel.stripAvailable else { return [] }
         return controller.keyboardAccessory?.toolbarView.activeModifiers ?? []
         #else
@@ -389,14 +444,21 @@ extension VNCKeyboardAccessoryCoordinator {
     }
 
     private func clearOneShotToolbarModifiers() {
-        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        #if !os(visionOS)
         guard hudModel.isFloating, hudModel.stripAvailable else { return }
         controller.keyboardAccessory?.toolbarView.clearOneShotModifiers()
         #endif
     }
 
     private func syncHUD(_ presentation: Presentation) {
-        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        #if !os(visionOS)
+        #if targetEnvironment(macCatalyst)
+        // No chevron for a toolbar nobody asked for: with the toolbar off the
+        // menu button keeps its round chrome, as it had before Mac had a toolbar.
+        let hiddenBySetting = false
+        let stripAvailable = presentation != .hidden
+        let barEnabled = stripAvailable
+        #else
         // Docked, the terminal keyboard brings its own toolbar row and the bar steps aside.
         let barEnabled = hudModel.isFloating || !controller.usesFullTouchKeyboard
         // The hardware-keyboard setting hides the presentation and, by default,
@@ -407,6 +469,7 @@ extension VNCKeyboardAccessoryCoordinator {
             && controller.keyboardAccessory != nil
         let stripAvailable = barEnabled && effectivePreference != .off
             && (presentation != .hidden || hiddenBySetting)
+        #endif
         if hudModel.keysHiddenBySetting != hiddenBySetting { hudModel.keysHiddenBySetting = hiddenBySetting }
         let keysRequested = keyboardCapture.softwareKeyboardRequested
         if hudModel.keysRequested != keysRequested { hudModel.keysRequested = keysRequested }
@@ -422,7 +485,7 @@ extension VNCKeyboardAccessoryCoordinator {
         #endif
     }
 
-    #if !os(visionOS) && !targetEnvironment(macCatalyst)
+    #if !os(visionOS)
     /// Moves the toolbar between the floating bar and its docked place.
     func setToolbarFloating(_ floating: Bool) {
         guard hudModel.isFloating != floating else { return }
@@ -506,7 +569,7 @@ extension VNCKeyboardAccessoryCoordinator: TerminalKeyboardAccessoryHost {
     var keyboardAIAgentOverlayActive: Bool { false }
     var keyboardToolbarContext: ToolbarContext { pane?.keyboardToolbarContext ?? .screenSharing }
     var keyboardGlassBarIsFloating: Bool? {
-        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        #if !os(visionOS)
         hudModel.isFloating
         #else
         nil
@@ -543,9 +606,14 @@ extension VNCKeyboardAccessoryCoordinator: TerminalKeyboardAccessoryHost {
     }
 
     func keyboardReloadInputViews() {
+        #if targetEnvironment(macCatalyst)
+        // Nothing of ours is in the responder's input views to reload.
+        reconcilePresentation()
+        #else
         if !reconcilePresentation() {
             keyboardCapture.setNeedsInputViewsReload()
         }
+        #endif
     }
 
     func keyboardInvalidateKeyCommands() {}
@@ -554,7 +622,7 @@ extension VNCKeyboardAccessoryCoordinator: TerminalKeyboardAccessoryHost {
     func keyboardUpdateAccessoryForTraitCollection() {
         guard pane != nil else { return }
         controller.keyboardAccessory?.updateSizes(keyboardSizes)
-        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        #if !os(visionOS)
         refreshHUDMetrics()
         #endif
     }

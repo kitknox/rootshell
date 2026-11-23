@@ -6,7 +6,7 @@
 //  buttons that fold it away, show the keys, and float or dock the bar.
 //
 
-#if !os(visionOS) && !targetEnvironment(macCatalyst)
+#if !os(visionOS)
 import Observation
 import SwiftUI
 import UIKit
@@ -54,8 +54,14 @@ final class RemoteScreenHUDKeysModel {
         }
     }
 
-    /// A hardware keyboard has no on-screen keys to summon.
-    var showsKeysButton: Bool { !KeyboardTracker.shared.isHardwareKeyboard }
+    /// A hardware keyboard has no on-screen keys to summon, and a Mac never has any.
+    var showsKeysButton: Bool {
+        #if targetEnvironment(macCatalyst)
+        false
+        #else
+        !KeyboardTracker.shared.isHardwareKeyboard
+        #endif
+    }
 
     /// Buttons over the toolbar's trailing end: fold, keys, and the HUD menu.
     private var trailingButtonCount: Int { showsKeysButton ? 3 : 2 }

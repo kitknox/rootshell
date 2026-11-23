@@ -383,7 +383,7 @@ extension SettingsSearchDestination {
             return !SearchBuild.isCatalyst && !SearchBuild.isVisionOS
         case .dictation, .dictationModels, .dictationVocabulary:
             return DictationSupport.isCompiled
-        case .toolbarKeys, .promptAndUsername, .bookmarkedLocations, .locationDiary:
+        case .promptAndUsername, .bookmarkedLocations, .locationDiary:
             return !SearchBuild.isCatalyst
         case .liveActivity:
             return SearchBuild.hasActivityKit && !SearchBuild.isCatalyst
@@ -803,11 +803,11 @@ struct SettingsSearchEntry: Identifiable, Hashable {
             row("toolbar-pinned-keys", String(localized: "Pinned Keys"), in: .toolbarKeys,
                 keywords: ["pinned", "pin", "left", "right", "sections", "overflow"]),
             row("toolbar-style", String(localized: "Toolbar Style"), in: .toolbarKeys,
-                keywords: ["glass", "flat", "appearance", "system keyboard", "toolbar look"]),
+                keywords: ["glass", "flat", "appearance", "system keyboard", "toolbar look"], available: !isCatalyst),
             row("toolbar-drawer-key-size", String(localized: "Same Key Width as Main Row"), in: .toolbarKeys,
                 keywords: ["drawer", "spacing", "columns", "align", "key width", "key size"]),
             row("toolbar-keycaps", String(localized: "Toolbar Keycaps"), in: .toolbarKeys,
-                keywords: ["keycaps", "keys", "appearance", "system keyboard"]),
+                keywords: ["keycaps", "keys", "appearance", "system keyboard"], available: !isCatalyst),
             row("toolbar-key-colors", String(localized: "Toolbar Key Colors"), in: .toolbarKeys,
                 keywords: ["color", "colour", "tint", "glyph", "icon color", "symbol color", "key color",
                            "individual key", "appearance"]),
@@ -1196,11 +1196,7 @@ func settingsSearchDestinationView(for destination: SettingsSearchDestination) -
         EmptyView()
         #endif
     case .toolbarKeys:
-        #if !targetEnvironment(macCatalyst)
         KeyboardToolbarSettingsView()
-        #else
-        EmptyView()
-        #endif
     case .dictation:
         #if canImport(FluidAudio) && !CHINA_BUILD
         DictationSettingsView()

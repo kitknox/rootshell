@@ -16,6 +16,16 @@ extension ToolbarContext {
         case .kvm: return String(localized: "KVM Toolbar")
         }
     }
+
+    /// Toolbars this device shows, so the ones settings may edit. A Mac's only
+    /// toolbar is a remote screen's bar.
+    static var editableCases: [ToolbarContext] {
+        #if targetEnvironment(macCatalyst)
+        allCases.filter(\.usesGlassBar)
+        #else
+        allCases
+        #endif
+    }
 }
 
 /// Ends the toolbar's undo history with the screen that made it, so an undo
@@ -69,7 +79,8 @@ struct KeyboardToolbarSettingsView: View {
 
     /// `surface` is where the toolbar was showing when its settings key was pressed.
     init(context: ToolbarContext = .terminal, surface: ToolbarPreviewSurface? = nil) {
-        _context = State(initialValue: context)
+        _context = State(initialValue: ToolbarContext.editableCases.contains(context)
+            ? context : ToolbarContext.editableCases[0])
         _chosenSurface = State(initialValue: surface)
     }
 
@@ -242,7 +253,7 @@ struct KeyboardToolbarSettingsView: View {
                     setSelecting(false)
                 }
             )) {
-                ForEach(ToolbarContext.allCases, id: \.self) { context in
+                ForEach(ToolbarContext.editableCases, id: \.self) { context in
                     Text(context.displayName).tag(context)
                 }
             }

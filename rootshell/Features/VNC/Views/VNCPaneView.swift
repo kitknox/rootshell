@@ -1550,7 +1550,7 @@ struct VNCPaneRootView: View {
                     hudMenuExtras: VNCHUDMenuExtras(
                         display: { VNCQuickModeMenu(pane: pane) },
                         keyboard: {
-                            #if !os(visionOS) && !targetEnvironment(macCatalyst)
+                            #if !os(visionOS)
                             VNCKeyboardToolbarMenuToggle(pane: pane)
                             if let coordinator = pane.keyboardCoordinator {
                                 RemoteScreenFloatingToolbarMenuToggle(coordinator: coordinator)
@@ -1562,7 +1562,7 @@ struct VNCPaneRootView: View {
                 .screenPlaceholder {
                     RemoteScreenLastSeenPlaceholder(recorder: pane.snapshots)
                 }
-                #if !os(visionOS) && !targetEnvironment(macCatalyst)
+                #if !os(visionOS)
                 .hudAccessory(
                     isEnabled: pane.keyboardCoordinator?.hudModel.barEnabled ?? false,
                     docksToBottom: pane.keyboardCoordinator?.hudModel.docksToBottom ?? false,
@@ -2316,7 +2316,7 @@ private struct VNCConnectionInfoMenuItem: View {
     }
 }
 
-#if !os(visionOS) && !targetEnvironment(macCatalyst)
+#if !os(visionOS)
 /// HUD menu extra: per-pane keyboard toolbar on/off. Flips a runtime
 /// override on the pane (defaulting from the connection's configured
 /// tri-state); the persisted setting lives in the form/profile editor.
@@ -2325,7 +2325,7 @@ private struct VNCKeyboardToolbarMenuToggle: View {
 
     var body: some View {
         Toggle(isOn: Binding(
-            get: { pane.effectiveKeyboardToolbarPreference != .off },
+            get: { pane.keyboardCoordinator?.toolbarIsOn ?? (pane.effectiveKeyboardToolbarPreference != .off) },
             set: { pane.setKeyboardToolbarEnabled($0) }
         )) {
             Label("Keyboard Toolbar", systemImage: "ellipsis.rectangle")
