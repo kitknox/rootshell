@@ -224,6 +224,7 @@ extension MainView {
     /// tab. Already-occluded renderers ack the drain near-instantly, so the
     /// cost stays bounded.
     func pauseRenderersForSecureSnapshot() {
+        tabsModel.clearWarmTabs()
         guard !terminals.isEmpty else { return }
         LifecycleDebugLogger.shared.checkpoint("INACTIVE.renderer.pause.begin")
         for tab in terminals {
@@ -300,6 +301,11 @@ extension MainView {
         //     makes visible side-by-side before the selection commits.
         var preserveIDs: Set<UUID> = []
         if let displayedID = tabsModel.displayedTabID { preserveIDs.insert(displayedID) }
+        if !reason.hasPrefix("foreground") && reason != "onAppear" {
+            preserveIDs.formUnion(tabsModel.warmTabIDs)
+        } else {
+            tabsModel.clearWarmTabs()
+        }
         if let swipe = appTabSwipeState {
             preserveIDs.insert(swipe.sourceTabID)
             preserveIDs.insert(swipe.targetTabID)
@@ -414,6 +420,8 @@ extension MainView {
 
     func handleAppBackgrounded() {
         PreviewRenderingLifecycle.didEnterBackground()
+        tabsModel.clearWarmTabs()
+        tabsModel.flushRapidTabSwitchIfNeeded()
         // The exposé and a hover preview keep tabs un-occluded; drop both
         // before the sweep (a pending hover exit would otherwise leave the
         // card's tab awake through the next foreground reconcile).

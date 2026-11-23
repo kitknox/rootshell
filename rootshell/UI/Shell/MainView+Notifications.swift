@@ -72,6 +72,28 @@ final class MainViewObserverBag: @unchecked Sendable {
         track(NotificationCenter.default.addObserver(forName: name, object: nil, queue: queue, using: block))
     }
 
+    /// Delivers synchronously when posted on the main thread (eliminating an
+    /// `OperationQueue.main` turn on latency-critical paths like tab switching)
+    /// and hops to main otherwise.
+    func observeOnMainActorSync(
+        _ name: Notification.Name,
+        using block: @escaping @MainActor @Sendable (Notification) -> Void
+    ) {
+        observe(name, queue: nil) { notification in
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    block(notification)
+                }
+            } else {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        block(notification)
+                    }
+                }
+            }
+        }
+    }
+
     func observeOnMainActor(
         _ name: Notification.Name,
         using block: @escaping @MainActor @Sendable (Notification) -> Void
@@ -320,18 +342,18 @@ extension MainView {
             #endif
         }
 
-        observerBag.observeOnMainActor(.previousTab) { [self] notification in
+        observerBag.observeOnMainActorSync(.previousTab) { [self] notification in
             // Handle both UIKeyCommand (with terminal) and SwiftUI Commands (nil object)
             guard self.shouldHandleNotification(notification) else { return }
             if self.routeReservedVNCKeyboardShortcut(from: notification) { return }
-            self.previousTab()
+            self.previousTab(fromKeyboard: true)
         }
 
-        observerBag.observeOnMainActor(.nextTab) { [self] notification in
+        observerBag.observeOnMainActorSync(.nextTab) { [self] notification in
             // Handle both UIKeyCommand (with terminal) and SwiftUI Commands (nil object)
             guard self.shouldHandleNotification(notification) else { return }
             if self.routeReservedVNCKeyboardShortcut(from: notification) { return }
-            self.nextTab()
+            self.nextTab(fromKeyboard: true)
         }
 
         observerBag.observe(.appTabSwipeBegan, queue: nil) { [self] notification in
@@ -360,7 +382,7 @@ extension MainView {
             }
         }
 
-        observerBag.observeOnMainActor(.selectTab) { [self] notification in
+        observerBag.observeOnMainActorSync(.selectTab) { [self] notification in
             // Handle both UIKeyCommand (with terminal) and SwiftUI Commands (nil object)
             guard self.shouldHandleNotification(notification) else { return }
             guard let tabIndex = notification.userInfo?["tabIndex"] as? Int else { return }

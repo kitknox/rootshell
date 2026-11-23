@@ -651,9 +651,9 @@ extension MainView {
     private func reconnectPlaceholderSwipeAction(for direction: SwipeDirection) -> TmuxReconnectSwipeFallbackView.Action {
         switch SwipeGestureManager.shared.binding(for: direction) {
         case .preset(.nextTab):
-            return .tabNavigation(nextTab)
+            return .tabNavigation({ nextTab() })
         case .preset(.previousTab):
-            return .tabNavigation(previousTab)
+            return .tabNavigation({ previousTab() })
         default:
             // Sequence/custom-key/multiplexer bindings need a live terminal
             // surface to receive bytes. Leave them disabled on empty placeholders
@@ -1190,16 +1190,22 @@ extension MainView {
     ) -> some View {
         // One measurement of the active pane's accessory for this layout pass;
         // existing keyboard notifications already invalidate the shared view.
-        let accessoryFrame = terminals.indices.contains(selectedTabIndex)
-            ? terminals[selectedTabIndex].focusedPane?.keyboardAccessoryFrameInScreen : nil
-        let touchKeyboardFrame = terminals.indices.contains(selectedTabIndex)
-            ? terminals[selectedTabIndex].focusedPane?.dockedTouchKeyboardFrameInScreen : nil
-        let selectedBottomToolbarHeight = terminals.indices.contains(selectedTabIndex)
-            ? (terminals[selectedTabIndex].focusedPane?.reservedKeyboardToolbarHeightAtBottom ?? 0)
-            : 0
+        // Uses `activeKeyboardToolbarPane` so a tab switch doesn't dip to 0
+        // during the frame between `selectedTabID` changing and the incoming
+        // pane acquiring first responder (or while rapid scrubbing settles).
+        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        let toolbarPane = activeKeyboardToolbarPane
+        let accessoryFrame = toolbarPane?.keyboardAccessoryFrameInScreen
+        let touchKeyboardFrame = toolbarPane?.dockedTouchKeyboardFrameInScreen
+        let selectedBottomToolbarHeight = toolbarPane?.reservedKeyboardToolbarHeightAtBottom ?? 0
         // A glass toolbar lets bottom panes draw on under it and the keyboard.
-        let toolbarIsGlass = terminals.indices.contains(selectedTabIndex)
-            && terminals[selectedTabIndex].focusedPane?.keyboardToolbarShowsGlassBar == true
+        let toolbarIsGlass = toolbarPane?.keyboardToolbarShowsGlassBar == true
+        #else
+        let accessoryFrame: CGRect? = nil
+        let touchKeyboardFrame: CGRect? = nil
+        let selectedBottomToolbarHeight: CGFloat = 0
+        let toolbarIsGlass = false
+        #endif
         // Tabletop holds the toolbar and keyboard in a region below the fold, outside
         // this container, so the band reaches on to the window's bottom edge. Not across
         // a bottom tab bar, and only while a docked keyboard fills the region below the
@@ -1234,147 +1240,62 @@ extension MainView {
             return 0
             #endif
         }()
+        let containerFrame = geometry.frame(in: .global)
+        let containerSafeAreaBottom = geometry.safeAreaInsets.bottom
+        let layoutSignature = TerminalTabSlotLayoutSignature(
+            containerFrame: containerFrame,
+            containerSafeAreaBottom: containerSafeAreaBottom,
+            keyboardFrame: keyboardFrame,
+            keyboardHeight: keyboardHeight,
+            accessoryFrame: accessoryFrame,
+            touchKeyboardFrame: touchKeyboardFrame,
+            containerBottomSafeAreaExpansion: containerBottomSafeAreaExpansion
+        )
         ZStack {
             ForEach(Array(terminals.enumerated()), id: \.element.id) { index, tab in
-                if !tab.splitTree.isEmpty {
-                    let terminalEffectsEnabled = tabAllowsTerminalEffects(tab)
-                    let visualMetrics = appTabSwipeVisualMetrics(for: tab.id, width: width)
-                    let liveBottomToolbarHeight = tab.focusedPane?.reservedKeyboardToolbarHeightAtBottom ?? 0
-                    // A herdr tab can be claimed while it is not showing (Take
-                    // Control), and the size claimed is the size it lays out
-                    // at. Its own pane is not first responder, so borrow the
-                    // selected tab's reservation rather than reserving nothing,
-                    // or it claims several rows too tall and reflows twice.
-                    let hiddenBottomToolbarHeight: CGFloat =
-                        (tab.isHerdrWindow || tab.isHerdrGateway) ? selectedBottomToolbarHeight : 0
-                    // During an app-tab swipe both visible tabs must use the
-                    // same reservation. The target is not first responder yet,
-                    // so its live value is otherwise 0 and its viewport appears
-                    // taller beside the toolbar-shortened source tab.
-                    let reservedBottomToolbarHeight: CGFloat = appTabSwipeState?
-                        .reservedBottomToolbarHeight(for: tab.id)
-                        ?? ((index == selectedTabIndex || tab.id == tabsModel.displayedTabID)
-                            ? liveBottomToolbarHeight
-                            : hiddenBottomToolbarHeight)
-                    let bottomPadding = terminalBottomPadding(
-                        geometry: geometry,
-                        keyboardFrame: keyboardFrame,
-                        keyboardHeight: keyboardHeight,
-                        reservedBottomToolbarHeight: reservedBottomToolbarHeight,
-                        accessoryFrame: accessoryFrame,
-                        touchKeyboardFrame: touchKeyboardFrame,
-                        containerBottomSafeAreaExpansion: containerBottomSafeAreaExpansion,
-                        terminalEffectsEnabled: terminalEffectsEnabled
-                    )
-                    Group {
-                        switch layer {
-                        case .underlay:
-                            PaneUnderlay(model: tab.paneUnderlay)
-                        case .content:
-                            TerminalSplitTreeView(
-                                tree: tab.splitTree,
-                                onResize: { node, ratio in
-                                    handleSplitResize(tabIndex: index, node: node, ratio: ratio)
-                                },
-                                onMove: { source, destination, zone in
-                                    handlePaneMove(tabID: tab.id, source: source, destination: destination, zone: zone)
-                                },
-                                allowsPaneRearrangement: !tab.paneMove.isPending && !isAnySheetPresented
-                                    && appTabSwipeState == nil && !tabExpose.isActive
-                                    && tabsModel.fullScreenPaneID == nil,
-                                isActive: index == selectedTabIndex,
-                                focusedPane: tab.focusedPane,
-                                terminalEffectsEnabled: terminalEffectsEnabled,
-                                routesFocusedProgressToIntegratedEdge: topTabStyle == .integrated
-                                    && showsHorizontalTabs,
-                                progressBarPosition: horizontalTabPosition,
-                                integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs ? integratedTabJoin : nil,
-                                tracksSwipe: appTabSwipeState.map { $0.sourceTabID == tab.id || $0.targetTabID == tab.id } ?? false,
-                                paneUnderlay: tab.paneUnderlay,
-                                integratedTabSurface: topTabStyle == .integrated && showsHorizontalTabs
-                                    ? integratedTabSurface : nil,
-                                paneCardGaps: roundedPanes ? paneCardGaps : nil,
-                                tabID: tab.id
-                            )
-                            // The padding is exactly the band the toolbar and keyboard cover.
-                            .environment(\.terminalKeyboardUnderlap,
-                                         toolbarIsGlass ? bottomPadding + tabletopUnderlap : 0)
-                            // NOTE: the tmux control-mode client size is NOT driven from here.
-                            // A tmux pane is a real ghostty surface, so its grid is recomputed
-                            // in the core (cell/font/inset-aware) on every resize/keyboard/font
-                            // change exactly like a normal surface, and the tmux backend relays
-                            // it; the viewer turns a single-pane window's resize into
-                            // `refresh-client -C`. Driving it from SwiftUI geometry here would
-                            // re-derive the grid in the wrong place and add a round trip.
-                            //
-                            // The id is scoped by tab. `structuralIdentity` alone compares
-                            // leaves by pane OBJECT identity, so two tabs holding the same
-                            // pane (a tmux move-pane before the source tab's layout heals)
-                            // gave sibling ForEach children an equal explicit id and SwiftUI
-                            // trapped in DisplayList.ViewUpdater.ViewCache with "repeated
-                            // view". Combining the stable tab UUID keeps the rebuild-on-
-                            // structure-change behavior the tmux reconcile depends on.
-                            .id(TabSplitTreeIdentity(tabID: tab.id, tree: tab.splitTree.structuralIdentity))
-                            .overlay(alignment: .top) {
-                                if let message = tab.paneMove.errorMessage {
-                                    Text(message)
-                                        .font(.callout)
-                                        .padding(10)
-                                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-                                        .padding(8)
-                                        .allowsHitTesting(false)
-                                        .accessibilityLabel(message)
-                                }
-                            }
-                        }
+                TerminalTabSlotView(
+                    tab: tab,
+                    index: index,
+                    layer: layer,
+                    width: width,
+                    appTabSwipeState: appTabSwipeState,
+                    selectedBottomToolbarHeight: selectedBottomToolbarHeight,
+                    toolbarIsGlass: toolbarIsGlass,
+                    tabletopUnderlap: tabletopUnderlap,
+                    roundedPanes: roundedPanes,
+                    showsHorizontalTabs: showsHorizontalTabs,
+                    topTabStyle: topTabStyle,
+                    horizontalTabPosition: horizontalTabPosition,
+                    integratedTabsJoinCards: integratedTabsJoinCards,
+                    integratedTabJoin: integratedTabJoin,
+                    integratedTabSurface: integratedTabSurface,
+                    paneCardGaps: paneCardGaps,
+                    allowsPaneRearrangement: !tab.paneMove.isPending && !isAnySheetPresented
+                        && appTabSwipeState == nil && !tabExpose.isActive
+                        && tabsModel.fullScreenPaneID == nil,
+                    tabAllowsTerminalEffects: tabAllowsTerminalEffects(tab),
+                    layoutSignature: layoutSignature,
+                    computeBottomPadding: { reservedHeight, effectsEnabled in
+                        terminalBottomPadding(
+                            containerFrame: containerFrame,
+                            containerSafeAreaBottom: containerSafeAreaBottom,
+                            keyboardFrame: keyboardFrame,
+                            keyboardHeight: keyboardHeight,
+                            reservedBottomToolbarHeight: reservedHeight,
+                            accessoryFrame: accessoryFrame,
+                            touchKeyboardFrame: touchKeyboardFrame,
+                            containerBottomSafeAreaExpansion: containerBottomSafeAreaExpansion,
+                            terminalEffectsEnabled: effectsEnabled
+                        )
+                    },
+                    onResize: { node, ratio in
+                        handleSplitResize(tabIndex: index, node: node, ratio: ratio)
+                    },
+                    onMove: { source, destination, zone in
+                        handlePaneMove(tabID: tab.id, source: source, destination: destination, zone: zone)
                     }
-                    // Visibility keys off the lagging displayedTabID (not the
-                    // selection) so a freshly opened tab stays hidden, and the
-                    // previous tab stays on screen, until its renderer has
-                    // presented a first frame. Hit testing and isActive stay on
-                    // the selection: input must reach the new tab immediately.
-                    //
-                    // During an app-tab swipe, visual state deliberately diverges
-                    // from selected/displayed state: source and target are both
-                    // visible so they can slide beside each other, but input stays
-                    // on the current selected/source tab until release commits.
-                    .opacity(visualMetrics.opacity)
-                    .offset(x: visualMetrics.offsetX)
-                    .zIndex(visualMetrics.zIndex)
-                    // Disabling interaction resigns a first responder inside, so the
-                    // outgoing tab keeps it until the incoming pane (a herdr or tmux
-                    // attach not yet in the window) can take the keyboard over.
-                    .allowsHitTesting(layer == .content
-                        && (index == selectedTabIndex || tab.focusedPane?.isFirstResponder == true)
-                        && (appTabSwipeState == nil || tab.id == appTabSwipeState?.sourceTabID))
-                    .padding(.bottom, bottomPadding)
-                    // The safe-area escape moved up to the reader in
-                    // terminalTabsView that measures the expansion it grants.
-                    .transaction {
-                        if appTabSwipeState?.isSettling != true {
-                            $0.animation = nil
-                        }
-                    }
-                    // An animated close would fade a translucent tab over the
-                    // reveal backdrop. Hidden tabs are at opacity 0 anyway.
-                    .transition(.identity)
-                } else if let preview = tab.webPreview, layer == .content {
-                    // A remote-port page lives in an ordinary app tab: keep
-                    // the app foreground so its loopback forward stays alive.
-                    let metrics = appTabSwipeVisualMetrics(for: tab.id, width: width)
-                    PortPreviewTabView(
-                        preview: preview,
-                        roundedPanes: roundedPanes,
-                        integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs
-                            ? integratedTabJoin : nil
-                    )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .opacity(metrics.opacity)
-                        .offset(x: metrics.offsetX)
-                        .zIndex(metrics.zIndex)
-                        .allowsHitTesting(index == selectedTabIndex && appTabSwipeState == nil)
-                        .transition(.identity)
-                }
+                )
+                .equatable()
             }
         }
         // App-tab swipe views deliberately travel beyond their own bounds.
@@ -1382,14 +1303,6 @@ extension MainView {
         // bottom safe-area escape) so they cannot smear beneath the sidebar.
         // Tabletop's underlap continues below it, past the fold.
         .clipShape(BottomExtendedRect(bottom: tabletopUnderlap))
-    }
-
-    private func appTabSwipeVisualMetrics(for tabID: UUID, width: CGFloat) -> (opacity: Double, offsetX: CGFloat, zIndex: Double) {
-        guard let state = appTabSwipeState else {
-            return (tabID == tabsModel.displayedTabID ? 1 : 0, 0, tabID == tabsModel.displayedTabID ? 1 : 0)
-        }
-        guard let offsetX = state.offsetX(for: tabID, width: width) else { return (0, 0, 0) }
-        return (1, offsetX, tabID == state.sourceTabID ? 2 : 1)
     }
 
     /// A pane may be a leaf of exactly one tab's split tree. Two tabs sharing a
@@ -1559,8 +1472,13 @@ extension MainView {
         let rowWidth = width - cardGap * 2
         let dockedWidth = dockedTabSidebarWidth(windowWidth: width)
         #if !CHINA_BUILD
-        let currentTabId = terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].id : UUID()
-        let sidebarWidth = shouldShowAISidebar(currentTabId: currentTabId) ? aiAgentSidebarWidth : 0
+        let sidebarWidth: CGFloat = if !aiAgentSidebarVisibleTabs.isEmpty,
+                                       terminals.indices.contains(selectedTabIndex),
+                                       shouldShowAISidebar(currentTabId: terminals[selectedTabIndex].id) {
+            aiAgentSidebarWidth
+        } else {
+            0
+        }
         #else
         let sidebarWidth: CGFloat = 0
         #endif
@@ -1590,13 +1508,16 @@ extension MainView {
 
     /// The complete terminal and AI sidebar content.
     @ViewBuilder
-    func terminalAndSidebarContent(geometry: GeometryProxy, theme: ResolvedTabBarTheme) -> some View {
-        let currentTabId = terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].id : UUID()
+    func terminalAndSidebarContent(
+        geometry: GeometryProxy,
+        theme: ResolvedTabBarTheme,
+        sheetTheme: ResolvedSheetTheme
+    ) -> some View {
         // Docked (pinned) tab sidebar: a left column that shrinks the terminal.
         // Available on both China and non-China builds.
         let docked = tabSidebarIsDocked
         let dockedWidth = dockedTabSidebarWidth(windowWidth: geometry.size.width)
-        let dockedSidebarTheme: ResolvedSheetTheme? = docked ? resolvedSheetTheme() : nil
+        let dockedSidebarTheme: ResolvedSheetTheme? = docked ? sheetTheme : nil
         // Rounded panes inset the whole row; columns divide what remains.
         let cardGap: CGFloat = roundedPanes ? PaneCardStyle.gap : 0
         // Floating tabs leave slack beside the cards in the tab row, which
@@ -1618,14 +1539,17 @@ extension MainView {
         #endif
         let columns = terminalRowColumns(width: geometry.size.width)
         #if !CHINA_BUILD
-        let shouldShowSidebar = shouldShowAISidebar(currentTabId: currentTabId)
+        let currentTabId: UUID? = !aiAgentSidebarVisibleTabs.isEmpty && terminals.indices.contains(selectedTabIndex)
+            ? terminals[selectedTabIndex].id
+            : nil
+        let shouldShowSidebar = currentTabId.map { shouldShowAISidebar(currentTabId: $0) } ?? false
         #endif
         let sidebarWidth = columns.aiSidebar
         let fileManagerWidth = columns.fileManager
         let httpCaptureWidth = columns.httpCapture
         let agentInboxWidth = columns.agentInbox
         let terminalWidth = columns.terminal
-        let portsTerminal = terminals.indices.contains(selectedTabIndex)
+        let portsTerminal = showRemotePorts && terminals.indices.contains(selectedTabIndex)
             ? terminals[selectedTabIndex].focusedPane?.asTerminal
             : nil
         // The terminal column ignores the keyboard, so the pill must lift
@@ -1681,7 +1605,7 @@ extension MainView {
             #if !CHINA_BUILD
             httpCaptureSidebarColumn(width: httpCaptureWidth, totalWidth: geometry.size.width)
 
-            if shouldShowSidebar, let session = aiAgentSessions[currentTabId] {
+            if shouldShowSidebar, let currentTabId, let session = aiAgentSessions[currentTabId] {
                 aiSidebarView(currentTabId: currentTabId, session: session, sidebarWidth: sidebarWidth, totalWidth: geometry.size.width)
             }
             #endif
@@ -1830,6 +1754,43 @@ extension MainView {
         return (theme.translucentBackground ?? opaque).opacity(transparencyManager.effectiveBackgroundOpacity)
     }
 
+    #if !os(visionOS) && !targetEnvironment(macCatalyst)
+    /// The pane currently owning this window's bottom keyboard/toolbar.
+    ///
+    /// During a tab switch, `MainView.body` evaluates as soon as `selectedTabID`
+    /// changes — before `handleSelectedTabChange` transfers first responder to
+    /// the incoming tab (and throughout rapid key-repeat scrubbing). Asking only
+    /// `terminals[selectedTabIndex].focusedPane` during that window reads `0`
+    /// from the not-yet-focused incoming pane, causing `dockedBottomClearance`
+    /// (and the pinned sidebar's usage footer) to dip to `0` and bounce back up
+    /// on the next turn. Falling back to the outgoing first-responder pane
+    /// bridges the handoff seamlessly with zero clearance dip.
+    private var activeKeyboardToolbarPane: SplitPaneView? {
+        let selectedPane = terminals.indices.contains(selectedTabIndex)
+            ? terminals[selectedTabIndex].focusedPane
+            : nil
+        if let selectedPane,
+           selectedPane.isFirstResponder
+            || selectedPane.reservedKeyboardToolbarHeightAtBottom > 0
+            || selectedPane.dockedTouchKeyboardFrameInScreen != nil {
+            return selectedPane
+        }
+        if let displayedID = tabsModel.displayedTabID,
+           let displayedPane = tabsModel.tab(withID: displayedID)?.focusedPane,
+           displayedPane.isFirstResponder
+            || displayedPane.reservedKeyboardToolbarHeightAtBottom > 0
+            || displayedPane.dockedTouchKeyboardFrameInScreen != nil {
+            return displayedPane
+        }
+        for tab in terminals {
+            if let pane = tab.focusedPane, pane.isFirstResponder {
+                return pane
+            }
+        }
+        return selectedPane
+    }
+    #endif
+
     /// Bottom clearance for the docked tab sidebar's content so it stays
     /// clear of whatever occupies the window's bottom edge. Two cases,
     /// mirroring the terminal's own `terminalBottomPadding`:
@@ -1842,7 +1803,7 @@ extension MainView {
     ///   above (the safe area, or the card gap with rounded panes).
     /// - Otherwise, the keyboard toolbar docked at the bottom edge (hardware
     ///   keyboard, toolbar-only mode, or a floating software keyboard):
-    ///   clearance is the focused pane's toolbar reservation.
+    ///   clearance is the active toolbar-owning pane's reservation.
     ///
     /// The sidebar applies `.ignoresSafeArea(.keyboard)`, so SwiftUI's own
     /// avoidance never double-applies; this value is the only bottom inset.
@@ -1856,9 +1817,8 @@ extension MainView {
         let _ = effectManager.keyboardStateVersion
         // A bottom tab bar already lifts the column above both.
         guard !showsBottomTabBar,
-              terminals.indices.contains(selectedTabIndex),
-              let pane = terminals[selectedTabIndex].focusedPane,
-              let window = pane.window else { return 0 }
+              let pane = activeKeyboardToolbarPane,
+              let window = pane.window ?? overlayPreservationHostWindow else { return 0 }
         let touchKeyboardFrame = pane.dockedTouchKeyboardFrameInScreen
         let keyboardFrame = window.convert(touchKeyboardFrame ?? effectManager.keyboardFrame,
                                            from: window.screen.coordinateSpace)
@@ -1870,10 +1830,10 @@ extension MainView {
             return max(0, coverage - stripClearance)
         }
         // Not gated on the keyboard: the reservation itself requires the
-        // pane to hold first responder, so it is 0 whenever no toolbar is
+        // pane to hold first responder (bridged across tab switches by
+        // `activeKeyboardToolbarPane`), so it is 0 whenever no toolbar is
         // docked at the bottom edge.
-        guard terminals.indices.contains(selectedTabIndex) else { return 0 }
-        return terminals[selectedTabIndex].focusedPane?.reservedKeyboardToolbarHeightAtBottom ?? 0
+        return pane.reservedKeyboardToolbarHeightAtBottom
         #endif
     }
 
@@ -1958,10 +1918,182 @@ private struct BottomExtendedRect: Shape {
 }
 
 /// Explicit SwiftUI identity for a tab's split-tree subtree: the tab's stable
-/// UUID plus the tree's structure. See the `.id(...)` call in `terminalTabsView`.
+/// UUID plus the tree's structure. See the `.id(...)` call in `TerminalTabSlotView`.
 private struct TabSplitTreeIdentity: Hashable {
     let tabID: UUID
     let tree: SplitTree<SplitPaneView>.StructuralIdentity
+}
+
+private struct TerminalTabSlotLayoutSignature: Equatable {
+    let containerFrame: CGRect
+    let containerSafeAreaBottom: CGFloat
+    let keyboardFrame: CGRect
+    let keyboardHeight: CGFloat
+    let accessoryFrame: CGRect?
+    let touchKeyboardFrame: CGRect?
+    let containerBottomSafeAreaExpansion: CGFloat
+}
+
+/// Per-tab isolated view in `terminalTabsStack`. Reads `tab.isSelectedInWindow`
+/// and `tab.isDisplayedInWindow` inside its own `body` and conforms to `Equatable`
+/// so switching tabs only re-evaluates the outgoing and incoming tabs—skipping
+/// `terminalBottomPadding` and `TerminalSplitTreeView.updateUIView` on all hidden tabs.
+private struct TerminalTabSlotView: View, Equatable {
+    let tab: TabModel
+    let index: Int
+    let layer: MainView.TerminalTabsLayer
+    let width: CGFloat
+    let appTabSwipeState: MainView.AppTabSwipeState?
+    let selectedBottomToolbarHeight: CGFloat
+    let toolbarIsGlass: Bool
+    let tabletopUnderlap: CGFloat
+    let roundedPanes: Bool
+    let showsHorizontalTabs: Bool
+    let topTabStyle: TopTabStyle
+    let horizontalTabPosition: TabBarPosition
+    let integratedTabsJoinCards: Bool
+    let integratedTabJoin: IntegratedTabJoin
+    let integratedTabSurface: IntegratedTabSurface
+    let paneCardGaps: PaneCardGaps
+    let allowsPaneRearrangement: Bool
+    let tabAllowsTerminalEffects: Bool
+    let layoutSignature: TerminalTabSlotLayoutSignature
+    let computeBottomPadding: (CGFloat, Bool) -> CGFloat
+    let onResize: (SplitTree<SplitPaneView>.Node, Double) -> Void
+    let onMove: (SplitPaneView, SplitPaneView, PaneDropZone) -> Void
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.tab === rhs.tab
+            && lhs.index == rhs.index
+            && lhs.layer == rhs.layer
+            && lhs.width == rhs.width
+            && lhs.appTabSwipeState == rhs.appTabSwipeState
+            && lhs.selectedBottomToolbarHeight == rhs.selectedBottomToolbarHeight
+            && lhs.toolbarIsGlass == rhs.toolbarIsGlass
+            && lhs.tabletopUnderlap == rhs.tabletopUnderlap
+            && lhs.roundedPanes == rhs.roundedPanes
+            && lhs.showsHorizontalTabs == rhs.showsHorizontalTabs
+            && lhs.topTabStyle == rhs.topTabStyle
+            && lhs.horizontalTabPosition == rhs.horizontalTabPosition
+            && lhs.integratedTabsJoinCards == rhs.integratedTabsJoinCards
+            && lhs.integratedTabJoin === rhs.integratedTabJoin
+            && lhs.integratedTabSurface === rhs.integratedTabSurface
+            && lhs.paneCardGaps === rhs.paneCardGaps
+            && lhs.allowsPaneRearrangement == rhs.allowsPaneRearrangement
+            && lhs.tabAllowsTerminalEffects == rhs.tabAllowsTerminalEffects
+            && lhs.layoutSignature == rhs.layoutSignature
+    }
+
+    private func visualMetrics(isDisplayed: Bool) -> (opacity: Double, offsetX: CGFloat, zIndex: Double) {
+        guard let state = appTabSwipeState else {
+            return (isDisplayed ? 1 : 0, 0, isDisplayed ? 1 : 0)
+        }
+        guard let offsetX = state.offsetX(for: tab.id, width: width) else { return (0, 0, 0) }
+        return (1, offsetX, tab.id == state.sourceTabID ? 2 : 1)
+    }
+
+    var body: some View {
+        let isSelected = tab.isSelectedInWindow
+        let isDisplayed = tab.isDisplayedInWindow
+        if !tab.splitTree.isEmpty {
+            let terminalEffectsEnabled = tabAllowsTerminalEffects
+            let metrics = visualMetrics(isDisplayed: isDisplayed)
+            let liveBottomToolbarHeight = tab.focusedPane?.reservedKeyboardToolbarHeightAtBottom ?? 0
+            // A herdr tab can be claimed while it is not showing (Take
+            // Control), and the size claimed is the size it lays out
+            // at. Its own pane is not first responder, so borrow the
+            // selected tab's reservation rather than reserving nothing,
+            // or it claims several rows too tall and reflows twice.
+            let hiddenBottomToolbarHeight: CGFloat =
+                (tab.isHerdrWindow || tab.isHerdrGateway) ? selectedBottomToolbarHeight : 0
+            // During an app-tab swipe both visible tabs must use the
+            // same reservation. During a normal switch, the incoming selected
+            // tab may not be first responder on the first body pass yet, so
+            // borrow `selectedBottomToolbarHeight` (from the outgoing
+            // responder) instead of dipping to 0 for a frame.
+            let reservedBottomToolbarHeight: CGFloat = appTabSwipeState?
+                .reservedBottomToolbarHeight(for: tab.id)
+                ?? ((isSelected || isDisplayed)
+                    ? (liveBottomToolbarHeight > 0 ? liveBottomToolbarHeight : selectedBottomToolbarHeight)
+                    : hiddenBottomToolbarHeight)
+            let bottomPadding = computeBottomPadding(reservedBottomToolbarHeight, terminalEffectsEnabled)
+            Group {
+                switch layer {
+                case .underlay:
+                    PaneUnderlay(model: tab.paneUnderlay)
+                case .content:
+                    TerminalSplitTreeView(
+                        tree: tab.splitTree,
+                        onResize: onResize,
+                        onMove: onMove,
+                        allowsPaneRearrangement: allowsPaneRearrangement,
+                        isActive: isSelected,
+                        focusedPane: tab.focusedPane,
+                        terminalEffectsEnabled: terminalEffectsEnabled,
+                        routesFocusedProgressToIntegratedEdge: topTabStyle == .integrated
+                            && showsHorizontalTabs,
+                        progressBarPosition: horizontalTabPosition,
+                        integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs ? integratedTabJoin : nil,
+                        tracksSwipe: appTabSwipeState.map { $0.sourceTabID == tab.id || $0.targetTabID == tab.id } ?? false,
+                        paneUnderlay: tab.paneUnderlay,
+                        integratedTabSurface: topTabStyle == .integrated && showsHorizontalTabs
+                            ? integratedTabSurface : nil,
+                        paneCardGaps: roundedPanes ? paneCardGaps : nil,
+                        tabID: tab.id
+                    )
+                    // The padding is exactly the band the toolbar and keyboard cover.
+                    .environment(\.terminalKeyboardUnderlap,
+                                 toolbarIsGlass ? bottomPadding + tabletopUnderlap : 0)
+                    .id(TabSplitTreeIdentity(tabID: tab.id, tree: tab.splitTree.structuralIdentity))
+                    .overlay(alignment: .top) {
+                        if let message = tab.paneMove.errorMessage {
+                            Text(message)
+                                .font(.callout)
+                                .padding(10)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                                .padding(8)
+                                .allowsHitTesting(false)
+                                .accessibilityLabel(message)
+                        }
+                    }
+                }
+            }
+            .opacity(metrics.opacity)
+            .offset(x: metrics.offsetX)
+            .zIndex(metrics.zIndex)
+            // Disabling interaction resigns a first responder inside, so the
+            // outgoing tab keeps it until the incoming pane (a herdr or tmux
+            // attach not yet in the window) can take the keyboard over.
+            .allowsHitTesting(layer == .content
+                && (isSelected || tab.focusedPane?.isFirstResponder == true)
+                && (appTabSwipeState == nil || tab.id == appTabSwipeState?.sourceTabID))
+            .padding(.bottom, bottomPadding)
+            .transaction {
+                if appTabSwipeState?.isSettling != true {
+                    $0.animation = nil
+                }
+            }
+            // An animated close would fade a translucent tab over the
+            // reveal backdrop. Hidden tabs are at opacity 0 anyway.
+            .transition(.identity)
+        } else if let preview = tab.webPreview, layer == .content {
+            // A remote-port page lives in an ordinary app tab: keep
+            // the app foreground so its loopback forward stays alive.
+            let metrics = visualMetrics(isDisplayed: isDisplayed)
+            PortPreviewTabView(
+                preview: preview,
+                roundedPanes: roundedPanes,
+                integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs
+                    ? integratedTabJoin : nil
+            )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .opacity(metrics.opacity)
+                .offset(x: metrics.offsetX)
+                .zIndex(metrics.zIndex)
+                .allowsHitTesting(isSelected && appTabSwipeState == nil)
+                .transition(.identity)
+        }
+    }
 }
 
 private struct TmuxReconnectSwipeFallbackView: UIViewRepresentable {

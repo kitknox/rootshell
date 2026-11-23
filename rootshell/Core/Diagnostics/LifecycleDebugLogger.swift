@@ -131,10 +131,10 @@ final class LifecycleDebugLogger: Sendable {
     /// Log a structured checkpoint with optional in-phase ms and key/value pairs.
     /// Each line includes `delta=X.YYms` from the previous logged event.
     /// Order kv keys deterministically by passing an array of (String, Any) pairs.
-    nonisolated func checkpoint(_ name: String, ms: Double? = nil, _ kv: [(String, Any)] = []) {
+    nonisolated func checkpoint(_ name: String, ms: Double? = nil, _ kv: @autoclosure () -> [(String, Any)] = []) {
         guard isEnabled else { return }
 
-        let line = checkpointLine(name, now: Date(), ms: ms, kv)
+        let line = checkpointLine(name, now: Date(), ms: ms, kv())
         ioQueue.async { [self] in
             self.appendAndSync(line)
         }

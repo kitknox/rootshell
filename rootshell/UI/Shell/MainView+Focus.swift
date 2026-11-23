@@ -145,22 +145,22 @@ extension MainView {
     // skipped, and grouped mode narrows navigation to the active group.
     // (id=tmux-hidden-windows)
 
-    func previousTab() {
+    func previousTab(fromKeyboard: Bool = false) {
         let visible = tabsModel.navigationTabs
         guard !visible.isEmpty else { return }
         let current = tabsModel.selectedTabID
             .flatMap { id in visible.firstIndex(where: { $0.id == id }) } ?? 0
         let target = current > 0 ? current - 1 : visible.count - 1
-        applyTabSwitch(toTabID: visible[target].id)
+        applyTabSwitch(toTabID: visible[target].id, fromKeyboard: fromKeyboard)
     }
 
-    func nextTab() {
+    func nextTab(fromKeyboard: Bool = false) {
         let visible = tabsModel.navigationTabs
         guard !visible.isEmpty else { return }
         let current = tabsModel.selectedTabID
             .flatMap { id in visible.firstIndex(where: { $0.id == id }) } ?? 0
         let target = current < visible.count - 1 ? current + 1 : 0
-        applyTabSwitch(toTabID: visible[target].id)
+        applyTabSwitch(toTabID: visible[target].id, fromKeyboard: fromKeyboard)
     }
 
     func triggerWiggle(forTabId id: UUID) {
@@ -535,9 +535,21 @@ extension MainView {
     /// driven by a scoped `.animation(value: selectedTabID)` modifier inside
     /// `TabBar`, so the indicator still animates without leaking a transaction
     /// into the rest of the view tree.
-    private func applyTabSwitch(toTabID id: UUID) {
+    func applyTabSwitch(toTabID id: UUID, fromKeyboard: Bool = false) {
         guard tabsModel.selectedTabID != id else { return }
-        tabsModel.selectedTabID = id
+        if fromKeyboard {
+            let isScrubbing = tabsModel.noteKeyboardTabSwitch(from: tabsModel.selectedTabID)
+            if !isScrubbing {
+                // Eagerly un-occlude the target tab before SwiftUI's onChange
+                // turn so cold renderers start waking immediately.
+                setTabOcclusion(tabID: id, visible: true)
+            }
+            tabsModel.selectedTabID = id
+        } else {
+            tabsModel.flushRapidTabSwitchIfNeeded()
+            setTabOcclusion(tabID: id, visible: true)
+            tabsModel.selectedTabID = id
+        }
     }
 }
 

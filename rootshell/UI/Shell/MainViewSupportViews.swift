@@ -67,7 +67,7 @@ struct AIAgentSheetModifier: ViewModifier {
 struct HealthPopoverOverlay: View {
     let hover: TabHoverController
     let tabsModel: TabsModel
-    @Binding var tabFrames: [UUID: CGRect]
+    let tabFrames: TabFramesStore
     let geometryWidth: CGFloat
     let enabled: Bool
     /// The hover preview card takes the same spot; the tooltip yields to it.
@@ -93,7 +93,7 @@ struct HealthPopoverOverlay: View {
            let tab = tabsModel.tabs.first(where: { $0.id == hoveredTabId }),
            previews.previewedTabID != tab.id,
            let health = tab.connectionHealth,
-           let tabFrame = tabFrames[hoveredTabId] {
+           let tabFrame = tabFrames.frames[hoveredTabId] {
             ConnectionHealthPopover(health: health)
                 .fixedSize()
                 .position(

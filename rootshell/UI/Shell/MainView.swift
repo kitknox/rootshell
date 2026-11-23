@@ -176,7 +176,7 @@ struct MainView: View {
     @State var tabHover = TabHoverController()
     /// Live thumbnail card while the pointer rests on a tab (see TabHoverPreviewController).
     @State var tabHoverPreview = TabHoverPreviewController()
-    @State var tabFrames: [UUID: CGRect] = [:]
+    @State var tabFrames = TabFramesStore()
 
     // Namespace for glass effect tab transitions (iOS 26+)
     @Namespace var tabNamespace
@@ -469,6 +469,9 @@ struct MainView: View {
         // grow on structural events (tab add/remove, manual selection, sheet
         // visibility, theme picker, keyboard frame).
         LifecycleDebugLogger.shared.bumpBodyEvaluation()
+        // Resolve sheet styling once for this body evaluation and share it
+        // between the docked sidebar and the sheet/overlay modifier chain.
+        let sheetTheme = resolvedSheetTheme()
         let content = DuoWorkspaceGeometry(
             context: effectiveDuoLayout,
             headerHeight: showsHorizontalTabHeader ? TabMetrics.tabBarHeight : 0,
@@ -525,7 +528,7 @@ struct MainView: View {
                     GeometryReader { terminalGeometry in
                         // The detach banner also covers the empty state after tmux prunes its tabs.
                         if ghosttyApp.readiness == .ready, !terminals.isEmpty {
-                            terminalAndSidebarContent(geometry: terminalGeometry, theme: resolvedTheme)
+                            terminalAndSidebarContent(geometry: terminalGeometry, theme: resolvedTheme, sheetTheme: sheetTheme)
                         } else if ghosttyApp.readiness == .ready, terminals.isEmpty, !windowClosingAfterTabTransfer {
                             // Empty state - shown when all tabs are closed
                             EmptyStateResponder(
@@ -689,7 +692,7 @@ struct MainView: View {
                 HealthPopoverOverlay(
                     hover: tabHover,
                     tabsModel: tabsModel,
-                    tabFrames: $tabFrames,
+                    tabFrames: tabFrames,
                     geometryWidth: geometry.size.width,
                     // Only titlebar tabs report frames; a bottom bar would read
                     // ones left over from the top.
@@ -704,17 +707,6 @@ struct MainView: View {
         .ignoresSafeArea(.keyboard)
 
         let sceneContent = applySceneModifiers(applyDuoChrome(content))
-        // Resolve sheet styling once for this body evaluation. Without this,
-        // each .themedSheet / sheet-aware modifier inside `applySheetModifiers`
-        // independently re-reads sheet theme + accent + color-scheme — 8+
-        // attachments × 3 properties = 30+ effectiveThemeColors walks per
-        // body. Combined with network-driven body invalidations
-        // (TabsModel.tabs, EffectManager.keyboardStateVersion,
-        // ThemeOverrideManager.tabOverrides), that workload is what
-        // FrontBoard's 10s foreground / 30s background scene-update budget
-        // catches in the 52 0x8BADF00D crash IPS files (varying frames; same
-        // root cause: MainView.body is too expensive).
-        let sheetTheme = resolvedSheetTheme()
         let sheetContent = applyKeyboardChooser(
             applySheetModifiers(sceneContent, sheetTheme: sheetTheme), sheetTheme: sheetTheme)
         let overlayContent = applyOverlayChangeHandlers(sheetContent)

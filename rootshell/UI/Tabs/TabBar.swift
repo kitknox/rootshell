@@ -267,13 +267,21 @@ enum TabBarSizingPolicy {
         return width + 6 // spacing between title/metadata and indicator
     }
 
+    private static var shortcutWidthCache: [String: CGFloat] = [:]
+
     private static func shortcutWidth(_ shortcut: String) -> CGFloat {
+        if let cached = shortcutWidthCache[shortcut] {
+            return cached
+        }
+        let width: CGFloat
         #if canImport(UIKit)
         let font = UIFont.systemFont(ofSize: 11, weight: .regular)
-        return (shortcut as NSString).size(withAttributes: [.font: font]).width
+        width = (shortcut as NSString).size(withAttributes: [.font: font]).width
         #else
-        return CGFloat(shortcut.count) * 7
+        width = CGFloat(shortcut.count) * 7
         #endif
+        shortcutWidthCache[shortcut] = width
+        return width
     }
 
 }
@@ -311,7 +319,7 @@ struct TabBar: View {
     // MARK: - State propagated up
 
     @Binding var wigglingTabIds: Set<UUID>
-    @Binding var tabFrames: [UUID: CGRect]
+    let tabFrames: TabFramesStore
 
     // MARK: - Actions / lookups
 
@@ -377,15 +385,31 @@ struct TabBar: View {
     // MARK: - Body
 
     var body: some View {
-        let decision = sizingDecision()
+        let tabs = tabsModel.tabs
+        let navigationTabs = tabsModel.navigationTabs
+        let gatewayOwnerIDs = tabsModel.activeGatewayOwnerIDs
+        let decision = sizingDecision(navigationTabs: navigationTabs, gatewayOwnerIDs: gatewayOwnerIDs)
         Group {
             switch decision.mode {
             case .singleTab:
-                singleTabView(width: decision.singleTabWidth)
+                singleTabView(
+                    width: decision.singleTabWidth,
+                    navigationTabs: navigationTabs,
+                    gatewayOwnerIDs: gatewayOwnerIDs
+                )
             case .equalWidth:
-                equalWidthView(tabWidth: decision.equalTabWidth)
+                equalWidthView(
+                    tabWidth: decision.equalTabWidth,
+                    navigationTabs: navigationTabs,
+                    gatewayOwnerIDs: gatewayOwnerIDs
+                )
             case .scrolling:
-                scrollingView(tabWidth: decision.scrollingTabWidth)
+                scrollingView(
+                    tabWidth: decision.scrollingTabWidth,
+                    tabs: tabs,
+                    navigationTabs: navigationTabs,
+                    gatewayOwnerIDs: gatewayOwnerIDs
+                )
             }
         }
         // GeometryReader places an intrinsic-height child at its top edge.
@@ -430,13 +454,12 @@ struct TabBar: View {
         }
     }
 
-    private func sizingDecision() -> TabBarSizingPolicy.Decision {
-        let tabs = tabsModel.tabs
-        let navigationTabs = tabsModel.navigationTabs
-        let gatewayOwnerIDs = TmuxTabBadgeResolver.activeGatewayOwnerIDs(in: tabs)
-        let items = navigationTabs.map { tab in
-            let index = tabsModel.index(of: tab.id) ?? 0
-            return sizingItem(for: tab, index: index, gatewayOwnerIDs: gatewayOwnerIDs)
+    private func sizingDecision(
+        navigationTabs: [TabModel],
+        gatewayOwnerIDs: [UUID]
+    ) -> TabBarSizingPolicy.Decision {
+        let items = navigationTabs.enumerated().map { navIndex, tab in
+            sizingItem(for: tab, navigationIndex: navIndex, gatewayOwnerIDs: gatewayOwnerIDs)
         }
         return TabBarSizingPolicy.decision(
             availableWidth: max(0, availableWidth - scopeMenuLead - activeScopeMenuWidth - cardGutterWidth),
@@ -455,10 +478,9 @@ struct TabBar: View {
 
     private func sizingItem(
         for tab: TabModel,
-        index: Int,
+        navigationIndex: Int,
         gatewayOwnerIDs: [UUID]
     ) -> TabBarSizingPolicy.Item {
-        let navigationIndex = tabsModel.navigationIndex(of: tab.id) ?? index
         let tmuxBadge = TmuxTabBadgeResolver.badge(for: tab, gatewayOwnerIDs: gatewayOwnerIDs)
         let hasAgentLogo = logoMark(for: tab) != nil
         return TabBarSizingPolicy.Item(
@@ -478,6 +500,7 @@ struct TabBar: View {
     private func tabItem(
         for tab: TabModel,
         index: Int,
+        navigationIndex: Int,
         isOnly: Bool,
         gatewayOwnerIDs: [UUID],
         tabWidth: CGFloat
@@ -508,7 +531,7 @@ struct TabBar: View {
             sshHealthMonitoringEnabled: sshHealthMonitoringEnabled,
             // Shortcut hints use the navigable position: grouped mode scopes
             // Cmd+N to the active group, and hidden tmux windows are skipped.
-            keyboardShortcut: keyboardShortcut(tabsModel.navigationIndex(of: tab.id) ?? index),
+            keyboardShortcut: keyboardShortcut(navigationIndex),
             usesTitlebarTabs: usesTitlebarTabs,
             style: style,
             position: position,
@@ -718,8 +741,7 @@ struct TabBar: View {
             moveLeftTarget: moveLeftTarget,
             moveRightTarget: moveRightTarget,
             includeThemeOverrideClear: includeThemeOverrideClear,
-            pinsEqualWidth: usesCompactSpacing || shouldPinEqualWidthTabs,
-            tabFrames: tabFrames
+            pinsEqualWidth: usesCompactSpacing || shouldPinEqualWidthTabs
         )
     }
 
@@ -733,14 +755,6 @@ struct TabBar: View {
             tabFrames: tabFrames,
             usesTitlebarTabs: usesTitlebarTabs
         )
-    }
-
-    private func moveTargetRawIndex(for tab: TabModel, delta: Int) -> Int? {
-        let orderedTabs = tabsModel.navigationTabs
-        guard let visibleIndex = tabsModel.navigationIndex(of: tab.id) else { return nil }
-        let targetVisibleIndex = visibleIndex + delta
-        guard orderedTabs.indices.contains(targetVisibleIndex) else { return nil }
-        return tabsModel.index(of: orderedTabs[targetVisibleIndex].id)
     }
 
     // Inline pickers, not checkmark-icon labels: menus can hide item images,
@@ -806,16 +820,19 @@ struct TabBar: View {
     // MARK: - Single tab
 
     @ViewBuilder
-    private func singleTabView(width fallbackWidth: CGFloat) -> some View {
+    private func singleTabView(
+        width fallbackWidth: CGFloat,
+        navigationTabs: [TabModel],
+        gatewayOwnerIDs: [UUID]
+    ) -> some View {
         // First VISIBLE tab: with hidden tmux windows present, tabs.first may
         // be hidden while only one tab is user-visible. Raw index preserved
         // for the close callback. (id=tmux-hidden-windows)
-        if let tab = tabsModel.navigationTabs.first {
+        if let tab = navigationTabs.first {
             let rawIndex = tabsModel.index(of: tab.id) ?? 0
-            let gatewayOwnerIDs = TmuxTabBadgeResolver.activeGatewayOwnerIDs(in: tabsModel.tabs)
             let tabWidth = usesCompactSpacing ? fallbackWidth : TabBarSizingPolicy.singleTabWidth(
                 availableWidth: max(0, availableWidth - activeScopeMenuWidth),
-                item: sizingItem(for: tab, index: rawIndex, gatewayOwnerIDs: gatewayOwnerIDs),
+                item: sizingItem(for: tab, navigationIndex: 0, gatewayOwnerIDs: gatewayOwnerIDs),
                 title: tab.title,
                 showHealthIndicator: sshHealthMonitoringEnabled && tab.connectionHealth?.quality == .poor,
                 healthRTTMilliseconds: tab.connectionHealth?.rttMilliseconds
@@ -834,6 +851,7 @@ struct TabBar: View {
                         let item = tabItem(
                             for: tab,
                             index: rawIndex,
+                            navigationIndex: 0,
                             isOnly: true,
                             gatewayOwnerIDs: gatewayOwnerIDs,
                             tabWidth: resolvedWidth
@@ -908,30 +926,30 @@ struct TabBar: View {
     // MARK: - Equal-width tabs
 
     @ViewBuilder
-    private func equalWidthView(tabWidth: CGFloat) -> some View {
+    private func equalWidthView(
+        tabWidth: CGFloat,
+        navigationTabs: [TabModel],
+        gatewayOwnerIDs: [UUID]
+    ) -> some View {
         // `activeRoamProtocol` walks `splitTree` and runtime-casts each
         // session — historically expensive enough per ForEach child to blow
         // the iPhone scene-update watchdog under burst conditions. With the
         // read now scoped inside `TabBarItem.body`, only invalidated items
         // recompute it. No parent-level roamMap is needed.
-        let tabs = tabsModel.tabs
-        let navigationTabs = tabsModel.navigationTabs
-        // Gateway ordering for tmux badge colors — computed once per render and
-        // reused for every tab (O(n)), and baked into each item so equality can
-        // compare the resolved badge.
-        let gatewayOwnerIDs = TmuxTabBadgeResolver.activeGatewayOwnerIDs(in: tabs)
         HStack(spacing: usesCompactSpacing ? 0 : 4) {
             leadingScopeMenu
             compactScopeMenuSpacer
             cardLeadingGutter
             troughWell(segmentCount: navigationTabs.count, segmentWidth: tabWidth) {
-                ForEach(navigationTabs) { tab in
+                ForEach(Array(navigationTabs.enumerated()), id: \.element.id) { navIndex, tab in
                     let index = tabsModel.index(of: tab.id) ?? 0
-                    let moveLeftTarget = moveTargetRawIndex(for: tab, delta: -1)
-                    let moveRightTarget = moveTargetRawIndex(for: tab, delta: 1)
+                    let moveLeftTarget = navIndex > 0 ? tabsModel.index(of: navigationTabs[navIndex - 1].id) : nil
+                    let moveRightTarget = navIndex + 1 < navigationTabs.count
+                        ? tabsModel.index(of: navigationTabs[navIndex + 1].id) : nil
                     let item = tabItem(
                         for: tab,
                         index: index,
+                        navigationIndex: navIndex,
                         isOnly: false,
                         gatewayOwnerIDs: gatewayOwnerIDs,
                         tabWidth: tabWidth
@@ -985,11 +1003,19 @@ struct TabBar: View {
     private static let compactOvershootHeadroom: CGFloat = 12
 
     @ViewBuilder
-    private func scrollingView(tabWidth: CGFloat) -> some View {
-        let tabs = tabsModel.tabs
-        let renderedTabIDs = renderedTabIDs(in: tabs)
+    private func scrollingView(
+        tabWidth: CGFloat,
+        tabs: [TabModel],
+        navigationTabs: [TabModel],
+        gatewayOwnerIDs: [UUID]
+    ) -> some View {
+        let renderedTabIDs = navigationTabs.map(\.id)
         ScrollViewReader { scrollViewProxy in
-            scrollingScrollView(tabs: tabs, tabWidth: tabWidth)
+            scrollingScrollView(
+                navigationTabs: navigationTabs,
+                gatewayOwnerIDs: gatewayOwnerIDs,
+                tabWidth: tabWidth
+            )
                 .modifier(ScrollingTabBarHandlersModifier(
                     proxy: scrollViewProxy,
                     tabs: tabs,
@@ -1002,17 +1028,12 @@ struct TabBar: View {
         }
     }
 
-    private func renderedTabIDs(in tabs: [TabModel]) -> [UUID] {
-        _ = tabs
-        return tabsModel.navigationTabs.map(\.id)
-    }
-
     @ViewBuilder
-    private func scrollingScrollView(tabs: [TabModel], tabWidth: CGFloat) -> some View {
-        let navigationTabs = tabsModel.navigationTabs
-        // Gateway ordering for tmux badge colors — computed once per render; see
-        // equalWidthView.
-        let gatewayOwnerIDs = TmuxTabBadgeResolver.activeGatewayOwnerIDs(in: tabs)
+    private func scrollingScrollView(
+        navigationTabs: [TabModel],
+        gatewayOwnerIDs: [UUID],
+        tabWidth: CGFloat
+    ) -> some View {
         let pinsLead = pinsLeadingRun(tabWidth: tabWidth)
         HStack(spacing: 0) {
             // Pinned outside the scroll so scrolled tabs never slide over the
@@ -1029,13 +1050,15 @@ struct TabBar: View {
                         cardLeadingGutter
                     }
                     troughWell(segmentCount: navigationTabs.count, segmentWidth: tabWidth) {
-                        ForEach(navigationTabs) { tab in
+                        ForEach(Array(navigationTabs.enumerated()), id: \.element.id) { navIndex, tab in
                             let index = tabsModel.index(of: tab.id) ?? 0
-                            let moveLeftTarget = moveTargetRawIndex(for: tab, delta: -1)
-                            let moveRightTarget = moveTargetRawIndex(for: tab, delta: 1)
+                            let moveLeftTarget = navIndex > 0 ? tabsModel.index(of: navigationTabs[navIndex - 1].id) : nil
+                            let moveRightTarget = navIndex + 1 < navigationTabs.count
+                                ? tabsModel.index(of: navigationTabs[navIndex + 1].id) : nil
                             let item = tabItem(
                                 for: tab,
                                 index: index,
+                                navigationIndex: navIndex,
                                 isOnly: false,
                                 gatewayOwnerIDs: gatewayOwnerIDs,
                                 tabWidth: tabWidth
@@ -1233,8 +1256,19 @@ private struct ScrollingTabBarHandlersModifier: ViewModifier {
             .onChange(of: selectedTabIndex) { _, newValue in
                 guard tabs.indices.contains(newValue),
                       renderedTabIDs.contains(tabs[newValue].id) else { return }
-                withAnimation(scrollAnimation) {
-                    proxy.scrollTo(tabs[newValue].id, anchor: .center)
+                let targetID = tabs[newValue].id
+                if tabsModel.isRapidTabSwitching {
+                    // During rapid key-repeat scrubbing, avoid stacking 33
+                    // spring scroll animations per second; snap cleanly.
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        proxy.scrollTo(targetID, anchor: .center)
+                    }
+                } else {
+                    withAnimation(scrollAnimation) {
+                        proxy.scrollTo(targetID, anchor: .center)
+                    }
                 }
             }
             .onChange(of: tabs.count) { _, _ in
@@ -1573,7 +1607,6 @@ private struct TabContextMenuIdentity: Equatable {
     let moveRightTarget: Int?
     let includeThemeOverrideClear: Bool
     let pinsEqualWidth: Bool
-    let tabFrames: [UUID: CGRect]
 }
 
 /// Equatable owner for a tab's `.contextMenu`, so keyboard changes and parent

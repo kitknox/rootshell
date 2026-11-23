@@ -333,11 +333,13 @@ extension MainView {
     /// Get the effective theme colors for the currently selected tab
     /// Uses override resolution: Tab > Window > Global
     var effectiveThemeColors: ThemeManager.ThemeInfo.ThemeColors? {
-        guard terminals.indices.contains(selectedTabIndex) else {
-            return themeManager.currentThemeInfo?.colors
+        let tabId: UUID? = if themeOverrideManager.tabOverrides.isEmpty {
+            nil
+        } else if terminals.indices.contains(selectedTabIndex) {
+            terminals[selectedTabIndex].id
+        } else {
+            nil
         }
-
-        let tabId = terminals[selectedTabIndex].id
         let (themeName, _) = themeOverrideManager.resolveTheme(
             tabId: tabId,
             windowId: windowId
@@ -356,10 +358,13 @@ extension MainView {
     /// and window theme overrides). Used by the per-theme UI color override
     /// lookup so chrome reflects the theme that's actually showing.
     var effectiveThemeName: String? {
-        guard terminals.indices.contains(selectedTabIndex) else {
-            return themeManager.currentTheme
+        let tabId: UUID? = if themeOverrideManager.tabOverrides.isEmpty {
+            nil
+        } else if terminals.indices.contains(selectedTabIndex) {
+            terminals[selectedTabIndex].id
+        } else {
+            nil
         }
-        let tabId = terminals[selectedTabIndex].id
         let (themeName, _) = themeOverrideManager.resolveTheme(
             tabId: tabId,
             windowId: windowId

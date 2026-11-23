@@ -330,8 +330,16 @@ final class TabModel: Identifiable {
     /// Nil follows the global font.
     var tmuxFontSizeOverride: Double?
 
+    /// Per-tab mirrors of `TabsModel.selectedTabID` and `displayedTabID`.
+    /// Maintained in O(1) by `TabsModel` so per-tab views (`TerminalTabSlotView`,
+    /// `SidebarTabRowItem`, etc.) invalidate only the outgoing and incoming tabs
+    /// on a switch instead of re-evaluating all N tabs or their parent container.
+    var isSelectedInWindow: Bool = false
+    var isDisplayedInWindow: Bool = false
+
     var splitTree: SplitTree<SplitPaneView> {
         didSet {
+            groupingRevision &+= 1
             AgentAttentionCenter.shared.topologyDidChange()
         }
     }
@@ -765,11 +773,42 @@ final class TabsModel {
             indexByIDCache = nil
             groupingInputsRevision &+= 1
             invalidateGroupingCache()
-            for tab in tabs { tab.tabsModel = self }
+            let currentSelectedID = selectedTabID
+            let currentDisplayedID = displayedTabID
+            for tab in tabs {
+                tab.tabsModel = self
+                let shouldSelect = tab.id == currentSelectedID
+                if tab.isSelectedInWindow != shouldSelect {
+                    tab.isSelectedInWindow = shouldSelect
+                }
+                let shouldDisplay = tab.id == currentDisplayedID
+                if tab.isDisplayedInWindow != shouldDisplay {
+                    tab.isDisplayedInWindow = shouldDisplay
+                }
+            }
             let liveIDs = Set(tabs.map(\.id))
             primaryProjectAssignments = primaryProjectAssignments.filter { liveIDs.contains($0.key) }
+            pruneWarmTabs(keeping: liveIDs)
+            scheduleSelectedGroupRefresh()
             AgentAttentionCenter.shared.topologyDidChange()
         }
+    }
+
+    /// Stored mirror of the selected tab's effective group, kept in sync with
+    /// both `selectedTabID` and `groupingInputsRevision`. Reading `selectedGroupID`
+    /// hits this fast path during tab switches so sidebar gateway headers only
+    /// invalidate when the selected tab actually crosses groups or grouping
+    /// inputs change (overrides, async tmux/herdr classification).
+    private var cachedSelectedGroupID: TabGroupID?
+    @ObservationIgnored private var selectedGroupCacheRevision: GroupingRevision?
+    @ObservationIgnored private var selectedGroupRefreshScheduled = false
+
+    var selectedGroupID: TabGroupID? {
+        let currentGrouping = currentGroupingRevision
+        if selectedGroupCacheRevision == currentGrouping {
+            return cachedSelectedGroupID
+        }
+        return effectiveGroupID(for: selectedTab)
     }
 
     /// Nil only when `tabs` is empty. Every selection change funnels through here.
@@ -777,20 +816,36 @@ final class TabsModel {
         didSet {
             guard oldValue != selectedTabID else { return }
             selectionRevision &+= 1
+            if let oldValue, let oldTab = tab(withID: oldValue), oldTab.isSelectedInWindow {
+                oldTab.isSelectedInWindow = false
+            }
+            if let newValue = selectedTabID, let newTab = tab(withID: newValue), !newTab.isSelectedInWindow {
+                newTab.isSelectedInWindow = true
+            }
+            if let oldValue {
+                recordWarmTab(oldValue)
+            }
+            if let newValue = selectedTabID {
+                removeWarmTabTracking(newValue)
+            }
             if let pending = pendingHerdrSelection,
                selectedTab?.splitTree.terminalLeaves.contains(where: { $0.uuid == pending.gatewayTerminalUUID }) != true {
                 pendingHerdrSelection = nil
             }
             beginTabSwitchAnimationGate()
-            if let tab = selectedTab { rememberSelectionScope(of: tab) }
+            let currentTab = selectedTab
+            let newGroup = refreshSelectedGroupID(for: currentTab)
+            if let tab = currentTab { rememberSelectionScope(of: tab) }
             if isGroupedModeEnabled, !isProjectGroupingActive,
-               let selectedGroup = effectiveGroupID(for: selectedTab),
+               let selectedGroup = newGroup,
                activeGroupID != selectedGroup {
                 activeGroupID = selectedGroup
             }
             syncDisplayedTab()
-            AgentAttentionCenter.shared.visibilityDidChange()
-            HerdrController.selectedTabDidChange(in: self)
+            if !isRapidTabSwitching {
+                AgentAttentionCenter.shared.visibilityDidChange()
+                HerdrController.selectedTabDidChange(in: self)
+            }
         }
     }
 
@@ -798,7 +853,17 @@ final class TabsModel {
 
     /// Lags `selectedTabID` until the target's terminals present a first frame,
     /// so a swap never shows the empty translucent layer. Focus doesn't lag.
-    var displayedTabID: UUID?
+    var displayedTabID: UUID? {
+        didSet {
+            guard oldValue != displayedTabID else { return }
+            if let oldValue, let oldTab = tab(withID: oldValue), oldTab.isDisplayedInWindow {
+                oldTab.isDisplayedInWindow = false
+            }
+            if let newValue = displayedTabID, let newTab = tab(withID: newValue), !newTab.isDisplayedInWindow {
+                newTab.isDisplayedInWindow = true
+            }
+        }
+    }
 
     /// Runtime-only, so restoration always lands non-full-screen.
     var fullScreenPaneID: UUID?
@@ -856,6 +921,7 @@ final class TabsModel {
         didSet {
             groupingInputsRevision &+= 1
             invalidateGroupingCache()
+            scheduleSelectedGroupRefresh()
         }
     }
 
@@ -866,6 +932,31 @@ final class TabsModel {
 
     func tabGroupingInputsDidChange() {
         groupingInputsRevision &+= 1
+        scheduleSelectedGroupRefresh()
+    }
+
+    @discardableResult
+    private func refreshSelectedGroupID(for tab: TabModel? = nil) -> TabGroupID? {
+        let target = tab ?? selectedTab
+        let resolved = effectiveGroupID(for: target)
+        selectedGroupCacheRevision = currentGroupingRevision
+        if cachedSelectedGroupID != resolved {
+            cachedSelectedGroupID = resolved
+        }
+        return resolved
+    }
+
+    /// Coalesces grouping-input bursts (e.g. tmux/herdr attach classifying
+    /// many tabs at once) into one cache update so `selectedGroupID` returns to
+    /// its O(1) non-`selectedTabID`-observing fast path.
+    private func scheduleSelectedGroupRefresh() {
+        guard !selectedGroupRefreshScheduled else { return }
+        selectedGroupRefreshScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.selectedGroupRefreshScheduled = false
+            self.refreshSelectedGroupID()
+        }
     }
 
     /// Unknown ids are kept so late-classified groups recover their position.
@@ -905,9 +996,43 @@ final class TabsModel {
 
     @ObservationIgnored private var groupingCache: GroupingSnapshot?
     @ObservationIgnored private var navigationCache: NavigationSnapshot?
+    @ObservationIgnored private var orderedGroupsCache: (revision: GroupingRevision, order: [String], groups: [TabGroup])?
+    @ObservationIgnored private var hasAnyProjectCache: (grouping: GroupingRevision, projectClock: UInt64, value: Bool)?
+
+    // MARK: - Warm LRU Occlusion Grace Cache
+
+    /// Recently visited non-selected terminal tabs kept briefly un-occluded so
+    /// switching back/forth or reversing direction reveals in 1 frame with zero
+    /// Metal cold-redraw or CADisplayLink polling.
+    @ObservationIgnored private static let maxWarmBackgroundTabs = 2
+    @ObservationIgnored private static let warmTabGraceInterval: CFTimeInterval = 4.0
+    @ObservationIgnored private var warmTabOrder: [UUID] = []
+    @ObservationIgnored private var warmTabExpirations: [UUID: CFTimeInterval] = [:]
+    @ObservationIgnored private var warmEvictionTimer: Timer?
+    @ObservationIgnored var onWarmTabEvicted: ((UUID) -> Void)?
+
+    // MARK: - Rapid Key-Repeat Tab Scrubbing
+
+    /// True while the user is holding down Cmd+Shift+[ / ] (or rapidly stepping
+    /// through 3+ tabs). Tab-bar and sidebar highlights stay live, while heavy
+    /// landing-only work (first responder, Ghostty focus, tmux/herdr select,
+    /// cold Metal wakes, AgentAttention sweeps) defers until settle.
+    @ObservationIgnored private(set) var isRapidTabSwitching = false
+    @ObservationIgnored private var lastKeyboardTabSwitchTime: CFTimeInterval = 0
+    @ObservationIgnored private var consecutiveRapidSwitches = 0
+    @ObservationIgnored private var rapidSwitchSettleTimer: Timer?
+    @ObservationIgnored private(set) var rapidSwitchOriginTabID: UUID?
+    @ObservationIgnored var onRapidTabSwitchSettled: ((UUID?, UUID?) -> Void)?
+
+    deinit {
+        tabSwitchAnimationTimer?.invalidate()
+        warmEvictionTimer?.invalidate()
+        rapidSwitchSettleTimer?.invalidate()
+    }
 
     private struct GroupingRevision: Equatable {
         let inputs: UInt64
+        let profiles: UInt64
     }
 
     private struct GroupingSnapshot {
@@ -920,6 +1045,9 @@ final class TabsModel {
         let visibleIndexByID: [UUID: Int]
         /// Position among the non-hidden members of the tab's own group.
         let groupPositionByID: [UUID: Int]
+        /// Ordered gateway owner IDs shared by both top `TabBar` and `VerticalTabSidebar`.
+        let gatewayOwnerIDs: [UUID]
+        let availableGroups: [TabGroup]
     }
 
     private struct NavigationRevision: Equatable {
@@ -928,8 +1056,7 @@ final class TabsModel {
         let activeGroupID: TabGroupID?
         let selectedFallbackID: UUID?
         let projectScopedInbox: Bool
-        /// All visible tabs, not just the selected one.
-        let projectMembership: [String]
+        let projectClockRevision: UInt64
         let orderRevision: UInt64
     }
 
@@ -952,14 +1079,165 @@ final class TabsModel {
     private func invalidateGroupingCache() {
         groupingCache = nil
         navigationCache = nil
+        orderedGroupsCache = nil
+        hasAnyProjectCache = nil
     }
 
     private func invalidateNavigationCache() {
         navigationCache = nil
     }
 
+    // MARK: - Warm Tab LRU Helpers
+
+    var warmTabIDs: Set<UUID> {
+        Set(warmTabOrder)
+    }
+
+    func isWarmTab(_ id: UUID) -> Bool {
+        warmTabExpirations[id] != nil
+    }
+
+    private func recordWarmTab(_ id: UUID) {
+        guard let tab = tab(withID: id),
+              !tab.splitTree.isEmpty,
+              tab.splitTree.allSatisfy({ $0.asTerminal != nil }) else {
+            return
+        }
+        // Only keep tabs that have actually rendered a frame warm; an unrendered
+        // tab passed through during scrubbing shouldn't occupy a warm slot.
+        guard tab.splitTree.terminalLeaves.allSatisfy({ $0.hasRenderedFirstFrame }) else {
+            return
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        warmTabOrder.removeAll { $0 == id }
+        warmTabOrder.insert(id, at: 0)
+        warmTabExpirations[id] = now + Self.warmTabGraceInterval
+
+        while warmTabOrder.count > Self.maxWarmBackgroundTabs {
+            let evicted = warmTabOrder.removeLast()
+            warmTabExpirations.removeValue(forKey: evicted)
+            onWarmTabEvicted?(evicted)
+        }
+        rescheduleWarmEvictionTimer(now: now)
+    }
+
+    private func removeWarmTabTracking(_ id: UUID) {
+        guard warmTabExpirations.removeValue(forKey: id) != nil else { return }
+        warmTabOrder.removeAll { $0 == id }
+        rescheduleWarmEvictionTimer(now: ProcessInfo.processInfo.systemUptime)
+    }
+
+    private func pruneWarmTabs(keeping liveIDs: Set<UUID>) {
+        guard !warmTabOrder.isEmpty else { return }
+        warmTabOrder.removeAll { !liveIDs.contains($0) }
+        warmTabExpirations = warmTabExpirations.filter { liveIDs.contains($0.key) }
+        rescheduleWarmEvictionTimer(now: ProcessInfo.processInfo.systemUptime)
+    }
+
+    func clearWarmTabs(occludeEvicted: Bool = false) {
+        warmEvictionTimer?.invalidate()
+        warmEvictionTimer = nil
+        let evicted = warmTabOrder
+        warmTabOrder.removeAll()
+        warmTabExpirations.removeAll()
+        if occludeEvicted {
+            for id in evicted {
+                onWarmTabEvicted?(id)
+            }
+        }
+    }
+
+    private func rescheduleWarmEvictionTimer(now: TimeInterval) {
+        warmEvictionTimer?.invalidate()
+        warmEvictionTimer = nil
+        guard let nextDeadline = warmTabExpirations.values.min() else { return }
+        let delay = max(0.05, nextDeadline - now)
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.evictExpiredWarmTabs()
+            }
+        }
+        warmEvictionTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func evictExpiredWarmTabs() {
+        let now = ProcessInfo.processInfo.systemUptime
+        var expired: [UUID] = []
+        for id in warmTabOrder {
+            if let deadline = warmTabExpirations[id], deadline <= now + 0.02 {
+                expired.append(id)
+            }
+        }
+        for id in expired {
+            warmTabExpirations.removeValue(forKey: id)
+            warmTabOrder.removeAll { $0 == id }
+            onWarmTabEvicted?(id)
+        }
+        rescheduleWarmEvictionTimer(now: now)
+    }
+
+    // MARK: - Rapid Key-Repeat Scrubbing Helpers
+
+    /// Records a keyboard-driven sequential tab switch (`Cmd+Shift-[` / `]`).
+    /// Returns `true` when rapid key-repeat scrubbing is active (3rd+ rapid step
+    /// within 140ms), signaling callers to defer heavy landing-only work until
+    /// `flushRapidTabSwitchIfNeeded()` runs after a 75ms settle window.
+    func noteKeyboardTabSwitch(from oldID: UUID?) -> Bool {
+        let now = ProcessInfo.processInfo.systemUptime
+        let dt = now - lastKeyboardTabSwitchTime
+        lastKeyboardTabSwitchTime = now
+
+        if dt < 0.14 {
+            consecutiveRapidSwitches += 1
+        } else {
+            consecutiveRapidSwitches = 0
+        }
+
+        if consecutiveRapidSwitches >= 2 {
+            if !isRapidTabSwitching {
+                isRapidTabSwitching = true
+                rapidSwitchOriginTabID = oldID
+            }
+            scheduleRapidSwitchSettleTimer()
+            return true
+        }
+        return false
+    }
+
+    /// Immediately commits any pending deferred rapid-scrubbing activation.
+    /// Call before non-scrubbing selections (clicks, Cmd+1..9), tab closes, or
+    /// user keystrokes so focus/input never lands on a stale tab.
+    func flushRapidTabSwitchIfNeeded() {
+        rapidSwitchSettleTimer?.invalidate()
+        rapidSwitchSettleTimer = nil
+        consecutiveRapidSwitches = 0
+        guard isRapidTabSwitching else { return }
+        isRapidTabSwitching = false
+        let origin = rapidSwitchOriginTabID
+        rapidSwitchOriginTabID = nil
+        syncDisplayedTab()
+        AgentAttentionCenter.shared.visibilityDidChange()
+        HerdrController.selectedTabDidChange(in: self)
+        onRapidTabSwitchSettled?(origin, selectedTabID)
+    }
+
+    private func scheduleRapidSwitchSettleTimer() {
+        rapidSwitchSettleTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.075, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.flushRapidTabSwitchIfNeeded()
+            }
+        }
+        rapidSwitchSettleTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
     private var currentGroupingRevision: GroupingRevision {
-        GroupingRevision(inputs: groupingInputsRevision)
+        GroupingRevision(
+            inputs: groupingInputsRevision,
+            profiles: ConnectionProfileChangeClock.shared.revision
+        )
     }
 
     private func groupingSnapshot() -> GroupingSnapshot {
@@ -1008,6 +1286,13 @@ final class TabsModel {
             }
         }
 
+        let allByID = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0) })
+        let resolvedGroups: [TabGroup] = order.compactMap { id in
+            guard let tabIDs = buckets[id], !tabIDs.isEmpty else { return nil }
+            return TabGroup(id: id, title: groupTitle(for: id, tabIDs: tabIDs, byID: allByID), tabIDs: tabIDs)
+        }
+        let gatewayOwnerIDs = TmuxTabBadgeResolver.activeGatewayOwnerIDs(in: tabs)
+
         let snapshot = GroupingSnapshot(
             revision: revision,
             visibleTabs: visibleTabs,
@@ -1016,7 +1301,9 @@ final class TabsModel {
             groupTabIDs: buckets,
             visibleIndexByID: Dictionary(visibleTabs.enumerated().map { ($1.id, $0) },
                                          uniquingKeysWith: { first, _ in first }),
-            groupPositionByID: groupPositionByID
+            groupPositionByID: groupPositionByID,
+            gatewayOwnerIDs: gatewayOwnerIDs,
+            availableGroups: resolvedGroups
         )
         groupingCache = snapshot
         return snapshot
@@ -1050,12 +1337,11 @@ final class TabsModel {
         // A dissolved active group falls back to the selected tab's group, not all tabs.
         let resolvedActiveGroupID = activeGroupID.flatMap { grouping.groupTabIDs[$0] != nil ? $0 : nil }
         let usesSelectedFallback = isGroupedModeEnabled && resolvedActiveGroupID == nil
-        let projectMembership: [String] = projectScopedInboxEnabled
-            ? grouping.visibleTabs.map(Self.projectMembershipRevision(for:))
-            : []
-        let anyProject = projectScopedInboxEnabled && grouping.visibleTabs.contains {
-            !projectCandidates(for: $0).isEmpty
-        }
+        let projectClockRevision: UInt64 = projectScopedInboxEnabled ? ProjectGroupingClock.shared.revision : 0
+        let anyProject = projectScopedInboxEnabled && computeHasAnyProject(
+            grouping: grouping,
+            projectClockRevision: projectClockRevision
+        )
         let projectGrouping = projectScopedInboxEnabled && isGroupedModeEnabled && anyProject
         let revision = NavigationRevision(
             groupingRevision: grouping.revision,
@@ -1063,7 +1349,7 @@ final class TabsModel {
             activeGroupID: activeGroupID,
             selectedFallbackID: (projectGrouping || usesSelectedFallback) ? selectedTabID : nil,
             projectScopedInbox: projectGrouping,
-            projectMembership: projectMembership,
+            projectClockRevision: projectClockRevision,
             orderRevision: orderRevision
         )
         if let navigationCache, navigationCache.revision == revision {
@@ -1098,7 +1384,7 @@ final class TabsModel {
             mode = .userGrouped(groupID)
             activeProjectID = nil
             activeScopeTitle = groupID.flatMap { id in
-                availableGroups.first(where: { $0.id == id })?.title
+                grouping.availableGroups.first(where: { $0.id == id })?.title
             }
         } else {
             navigationIDs = grouping.visibleTabs.map(\.id)
@@ -1128,22 +1414,26 @@ final class TabsModel {
         return snapshot
     }
 
-    var hasAnyProject: Bool {
-        visibleTabs.contains { !projectCandidates(for: $0).isEmpty }
+    private func computeHasAnyProject(grouping: GroupingSnapshot, projectClockRevision: UInt64) -> Bool {
+        if let cached = hasAnyProjectCache,
+           cached.grouping == grouping.revision,
+           cached.projectClock == projectClockRevision {
+            return cached.value
+        }
+        let value = grouping.visibleTabs.contains { !projectCandidates(for: $0).isEmpty }
+        hasAnyProjectCache = (grouping.revision, projectClockRevision, value)
+        return value
     }
 
-    /// Includes pane UUIDs so swapping a same-labelled pane still invalidates.
-    private static func projectMembershipRevision(for tab: TabModel) -> String {
-        let values = tab.splitTree.map { pane in
-            let project = pane.presentation.projectForGrouping
-            let projectKey = project.map {
-                "\($0.hostKey ?? ""):\($0.identityPath):\($0.label)"
-            } ?? ""
-            let isAgent = pane.presentation.agentRow != nil ? "agent" : "other"
-            return "\(pane.uuid.uuidString)=\(isAgent):\(projectKey)"
-        }
-        let fallback = workspaceProjectCandidate(for: tab).map { "\($0.id.rawValue):\($0.label)" } ?? ""
-        return ([fallback] + values).joined(separator: "|")
+    var hasAnyProject: Bool {
+        let grouping = groupingSnapshot()
+        let clockRev = ProjectGroupingClock.shared.revision
+        return computeHasAnyProject(grouping: grouping, projectClockRevision: clockRev)
+    }
+
+    /// Cached ordered gateway owner IDs shared by top `TabBar` and `VerticalTabSidebar`.
+    var activeGatewayOwnerIDs: [UUID] {
+        groupingSnapshot().gatewayOwnerIDs
     }
 
     private static func projectGroupID(for project: AgentProjectIdentity) -> ProjectGroupID {
@@ -1634,27 +1924,33 @@ final class TabsModel {
     }
 
     var availableGroups: [TabGroup] {
-        let snapshot = groupingSnapshot()
-        let byID = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0) })
-
-        return snapshot.groupOrder.compactMap { id in
-            guard let tabIDs = snapshot.groupTabIDs[id], !tabIDs.isEmpty else { return nil }
-            return TabGroup(id: id, title: groupTitle(for: id, tabIDs: tabIDs, byID: byID), tabIDs: tabIDs)
-        }
+        groupingSnapshot().availableGroups
     }
 
     /// Sidebar order; groups without a saved position go last.
     var orderedGroups: [TabGroup] {
-        let groups = availableGroups
+        let snapshot = groupingSnapshot()
         let groupOrder = sidebarGroupOrder
-        guard !groupOrder.isEmpty else { return groups }
-        let orderIndex = Dictionary(uniqueKeysWithValues: groupOrder.enumerated().map { ($0.element, $0.offset) })
-        return groups.enumerated().sorted { lhs, rhs in
-            let l = orderIndex[lhs.element.id.rawValue] ?? Int.max
-            let r = orderIndex[rhs.element.id.rawValue] ?? Int.max
-            if l != r { return l < r }
-            return lhs.offset < rhs.offset
-        }.map { $0.element }
+        if let cached = orderedGroupsCache,
+           cached.revision == snapshot.revision,
+           cached.order == groupOrder {
+            return cached.groups
+        }
+        let groups = snapshot.availableGroups
+        let result: [TabGroup]
+        if groupOrder.isEmpty {
+            result = groups
+        } else {
+            let orderIndex = Dictionary(uniqueKeysWithValues: groupOrder.enumerated().map { ($0.element, $0.offset) })
+            result = groups.enumerated().sorted { lhs, rhs in
+                let l = orderIndex[lhs.element.id.rawValue] ?? Int.max
+                let r = orderIndex[rhs.element.id.rawValue] ?? Int.max
+                if l != r { return l < r }
+                return lhs.offset < rhs.offset
+            }.map { $0.element }
+        }
+        orderedGroupsCache = (snapshot.revision, groupOrder, result)
+        return result
     }
 
     /// Stays in the current scope unless its last tab is closing.
@@ -2095,6 +2391,13 @@ final class TabsModel {
         let pending = target.splitTree.terminalLeaves.filter { !$0.hasRenderedFirstFrame }
         if pending.isEmpty {
             displayedTabID = target.id
+            return
+        }
+
+        // During rapid key-repeat scrubbing, skip registering first-frame
+        // waiters or 600ms timeout tasks on cold intermediate tabs we're flying
+        // past; `flushRapidTabSwitchIfNeeded()` reveals the landed tab cleanly.
+        if isRapidTabSwitching {
             return
         }
 

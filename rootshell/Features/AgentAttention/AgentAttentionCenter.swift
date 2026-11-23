@@ -191,6 +191,7 @@ final class AgentAttentionCenter {
     @ObservationIgnored private var remoteHomes: [String: String] = [:]
 
     @ObservationIgnored private var schedulerTask: Task<Void, Never>?
+    @ObservationIgnored private var visibilityTask: Task<Void, Never>?
     @ObservationIgnored private var scheduledWakeDeadline: Date?
     @ObservationIgnored private var scanDeadlines = AgentAttentionDeadlineQueue<UUID>()
     @ObservationIgnored private var livenessDeadlines = AgentAttentionDeadlineQueue<UUID>()
@@ -452,15 +453,27 @@ final class AgentAttentionCenter {
 
     func visibilityDidChange() {
         guard started, wasEnabled else { return }
-        refreshVisibleRepositoryFacts(now: Date())
-        seenPass()
-        publish(now: Date())
+        // Coalesce off the synchronous `selectedTabID.didSet` path so rapid
+        // tab switches don't rescan every window/pane or fire remote git
+        // probes for tabs the user only passed through.
+        visibilityTask?.cancel()
+        visibilityTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(160))
+            guard !Task.isCancelled, let self, self.started, self.wasEnabled, self.foregroundActive else { return }
+            self.visibilityTask = nil
+            let now = Date()
+            self.refreshVisibleRepositoryFacts(now: now)
+            self.seenPass()
+            self.publish(now: now)
+        }
     }
 
     private func applicationDidEnterBackground() {
         foregroundActive = false
         schedulerTask?.cancel()
         schedulerTask = nil
+        visibilityTask?.cancel()
+        visibilityTask = nil
         scheduledWakeDeadline = nil
         setCoreEventsEnabled(false)
     }
