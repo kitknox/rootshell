@@ -535,7 +535,12 @@ struct VerticalTabSidebar: View {
                 if isDocked { requestSearchFocus() }
             }
         }
-        .ignoresSafeArea(.keyboard)
+        // Docked sidebars already sit inside MainView's `.ignoresSafeArea(.keyboard)`
+        // and `terminalAndSidebarContent`'s outer `.ignoresSafeArea` + card padding.
+        // Applying a nested `.ignoresSafeArea(.keyboard)` inside the card padding
+        // lets transient iPadOS responder-handoff keyboard regions expand the
+        // sidebar content past the card's bottom gap, bouncing the usage footer.
+        .ignoresSafeArea(.keyboard, edges: isDocked ? [] : .all)
         .background(sidebarShortcutCatchers)
         .tmuxTabDialogs(coordinator: tmuxDialogs, controller: tmuxController)
         .herdrTabDialogs(coordinator: herdrDialogs)
