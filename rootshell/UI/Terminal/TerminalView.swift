@@ -3216,11 +3216,10 @@ extension Ghostty {
         /// and the renderer thread drops to low priority, saving GPU resources.
         /// Also notifies the session for CPU throttling (e.g., Mosh sessions).
         override func setOcclusion(_ visible: Bool) {
-            setOcclusion(visible, force: false)
-        }
-
-        func setOcclusion(_ visible: Bool, force: Bool) {
-            if !force && hasExplicitTabVisibility && isTabVisible == visible {
+            // Only `false` dedups: `isTabVisible` can read true while the core
+            // is still occluded (secure-draw drop, latched surface creation), so
+            // a `true` re-assert must always reach the core.
+            if !visible && hasExplicitTabVisibility && !isTabVisible {
                 return
             }
             Ghostty.logger.debug("setOcclusion(\(visible)): terminal=\(self.uuid.uuidString.prefix(8))")
@@ -3285,12 +3284,7 @@ extension Ghostty {
                 vsyncRunning = ghostty_surface_vsync_running(s)
                 vsyncTickAgeMs = ghostty_surface_vsync_last_tick_age_ms(s)
             }
-            // Re-assert occlusion unconditionally in the delayed backstop: the
-            // documented CADisplayLink wedge reports vsyncRunning=true with a
-            // stale vsyncTickAgeMs on an already-rendered tab, where ordinary
-            // deduplicated setOcclusion(true) would no-op. When healthy, the
-            // renderer drops same-value `.visible` messages cheaply.
-            setOcclusion(true, force: true)
+            setOcclusion(true)
             var winActive = windowIsActiveForFocus()
             var healedOverride = false
             var focusRetried = false
