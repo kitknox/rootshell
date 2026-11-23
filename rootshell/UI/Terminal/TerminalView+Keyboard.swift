@@ -396,6 +396,44 @@ extension Ghostty.TerminalView {
         let hasOption = effectiveModifiers.contains(.alternate)
         lazy var logicalKey = KeyCode(uiKey: key, modifiers: effectiveModifiers)
 
+        // If rapid key-repeat tab scrubbing is still settling and the user
+        // pressed any non-modifier, non-tab-switch key (including Escape),
+        // flush focus and reroute BEFORE any terminal-specific handlers
+        // (tmux/herdr gateway detach, cancel chord, discovery picker, IME,
+        // or key sequences) can act on the previously focused terminal.
+        if presentedOverlayKeyHandler == nil,
+           !isModifierOnlyKey(key.keyCode),
+           let tabsModel = TerminalWindowRegistry.tabsModel(for: windowId),
+           tabsModel.isRapidTabSwitching {
+            let earlyHardwareTrigger = logicalKey.map {
+                KeyTrigger(key: $0, modifiers: KeybindModifiers(uiModifierFlags: effectiveModifiers))
+            }
+            let earlyTrigger = originalShortcutIsBound ? originalTrigger : earlyHardwareTrigger.map {
+                normalizedBindingTrigger($0)
+            }
+            let isTabSwitchChord = earlyTrigger
+                .flatMap { KeybindManager.shared.keybind(for: $0)?.action }
+                .map { $0 == .previous_tab || $0 == .next_tab } ?? false
+
+            if !isTabSwitchChord {
+                tabsModel.flushRapidTabSwitchIfNeeded()
+                if let target = tabsModel.selectedTab?.focusedTerminal, target !== self {
+                    return target.processKeyPress(press, virtualModifier: virtualModifier)
+                }
+                // Destination is a non-terminal tab (e.g. VNC, KVM, web preview) or
+                // another pane — stop processing so the keystroke cannot leak to
+                // the previous terminal session.
+                if tabsModel.selectedTab?.focusedPane !== self {
+                    #if !targetEnvironment(macCatalyst)
+                    if shouldPassHardwareCtrlSpaceToSystem(key: key, modifiers: effectiveModifiers) {
+                        return (false, false)
+                    }
+                    #endif
+                    return (true, true)
+                }
+            }
+        }
+
         // The reserved Cmd+Period system-cancel chord can arrive translated as
         // plain Escape. Give a cmd+period binding first refusal; a twin of a
         // chord delivery already handled on another rail is swallowed. Unbound

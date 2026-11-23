@@ -247,18 +247,12 @@ extension MainView {
             tabsLeadingInset: tabsLeadingInset,
             scopeMenuLeadingInset: scopeMenuLeadingInset,
             wigglingTabIds: $wigglingTabIds,
-            tabFrames: $tabFrames,
+            tabFrames: tabFrames,
             onCloseTab: { index in requestUserCloseTab(at: index) },
             onMoveTab: { from, to in moveTab(from: from, to: to) },
             onSelectTab: { index in
-                guard index != selectedTabIndex else { return }
-                if tabBarAnimationsDisabled || UIAccessibility.isReduceMotionEnabled {
-                    selectedTabIndex = index
-                } else {
-                    withAnimation(TabBar.selectionAnimation) {
-                        selectedTabIndex = index
-                    }
-                }
+                guard tabsModel.tabs.indices.contains(index) else { return }
+                applyTabSwitch(toTabID: tabsModel.tabs[index].id)
             },
             keyboardShortcut: { index in keyboardShortcut(for: index) },
             onTabHover: { id, isHovered in

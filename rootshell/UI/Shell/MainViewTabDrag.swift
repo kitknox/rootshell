@@ -114,6 +114,14 @@ final class TabDragState: ObservableObject {
 }
 #endif
 
+/// Reference-type frame cache for Catalyst titlebar tab drag and health tooltip
+/// placement. Non-`@Observable` so `TabFramePreferenceKey` updates never
+/// invalidate `MainView.body` or defeat `TabContextMenuRow.==`.
+@MainActor
+final class TabFramesStore {
+    var frames: [UUID: CGRect] = [:]
+}
+
 /// Handles tab dragging with platform-specific behavior
 /// Tab drag modifier using standard SwiftUI onDrag/onDrop
 /// Window background dragging is disabled via movableByWindowBackground when titlebar tabs are enabled,
@@ -128,7 +136,7 @@ struct TabDragModifier: ViewModifier {
     /// one a write into `MainView`'s `@State` that invalidated all of its
     /// body. Now everything routes through this reference.
     let tabsModel: TabsModel
-    let tabFrames: [UUID: CGRect]
+    let tabFrames: TabFramesStore
     let usesTitlebarTabs: Bool
 
 #if targetEnvironment(macCatalyst)
@@ -180,7 +188,7 @@ struct TabDragModifier: ViewModifier {
 
                 // Start drag if not already dragging (for this window)
                 if !dragState.isDragging(windowId: windowId) {
-                    let tabWidth = tabFrames[tab.id]?.width ?? 150
+                    let tabWidth = tabFrames.frames[tab.id]?.width ?? 150
                     dragState.startDrag(windowId: windowId, index: dragIndex, tabWidth: tabWidth)
                     tabsModel.draggingTabID = tab.id
                 }

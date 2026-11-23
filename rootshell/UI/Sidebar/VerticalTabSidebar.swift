@@ -465,8 +465,8 @@ struct VerticalTabSidebar: View {
 
     var body: some View {
         let rows = buildRows()
-        // Once per render; per-row resolution is O(n^2) and observes every split tree.
-        let gatewayOwnerIDs = TmuxTabBadgeResolver.activeGatewayOwnerIDs(in: tabsModel.tabs)
+        // Shared cached gateway ordering on TabsModel (reused by top TabBar too).
+        let gatewayOwnerIDs = tabsModel.activeGatewayOwnerIDs
 
         ScrollViewReader { proxy in
             VStack(spacing: 0) {
@@ -500,8 +500,12 @@ struct VerticalTabSidebar: View {
             .onChange(of: projectGroupingActive, initial: true) { _, active in
                 tabsModel.projectScopedInboxEnabled = active
             }
-            .onChange(of: tabsModel.selectedTabID) { _, id in
-                revealSelection(id, proxy: proxy)
+            // Isolated child observer so `tabsModel.selectedTabID` changes never
+            // invalidate `VerticalTabSidebar.body` or trigger a full `buildRows()`.
+            .background {
+                SidebarSelectionRevealObserver(tabsModel: tabsModel) { id in
+                    revealSelection(id, proxy: proxy)
+                }
             }
             .onAppear {
                 loadGroupOrder()
@@ -531,7 +535,12 @@ struct VerticalTabSidebar: View {
                 if isDocked { requestSearchFocus() }
             }
         }
-        .ignoresSafeArea(.keyboard)
+        // Docked sidebars already sit inside MainView's `.ignoresSafeArea(.keyboard)`
+        // and `terminalAndSidebarContent`'s outer `.ignoresSafeArea` + card padding.
+        // Applying a nested `.ignoresSafeArea(.keyboard)` inside the card padding
+        // lets transient iPadOS responder-handoff keyboard regions expand the
+        // sidebar content past the card's bottom gap, bouncing the usage footer.
+        .ignoresSafeArea(.keyboard, edges: isDocked ? [] : .all)
         .background(sidebarShortcutCatchers)
         .tmuxTabDialogs(coordinator: tmuxDialogs, controller: tmuxController)
         .herdrTabDialogs(coordinator: herdrDialogs)
@@ -561,7 +570,7 @@ struct VerticalTabSidebar: View {
             }
             TabSidebarGroupCollapseStore.save(newValue, knownGroups: known)
         }
-        .onChange(of: tabsModel.availableGroups.map { $0.id.rawValue }) { _, _ in
+        .onChange(of: tabsModel.groupingInputsRevision) { _, _ in
             if !canReorderSections {
                 draggingSectionID = nil
             }
@@ -951,15 +960,24 @@ struct VerticalTabSidebar: View {
               isDocked || isPanelVisible,
               searchText.isEmpty,
               draggingRowID == nil, draggingSectionID == nil else { return }
-        let animation: Animation? = tabAnimationsDisabled || reduceMotion
+        let isRapid = tabsModel.isRapidTabSwitching
+        let animation: Animation? = (tabAnimationsDisabled || reduceMotion || isRapid)
             ? nil
             : .spring(response: 0.3, dampingFraction: 0.85)
         // Next main-actor turn, after a just-inserted row has been laid out.
         // Unknown ids (collapsed sections) are a no-op.
         selectionRevealTask = Task { @MainActor in
             guard !Task.isCancelled, tabsModel.selectedTabID == id else { return }
-            withAnimation(animation) {
-                proxy.scrollTo(id.uuidString, anchor: nil)
+            if isRapid || animation == nil {
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    proxy.scrollTo(id.uuidString, anchor: nil)
+                }
+            } else {
+                withAnimation(animation) {
+                    proxy.scrollTo(id.uuidString, anchor: nil)
+                }
             }
         }
     }
@@ -1160,7 +1178,6 @@ struct VerticalTabSidebar: View {
         let isDraggingSection = draggingSectionID != nil && row.sectionID?.rawValue == draggingSectionID
         let isDragging = isDraggingTab || isDraggingSection
         let hidesSourceDuringDrag = usesHiddenSourceDragPreview
-        let isSelected = tabsModel.selectedTabID == row.tab.id && !row.isHiddenKind
         // Only while the sidebar owns the keyboard, or docked shows two highlights.
         let isHighlighted = highlightedRowID == row.id
             && KeyboardTracker.shared.isHardwareKeyboard
@@ -1193,7 +1210,6 @@ struct VerticalTabSidebar: View {
             case .gatewayHeader(let collapsed, let windowCount, let ownerID):
                 let header = gatewayHeaderRow(
                     row: row,
-                    isSelected: isSelected,
                     isHighlighted: isHighlighted,
                     collapsed: collapsed,
                     windowCount: windowCount,
@@ -1255,7 +1271,7 @@ struct VerticalTabSidebar: View {
                     paneID: paneID,
                     attentionBadgesEnabled: attentionBadgesEnabled,
                     programIconsEnabled: programIconsEnabled,
-                    isSelected: isSelected && row.tab.focusedPane?.uuid == paneID,
+                    isHiddenKind: row.isHiddenKind,
                     isHighlighted: isHighlighted,
                     indentLevel: row.visualIndentLevel,
                     metrics: metrics,
@@ -1275,7 +1291,7 @@ struct VerticalTabSidebar: View {
                     tmuxBadge: TmuxTabBadgeResolver.badge(for: row.tab, gatewayOwnerIDs: gatewayOwnerIDs),
                     attentionBadgesEnabled: attentionBadgesEnabled,
                     programIconsEnabled: programIconsEnabled,
-                    isSelected: isSelected,
+                    isHiddenKind: row.isHiddenKind,
                     isHighlighted: isHighlighted,
                     indentLevel: row.visualIndentLevel,
                     shortcutHint: shortcutHint(for: row),
@@ -1439,8 +1455,6 @@ struct VerticalTabSidebar: View {
     @ViewBuilder
     /// Same `SidebarTabRowItem` as the live row; no `.equatable()` for a one-off render.
     private func dragPreview(for row: SidebarRow, gatewayOwnerIDs: [UUID]) -> some View {
-        let isSelected = tabsModel.selectedTabID == row.tab.id && !row.isHiddenKind
-
         Group {
             switch row.kind {
             case .groupHeader(let groupID, let title, let count, let isActive, let collapsed):
@@ -1456,7 +1470,6 @@ struct VerticalTabSidebar: View {
             case .gatewayHeader(let collapsed, let windowCount, let ownerID):
                 gatewayHeaderRow(
                     row: row,
-                    isSelected: isSelected,
                     isHighlighted: false,
                     collapsed: collapsed,
                     windowCount: windowCount,
@@ -1469,7 +1482,7 @@ struct VerticalTabSidebar: View {
                     tmuxBadge: TmuxTabBadgeResolver.badge(for: row.tab, gatewayOwnerIDs: gatewayOwnerIDs),
                     attentionBadgesEnabled: attentionBadgesEnabled,
                     programIconsEnabled: programIconsEnabled,
-                    isSelected: isSelected,
+                    isHiddenKind: row.isHiddenKind,
                     isHighlighted: false,
                     indentLevel: row.visualIndentLevel,
                     shortcutHint: shortcutHint(for: row),
@@ -2240,7 +2253,6 @@ struct VerticalTabSidebar: View {
     /// Concrete type so the live row can apply `.equatable()`.
     private func gatewayHeaderRow(
         row: SidebarRow,
-        isSelected: Bool,
         isHighlighted: Bool,
         collapsed: Bool,
         windowCount: Int,
@@ -2249,15 +2261,15 @@ struct VerticalTabSidebar: View {
     ) -> SidebarGatewayHeaderItem {
         let isHerdr = row.tab.isHerdrGateway
         let familyID: TabGroupID = isHerdr ? .herdr(ownerID: ownerID) : .tmux(ownerID: ownerID)
-        let isActive = tabsModel.effectiveGroupID(for: tabsModel.selectedTab) == familyID
         return SidebarGatewayHeaderItem(
             tab: row.tab,
+            tabsModel: tabsModel,
+            familyID: familyID,
+            isHiddenKind: row.isHiddenKind,
             tmuxBadge: TmuxTabBadgeResolver.badge(for: row.tab, gatewayOwnerIDs: gatewayOwnerIDs),
             naming: tabsModel.gatewayNaming(for: row.tab),
             collapsed: collapsed,
             windowCount: windowCount,
-            isSelected: isSelected,
-            isActive: isActive,
             isHighlighted: isHighlighted,
             indentLevel: row.indentLevel,
             metrics: metrics,
@@ -3018,6 +3030,23 @@ private struct SidebarContextMenuContents<Content: View>: View {
 
 // MARK: - Sidebar Tab Row
 
+/// Observes `tabsModel.selectedTabID` in its own child scope so tab switches
+/// scroll the sidebar without invalidating `VerticalTabSidebar.body` or
+/// rebuilding `buildRows()`.
+private struct SidebarSelectionRevealObserver: View {
+    let tabsModel: TabsModel
+    let onSelectionChange: (UUID?) -> Void
+
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onChange(of: tabsModel.selectedTabID) { _, id in
+                onSelectionChange(id)
+            }
+    }
+}
+
 /// Per-tab observed reads happen here, scoping invalidation to this row.
 /// `.contextMenu` stays outside, or spinner updates would rebuild the menu.
 private struct SidebarTabRowItem: View, Equatable {
@@ -3027,7 +3056,7 @@ private struct SidebarTabRowItem: View, Equatable {
     let tmuxBadge: TmuxTabBadge?
     let attentionBadgesEnabled: Bool
     let programIconsEnabled: Bool
-    let isSelected: Bool
+    let isHiddenKind: Bool
     let isHighlighted: Bool
     let indentLevel: Int
     let shortcutHint: String?
@@ -3037,15 +3066,14 @@ private struct SidebarTabRowItem: View, Equatable {
     var onHoverChange: ((Bool) -> Void)? = nil
     var previewAnchors: TabHoverPreviewAnchorRegistry? = nil
 
-    // Parent inputs only; observed reads in `body` still update live. Unlike
-    // TabBarItem, no index (onClose captures tab.id) and no badge color (the
-    // theme is observed in `body`).
+    // Parent inputs only; observed reads in `body` (including `tab.isSelectedInWindow`)
+    // still update live for just the outgoing and incoming rows.
     static func == (lhs: SidebarTabRowItem, rhs: SidebarTabRowItem) -> Bool {
         lhs.tab === rhs.tab
             && lhs.tmuxBadge == rhs.tmuxBadge
             && lhs.attentionBadgesEnabled == rhs.attentionBadgesEnabled
             && lhs.programIconsEnabled == rhs.programIconsEnabled
-            && lhs.isSelected == rhs.isSelected
+            && lhs.isHiddenKind == rhs.isHiddenKind
             && lhs.isHighlighted == rhs.isHighlighted
             && lhs.indentLevel == rhs.indentLevel
             && lhs.shortcutHint == rhs.shortcutHint
@@ -3057,6 +3085,7 @@ private struct SidebarTabRowItem: View, Equatable {
 
     var body: some View {
         // Split tabs become a rollup row with pane cards below.
+        let isSelected = !isHiddenKind && tab.isSelectedInWindow
         let solePane = tab.splitTree.count == 1 ? tab.splitTree.first : nil
         let agentRow: AgentRowState? = attentionBadgesEnabled ? solePane?.presentation.agentRow : nil
         SidebarTabRow(
@@ -3092,7 +3121,7 @@ private struct SidebarPaneRowItem: View, Equatable {
     let paneID: UUID
     let attentionBadgesEnabled: Bool
     let programIconsEnabled: Bool
-    let isSelected: Bool
+    let isHiddenKind: Bool
     let isHighlighted: Bool
     let indentLevel: Int
     let metrics: SidebarMetrics
@@ -3103,7 +3132,7 @@ private struct SidebarPaneRowItem: View, Equatable {
             && lhs.paneID == rhs.paneID
             && lhs.attentionBadgesEnabled == rhs.attentionBadgesEnabled
             && lhs.programIconsEnabled == rhs.programIconsEnabled
-            && lhs.isSelected == rhs.isSelected
+            && lhs.isHiddenKind == rhs.isHiddenKind
             && lhs.isHighlighted == rhs.isHighlighted
             && lhs.indentLevel == rhs.indentLevel
             && lhs.metrics == rhs.metrics
@@ -3111,6 +3140,7 @@ private struct SidebarPaneRowItem: View, Equatable {
     }
 
     var body: some View {
+        let isSelected = !isHiddenKind && tab.isSelectedInWindow && tab.focusedPane?.uuid == paneID
         if let pane = tab.splitTree.first(where: { $0.uuid == paneID }) {
             let presentation = pane.presentation
             let agentRow = attentionBadgesEnabled ? presentation.agentRow : nil
@@ -3212,13 +3242,13 @@ private struct SidebarAgentSummaryBar: View {
 /// Same isolation contract as `SidebarTabRowItem`.
 private struct SidebarGatewayHeaderItem: View, Equatable {
     let tab: TabModel
+    let tabsModel: TabsModel
+    let familyID: TabGroupID
+    let isHiddenKind: Bool
     let tmuxBadge: TmuxTabBadge?
     let naming: GatewayNaming
     let collapsed: Bool
     let windowCount: Int
-    let isSelected: Bool
-    /// The selected tab is in this family, possibly a child window.
-    let isActive: Bool
     let isHighlighted: Bool
     let indentLevel: Int
     let metrics: SidebarMetrics
@@ -3244,12 +3274,13 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
 
     static func == (lhs: SidebarGatewayHeaderItem, rhs: SidebarGatewayHeaderItem) -> Bool {
         lhs.tab === rhs.tab
+            && lhs.tabsModel === rhs.tabsModel
+            && lhs.familyID == rhs.familyID
+            && lhs.isHiddenKind == rhs.isHiddenKind
             && lhs.tmuxBadge == rhs.tmuxBadge
             && lhs.naming == rhs.naming
             && lhs.collapsed == rhs.collapsed
             && lhs.windowCount == rhs.windowCount
-            && lhs.isSelected == rhs.isSelected
-            && lhs.isActive == rhs.isActive
             && lhs.isHighlighted == rhs.isHighlighted
             && lhs.indentLevel == rhs.indentLevel
             && lhs.metrics == rhs.metrics
@@ -3263,6 +3294,8 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
     }
 
     var body: some View {
+        let isSelected = !isHiddenKind && tab.isSelectedInWindow
+        let isActive = tabsModel.selectedGroupID == familyID
         // The tab's observable mirror; TmuxController isn't observable.
         let session = tab.tmuxSessionName ?? tab.herdrSessionName
         let title = naming.machine ?? session ?? tab.title
@@ -3358,7 +3391,7 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
         .contentShape(Rectangle())
         .background(
             SidebarRowHoverBackground(
-                fill: backgroundFill,
+                fill: backgroundFill(isActive: isActive),
                 isHovered: isHovered && !isActive && !isHighlighted,
                 reduceMotion: reduceMotion
             )
@@ -3378,7 +3411,7 @@ private struct SidebarGatewayHeaderItem: View, Equatable {
         .onTapGesture(perform: onTap)
     }
 
-    private var backgroundFill: Color {
+    private func backgroundFill(isActive: Bool) -> Color {
         if isHighlighted { return accentTint.opacity(0.22) }
         if isActive { return accentTint.opacity(0.10) }
         return Color.primary.opacity(0.04)

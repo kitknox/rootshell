@@ -118,6 +118,14 @@ extension MainView {
         // (routed via the viewer-owner surface) can map windows->tabs here.
         TmuxWindowRegistry.register(tabsModel, windowId: windowId)
 
+        // Wire warm-tab LRU eviction and rapid key-repeat scrubbing settle hooks.
+        tabsModel.onWarmTabEvicted = { [self] evictedID in
+            occludeTabIfNoLongerShown(evictedID)
+        }
+        tabsModel.onRapidTabSwitchSettled = { [self] originID, destID in
+            commitSelectedTabChange(oldValue: originID, newValue: destID)
+        }
+
         // Seed every existing pane from the selected-tab source of truth. This
         // covers windows whose restored/attached selection remains unchanged,
         // so SwiftUI never emits the selection onChange that would otherwise
@@ -319,6 +327,9 @@ extension MainView {
         }
         #endif
         performWindowCleanup(reason: "disappear")
+        #else
+        tabsModel.onWarmTabEvicted = nil
+        tabsModel.onRapidTabSwitchSettled = nil
         #endif
     }
 
@@ -339,6 +350,10 @@ extension MainView {
         // The hover card lives in the window, not the view tree; take it down
         // with the window and release the tab it mirrors.
         tabHoverPreview.hide(animated: false)
+        tabsModel.onWarmTabEvicted = nil
+        tabsModel.onRapidTabSwitchSettled = nil
+        tabsModel.clearWarmTabs()
+        tabsModel.flushRapidTabSwitchIfNeeded()
 
         // Clean up observers. The block-based addObserver API returns tokens
         // that the legacy `removeObserver(self)` call would NOT match — those
@@ -427,7 +442,7 @@ extension MainView {
     }
 
     func handleSelectedTabChange(oldValue: UUID?, newValue: UUID?) {
-        Ghostty.logger.info("onChange(selectedTabID): \(oldValue?.uuidString ?? "nil") -> \(newValue?.uuidString ?? "nil")")
+        Ghostty.logger.debug("onChange(selectedTabID): \(oldValue?.uuidString ?? "nil") -> \(newValue?.uuidString ?? "nil")")
 
         // Clear any stale drag state when tabs are selected
         if draggingTab != nil {
@@ -443,6 +458,23 @@ extension MainView {
         if let swipe = appTabSwipeState, !swipe.isSettling {
             forceClearAppTabSwipe(reason: "tabSwitchDuringSwipe")
         }
+
+        // During rapid key-repeat scrubbing (Cmd+Shift-[ / ] held down), keep
+        // the tab bar, sidebar, and hidden-bar indicator HUD live, but defer
+        // heavy landing-only work (first responder, Ghostty focus, cold Metal
+        // wakes, tmux/herdr select, backstops) until `onRapidTabSwitchSettled`.
+        if tabsModel.isRapidTabSwitching {
+            let shouldSuppressIndicator = tabIndicator.consumeSuppressHiddenIndicator()
+            if !showsHorizontalTabs && terminals.count > 1 && !shouldSuppressIndicator {
+                tabIndicator.showBriefly()
+            }
+            return
+        }
+
+        commitSelectedTabChange(oldValue: oldValue, newValue: newValue)
+    }
+
+    func commitSelectedTabChange(oldValue: UUID?, newValue: UUID?) {
         var supersededSwipeSourceID: UUID?
         if var swipe = appTabSwipeState, swipe.awaitsLandingHandoff {
             // A committed swipe's handoff waits for its slide to land, since it
@@ -461,25 +493,22 @@ extension MainView {
               let newTab = tabsModel.tab(withID: newValue) else { return }
         let oldTab = oldValue.flatMap { tabsModel.tab(withID: $0) }
 
-        // Mark all surfaces in old tab as occluded to stop their IOSDisplayLink.
-        // While it is still displayed (the new tab hasn't drawn yet), occluding
-        // would empty its frame on screen; handleDisplayedTabChange does it.
-        if let oldTab, oldTab.id != tabsModel.displayedTabID {
+        // Mark all surfaces in old tab as occluded unless it is still displayed
+        // mid-reveal or held briefly in the warm LRU grace cache.
+        if let oldTab,
+           oldTab.id != newValue,
+           oldTab.id != tabsModel.displayedTabID,
+           !tabsModel.isWarmTab(oldTab.id) {
             for terminal in oldTab.splitTree {
                 terminal.setOcclusion(false)
             }
         }
 
-        // Mark all surfaces in new tab as visible before focusing
+        // Mark all surfaces in new tab as visible before focusing (idempotent
+        // no-op when `applyTabSwitch` already un-occluded eagerly or tab is warm).
         for terminal in newTab.splitTree {
             terminal.setOcclusion(true)
         }
-
-        // The old/new fast path above keeps switching responsive. Follow it
-        // with an authoritative sweep so any other tab that missed an earlier
-        // lifecycle/topology update cannot remain renderer-visible until the
-        // user manually visits it.
-        reconcileSurfaceOcclusion(reason: "tabSelection")
 
         // Set up the focused pane reference
         var paneToFocus = newTab.focusedPane
@@ -500,8 +529,9 @@ extension MainView {
         // the window yet. It takes first responder once attached; resigning
         // the old terminal first would hide and rebuild the keyboard meanwhile.
         var newFocusAwaitsWindow = false
+        let selectionRevision = tabsModel.selectionRevision
         if let focus = paneToFocus {
-            Ghostty.logger.info("Focusing terminal at tab \(newValue.uuidString)")
+            Ghostty.logger.debug("Focusing terminal at tab \(newValue.uuidString)")
             focus.isLogicallyFocused = true
             focus.asTerminal?.shouldBecomeFirstResponderWhenReady = true
             // Initialize the gate before focusing, in case this tab's terminal
@@ -543,6 +573,7 @@ extension MainView {
 
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 10_000_000) // 10ms delay
+                guard tabsModel.selectionRevision == selectionRevision else { return }
                 ghosttyApp.appTick()
             }
         }
@@ -578,7 +609,6 @@ extension MainView {
         // a background) and scoped to this switch (skip if a later switch already
         // won). Idempotent: a cheap core no-op when the tab is already alive.
         let destTabID = newTab.id
-        let selectionRevision = tabsModel.selectionRevision
         LifecycleDebugLogger.shared.checkpoint("FG.tabSwitch", ms: nil, [
             ("from", oldValue?.uuidString ?? "nil"),
             ("to", newValue.uuidString),
@@ -608,12 +638,13 @@ extension MainView {
         }
     }
 
-    /// A tab a swipe, exposé or hover preview still shows is left to that
-    /// path: a committed swipe calls this for its source, a cancelled one
-    /// occludes its target.
+    /// A tab a swipe, exposé, hover preview, or warm LRU slot still holds is
+    /// left to that path: a committed swipe calls this for its source, a
+    /// cancelled one occludes its target, and warm eviction calls it on expiry.
     func occludeTabIfNoLongerShown(_ id: UUID) {
         guard tabsModel.selectedTabID != id,
               tabsModel.displayedTabID != id,
+              !tabsModel.isWarmTab(id),
               appTabSwipeState?.sourceTabID != id,
               appTabSwipeState?.targetTabID != id,
               tabHoverPreview.previewedTabID != id,

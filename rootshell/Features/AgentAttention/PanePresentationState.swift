@@ -9,6 +9,22 @@
 import Foundation
 import Observation
 
+/// Lightweight global revision counter bumped whenever any pane's project
+/// grouping inputs (`projectForGrouping` or `agentRow != nil`) change.
+/// Lets `TabsModel.navigationSnapshot()` validate its cache in O(1) instead of
+/// rebuilding a `[String]` across all visible tabs on every read, while still
+/// keeping SwiftUI Observation tracking intact.
+@MainActor
+@Observable
+final class ProjectGroupingClock {
+    static let shared = ProjectGroupingClock()
+    private(set) var revision: UInt64 = 0
+
+    func bump() {
+        revision &+= 1
+    }
+}
+
 /// Live presentation state for one split leaf.
 ///
 /// A tab can contain multiple panes, so title and agent identity cannot be
@@ -26,20 +42,44 @@ final class PanePresentationState {
     /// Detector-owned state. OSC progress is layered over this rather than
     /// replacing it, so clearing progress restores the exact prior card.
     var detectedAttentionStatus: AgentAttentionStatus?
-    var detectedAgentRow: AgentRowState?
+    var detectedAgentRow: AgentRowState? {
+        didSet {
+            if oldValue?.project != detectedAgentRow?.project || (oldValue != nil) != (detectedAgentRow != nil) {
+                ProjectGroupingClock.shared.bump()
+            }
+        }
+    }
     /// Herdr owns a reported agent's status; ordinary commands retain OSC activity.
     var usesHerdrStatus = false
 
     /// Free multiplexer metadata is useful even for an ordinary shell, or
     /// when coding-agent detection is disabled. It does not create an agent row.
-    var reportedProject: AgentProjectIdentity?
+    var reportedProject: AgentProjectIdentity? {
+        didSet {
+            if oldValue != reportedProject {
+                ProjectGroupingClock.shared.bump()
+            }
+        }
+    }
 
     /// The pane's shell at a prompt, or the program in the foreground.
-    var foregroundProgram: ForegroundProgram?
+    var foregroundProgram: ForegroundProgram? {
+        didSet {
+            if oldValue?.showsRunningCard != foregroundProgram?.showsRunningCard {
+                ProjectGroupingClock.shared.bump()
+            }
+        }
+    }
 
     /// When the current non-shell program took the foreground, set only once
     /// it has stayed long enough for a Running card.
-    var foregroundProgramCardSince: Date?
+    var foregroundProgramCardSince: Date? {
+        didSet {
+            if (oldValue != nil) != (foregroundProgramCardSince != nil) {
+                ProjectGroupingClock.shared.bump()
+            }
+        }
+    }
 
     var projectForGrouping: AgentProjectIdentity? {
         AgentProjectIdentity.forGrouping(reported: reportedProject, detected: detectedAgentRow?.project)
@@ -47,7 +87,13 @@ final class PanePresentationState {
 
     /// Latest live OSC 9;4 activity. Percentage-only mutations stay scoped to
     /// this pane's row; semantic edges are separately rolled up by the center.
-    private(set) var oscProgressActivity: OSCProgressActivity?
+    private(set) var oscProgressActivity: OSCProgressActivity? {
+        didSet {
+            if (oldValue != nil) != (oscProgressActivity != nil) {
+                ProjectGroupingClock.shared.bump()
+            }
+        }
+    }
 
     /// Pane-local attention rollup, including plain command completions and
     /// generic OSC progress. Live OSC state is authoritative until cleared,

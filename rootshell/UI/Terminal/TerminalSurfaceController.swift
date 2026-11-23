@@ -814,7 +814,7 @@ final class TerminalSurfaceController: NSObject {
 
     func setOcclusion(_ visible: Bool) {
         let terminalID = host.surfaceTerminalDebugID
-        Ghostty.logger.info("setOcclusion(\(visible)): terminal=\(terminalID)")
+        Ghostty.logger.debug("setOcclusion(\(visible)): terminal=\(terminalID)")
         // The host updates surfaceIsTabVisible before calling in, so it can't
         // tell a re-show from a re-assert.
         let wasOccluded = isOccluded
@@ -828,7 +828,7 @@ final class TerminalSurfaceController: NSObject {
             suspendFirstFramePolling()
         }
 
-        guard surface != nil else {
+        guard let surface else {
             Ghostty.logger.debug("setOcclusion(\(visible)): no surface")
             return
         }
@@ -840,31 +840,27 @@ final class TerminalSurfaceController: NSObject {
             expireRenderedFrame()
         }
 
-        // Defer the GhosttyKit occlusion call onto a follow-up main-queue tick
-        // before hopping to the background API queue. The C call can dispatch
-        // CADisplayLink work back to main; one extra tick lets UIKit finish the
-        // current keyboard/scene event before we touch the display link. Re-read
-        // the live surface here so teardown that already ran leaves us with nil,
-        // and teardown after this call preserves serial queue ordering.
-        DispatchQueue.main.async { [weak self] in
-            guard let self, let surface = self.surface else { return }
-            // Secure-draw latch: while the device may be locked, occlusion(true)
-            // forces an immediate present in the core (even when redundant),
-            // which FrontBoard kills as insecure drawing (0x2BAD45EC). Drop
-            // true here and again at the final hop; false always delivers.
-            // surfaceIsTabVisible keeps the intent, and the foreground resume
-            // re-asserts from the tab model after the latch clears.
-            if visible && Ghostty.isSecureDrawProhibitedAtomic {
-                LifecycleDebugLogger.shared.checkpoint("SECURE.occlusion.dropped", ms: nil, [
-                    ("terminal", terminalID), ("hop", "main"),
-                ])
-                return
-            }
-            nonisolated(unsafe) let surfacePtr = surface
-            Ghostty.TerminalView.ghosttyAPIQueue.async {
-                if visible && Ghostty.isSecureDrawProhibitedAtomic { return }
-                ghostty_surface_set_occlusion(surfacePtr, visible)
-            }
+        // Secure-draw latch: while the device may be locked, occlusion(true)
+        // forces an immediate present in the core (even when redundant),
+        // which FrontBoard kills as insecure drawing (0x2BAD45EC). Drop
+        // true here and again at the final hop; false always delivers.
+        // surfaceIsTabVisible keeps the intent, and the foreground resume
+        // re-asserts from the tab model after the latch clears.
+        if visible && Ghostty.isSecureDrawProhibitedAtomic {
+            LifecycleDebugLogger.shared.checkpoint("SECURE.occlusion.dropped", ms: nil, [
+                ("terminal", terminalID), ("hop", "main"),
+            ])
+            return
+        }
+
+        // Dispatch directly onto the serial Ghostty API queue (skipping an
+        // extra main-queue hop) so un-occlusion wakes the renderer immediately
+        // while preserving strict FIFO ordering with teardown (`ghostty_surface_free`),
+        // which also runs on `ghosttyAPIQueue` after clearing `self.surface` on main.
+        nonisolated(unsafe) let surfacePtr = surface
+        Ghostty.TerminalView.ghosttyAPIQueue.async {
+            if visible && Ghostty.isSecureDrawProhibitedAtomic { return }
+            ghostty_surface_set_occlusion(surfacePtr, visible)
         }
     }
 
@@ -1026,6 +1022,7 @@ extension Ghostty.TerminalView: TerminalSurfaceHost {
 
     func surfaceControllerDidSetSurface(_ surface: ghostty_surface_t?) {
         self.surface = surface
+        self.lastAppliedGhosttyFocus = nil
     }
 
     func surfaceRegisterForScrollbackPersistence() {

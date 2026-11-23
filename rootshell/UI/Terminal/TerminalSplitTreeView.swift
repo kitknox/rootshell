@@ -450,8 +450,10 @@ final class SplitTreeHostingView: UIView, IntegratedTabJoinObserver {
         didSet {
             guard isActiveTab != oldValue else { return }
             if !isActiveTab { dismissPaneZoomPicker(restoreFocus: false) }
-            setNeedsLayout()
             refreshProgressBarRouting()
+            if isActiveTab {
+                pushTmuxClientSizeIfNeeded()
+            }
         }
     }
     var terminalEffectsEnabled: Bool = true {

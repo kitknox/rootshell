@@ -168,15 +168,9 @@ extension MainView {
         .catalystCursorRegion()
 #endif
         .onPreferenceChange(TabFramePreferenceKey.self) { frames in
-            // Tab frame preferences are only used by Catalyst
-            // titlebar dragging. Guard and defer the write so
-            // selection animations don't feed layout-pass
-            // preferences back into MainView every frame.
-            DispatchQueue.main.async {
-                if tabFrames != frames {
-                    tabFrames = frames
-                }
-            }
+            // Stored in a non-@Observable box so selection animations and
+            // layout preference passes never feed back into MainView.body.
+            tabFrames.frames = frames
         }
     }
 }

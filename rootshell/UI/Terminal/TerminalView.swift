@@ -183,6 +183,16 @@ extension Ghostty {
         /// here so surface creation never has to assume every new tab is visible.
         var hasExplicitTabVisibility = false
 
+        /// Last focus state sent to Ghostty for the current `surface`; avoids
+        /// duplicate `ghostty_surface_set_focus` + `ghostty_surface_refresh`
+        /// dispatches when both `focusDidChange` and `becomeFirstResponder` /
+        /// `resignFirstResponder` run during the same tab switch.
+        var lastAppliedGhosttyFocus: Bool?
+
+        /// Cached subview count at the last `clearInputAssistantsRecursively`
+        /// walk so repeated `becomeFirstResponder` calls skip redundant tree walks.
+        private var lastClearedInputAssistantSubviewCount: Int?
+
         /// Whether MainView is presenting terminal effects for this pane's
         /// rendered split tree. Mixed VNC/terminal layouts disable effects for
         /// the whole visible tree, including effect-owned safe-area behavior.
@@ -3085,6 +3095,8 @@ extension Ghostty {
         }
 
         private func applyGhosttyFocus(_ focused: Bool) {
+            guard lastAppliedGhosttyFocus != focused else { return }
+            lastAppliedGhosttyFocus = focused
             HerdrController.controller(for: self)?.synchronizeEndpointTheme()
             guard let surface = surface else { return }
 
@@ -3096,9 +3108,11 @@ extension Ghostty {
                 ghostty_surface_set_focus(surface, focused)
             }
 
-            // Refresh can stay on main thread - it just schedules a redraw
-            ghostty_surface_refresh(surface)
-
+            // Refresh can stay on main thread - it just schedules a redraw.
+            // Skip refreshing a surface that is already occluded/hiding on focus loss.
+            if focused || isTabVisible {
+                ghostty_surface_refresh(surface)
+            }
         }
 
         private func selectionUIIsOccluded() -> Bool {
@@ -3202,7 +3216,14 @@ extension Ghostty {
         /// and the renderer thread drops to low priority, saving GPU resources.
         /// Also notifies the session for CPU throttling (e.g., Mosh sessions).
         override func setOcclusion(_ visible: Bool) {
-            Ghostty.logger.info("setOcclusion(\(visible)): terminal=\(self.uuid.uuidString.prefix(8))")
+            setOcclusion(visible, force: false)
+        }
+
+        func setOcclusion(_ visible: Bool, force: Bool) {
+            if !force && hasExplicitTabVisibility && isTabVisible == visible {
+                return
+            }
+            Ghostty.logger.debug("setOcclusion(\(visible)): terminal=\(self.uuid.uuidString.prefix(8))")
             hasExplicitTabVisibility = true
             isTabVisible = visible
             if !visible {
@@ -3254,9 +3275,6 @@ extension Ghostty {
                 return false
             }
 
-            // Always re-push occlusion=true; only does real work in the freeze case.
-            setOcclusion(true)
-
             let surfaceAlive = surface != nil
             // Real render-thread liveness (not the Swift-side `isTabVisible`
             // belief): a frozen tab that logs vsyncRunning=true with a large
@@ -3267,6 +3285,12 @@ extension Ghostty {
                 vsyncRunning = ghostty_surface_vsync_running(s)
                 vsyncTickAgeMs = ghostty_surface_vsync_last_tick_age_ms(s)
             }
+            // Re-assert occlusion unconditionally in the delayed backstop: the
+            // documented CADisplayLink wedge reports vsyncRunning=true with a
+            // stale vsyncTickAgeMs on an already-rendered tab, where ordinary
+            // deduplicated setOcclusion(true) would no-op. When healthy, the
+            // renderer drops same-value `.visible` messages cheaply.
+            setOcclusion(true, force: true)
             var winActive = windowIsActiveForFocus()
             var healedOverride = false
             var focusRetried = false
@@ -4084,7 +4108,7 @@ extension Ghostty {
                 keyboardAccessoryController?.scheduleFloatingTouchKeyboardUpdate()
                 #if !targetEnvironment(macCatalyst)
                 // No keyboard toolbar on Catalyst; a bump would only re-render every window.
-                EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
+                EffectManager.shared.scheduleCoalescedKeyboardToolbarLayoutChanged()
                 #endif
             }
 
@@ -4092,7 +4116,7 @@ extension Ghostty {
             // This ensures Ghostty cursor state matches UIKit even when
             // becomeFirstResponder() is called directly (e.g., from session ready callbacks)
             if result, self.surface != nil {
-                Ghostty.logger.info("becomeFirstResponder() SUCCESS on terminal \(self.uuid.uuidString.prefix(8)) - setting Ghostty focus")
+                Ghostty.logger.debug("becomeFirstResponder() SUCCESS on terminal \(self.uuid.uuidString.prefix(8)) - setting Ghostty focus")
                 applyGhosttyFocus(true)
                 // Point the sequence tracker's deferred-action callback at the
                 // currently focused view. didMoveToWindow fires on window entry
@@ -4102,7 +4126,7 @@ extension Ghostty {
                 installSequenceTrackerTimeoutHandler()
             } else if !result {
                 keyboardAccessoryController?.abandonTouchKeyboardActivation()
-                Ghostty.logger.info("becomeFirstResponder() FAILED on terminal \(self.uuid.uuidString.prefix(8)) - not setting Ghostty focus")
+                Ghostty.logger.debug("becomeFirstResponder() FAILED on terminal \(self.uuid.uuidString.prefix(8)) - not setting Ghostty focus")
             }
 
             return result
@@ -4133,7 +4157,7 @@ extension Ghostty {
             if keyboardToolbarCollapsed {
                 keyboardToolbarCollapsed = false
             }
-            Ghostty.logger.info("resignFirstResponder() called on terminal \(self.uuid.uuidString.prefix(8))")
+            Ghostty.logger.debug("resignFirstResponder() called on terminal \(self.uuid.uuidString.prefix(8))")
             keyboardAccessoryController?.cancelTouchKeyboardInteraction()
             let result = super.resignFirstResponder()
             if result {
@@ -4145,14 +4169,14 @@ extension Ghostty {
                 // No keyboard toolbar on Catalyst; a bump would only re-render every window.
                 CatalystAppDelegate.noteContinuityPasteboardTargetResigned(self)
                 #else
-                EffectManager.shared.notifyKeyboardToolbarLayoutChanged()
+                EffectManager.shared.scheduleCoalescedKeyboardToolbarLayoutChanged()
                 #endif
             }
 
             // Sync Ghostty surface focus when UIKit resigns us
             // This handles auto-resign when another view becomes first responder
             if result, self.surface != nil {
-                Ghostty.logger.info("resignFirstResponder() SUCCESS - clearing Ghostty focus")
+                Ghostty.logger.debug("resignFirstResponder() SUCCESS - clearing Ghostty focus")
                 applyGhosttyFocus(false)
             }
 
@@ -4275,9 +4299,22 @@ extension Ghostty {
         private func clearInputAssistantsRecursively(_ view: UIView? = nil) {
             #if !os(visionOS)
             guard Self.suppressLanguagePill else { return }
+            if view == nil {
+                let count = subviews.count
+                if lastClearedInputAssistantSubviewCount == count,
+                   inputAssistantItem.leadingBarButtonGroups.isEmpty,
+                   inputAssistantItem.trailingBarButtonGroups.isEmpty {
+                    return
+                }
+                lastClearedInputAssistantSubviewCount = count
+            }
             let root = view ?? self
-            root.inputAssistantItem.leadingBarButtonGroups = []
-            root.inputAssistantItem.trailingBarButtonGroups = []
+            if !root.inputAssistantItem.leadingBarButtonGroups.isEmpty {
+                root.inputAssistantItem.leadingBarButtonGroups = []
+            }
+            if !root.inputAssistantItem.trailingBarButtonGroups.isEmpty {
+                root.inputAssistantItem.trailingBarButtonGroups = []
+            }
             for subview in root.subviews {
                 clearInputAssistantsRecursively(subview)
             }
@@ -5057,17 +5094,17 @@ extension Ghostty {
                 // This is independent of UIKit first responder - we want the cursor
                 // to appear focused even before becomeFirstResponder() succeeds
                 if surface != nil {
-                    Ghostty.logger.info("focusDidChange(true): Setting Ghostty focus immediately")
+                    Ghostty.logger.debug("focusDidChange(true): Setting Ghostty focus immediately")
                     applyGhosttyFocus(true)
                 } else {
-                    Ghostty.logger.info("focusDidChange(true): No surface yet, will set focus in didMoveToWindow")
+                    Ghostty.logger.debug("focusDidChange(true): No surface yet, will set focus in didMoveToWindow")
                 }
 
                 // Attempt UIKit focus - defer only if necessary
                 if window != nil {
                     // View is in window, try synchronous focus
                     let result = becomeFirstResponder()
-                    Ghostty.logger.info("focusDidChange(true): becomeFirstResponder() = \(result)")
+                    Ghostty.logger.debug("focusDidChange(true): becomeFirstResponder() = \(result)")
                     if result {
                         syncSelectionHandlesForSurfaceActivity()
                         // Acquiring first responder already installs the input
@@ -5098,7 +5135,7 @@ extension Ghostty {
                 }
                 return false
             } else {
-                Ghostty.logger.info("focusDidChange(false): Unfocusing terminal")
+                Ghostty.logger.debug("focusDidChange(false): Unfocusing terminal")
                 if keyboardToolbarCollapsed {
                     keyboardToolbarCollapsed = false
                 }

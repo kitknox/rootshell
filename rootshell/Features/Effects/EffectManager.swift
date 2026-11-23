@@ -268,9 +268,24 @@ final class EffectManager {
         if isLoaded { TransparencyManager.shared.transparencyDidChange.send() }
     }
 
+    @ObservationIgnored private var coalescedKeyboardToolbarChangePending = false
+
     func notifyKeyboardToolbarLayoutChanged() {
         keyboardStateVersion += 1
         keyboardStateDidChange.send()
+    }
+
+    /// Coalesces back-to-back toolbar layout notifications within the same
+    /// main run-loop turn (e.g. resignFirstResponder + becomeFirstResponder
+    /// during a tab switch) into a single `keyboardStateVersion` bump.
+    func scheduleCoalescedKeyboardToolbarLayoutChanged() {
+        guard !coalescedKeyboardToolbarChangePending else { return }
+        coalescedKeyboardToolbarChangePending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.coalescedKeyboardToolbarChangePending = false
+            self.notifyKeyboardToolbarLayoutChanged()
+        }
     }
 
     private func notifyKeyboardEnvironmentChanged() {

@@ -9,6 +9,21 @@ import Foundation
 import Observation
 import os.log
 
+/// Lightweight observable revision clock bumped whenever saved connection
+/// profiles change (create, rename, update, delete, reload, or sync).
+/// Kept separate from `ConnectionProfileManager.shared` so observers like
+/// `TabsModel` can track profile renames without triggering eager disk loads.
+@MainActor
+@Observable
+final class ConnectionProfileChangeClock {
+    static let shared = ConnectionProfileChangeClock()
+    private(set) var revision: UInt64 = 0
+
+    func bump() {
+        revision &+= 1
+    }
+}
+
 /// Manages persistent storage and organization of connection profiles
 @MainActor
 @Observable
@@ -856,6 +871,7 @@ final class ConnectionProfileManager {
         profiles = store.activeRecords
             .map(profileWithTheme)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        ConnectionProfileChangeClock.shared.bump()
         syncVPNSharedProfiles()
     }
 
