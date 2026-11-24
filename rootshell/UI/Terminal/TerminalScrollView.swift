@@ -281,13 +281,13 @@ extension Ghostty {
     /// Cancellable for observing terminal session changes
     private var sessionObserverCancellable: AnyCancellable?
 
-    #if targetEnvironment(macCatalyst)
-    /// Cancellable for observing global theme changes that affect native scrollbar contrast.
-    private var catalystThemeCancellable: AnyCancellable?
+    /// Streams that can change the pane background the scrollbar contrasts with.
+    private var indicatorStyleTasks: [Task<Void, Never>] = []
 
-    /// Cancellable for observing per-window/per-tab theme override changes.
-    private var catalystThemeOverrideCancellable: AnyCancellable?
-    #endif
+    /// False for overlays (the Visor) whose surface never shows the backdrop.
+    var drawsOverBackdrop = true {
+        didSet { if drawsOverBackdrop != oldValue { updateScrollIndicatorStyle() } }
+    }
 
     /// Whether we're in a post-foreground grace period where the roam banner UI is suppressed
     private var foregroundBannerGraceActive: Bool = false
@@ -321,7 +321,7 @@ extension Ghostty {
         setupScrollView()
         setupDocumentView()
         setupTerminalView()
-        setupCatalystIndicatorStyleObservers()
+        setupScrollIndicatorStyleObservers()
         setupNotifications()
         setupProgressBar()
         setupMouseCaptureObserver()
@@ -338,6 +338,7 @@ extension Ghostty {
     deinit {
         foregroundBannerGraceTask?.cancel()
         authBannerObserveTask?.cancel()
+        indicatorStyleTasks.forEach { $0.cancel() }
         restoreNativeScrollIndicatorWorkItem?.cancel()
         selectionScrollIndicatorHoldWorkItem?.cancel()
         // Clean up notification observers
@@ -619,11 +620,7 @@ extension Ghostty {
 
         scrollView.showsVerticalScrollIndicator = true
         scrollView.showsHorizontalScrollIndicator = false
-        #if targetEnvironment(macCatalyst)
-        updateCatalystScrollIndicatorStyle()
-        #else
-        scrollView.indicatorStyle = .default // Adapts to light/dark mode
-        #endif
+        updateScrollIndicatorStyle()
         scrollView.bounces = false
         scrollView.alwaysBounceVertical = false
         scrollView.alwaysBounceHorizontal = false
@@ -669,43 +666,69 @@ extension Ghostty {
     }
     #endif
 
-    #if targetEnvironment(macCatalyst)
-    private func setupCatalystIndicatorStyleObservers() {
-        updateCatalystScrollIndicatorStyle()
+    // MARK: - Scroll Indicator Style
 
-        catalystThemeCancellable = ThemeManager.shared.themeDidChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.updateCatalystScrollIndicatorStyle()
-            }
-
-        catalystThemeOverrideCancellable = ThemeOverrideManager.shared.overridesDidChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] change in
-                guard let self else { return }
-                switch change.scope {
-                case .tab:
-                    guard self.terminalView.containingTabID?.uuidString == change.id else { return }
-                case .window:
-                    guard self.terminalView.windowId == change.id else { return }
+    /// Everything `paneBackgroundColor` and `EffectiveSurface` read: theme and
+    /// overrides, OSC 11, Host Tint, and a backdrop through a translucent terminal.
+    private func setupScrollIndicatorStyleObservers() {
+        armScrollIndicatorStyleObservation()
+        let paneBackgroundChanges = NotificationCenter.default.notifications(
+            named: .terminalPaneBackgroundDidChange, object: terminalView)
+        let settingChanges = SettingsStore.shared.changes()
+        let fingerprintChanges = HostFingerprintRegistry.shared.changes()
+        indicatorStyleTasks = [
+            Task { @MainActor [weak self] in
+                for await _ in paneBackgroundChanges {
+                    self?.updateScrollIndicatorStyle()
                 }
-                self.updateCatalystScrollIndicatorStyle()
-            }
+            },
+            Task { @MainActor [weak self] in
+                for await change in settingChanges where change.contains(Settings.Theme.hostTint.name) {
+                    self?.updateScrollIndicatorStyle()
+                }
+            },
+            Task { @MainActor [weak self] in
+                for await _ in fingerprintChanges {
+                    self?.updateScrollIndicatorStyle()
+                }
+            },
+        ]
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: TerminalScrollView, _: UITraitCollection) in
+            self.updateScrollIndicatorStyle()
+        }
     }
 
-    private func updateCatalystScrollIndicatorStyle() {
-        let (themeName, _) = ThemeOverrideManager.shared.resolveTheme(
-            tabId: terminalView.containingTabID,
-            windowId: terminalView.windowId
-        )
-        let isLight = ThemeManager.shared.themeInfo(for: themeName)?.isLight
-            ?? ThemeManager.shared.currentThemeInfo?.isLight
-            ?? (traitCollection.userInterfaceStyle != .dark)
-        scrollView.indicatorStyle = isLight ? .black : .white
+    private func armScrollIndicatorStyleObservation() {
+        withObservationTracking {
+            _ = ThemeManager.shared.currentTheme
+            // Replaced when a custom theme is saved in place under the same name.
+            _ = ThemeManager.shared.availableThemes
+            _ = ThemeOverrideManager.shared.windowOverrides
+            _ = ThemeOverrideManager.shared.tabOverrides
+            _ = TransparencyManager.shared.effectiveBackgroundOpacity
+            _ = EffectManager.shared.isBackdropEnabled
+            _ = EffectManager.shared.backdropLook
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.updateScrollIndicatorStyle()
+                self?.armScrollIndicatorStyleObservation()
+            }
+        }
     }
-    #else
-    private func setupCatalystIndicatorStyleObservers() {}
-    #endif
+
+    /// Contrast the knob with the pane as drawn, not the system appearance.
+    private func updateScrollIndicatorStyle() {
+        let isLight = terminalView.paneSurfaceIsLight(overBackdrop: drawsOverBackdrop)
+            ?? (traitCollection.userInterfaceStyle != .dark)
+        let style: UIScrollView.IndicatorStyle = isLight ? .black : .white
+        if scrollView.indicatorStyle != style { scrollView.indicatorStyle = style }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // A moved pane may fall under another tab or window override.
+        if window != nil { updateScrollIndicatorStyle() }
+    }
 
     private func setupDocumentView() {
         documentView.translatesAutoresizingMaskIntoConstraints = false

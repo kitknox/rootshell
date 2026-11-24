@@ -55,6 +55,14 @@ extension Ghostty.TerminalView {
         return configuredPaneBackgroundColor
     }
 
+    /// Whether the pane reads light as drawn. Only window panes sit over the
+    /// Theme Gradient backdrop; overlays like the Visor draw over app content.
+    func paneSurfaceIsLight(overBackdrop: Bool) -> Bool? {
+        paneBackgroundColor.map { color in
+            overBackdrop ? EffectiveSurface.resolve(background: Color(uiColor: color)).isLight : Color(uiColor: color).isLight
+        }
+    }
+
     func handleBackgroundColorChange(_ rgb: SIMD3<UInt8>) {
         // A reset reports the configured color, which ends the override. Ghostty
         // doesn't flag resets, so an OSC 11 to that same color reads as one too.

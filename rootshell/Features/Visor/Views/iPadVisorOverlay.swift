@@ -69,6 +69,7 @@ final class iPadVisorController {
     func install(_ terminal: Ghostty.TerminalView) -> Ghostty.TerminalScrollView {
         self.terminal = terminal
         let scrollView = Ghostty.TerminalScrollView(terminalView: terminal)
+        scrollView.drawsOverBackdrop = false
         self.scrollView = scrollView
         return scrollView
     }
