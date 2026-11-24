@@ -378,7 +378,7 @@ struct SettingsTerminalSection: View {
                 .themedRow()
                 .settingGroupContextMenu(.dictation)
                 #endif
-                #if !targetEnvironment(macCatalyst)
+                // On Mac this edits the Screen Sharing and KVM toolbars, its only ones.
                 NavigationLink(value: SettingsSearchDestination.toolbarKeys) {
                     HStack(spacing: 12) {
                         SettingsIcon(systemName: "keyboard")
@@ -395,6 +395,7 @@ struct SettingsTerminalSection: View {
                 .themedRow()
                 .settingGroupContextMenu(.keyboardToolbar)
 
+                #if !targetEnvironment(macCatalyst)
                 SettingToggle(Settings.Keyboard.doubleSpaceForPeriod, title: "\"\u{200B}.\u{200B}\" Shortcut", icon: "character.cursor.ibeam")
                     .themedRow()
 

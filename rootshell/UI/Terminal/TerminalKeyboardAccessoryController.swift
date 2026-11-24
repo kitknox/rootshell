@@ -1445,6 +1445,8 @@ final class TerminalKeyboardAccessoryController: NSObject {
         }
         return onTerminalKeyboard ? .terminalKeyboard : .systemKeyboard
         #else
+        // A Mac's only toolbar is a remote screen's bar.
+        if let floating = host?.keyboardGlassBarIsFloating { return .glassBar(floating: floating) }
         return .systemKeyboard
         #endif
     }

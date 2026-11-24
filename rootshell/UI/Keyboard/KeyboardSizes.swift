@@ -117,9 +117,9 @@ struct KeyboardSizes {
 
     /// The size class picks the preset; the display's toolbar size then scales it.
     /// The Duo's regular-width inner display stays on phone sizes. So does a
-    /// remote screen's bar on iPad, which sits over the desktop it controls.
+    /// remote screen's bar on iPad and Mac, which sits over the desktop it controls.
     static func accessory(traitCollection: UITraitCollection, context: ToolbarContext) -> KeyboardSizes {
-        #if os(visionOS) || targetEnvironment(macCatalyst)
+        #if os(visionOS)
         let overRemoteScreen = false
         #else
         let overRemoteScreen = context.usesGlassBar

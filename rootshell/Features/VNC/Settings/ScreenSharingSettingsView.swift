@@ -19,6 +19,10 @@ struct ScreenSharingSettingsView: View {
     @Setting(Settings.ScreenSharing.controlOptionAsCommandDefault) private var controlOptionAsCommandDefault
     @Setting(Settings.ScreenSharing.routeReservedShortcutsToVNCDefault) private var routeReservedShortcutsToVNCDefault
     @Setting(Settings.ScreenSharing.floatingToolbarDefault) private var floatingToolbarDefault
+    #if targetEnvironment(macCatalyst)
+    /// On Mac this setting has no other use: only remote screens have a toolbar.
+    @Setting(Settings.KeyboardToolbar.showWithHardwareKeyboard) private var showKeyboardToolbar
+    #endif
     @Setting(Settings.ScreenSharing.touchHoldDelay) private var touchHoldDelay
     @Setting(Settings.ScreenSharing.showsHeldButton) private var showsHeldButton
     @Setting(Settings.ScreenSharing.swipeUpAction) private var swipeUpAction
@@ -69,8 +73,24 @@ struct ScreenSharingSettingsView: View {
                 #endif
             }
 
-            #if !os(visionOS) && !targetEnvironment(macCatalyst)
+            #if !os(visionOS)
             Section {
+                #if targetEnvironment(macCatalyst)
+                Toggle(isOn: Binding(
+                    get: { showKeyboardToolbar },
+                    set: {
+                        showKeyboardToolbar = $0
+                        NotificationCenter.default.post(name: .keyboardToolbarHardwareSettingChanged, object: nil)
+                    }
+                )) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "ellipsis.rectangle")
+                        Text("Show Keyboard Toolbar")
+                    }
+                    .settingRow(Settings.KeyboardToolbar.showWithHardwareKeyboard)
+                }
+                .themedRow()
+                #endif
                 Toggle(isOn: $floatingToolbarDefault) {
                     HStack(spacing: 12) {
                         SettingsIcon(systemName: "rectangle.bottomthird.inset.filled")
@@ -79,10 +99,30 @@ struct ScreenSharingSettingsView: View {
                     .settingRow(Settings.ScreenSharing.floatingToolbarDefault)
                 }
                 .themedRow()
+                #if targetEnvironment(macCatalyst)
+                // Also under Keyboard; here is where a Mac user looks for it.
+                NavigationLink(value: SettingsSearchDestination.toolbarKeys) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(systemName: "keyboard")
+                        Text("Toolbar Keys")
+                        Spacer()
+                        if KeyboardToolbarManager.shared.isCustomized {
+                            Text("Customized")
+                                .foregroundStyle(.secondary)
+                                .font(.subheadline)
+                        }
+                    }
+                }
+                .themedRow()
+                #endif
             } header: {
                 SettingGroupHeader("Keyboard Toolbar", group: .screenSharing)
             } footer: {
+                #if targetEnvironment(macCatalyst)
+                Text("Show Keyboard Toolbar adds a bar of keys to Screen Sharing and KVM sessions whose connection follows the app setting. Change it for the current session from the Screen Sharing menu. Floating Toolbar puts the bar in glass over the remote screen, where you can drag and fold it away; turn it off to dock the bar along the bottom. Click and hold the bar's chevron to switch the current session.")
+                #else
                 Text("Shows the keyboard toolbar in a glass bar over the remote screen that you can drag and fold away. Turn it off to dock the toolbar to the keyboard. Sets the default for new sessions; touch and hold the bar's chevron, or the docked toolbar's keyboard key, to switch the current one.")
+                #endif
             }
             #endif
 

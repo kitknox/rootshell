@@ -36,9 +36,13 @@ nonisolated enum ToolbarPreviewSurface: Hashable, Sendable {
     /// the one it appears on before anything is switched.
     static func available(for context: ToolbarContext, terminalKeyboard: Bool,
                           floatingBar: Bool) -> [ToolbarPreviewSurface] {
-        #if os(visionOS) || targetEnvironment(macCatalyst)
+        #if os(visionOS)
         return [.systemKeyboard]
         #else
+        // A Mac has neither keyboard: only a remote screen's bar shows a toolbar there.
+        #if targetEnvironment(macCatalyst)
+        let terminalKeyboard = false
+        #endif
         guard context.usesGlassBar else {
             return terminalKeyboard ? [.terminalKeyboard, .systemKeyboard] : [.systemKeyboard]
         }
@@ -165,8 +169,12 @@ private struct ToolbarLayoutPreviewRepresentable: UIViewRepresentable {
 }
 
 final class ToolbarLayoutPreviewHostView: UIView {
-    /// The remote screen's bar ends in three buttons of its own.
+    /// The remote screen's bar ends in buttons of its own. A Mac's has no keys to show.
+    #if targetEnvironment(macCatalyst)
+    private static let hostButtonSymbols = ["chevron.forward", "ellipsis"]
+    #else
     private static let hostButtonSymbols = ["chevron.forward", "keyboard", "ellipsis"]
+    #endif
 
     private let context: ToolbarContext
     private let surface: ToolbarPreviewSurface

@@ -135,7 +135,7 @@ private struct KVMScreenContent: View {
         .screenPlaceholder {
             RemoteScreenLastSeenPlaceholder(recorder: pane.snapshots)
         }
-        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        #if !os(visionOS)
         .hudAccessory(
             isEnabled: pane.keyboardCoordinator?.hudModel.barEnabled ?? false,
             docksToBottom: pane.keyboardCoordinator?.hudModel.docksToBottom ?? false,
@@ -215,7 +215,7 @@ private struct KVMHUDMenuExtras: View {
 
     @ViewBuilder
     private var keyboardItems: some View {
-        #if !os(visionOS) && !targetEnvironment(macCatalyst)
+        #if !os(visionOS)
         KVMKeyboardToolbarToggle(pane: pane)
         if let coordinator = pane.keyboardCoordinator {
             RemoteScreenFloatingToolbarMenuToggle(coordinator: coordinator)
@@ -330,13 +330,13 @@ private struct KVMHUDMenuExtras: View {
     }
 }
 
-#if !os(visionOS) && !targetEnvironment(macCatalyst)
+#if !os(visionOS)
 private struct KVMKeyboardToolbarToggle: View {
     @ObservedObject var pane: KVMPaneView
 
     var body: some View {
         Toggle(isOn: Binding(
-            get: { pane.effectiveKeyboardToolbarPreference != .off },
+            get: { pane.keyboardCoordinator?.toolbarIsOn ?? (pane.effectiveKeyboardToolbarPreference != .off) },
             set: { pane.setKeyboardToolbarEnabled($0) }
         )) {
             Label("Keyboard Toolbar", systemImage: "ellipsis.rectangle")
