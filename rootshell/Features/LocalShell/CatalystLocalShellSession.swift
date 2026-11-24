@@ -35,6 +35,7 @@ public class CatalystLocalShellSession: TerminalSession {
     public var isRunning = true
     var recoverySupported = false
     var recoveryAccepted = false
+    var workingDirectoryUnavailable = false
 
     // Callback-based output pattern (matches SSHSession)
     // NOTE: These callbacks may be called from a background thread (PTY read queue).
@@ -166,6 +167,7 @@ public class CatalystLocalShellSession: TerminalSession {
 
                         session.recoverySupported = createResult.recoverySupported
                         session.recoveryAccepted = createResult.recoveryAccepted
+                        session.workingDirectoryUnavailable = createResult.workingDirectoryUnavailable
 
                         // Output monitoring is started by the caller after callbacks are configured
                         completion(.success(session))

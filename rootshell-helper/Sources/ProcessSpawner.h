@@ -38,6 +38,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// Path to shell integration resources
 @property (nonatomic, copy, nullable) NSString *shellIntegrationPath;
 
+/// Start in HOME when workingDirectory cannot be opened; otherwise the child exits.
+@property (nonatomic, assign) BOOL fallbackToHomeDirectory;
+
 @end
 
 /// Result of spawning a shell process
@@ -49,7 +52,11 @@ NS_ASSUME_NONNULL_BEGIN
 /// PTY pair (caller takes ownership)
 @property (nonatomic, readonly, strong) PTYPair *pty;
 
+/// The shell started in HOME because the requested directory could not be opened.
+@property (nonatomic, readonly) BOOL usedHomeDirectoryFallback;
+
 - (instancetype)initWithPID:(pid_t)pid pty:(PTYPair *)pty;
+- (instancetype)initWithPID:(pid_t)pid pty:(PTYPair *)pty usedHomeDirectoryFallback:(BOOL)usedHomeDirectoryFallback;
 
 @end
 

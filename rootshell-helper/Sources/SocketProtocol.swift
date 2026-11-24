@@ -70,6 +70,8 @@ struct CreateShellRequest: Codable {
     var recoveryAttachment: LocalMultiplexerAttachment? = nil
     /// Extra variables for the new shell, such as in-app Tailscale's ALL_PROXY.
     var extraEnvironment: [String: String]? = nil
+    /// Start in HOME when `cwd` cannot be opened and report it; nil keeps the old exit-on-failure.
+    var fallsBackToHomeDirectory: Bool? = nil
 }
 
 struct CreateShellResponse: Codable {
@@ -77,6 +79,8 @@ struct CreateShellResponse: Codable {
     let socketPath: String
     var recoverySupported: Bool? = nil
     var recoveryAccepted: Bool? = nil
+    /// The requested cwd was missing or inaccessible, so the shell started in HOME.
+    var workingDirectoryUnavailable: Bool? = nil
 }
 
 struct ResizeShellRequest: Codable {

@@ -559,6 +559,34 @@ extension Ghostty {
         /// mode): local split edits must round-trip through the server.
         var isMultiplexerPane: Bool { isTmuxPane || isHerdrPane }
 
+        /// The cwd a new local shell may start in. Multiplexer panes carry `.local()` but
+        /// report their server's cwd, and a local gateway shell may just be running ssh,
+        /// so they qualify only with evidence of a local client.
+        var inheritableLocalDirectory: String? {
+            guard case .local = connectionConfig else { return nil }
+            if isHerdrPane {
+                guard HerdrController.controller(for: self)?.gateway?
+                        .localMultiplexerAttachmentForPersistence?.isHerdrControl == true else { return nil }
+            } else if let binding = tmuxPaneBinding {
+                guard TmuxWindowRegistry.gatewayView(ownerTerminalUUID: binding.parentUUID)?
+                        .runsLocalTmuxClient == true else { return nil }
+            }
+            return pwd
+        }
+
+        /// The helper census, or tmux leading the PTY's foreground group, since the
+        /// census is skipped with session persistence off.
+        private var runsLocalTmuxClient: Bool {
+            if localMultiplexerAttachmentForPersistence?.isTmuxControl == true { return true }
+            #if targetEnvironment(macCatalyst)
+            guard case .local = connectionConfig,
+                  let group = (session as? CatalystLocalShellSession)?.foregroundProcessGroup() else { return false }
+            return LocalForegroundProcessProbe.program(processGroup: group)?.name == "tmux"
+            #else
+            return false
+            #endif
+        }
+
         /// Per-pane identity queried from tmux. A projected tmux surface has a
         /// synthetic Ghostty title such as "Pane%196", so its ordinary OSC
         /// title publisher cannot be used as the pane label.

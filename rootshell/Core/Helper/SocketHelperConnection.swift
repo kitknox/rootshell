@@ -51,7 +51,9 @@ class SocketHelperConnection {
             termType: TerminalTypeSettings.local,
             paneToken: paneToken,
             recoveryAttachment: recoveryAttachment,
-            extraEnvironment: Self.extraShellEnvironment
+            extraEnvironment: Self.extraShellEnvironment,
+            // TerminalSessionController skips the startup command when the reply reports a fallback.
+            fallsBackToHomeDirectory: true
         )
         let payload = try JSONEncoder().encode(request)
 

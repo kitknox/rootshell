@@ -45,9 +45,14 @@ static NSString * const RootShellFallbackShell = @"/bin/zsh -f";
 @implementation ShellSpawnResult
 
 - (instancetype)initWithPID:(pid_t)pid pty:(PTYPair *)pty {
+    return [self initWithPID:pid pty:pty usedHomeDirectoryFallback:NO];
+}
+
+- (instancetype)initWithPID:(pid_t)pid pty:(PTYPair *)pty usedHomeDirectoryFallback:(BOOL)usedHomeDirectoryFallback {
     if (self = [super init]) {
         _pid = pid;
         _pty = pty;
+        _usedHomeDirectoryFallback = usedHomeDirectoryFallback;
     }
     return self;
 }
@@ -140,6 +145,23 @@ static NSString * const RootShellFallbackShell = @"/bin/zsh -f";
         return nil;
     }
 
+    // Resolve before fork so the child makes no Foundation calls.
+    NSString *homeDir = NSHomeDirectory();
+    const char *homePath = homeDir.UTF8String;
+    const char *workingPath = (config.workingDirectory ?: homeDir).UTF8String;
+    BOOL fallbackToHome = config.fallbackToHomeDirectory;
+    // Opened here so the reported fallback is exactly what the child does: it
+    // fchdirs to this fd or chdirs to HOME, and exits if either fails.
+    int workingDirFD = -1;
+    const char *fallbackNotice = NULL;
+    if (fallbackToHome) {
+        workingDirFD = open(workingPath, O_SEARCH | O_CLOEXEC);
+        if (workingDirFD < 0) {
+            fallbackNotice = [NSString stringWithFormat:@"rootshell: cannot open %s: %s; starting in %s\n",
+                              workingPath, strerror(errno), homePath].UTF8String;
+        }
+    }
+
     // Fork the process
     // Based on ghostty/src/termio/Exec.zig
     pid_t pid = fork();
@@ -147,6 +169,7 @@ static NSString * const RootShellFallbackShell = @"/bin/zsh -f";
     if (pid < 0) {
         // Fork failed
         int fork_errno = errno;
+        if (workingDirFD >= 0) close(workingDirFD);
         [self freeCStringArray:argv];
         [self freeCStringArray:envp];
         if (error) {
@@ -212,14 +235,13 @@ static NSString * const RootShellFallbackShell = @"/bin/zsh -f";
             close(pty.slaveFD);
         }
 
-        // Change working directory
-        // If not specified, default to user's home directory
-        NSString *targetDir = config.workingDirectory;
-        if (!targetDir) {
-            targetDir = NSHomeDirectory();
-        }
-
-        if (targetDir && chdir([targetDir UTF8String]) != 0) {
+        if (fallbackToHome) {
+            if (fallbackNotice) fputs(fallbackNotice, stderr);
+            if ((workingDirFD >= 0 ? fchdir(workingDirFD) : chdir(homePath)) != 0) {
+                perror("chdir failed");
+                _exit(1);
+            }
+        } else if (chdir(workingPath) != 0) {
             perror("chdir failed");
             _exit(1);
         }
@@ -242,6 +264,7 @@ static NSString * const RootShellFallbackShell = @"/bin/zsh -f";
     // but by then the fd number may have been reused for something else
     // (like the kqueue for client monitoring), causing subtle bugs.
     [pty closeSlave];
+    if (workingDirFD >= 0) close(workingDirFD);
 
     // Note: The child process sets itself as foreground via tcsetpgrp() before exec
     // We don't do it from the parent because tcsetpgrp() must be called from within the session
@@ -257,7 +280,7 @@ static NSString * const RootShellFallbackShell = @"/bin/zsh -f";
     // [self freeCStringArray:argv];  // Commented out - causes child to get garbage
     // [self freeCStringArray:envp];  // Commented out - causes child to get garbage
 
-    return [[ShellSpawnResult alloc] initWithPID:pid pty:pty];
+    return [[ShellSpawnResult alloc] initWithPID:pid pty:pty usedHomeDirectoryFallback:fallbackNotice != NULL];
 }
 
 + (NSArray<NSString *> *)buildLoginCommandWithUsername:(NSString *)username

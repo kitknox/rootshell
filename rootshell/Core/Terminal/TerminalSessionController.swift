@@ -504,8 +504,13 @@ final class TerminalSessionController {
                 session.startMonitoring()
                 self.responsePipeline.start(for: session)
                 // Taken now so a later restore/reconnect never re-runs it.
-                let startupCommand = host.terminalPendingStartupCommand
+                let pendingCommand = host.terminalPendingStartupCommand
                 host.terminalPendingStartupCommand = nil
+                // The shell fell back to HOME (the helper prints why); the command targeted another directory.
+                let startupCommand = session.workingDirectoryUnavailable ? nil : pendingCommand
+                if startupCommand == nil, pendingCommand?.isEmpty == false {
+                    Ghostty.logger.warning("Skipping startup command: cwd \(workingDirectory ?? "nil") unavailable")
+                }
 
                 Task {
                     do {

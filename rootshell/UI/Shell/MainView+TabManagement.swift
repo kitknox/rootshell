@@ -426,13 +426,13 @@ extension MainView {
             return NewTabRequest(target: .connections, localDirectory: nil)
         }
         if let controller = newTabTmuxController(for: terminal), controller.isActive {
-            return NewTabRequest(target: .tmux(terminal.uuid, controller), localDirectory: nil)
+            return NewTabRequest(target: .tmux(terminal.uuid, controller), localDirectory: terminal.inheritableLocalDirectory)
         }
         if let controller = HerdrController.controller(for: terminal), controller.isActive {
             let target = controller.newTabTarget(inWorkspaceOf: terminals[selectedTabIndex])
             return NewTabRequest(
                 target: .herdr(controller, workspaceID: target.workspaceID, afterTabID: target.afterTabID),
-                localDirectory: nil
+                localDirectory: terminal.inheritableLocalDirectory
             )
         }
         switch terminal.connectionConfig {
@@ -441,13 +441,11 @@ extension MainView {
             guard !terminal.isMultiplexerPane else {
                 return NewTabRequest(target: .connections, localDirectory: nil)
             }
+            let directory = terminal.inheritableLocalDirectory
             if let profileID = terminal.sourceProfileID {
-                return NewTabRequest(
-                    target: .connection(.local(workingDirectory: terminal.pwd), profileID),
-                    localDirectory: terminal.pwd
-                )
+                return NewTabRequest(target: .connection(.local(workingDirectory: directory), profileID), localDirectory: directory)
             }
-            return NewTabRequest(target: .local, localDirectory: terminal.pwd)
+            return NewTabRequest(target: .local, localDirectory: directory)
         case .trzszTransfer:
             return NewTabRequest(target: .connections, localDirectory: nil)
         default:
@@ -542,23 +540,11 @@ extension MainView {
     func createLocalProfile(_ profile: ConnectionProfile, splitOption: SSHConnectionView.SplitOption) {
         guard profile.isAvailableOnCurrentPlatform, let local = profile.localConfig else { return }
         performLocalShellAction(description: "open a local shell profile") {
-            let configuredDirectory = local.workingDirectory.flatMap { raw -> String? in
-                guard let path = Self.resolveIntentDirectory(raw) else { return nil }
-                #if targetEnvironment(macCatalyst)
-                // The helper exits if chdir fails; use HOME for a missing
-                // directory (common when a profile syncs to another Mac).
-                var isDirectory: ObjCBool = false
-                if !FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
-                    || !isDirectory.boolValue {
-                    return Self.resolveIntentDirectory("~")
-                }
-                #endif
-                return path
-            }
+            // The helper reports a missing directory (common when a profile syncs to
+            // another Mac), so the startup command is skipped rather than run in HOME.
+            let configuredDirectory = local.workingDirectory.flatMap { Self.resolveIntentDirectory($0) }
             @MainActor func inheritedDirectory(from pane: SplitPaneView?) -> String? {
-                guard let terminal = pane?.asTerminal,
-                      case .local = terminal.connectionConfig else { return nil }
-                return terminal.pwd
+                pane?.asTerminal?.inheritableLocalDirectory
             }
             let openTab: @MainActor () -> Void = {
                 let focused = self.terminals.indices.contains(self.selectedTabIndex)
@@ -593,15 +579,8 @@ extension MainView {
     }
 
     func createLocalShellTabInternal() {
-        // Get CWD from focused terminal (if any) to inherit working directory
-        let inheritedCwd: String?
-        if selectedTabIndex >= 0 && selectedTabIndex < terminals.count,
-           let focusedTerminal = terminals[selectedTabIndex].focusedTerminal,
-           case .local = focusedTerminal.connectionConfig {
-            inheritedCwd = focusedTerminal.pwd
-        } else {
-            inheritedCwd = nil
-        }
+        let inheritedCwd = terminals.indices.contains(selectedTabIndex)
+            ? terminals[selectedTabIndex].focusedTerminal?.inheritableLocalDirectory : nil
 
         openTerminalTab(
             config: .local(workingDirectory: inheritedCwd),
@@ -671,13 +650,7 @@ extension MainView {
             // Local splits inherit the working directory from the resolved
             // split target (not the tab's focused terminal at call time).
             // Non-terminal split targets have no cwd to inherit.
-            configFor: {
-                guard let terminal = $0.asTerminal,
-                      case .local = terminal.connectionConfig else {
-                    return .local(workingDirectory: nil)
-                }
-                return .local(workingDirectory: terminal.pwd)
-            },
+            configFor: { .local(workingDirectory: $0.asTerminal?.inheritableLocalDirectory) },
             fallbackToTab: { self.createLocalShellTabInternal() }
         )
     }

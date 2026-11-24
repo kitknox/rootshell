@@ -365,6 +365,8 @@ class SocketCommandServer {
                 spawnConfig.recoveryCommand = command
                     + " || /usr/bin/printf '%s\\n' 'Could not restore the multiplexer session; returned to shell.'"
             }
+            // Opt-in: an older app would send its startup command after a fallback.
+            spawnConfig.fallbackToHomeDirectory = createRequest.fallsBackToHomeDirectory == true
             if createRequest.recoveryAttachment != nil {
                 // A deleted old CWD must not prevent the recovery/fallback PTY.
                 var isDirectory: ObjCBool = false
@@ -396,7 +398,8 @@ class SocketCommandServer {
             // Catalyst app will create a server socket and wait for us to connect
             NSLog("Sending response to client with socket path: \(socketPath)")
             let response = CreateShellResponse(sessionID: sessionID, socketPath: socketPath,
-                recoverySupported: true, recoveryAccepted: recoveryAccepted)
+                recoverySupported: true, recoveryAccepted: recoveryAccepted,
+                workingDirectoryUnavailable: spawnResult.usedHomeDirectoryFallback ? true : nil)
             let responseData: Data
             do {
                 responseData = try JSONEncoder().encode(response)

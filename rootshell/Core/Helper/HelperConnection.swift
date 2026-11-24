@@ -20,12 +20,15 @@ public struct ShellCreateResult {
     public let socketPath: String
     public let recoverySupported: Bool
     public let recoveryAccepted: Bool
+    public let workingDirectoryUnavailable: Bool
 
-    public init(sessionID: UUID, socketPath: String, recoverySupported: Bool = false, recoveryAccepted: Bool = false) {
+    public init(sessionID: UUID, socketPath: String, recoverySupported: Bool = false, recoveryAccepted: Bool = false,
+                workingDirectoryUnavailable: Bool = false) {
         self.sessionID = sessionID
         self.socketPath = socketPath
         self.recoverySupported = recoverySupported
         self.recoveryAccepted = recoveryAccepted
+        self.workingDirectoryUnavailable = workingDirectoryUnavailable
     }
 }
 
@@ -168,7 +171,8 @@ public class HelperConnection {
                 )
 
                 let result = ShellCreateResult(sessionID: response.sessionID, socketPath: response.socketPath,
-                    recoverySupported: response.recoverySupported ?? false, recoveryAccepted: response.recoveryAccepted ?? false)
+                    recoverySupported: response.recoverySupported ?? false, recoveryAccepted: response.recoveryAccepted ?? false,
+                    workingDirectoryUnavailable: response.workingDirectoryUnavailable ?? false)
                 completion(.success(result))
             } catch {
                 completion(.failure(error))
