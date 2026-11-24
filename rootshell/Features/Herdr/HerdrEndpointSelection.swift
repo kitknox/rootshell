@@ -102,12 +102,12 @@ nonisolated struct HerdrEndpointPainter {
                         // The popup can hide the leading half of a wide glyph.
                         // Clear its exposed continuation even if Herdr marks it skipped.
                         let hidden = frame.grid.cells[index + column - 1]
-                        if !hidden.skip, DisplayWidth.width(of: Self.safeText(hidden.symbol)) > 1 {
+                        if !hidden.skip, Self.cellWidth(Self.safeText(hidden.symbol)) > 1 {
                             cell.symbol = " "; cell.skip = false
                         }
                     }
                 }
-                var glyphWidth = max(1, DisplayWidth.width(of: Self.safeText(cell.symbol)))
+                var glyphWidth = max(1, Self.cellWidth(Self.safeText(cell.symbol)))
                 // A glyph crossing a popup or pane edge cannot be painted partially.
                 // Replace its visible leading cell so it cannot cover the next region.
                 if !cell.skip, glyphWidth > availableColumns {
@@ -186,7 +186,7 @@ nonisolated struct HerdrEndpointPainter {
                 // Herdr can leave ordinary blank cells behind a wide glyph.
                 // Painting them erases the glyph in Ghostty. Repaint the whole
                 // changed row so narrowing a glyph also restores those cells.
-                coveredUntil = column + max(1, DisplayWidth.width(of: symbol))
+                coveredUntil = column + max(1, Self.cellWidth(symbol))
                 // Consecutive ASCII cells advance the cursor predictably.
                 // Position explicitly after Unicode instead of guessing its
                 // display width (wide cells, combining marks, and emoji).
@@ -240,6 +240,10 @@ nonisolated struct HerdrEndpointPainter {
         // Preserve Unicode format scalars such as emoji's zero-width joiner.
         // Only C0/C1 can introduce terminal control sequences here.
         return String(text.unicodeScalars.filter { $0.value >= 0x20 && !(0x7f...0x9f).contains($0.value) })
+    }
+
+    private static func cellWidth(_ text: String) -> Int {
+        isPrintableASCII(text) ? 1 : DisplayWidth.width(of: text)
     }
 
     private static func isPrintableASCII(_ text: String) -> Bool {

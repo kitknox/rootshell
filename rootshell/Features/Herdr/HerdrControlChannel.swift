@@ -255,6 +255,7 @@ actor HerdrControlChannel {
         writeStream = nil
         writerTask = Task.detached(priority: .userInitiated) { [weak self, stream, pipe, writes] in
             var inputID: UInt64 = 0
+            let encoder = JSONEncoder()
             do {
                 for await write in stream {
                     guard writes.withLock({ $0 != nil }) else { return }
@@ -266,7 +267,7 @@ actor HerdrControlChannel {
                             attach_id: attachId, bytes: bytes.base64EncodedString(), auto: auto
                         )
                         let request = HerdrControl.Request(id: "i\(inputID)", method: "terminal.input", params: params)
-                        var encoded = try JSONEncoder().encode(request)
+                        var encoded = try encoder.encode(request)
                         encoded.append(0x0A)
                         line = encoded
                     case .line(let encoded):

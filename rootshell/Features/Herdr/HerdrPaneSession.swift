@@ -290,7 +290,8 @@ nonisolated final class HerdrOutputRouter: @unchecked Sendable {
         guard started else { return }
         while true {
             let next: (OutputSink, Data?)? = lock.withLock {
-                guard let sink = sinks[attachId], var queue = queues[attachId] else {
+                // Taken out of the dictionary so removeFirst does not copy it.
+                guard let sink = sinks[attachId], var queue = queues.removeValue(forKey: attachId) else {
                     draining.remove(attachId)
                     return nil
                 }

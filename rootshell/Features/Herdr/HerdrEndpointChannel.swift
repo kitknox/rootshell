@@ -13,6 +13,7 @@ final class HerdrEndpointChannel {
     private var writer: Task<Void, Never>?
     private var heartbeat: Task<Void, Never>?
     private var presentation: Task<Void, Never>?
+    private var lastPresented: ContinuousClock.Instant?
     private enum Write {
         case bytes(Data)
         case hostTheme
@@ -317,6 +318,8 @@ final class HerdrEndpointChannel {
                 schedulePresentation()
             case .patch(let patch):
                 guard var frame = latest else { throw Wire.Failure.invalid("patch arrived before full frame") }
+                // Drop the stored reference so the patch edits cells in place.
+                latest = nil
                 try frame.apply(patch)
                 latest = frame
                 schedulePresentation()
@@ -347,13 +350,23 @@ final class HerdrEndpointChannel {
         guard presentation == nil else { return }
         // Apply every wire patch to `latest`, but paint at most once per
         // display interval. Replaying intermediate scroll frames backlogs
-        // Ghostty's parser and stalls input on the main actor.
+        // Ghostty's parser and stalls input on the main actor. A frame after
+        // an idle interval paints at once, so echoes are not delayed.
+        let wait = lastPresented.map { Duration.milliseconds(16) - $0.duration(to: .now) } ?? .zero
+        guard wait > .zero else { present(); return }
         presentation = Task { [weak self] in
-            do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
+            do { try await Task.sleep(for: wait) } catch { return }
             guard let self, !self.closed else { return }
             self.presentation = nil
-            if let frame = self.latest { self.onFrame?(frame) }
+            self.present()
         }
+    }
+
+    /// Timed from the end of the paint, so a slow paint still leaves an
+    /// interval for buffered patches to coalesce.
+    private func present() {
+        if let frame = latest { onFrame?(frame) }
+        lastPresented = .now
     }
 
     private func startHeartbeat() {
