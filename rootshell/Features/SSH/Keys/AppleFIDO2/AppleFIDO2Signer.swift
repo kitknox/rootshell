@@ -71,7 +71,9 @@ import os.log
             let descriptor = ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor(
                 credentialID: credentialID, transports: ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported)
             request.allowedCredentials = [descriptor]
-            request.userVerificationPreference = .discouraged
+            // Same loop as registration (#778): with .discouraged a key that demands its PIN to
+            // sign never receives it.
+            request.userVerificationPreference = .preferred
             authorizationRequest = request
             #endif
 
