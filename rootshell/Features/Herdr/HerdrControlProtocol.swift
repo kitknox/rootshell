@@ -625,6 +625,16 @@ nonisolated enum HerdrControl {
             }
             return nil
         }
+
+        /// Exact filesystem directory reported by herdr (`foreground_cwd` before
+        /// shell `cwd`), preserving any trailing whitespace in the directory name.
+        var workingDirectoryPath: String? {
+            for value in [foreground_cwd, cwd] {
+                guard let value, value.hasPrefix("/") else { continue }
+                return value
+            }
+            return nil
+        }
     }
 
     struct AgentInfo: Decodable, Sendable {

@@ -49,6 +49,7 @@ final class GitDiffStore {
     @ObservationIgnored private var lastProbeDuration: Duration = .zero
     @ObservationIgnored private var lastSerial: UInt64 = 0
     @ObservationIgnored private var lastDirectory: String?
+    @ObservationIgnored private var lastPwd: String?
     @ObservationIgnored private var failures = 0
     @ObservationIgnored private var skipsStampOnce = false
     /// Recent panes' diffs, so switching tabs shows the last one at once.
@@ -209,13 +210,16 @@ final class GitDiffStore {
         guard terminal.isTabVisible, !Ghostty.isAppBackgroundedAtomic else { return poll }
 
         let serial = terminal.surfaceContentSerial
-        let directory = terminal.pwd
+        let directory = GitDiffSource.knownDirectory(for: terminal)
+        let pwd = terminal.pwd
         if !force, let lastProbe {
-            let wait = interval(screenMoved: serial != lastSerial, directoryMoved: directory != lastDirectory)
+            let directoryMoved = directory != lastDirectory || pwd != lastPwd
+            let wait = interval(screenMoved: serial != lastSerial, directoryMoved: directoryMoved)
             if lastProbe.duration(to: .now) < wait { return poll }
         }
         lastSerial = serial
         lastDirectory = directory
+        lastPwd = pwd
 
         var request = GitDiffProbeRequest(scope: scope, ignoreWhitespace: ignoreWhitespace, includePatch: wantsPatch)
         // A manual refresh stays owed until a probe has actually answered:
@@ -225,7 +229,7 @@ final class GitDiffStore {
         if snapshot == nil { isRefreshing = true }
 
         let started = ContinuousClock.now
-        let result: Result<GitDiffProbeResponse, Error>
+        let result: Result<GitDiffSource.LoadResult, Error>
         do {
             result = .success(try await GitDiffSource.load(request, for: terminal))
         } catch {
@@ -233,36 +237,45 @@ final class GitDiffStore {
         }
         // A newer request (target, scope, manual refresh) owns the state now.
         guard generation == self.generation, !Task.isCancelled else { return poll }
+        // Record the local baseline observed immediately before Git ran so a
+        // directory change while Git was in flight triggers a fast refresh,
+        // without comparing an uncached tmux path against `knownDirectory`.
+        if case .success(let outcome) = result {
+            lastDirectory = outcome.baselineDirectory
+        }
         // tssh carries one probe at a time and another feature has the slot.
         // Nothing ran, so the spinner and any owed refresh carry over.
         if case .failure(let error) = result, case RemoteExecProbe.ProbeError.busy = error {
             return .milliseconds(1500)
         }
         isRefreshing = false
-        if case .success(let response) = result, response != .incomplete { skipsStampOnce = false }
+        if case .success(let outcome) = result, outcome.response != .incomplete { skipsStampOnce = false }
 
         switch result {
-        case .success(.snapshot(let fresh)):
-            noteProbe(started: started, failed: false)
-            if snapshot != fresh { snapshot = fresh }
-            foldOverrides = foldOverrides.filter { entry in fresh.files.contains { $0.id == entry.key } }
-            remember(fresh, for: terminal.uuid)
-            setPhase(.ready)
-        case .success(.unchanged):
-            noteProbe(started: started, failed: false)
-            if snapshot != nil { setPhase(.ready) }
-        case .success(.unavailable(let reason)):
-            noteProbe(started: started, failed: false)
-            if snapshot != nil { snapshot = nil }
-            setPhase(.unavailable(reason))
-        case .success(.incomplete):
-            noteProbe(started: started, failed: true)
-            if snapshot == nil { setPhase(.failed) }
-        case .success(.failed):
-            // An old diff beside a repository git cannot read would mislead.
-            noteProbe(started: started, failed: true)
-            if snapshot != nil { snapshot = nil }
-            setPhase(.gitFailed)
+        case .success(let outcome):
+            switch outcome.response {
+            case .snapshot(let fresh):
+                noteProbe(started: started, failed: false)
+                if snapshot != fresh { snapshot = fresh }
+                foldOverrides = foldOverrides.filter { entry in fresh.files.contains { $0.id == entry.key } }
+                remember(fresh, for: terminal.uuid)
+                setPhase(.ready)
+            case .unchanged:
+                noteProbe(started: started, failed: false)
+                if snapshot != nil { setPhase(.ready) }
+            case .unavailable(let reason):
+                noteProbe(started: started, failed: false)
+                if snapshot != nil { snapshot = nil }
+                setPhase(.unavailable(reason))
+            case .incomplete:
+                noteProbe(started: started, failed: true)
+                if snapshot == nil { setPhase(.failed) }
+            case .failed:
+                // An old diff beside a repository git cannot read would mislead.
+                noteProbe(started: started, failed: true)
+                if snapshot != nil { snapshot = nil }
+                setPhase(.gitFailed)
+            }
         case .failure(let error):
             noteProbe(started: started, failed: true)
             Self.logger.debug("Git diff probe failed: \(String(describing: error), privacy: .public)")

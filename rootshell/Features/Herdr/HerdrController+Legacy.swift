@@ -254,6 +254,7 @@ extension HerdrController {
         defer { legacyPollInFlight = false; legacyReconcileAttaches() }
         let metadataAtStart = endpointMetadata
         let statusRevision = agentStatusRevision
+        let directoryToken = beginPaneDirectorySnapshotRequest()
         let generation = streamGeneration
         let orderRevision = tabReorderRevision
         let capturedManagementRevision = managementRevision
@@ -288,7 +289,7 @@ extension HerdrController {
                 return
             }
             legacySnapshotFingerprint = fingerprint
-            applySnapshot(snapshot, preservingAgentUpdatesAfter: statusRevision)
+            applySnapshot(snapshot, preservingAgentUpdatesAfter: statusRevision, directoryToken: directoryToken)
         } catch {
             guard !didEnd, !Task.isCancelled, streamGeneration == generation,
                   tabReorderRevision == orderRevision,

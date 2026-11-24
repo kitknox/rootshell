@@ -82,6 +82,7 @@ extension HerdrController {
             guard let previous = paneInfos[pane.pane_id], pane.matches(previous) else { continue }
             let info = pane.updatingDirectories(in: previous)
             paneInfos[pane.pane_id] = info
+            notePaneDirectoryUpdate(terminalId: info.terminal_id)
             if let view = paneViews[info.terminal_id] { publishProject(for: info, view: view) }
             if let agent = metadata.agentsByPaneID[pane.pane_id], agent.belongs(to: pane) {
                 if let view = paneViews[info.terminal_id] {

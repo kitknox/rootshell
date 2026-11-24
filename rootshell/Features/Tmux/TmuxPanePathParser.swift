@@ -36,8 +36,7 @@ nonisolated enum TmuxPanePathParser {
             guard rawId.hasPrefix("%"), let paneId = Int(rawId.dropFirst()) else { continue }
 
             let path = String(line[line.index(after: separator)...])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !path.isEmpty else { continue }
+            guard !path.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
             result[paneId] = path
         }
         return result

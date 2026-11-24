@@ -18,7 +18,11 @@ extension HerdrController {
 
     // MARK: - Snapshot
 
-    func applySnapshot(_ snapshot: HerdrControl.SessionSnapshot, preservingAgentUpdatesAfter revision: UInt64? = nil) {
+    func applySnapshot(
+        _ snapshot: HerdrControl.SessionSnapshot,
+        preservingAgentUpdatesAfter revision: UInt64? = nil,
+        directoryToken: PaneDirectoryRequestToken? = nil
+    ) {
         guard !didEnd else { return }
         AgentAttentionCenter.shared.beginTopologyBatch()
         defer { AgentAttentionCenter.shared.endTopologyBatch() }
@@ -38,7 +42,21 @@ extension HerdrController {
         let liveTerminalIds = Set(snapshot.panes.map(\.terminal_id))
         for pane in snapshot.panes {
             let current = mode == .legacy ? endpointMetadata?.pane(matching: pane) : nil
-            ensurePane(current?.updatingDirectories(in: pane) ?? pane)
+            var resolved = current?.updatingDirectories(in: pane) ?? pane
+            if let directoryToken,
+               !shouldAcceptSnapshotDirectory(for: resolved.terminal_id, token: directoryToken) {
+                let existing: HerdrControl.PaneInfo? =
+                    if let byPaneId = paneInfos[resolved.pane_id], byPaneId.terminal_id == resolved.terminal_id {
+                        byPaneId
+                    } else {
+                        paneInfos.values.first { $0.terminal_id == resolved.terminal_id }
+                    }
+                if let existing {
+                    resolved.cwd = existing.cwd
+                    resolved.foreground_cwd = existing.foreground_cwd
+                }
+            }
+            ensurePane(resolved)
         }
         prune(tabIds: Set(snapshot.tabs.map(\.tab_id)), paneIds: livePaneIds, terminalIds: liveTerminalIds)
         dropOrphanLayouts()
@@ -148,6 +166,80 @@ extension HerdrController {
         if pathChanged, let path = pane.projectPath {
             AgentAttentionCenter.shared.applyHerdrProjectPath(terminal: view, path: path)
         }
+    }
+
+    struct PaneDirectoryRequestToken {
+        let eventRevision: UInt64
+        let requestSeq: UInt64
+    }
+
+    func beginPaneDirectorySnapshotRequest() -> PaneDirectoryRequestToken {
+        paneDirectoryRequestSeq &+= 1
+        return PaneDirectoryRequestToken(eventRevision: paneDirectoryRevision, requestSeq: paneDirectoryRequestSeq)
+    }
+
+    func shouldAcceptSnapshotDirectory(for terminalId: String, token: PaneDirectoryRequestToken) -> Bool {
+        guard (paneDirectoryRevisions[terminalId] ?? 0) <= token.eventRevision else { return false }
+        guard (paneDirectoryAppliedSeq[terminalId] ?? 0) < token.requestSeq else { return false }
+        paneDirectoryAppliedSeq[terminalId] = token.requestSeq
+        return true
+    }
+
+    /// Marks a pushed directory event (`pane_updated`, `pane_created`, `pane_moved`,
+    /// or endpoint metadata) so an earlier snapshot request cannot overwrite it.
+    func notePaneDirectoryUpdate(terminalId: String) {
+        paneDirectoryRevision &+= 1
+        paneDirectoryRevisions[terminalId] = paneDirectoryRevision
+    }
+
+    /// Cached server-reported directory for `binding` (`foreground_cwd` before shell `cwd`),
+    /// preserving exact filesystem whitespace.
+    func workingDirectory(for binding: Ghostty.TerminalView.HerdrPaneBinding) -> String? {
+        paneInfo(for: binding)?.workingDirectoryPath
+    }
+
+    /// Queries the live control stream for the bound pane's current directory
+    /// without disturbing layouts, focus, or other panes, and preserving any
+    /// directory event or newer snapshot received while the request was in flight.
+    func refreshWorkingDirectory(for binding: Ghostty.TerminalView.HerdrPaneBinding) async -> String? {
+        if mode == .raw, !didEnd, isActive, let channel {
+            let token = beginPaneDirectorySnapshotRequest()
+            if let snapshot = try? await channel.request(
+                "session.snapshot", HerdrControl.EmptyParams(),
+                as: HerdrControl.SessionSnapshotResult.self,
+                timeout: .seconds(3)
+            ).snapshot, !Task.isCancelled, !didEnd, self.channel === channel {
+                guard let pane = snapshot.panes.first(where: {
+                    $0.pane_id == binding.paneId && $0.terminal_id == binding.terminalId
+                }) ?? snapshot.panes.first(where: { $0.terminal_id == binding.terminalId })
+                else { return workingDirectory(for: binding) }
+
+                guard shouldAcceptSnapshotDirectory(for: pane.terminal_id, token: token) else {
+                    return workingDirectory(for: binding)
+                }
+
+                if var existing = paneInfos[pane.pane_id], existing.terminal_id == pane.terminal_id {
+                    if existing.cwd != pane.cwd || existing.foreground_cwd != pane.foreground_cwd {
+                        existing.cwd = pane.cwd
+                        existing.foreground_cwd = pane.foreground_cwd
+                        paneInfos[pane.pane_id] = existing
+                        if let view = paneViews[existing.terminal_id] {
+                            publishProject(for: existing, view: view)
+                        }
+                    }
+                    return existing.workingDirectoryPath
+                }
+                return pane.workingDirectoryPath ?? workingDirectory(for: binding)
+            }
+        }
+        return workingDirectory(for: binding)
+    }
+
+    private func paneInfo(for binding: Ghostty.TerminalView.HerdrPaneBinding) -> HerdrControl.PaneInfo? {
+        if let info = paneInfos[binding.paneId], info.terminal_id == binding.terminalId {
+            return info
+        }
+        return paneInfos.values.first { $0.terminal_id == binding.terminalId }
     }
 
     // MARK: - Tabs
@@ -283,6 +375,7 @@ extension HerdrController {
 
     func paneDidAppear(_ pane: HerdrControl.PaneInfo) {
         let isNew = paneInfos[pane.pane_id] == nil
+        notePaneDirectoryUpdate(terminalId: pane.terminal_id)
         ensurePane(pane)
         if isNew {
             subscribeAgentStatus(paneId: pane.pane_id)
@@ -292,6 +385,7 @@ extension HerdrController {
 
     func paneDidUpdate(_ pane: HerdrControl.PaneInfo) {
         paneInfos[pane.pane_id] = pane
+        notePaneDirectoryUpdate(terminalId: pane.terminal_id)
         agentStatusDidChange(.init(pane_id: pane.pane_id, workspace_id: pane.workspace_id,
             agent_status: pane.agent_status, agent: pane.agent, title: pane.title,
             display_agent: pane.display_agent, state_labels: pane.state_labels))
@@ -327,6 +421,7 @@ extension HerdrController {
         if let previous = moved.previous_pane_id {
             paneInfos.removeValue(forKey: previous)
         }
+        notePaneDirectoryUpdate(terminalId: moved.pane.terminal_id)
         ensurePane(moved.pane)
         paneSessions[moved.pane.terminal_id]?.updatePaneId(moved.pane.pane_id)
         if let attachId = attachIds[moved.pane.terminal_id] {
@@ -400,6 +495,8 @@ extension HerdrController {
         for (paneId, _) in paneInfos where !paneIds.contains(paneId) {
             paneInfos.removeValue(forKey: paneId)
         }
+        paneDirectoryRevisions = paneDirectoryRevisions.filter { terminalIds.contains($0.key) }
+        paneDirectoryAppliedSeq = paneDirectoryAppliedSeq.filter { terminalIds.contains($0.key) }
         let movingTerminals = Set(pendingPaneMoveTerminals.values)
         let staleViews = paneViews.filter { !terminalIds.contains($0.key) && !movingTerminals.contains($0.key) }
         for (terminalId, view) in staleViews {

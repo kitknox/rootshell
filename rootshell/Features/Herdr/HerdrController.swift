@@ -237,6 +237,16 @@ final class HerdrController {
     var agentStatuses: [String: HerdrControl.AgentStatusChangedData] = [:]
     var agentStatusRevision: UInt64 = 0
     var agentStatusRevisions: [String: UInt64] = [:]
+    /// Live directory events (`pane_updated`, `pane_created`, `pane_moved`,
+    /// endpoint metadata), keyed by `terminal_id`, so a snapshot reply never
+    /// overwrites a newer event.
+    var paneDirectoryRevision: UInt64 = 0
+    var paneDirectoryRevisions: [String: UInt64] = [:]
+    /// Monotonic send order of `session.snapshot` requests, plus the newest
+    /// request applied per `terminal_id`, so an older overlapping snapshot
+    /// reply cannot overwrite a newer one or cause it to be discarded.
+    var paneDirectoryRequestSeq: UInt64 = 0
+    var paneDirectoryAppliedSeq: [String: UInt64] = [:]
     var agentSubscriptionTask: Task<Void, Never>?
     var subscribedAgentPanes = Set<String>()
     var focusWatchdog: Task<Void, Never>?
@@ -565,6 +575,7 @@ final class HerdrController {
                 ]))
             }
             let statusRevision = agentStatusRevision
+            let directoryToken = beginPaneDirectorySnapshotRequest()
             let snapshot = try await channel.request(
                 "session.snapshot",
                 HerdrControl.EmptyParams(),
@@ -579,7 +590,7 @@ final class HerdrController {
             isActive = true
             connectionError = nil
             refreshPushRouteIdentity()
-            applySnapshot(snapshot, preservingAgentUpdatesAfter: statusRevision)
+            applySnapshot(snapshot, preservingAgentUpdatesAfter: statusRevision, directoryToken: directoryToken)
             subscribeAgentStatus()
             // Optional additions must not make an older control server fail
             // its otherwise compatible topology subscription handshake.
@@ -1002,6 +1013,8 @@ final class HerdrController {
         agentSubscriptionTask = nil
         subscribedAgentPanes.removeAll()
         agentStatusRevisions.removeAll()
+        paneDirectoryRevisions.removeAll()
+        paneDirectoryAppliedSeq.removeAll()
         streamGeneration = UUID()
         suspendActivation()
         for view in paneViews.values { view.endHerdrTitleAttachment() }
@@ -1154,6 +1167,7 @@ final class HerdrController {
                 self.topologyRefreshWanted = false
                 let managementRevision = self.managementRevision
                 let statusRevision = self.agentStatusRevision
+                let directoryToken = self.beginPaneDirectorySnapshotRequest()
                 do {
                     let snapshot = try await channel.request(
                         "session.snapshot", HerdrControl.EmptyParams(),
@@ -1161,7 +1175,7 @@ final class HerdrController {
                     ).snapshot
                     guard self.channel === channel, !Task.isCancelled else { return }
                     guard managementRevision == self.managementRevision, !self.management.isBusy else { continue }
-                    self.applySnapshot(snapshot, preservingAgentUpdatesAfter: statusRevision)
+                    self.applySnapshot(snapshot, preservingAgentUpdatesAfter: statusRevision, directoryToken: directoryToken)
                 } catch {
                     guard self.channel === channel, !Task.isCancelled else { return }
                     if self.refuseUnsupportedVersion(error) { return }

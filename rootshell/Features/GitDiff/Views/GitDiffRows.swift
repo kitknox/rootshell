@@ -118,7 +118,13 @@ struct GitDiffRowStyle: Equatable {
     /// The shared row width when lines do not wrap.
     var rowWidth: CGFloat?
 
-    static let markerWidth: CGFloat = 14
+    var markerWidth: CGFloat {
+        Self.markerWidth(for: fontSize)
+    }
+
+    static func markerWidth(for fontSize: CGFloat) -> CGFloat {
+        max(16, (fontSize * 1.15).rounded(.up))
+    }
 
     var gutterWidth: CGFloat {
         (twoNumbers ? numberWidth * 2 : numberWidth) + 6
@@ -140,27 +146,37 @@ struct GitDiffStatLabel: View {
     let additions: Int?
     let deletions: Int?
     let palette: GitDiffPalette
-    var size: CGFloat = 12
+    var textStyle: Font.TextStyle = .subheadline
     /// Some changes could not be counted, so these are at least this much.
     var isPartial = false
+    /// When true, scales down to fit a narrow container instead of overflowing.
+    var allowsShrinking = false
 
-    init(additions: Int?, deletions: Int?, palette: GitDiffPalette, size: CGFloat = 12, isPartial: Bool = false) {
+    init(
+        additions: Int?,
+        deletions: Int?,
+        palette: GitDiffPalette,
+        textStyle: Font.TextStyle = .subheadline,
+        isPartial: Bool = false,
+        allowsShrinking: Bool = false
+    ) {
         self.additions = additions
         self.deletions = deletions
         self.palette = palette
-        self.size = size
+        self.textStyle = textStyle
         self.isPartial = isPartial
+        self.allowsShrinking = allowsShrinking
     }
 
     /// One file's counts, without the side that cannot apply: a new file
     /// has nothing removed, a deleted one nothing added, a pure rename neither.
-    init(file: GitDiffFile, palette: GitDiffPalette, size: CGFloat) {
+    init(file: GitDiffFile, palette: GitDiffPalette, textStyle: Font.TextStyle = .subheadline) {
         let unchanged = file.additions == 0 && file.deletions == 0
         let isNew = file.status == .added || file.status == .untracked
         self.init(
             additions: file.status == .deleted || unchanged ? nil : file.additions,
             deletions: isNew || unchanged ? nil : file.deletions,
-            palette: palette, size: size)
+            palette: palette, textStyle: textStyle)
     }
 
     var body: some View {
@@ -175,9 +191,12 @@ struct GitDiffStatLabel: View {
                 Text(verbatim: "\u{2212}\(GitDiffFormat.compact(deletions))").foregroundStyle(palette.deletion)
             }
         }
-        .font(.system(size: size, weight: .semibold, design: .monospaced))
+        .font(.system(textStyle, design: .monospaced, weight: .semibold))
         .lineLimit(1)
-        .fixedSize()
+        .minimumScaleFactor(allowsShrinking ? 0.5 : 1)
+        .allowsTightening(allowsShrinking)
+        .fixedSize(horizontal: !allowsShrinking, vertical: true)
+        .clipped()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(isPartial
             ? String(
@@ -193,13 +212,15 @@ struct GitDiffStatusBadge: View {
     let status: GitDiffFileStatus
     let palette: GitDiffPalette
 
+    @ScaledMetric(relativeTo: .footnote) private var size: CGFloat = 22
+
     var body: some View {
         Text(verbatim: status.letter)
-            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .font(.system(.footnote, design: .rounded, weight: .bold))
             .foregroundStyle(palette.status(status))
-            .frame(width: 17, height: 17)
+            .frame(width: size, height: size)
             .background(palette.status(status).opacity(palette.isDark ? 0.20 : 0.14),
-                        in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: 5, style: .continuous))
             .accessibilityLabel(status.title)
     }
 }
@@ -227,10 +248,10 @@ struct GitDiffFileHeader: View, Equatable {
         Button(action: onToggle) {
             HStack(spacing: 8) {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
                     .rotationEffect(.degrees(expanded ? 90 : 0))
-                    .frame(width: 12)
+                    .frame(width: 14)
                 GitDiffStatusBadge(status: file.status, palette: palette)
                 name
                 Spacer(minLength: 6)
@@ -238,14 +259,15 @@ struct GitDiffFileHeader: View, Equatable {
                     Text(file.isTooLarge
                         ? String(localized: "Too Large", comment: "Git diff file header tag for a file over the size limit")
                         : String(localized: "Binary", comment: "Git diff file header tag for a binary file"))
-                        .font(.caption2.weight(.medium))
+                        .font(.footnote.weight(.medium))
                         .foregroundStyle(.secondary)
                 } else {
-                    GitDiffStatLabel(file: file, palette: palette, size: 11)
+                    GitDiffStatLabel(file: file, palette: palette, textStyle: .subheadline)
                 }
             }
-            .padding(.horizontal, 10)
-            .frame(height: 34)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(minHeight: 40)
             .frame(width: width, alignment: .leading)
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
             .background(background)
@@ -276,19 +298,19 @@ struct GitDiffFileHeader: View, Equatable {
     private var name: some View {
         HStack(spacing: 6) {
             Text(verbatim: file.name)
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(.callout.weight(.semibold))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .layoutPriority(1)
             if let oldPath = file.oldPath {
                 Text(verbatim: "\u{2190} \(oldPath)")
-                    .font(.system(size: 11))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.head)
             } else if !file.directory.isEmpty {
                 Text(verbatim: file.directory)
-                    .font(.system(size: 11))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.head)
@@ -317,10 +339,11 @@ struct GitDiffHunkHeader: View, Equatable {
                 Text(verbatim: hunk.context).foregroundStyle(.secondary)
             }
         }
-        .font(.system(size: style.fontSize - 1, design: .monospaced))
+        .font(.system(size: max(12, style.fontSize - 1), design: .monospaced))
         .lineLimit(1)
         .padding(.horizontal, 10)
-        .frame(height: 24)
+        .padding(.vertical, 5)
+        .frame(minHeight: (style.fontSize * 1.8).rounded())
         .frame(width: style.rowWidth, alignment: .leading)
         .frame(maxWidth: style.rowWidth == nil ? .infinity : nil, alignment: .leading)
         .background(style.palette.hunkTint)
@@ -338,14 +361,14 @@ struct GitDiffLineRow: View, Equatable {
             numbers
             Text(verbatim: marker)
                 .foregroundStyle(style.palette.accent(line.kind) ?? .clear)
-                .frame(width: GitDiffRowStyle.markerWidth)
+                .frame(width: style.markerWidth)
             Text(GitDiffLineText.attributed(line, style: style))
                 .frame(maxWidth: style.wrap ? .infinity : nil, alignment: .leading)
                 .fixedSize(horizontal: !style.wrap, vertical: true)
                 .padding(.trailing, 8)
         }
         .font(style.font)
-        .padding(.vertical, 1)
+        .padding(.vertical, 1.5)
         .frame(width: style.rowWidth, alignment: .leading)
         .background(alignment: .leading) {
             style.palette.gutterTint(line.kind).frame(width: style.gutterWidth)

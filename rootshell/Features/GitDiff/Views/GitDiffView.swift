@@ -98,7 +98,7 @@ struct GitDiffView: View {
     private var header: some View {
         HStack(spacing: 8) {
             Image(systemName: Self.systemImage)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.callout.weight(.semibold))
                 .foregroundStyle(Color.accentColor)
             title
             Spacer(minLength: 4)
@@ -134,18 +134,18 @@ struct GitDiffView: View {
                     .layoutPriority(1)
                 if let head = snapshot.headLabel {
                     Text(verbatim: head)
-                        .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                        .font(.subheadline.monospaced().weight(.medium))
                         .lineLimit(1)
                         .truncationMode(.middle)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2.5)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
                         .background(Color.primary.opacity(0.08), in: Capsule())
                 }
                 if snapshot.ahead > 0 || snapshot.behind > 0 {
                     Text(verbatim: [snapshot.ahead > 0 ? "\u{2191}\(snapshot.ahead)" : nil,
                                     snapshot.behind > 0 ? "\u{2193}\(snapshot.behind)" : nil]
                         .compactMap { $0 }.joined(separator: " "))
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.footnote.monospaced())
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .fixedSize()
@@ -168,7 +168,7 @@ struct GitDiffView: View {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 8) {
                         Text(String(localized: "\(snapshot.files.count) files", comment: "Git diff: number of changed files"))
-                            .font(.caption)
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .fixedSize()
@@ -215,7 +215,7 @@ struct GitDiffView: View {
             .accessibilityLabel(String(localized: "Refresh", comment: "Git diff toolbar button"))
         }
         .buttonStyle(.borderless)
-        .font(.system(size: 14))
+        .font(.callout)
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
     }
@@ -380,7 +380,7 @@ private struct GitDiffScopeMenu: View, Equatable {
                     .truncationMode(.middle)
                     .frame(maxWidth: 170)
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
@@ -471,6 +471,10 @@ private struct GitDiffFileList: View {
     private static let fileColumnThreshold: CGFloat = 860
     private static let twoNumberThreshold: CGFloat = 520
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @ScaledMetric(relativeTo: .callout) private var regularFontSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .subheadline) private var compactFontSize: CGFloat = 14
+
     var body: some View {
         GeometryReader { geometry in
             let showsColumn = geometry.size.width >= Self.fileColumnThreshold && snapshot.files.count > 1
@@ -488,7 +492,8 @@ private struct GitDiffFileList: View {
     // MARK: Diff
 
     private func diff(width: CGFloat) -> some View {
-        let fontSize: CGFloat = width < 380 ? 11 : 12
+        let isNarrow = horizontalSizeClass == .compact || width < 380
+        let fontSize = (isNarrow ? compactFontSize : regularFontSize).rounded()
         let characterWidth = GitDiffRowStyle.characterWidth(size: fontSize)
         let twoNumbers = width >= Self.twoNumberThreshold
         // One width for every file keeps unwrapped rows and headers aligned.
@@ -497,7 +502,7 @@ private struct GitDiffFileList: View {
         let gutter = (twoNumbers ? numberWidth * 2 : numberWidth) + 6
         let rowWidth: CGFloat? = wrap ? nil : max(
             width,
-            gutter + GitDiffRowStyle.markerWidth + 16
+            gutter + GitDiffRowStyle.markerWidth(for: fontSize) + 16
                 + CGFloat(snapshot.files.reduce(0) { max($0, $1.maxColumns) } + 1) * characterWidth)
 
         return ScrollViewReader { proxy in
@@ -556,10 +561,10 @@ private struct GitDiffFileList: View {
 
     private func notice(_ text: String, width: CGFloat?) -> some View {
         Label(text, systemImage: "info.circle")
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(.secondary)
             .padding(.horizontal, 12)
-            .padding(.vertical, 7)
+            .padding(.vertical, 8)
             .frame(width: width, alignment: .leading)
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
             .background(palette.conflicted.opacity(0.10))
@@ -575,26 +580,26 @@ private struct GitDiffFileList: View {
                         if !store.isExpanded(file) { store.setExpanded(true, for: file) }
                         jumpTarget = file.id
                     } label: {
-                        HStack(spacing: 7) {
+                        HStack(spacing: 8) {
                             GitDiffStatusBadge(status: file.status, palette: palette)
-                            VStack(alignment: .leading, spacing: 1) {
+                            VStack(alignment: .leading, spacing: 2) {
                                 Text(verbatim: file.name)
-                                    .font(.system(size: 12.5, weight: .medium))
+                                    .font(.subheadline.weight(.medium))
                                     .lineLimit(1)
                                     .truncationMode(.middle)
                                 if !file.directory.isEmpty {
                                     Text(verbatim: file.directory)
-                                        .font(.system(size: 10.5))
+                                        .font(.footnote)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                         .truncationMode(.head)
                                 }
                             }
                             Spacer(minLength: 4)
-                            GitDiffStatLabel(file: file, palette: palette, size: 10.5)
+                            GitDiffStatLabel(file: file, palette: palette, textStyle: .footnote)
                         }
                         .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
+                        .padding(.vertical, 6)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -662,7 +667,7 @@ private struct GitDiffFileBody: View {
 
     private func note(_ text: String) -> some View {
         Text(verbatim: text)
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(.secondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
