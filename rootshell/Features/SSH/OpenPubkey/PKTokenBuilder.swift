@@ -85,4 +85,14 @@ nonisolated enum PKTokenBuilder {
         _ = try OpenPubkeyJOSE.split(compactJWS: freshIDToken)
         return "\(base).\(freshIDToken)"
     }
+
+    /// Claims of the original sign-in ID token (the shared first segment).
+    static func originalIDTokenClaims(compactPKT: String) throws -> OpenPubkeyJOSE.IDTokenClaims {
+        let base = compactPKT.prefix { $0 != "." }
+        let parts = base.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 5 else {
+            throw PKTokenError.malformedCompactPKT
+        }
+        return try OpenPubkeyJOSE.decodeIDTokenClaims(payloadB64: String(parts[0]))
+    }
 }

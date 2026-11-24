@@ -65,6 +65,11 @@ final class OpenPubkeyClient {
             case accessToken = "access_token"
             case refreshToken = "refresh_token"
         }
+
+        /// Some providers send `""` instead of omitting the field.
+        var usableRefreshToken: String? {
+            refreshToken?.isEmpty == false ? refreshToken : nil
+        }
     }
 
     private let webAuthProvider = ASWebAuthSessionProvider()
@@ -174,7 +179,7 @@ final class OpenPubkeyClient {
         return Tokens(
             idToken: idToken,
             accessToken: response.accessToken,
-            refreshToken: response.refreshToken
+            refreshToken: response.usableRefreshToken
         )
     }
 
@@ -242,7 +247,7 @@ final class OpenPubkeyClient {
         return Tokens(
             idToken: idToken,
             accessToken: response.accessToken,
-            refreshToken: response.refreshToken
+            refreshToken: response.usableRefreshToken
         )
     }
 

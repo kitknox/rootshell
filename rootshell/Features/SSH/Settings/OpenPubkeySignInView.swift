@@ -71,6 +71,16 @@ struct OpenPubkeySignInView: View {
         selectedProviderID = "custom"
     }
 
+    /// Opens the custom form on a built-in's issuer and scopes, so the user
+    /// can sign in with their own client ID instead of opkssh's shared one.
+    private func useOwnClientID(for provider: OIDCProviderConfig) {
+        customIssuer = provider.issuer
+        customClientID = ""
+        customClientSecret = ""
+        customScopes = provider.scopes
+        selectedProviderID = "custom"
+    }
+
     /// Collects the distinct custom providers carried by existing opkssh keys
     /// (local + iCloud-synced), most-recent config winning per issuer+clientID.
     private static func collectSavedCustomProviders() -> [OIDCProviderConfig] {
@@ -99,6 +109,7 @@ struct OpenPubkeySignInView: View {
         let clientID = customClientID.trimmingCharacters(in: .whitespaces)
         guard issuer.hasPrefix("https://"), !clientID.isEmpty else { return nil }
         let secret = customClientSecret.trimmingCharacters(in: .whitespaces)
+        if customIssuerIsGoogle && secret.isEmpty { return nil }
         return OIDCProviderConfig(
             providerID: "custom",
             displayName: URL(string: issuer)?.host ?? issuer,
@@ -107,6 +118,32 @@ struct OpenPubkeySignInView: View {
             clientSecret: secret.isEmpty ? nil : secret,
             scopes: customScopes.trimmingCharacters(in: .whitespaces)
         )
+    }
+
+    /// Google's token endpoint rejects the code exchange without a secret.
+    private var customIssuerIsGoogle: Bool {
+        guard let url = URLComponents(string: customIssuer.trimmingCharacters(in: .whitespaces)) else {
+            return false
+        }
+        return url.scheme?.lowercased() == "https"
+            && url.host?.lowercased() == "accounts.google.com"
+            && (url.port == nil || url.port == 443)
+            && (url.path.isEmpty || url.path == "/")
+            && url.query == nil
+    }
+
+    /// Still the built-in personal-account tenant, which org registrations can't use.
+    private var customIssuerIsConsumerMicrosoft: Bool {
+        customIssuer.trimmingCharacters(in: .whitespaces) == OIDCProviderConfig.azure.issuer
+    }
+
+    private var customProviderFooter: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("The OIDC client must allow the redirect URIs http://localhost:3000/login-callback, http://localhost:10001/login-callback, and http://localhost:11110/login-callback (opkssh convention).")
+            if customIssuerIsConsumerMicrosoft {
+                Text("This Microsoft issuer is the personal-account tenant. For a work or school app registration, replace the tenant ID in the issuer URL with your directory (tenant) ID.")
+            }
+        }
     }
 
     private var defaultKeyName: String {
@@ -154,10 +191,17 @@ struct OpenPubkeySignInView: View {
                 }
                 .pickerStyle(.menu)
                 .themedRow()
+
+                if let builtIn = selectedBuiltIn {
+                    Button("Use Your Own Client ID") {
+                        useOwnClientID(for: builtIn)
+                    }
+                    .themedRow()
+                }
             } header: {
                 Text("Identity Provider")
             } footer: {
-                Text("Sign in with your account to create a short-lived SSH certificate. The server must run the opkssh verifier.")
+                Text("Sign in with your account to create a short-lived SSH certificate. The server must run the opkssh verifier. Built-in providers use opkssh's shared client IDs, which are meant for testing. For production, register your own client ID, and have the server administrator replace that provider's shared entry in /etc/opk/providers with the same issuer and your client ID, or add an entry if the issuer isn't listed.")
             }
 
             if !savedCustomProviders.isEmpty {
@@ -208,10 +252,16 @@ struct OpenPubkeySignInView: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .themedRow()
-                    TextField("Client Secret (optional)", text: $customClientSecret)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .themedRow()
+                    Group {
+                        if customIssuerIsGoogle {
+                            TextField("Client Secret (required for Google)", text: $customClientSecret)
+                        } else {
+                            TextField("Client Secret (optional)", text: $customClientSecret)
+                        }
+                    }
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .themedRow()
                     TextField("Scopes", text: $customScopes)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
@@ -219,7 +269,7 @@ struct OpenPubkeySignInView: View {
                 } header: {
                     Text("Custom Provider")
                 } footer: {
-                    Text("The OIDC client must allow the redirect URI http://localhost:3000/login-callback (opkssh convention).")
+                    customProviderFooter
                 }
             }
 

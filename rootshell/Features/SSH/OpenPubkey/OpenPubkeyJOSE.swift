@@ -32,12 +32,23 @@ nonisolated enum OpenPubkeyJOSE {
     struct IDTokenClaims: Sendable {
         let issuer: String
         let subject: String
-        let audience: String
+        let audiences: [String]
+        let authorizedParty: String?
         let expiresAt: Date
         let issuedAt: Date
         let email: String?
         let preferredUsername: String?
         let nonce: String?
+
+        /// OIDC Core aud/azp rule, as the opkssh verifier applies it: aud must
+        /// contain the client, and multi-audience tokens need a matching azp.
+        func isIssued(to clientID: String) -> Bool {
+            guard audiences.contains(clientID) else { return false }
+            if let authorizedParty {
+                return authorizedParty == clientID
+            }
+            return audiences.count == 1
+        }
     }
 
     static func split(compactJWS: String) throws -> JWSSegments {
@@ -78,11 +89,11 @@ nonisolated enum OpenPubkeyJOSE {
             throw JOSEError.malformedPayload("missing sub claim")
         }
         // aud may be a string or an array of strings
-        let audience: String
+        let audiences: [String]
         if let aud = claims["aud"] as? String {
-            audience = aud
-        } else if let audArray = claims["aud"] as? [String], let first = audArray.first {
-            audience = first
+            audiences = [aud]
+        } else if let audArray = claims["aud"] as? [String], !audArray.isEmpty {
+            audiences = audArray
         } else {
             throw JOSEError.malformedPayload("missing aud claim")
         }
@@ -95,7 +106,8 @@ nonisolated enum OpenPubkeyJOSE {
         return IDTokenClaims(
             issuer: iss,
             subject: sub,
-            audience: audience,
+            audiences: audiences,
+            authorizedParty: claims["azp"] as? String,
             expiresAt: Date(timeIntervalSince1970: exp.doubleValue),
             issuedAt: Date(timeIntervalSince1970: iat.doubleValue),
             email: claims["email"] as? String,

@@ -11,6 +11,7 @@ enum OpenPubkeyError: LocalizedError {
     case keyMaterialUnavailable
     case missingSecrets
     case subjectMismatch
+    case refreshedTokenMismatch
     case reauthenticationRequired(keyID: UUID, keyName: String, identity: String?)
 
     var errorDescription: String? {
@@ -25,6 +26,8 @@ enum OpenPubkeyError: LocalizedError {
             return "OpenPubkey tokens for this key are missing from the Keychain"
         case .subjectMismatch:
             return "The refreshed token belongs to a different account; sign in again"
+        case .refreshedTokenMismatch:
+            return "The refreshed token doesn't match the original sign-in; sign in again"
         case .reauthenticationRequired(_, let keyName, let identity):
             let who = identity.map { " (\($0))" } ?? ""
             return "OpenPubkey certificate for '\(keyName)'\(who) has expired. Open Settings, SSH Keys, \(keyName), and sign in again."
@@ -294,6 +297,14 @@ final class OpenPubkeyManager {
         let claims = try OpenPubkeyJOSE.decodeIDTokenClaims(payloadB64: freshSegments.payloadB64)
         guard claims.subject == info.identitySubject else {
             throw OpenPubkeyError.subjectMismatch
+        }
+        // Mirrors openpubkey v0.30.1's refreshed-token checks, so we never
+        // ship a cert an `oidc_refreshed` server would reject.
+        let original = try PKTokenBuilder.originalIDTokenClaims(compactPKT: secrets.originalCompactPKT)
+        guard claims.issuer == original.issuer,
+              claims.isIssued(to: info.provider.clientID),
+              claims.issuedAt >= original.issuedAt else {
+            throw OpenPubkeyError.refreshedTokenMismatch
         }
 
         let compactPKT = try PKTokenBuilder.refreshedCompactPKT(
