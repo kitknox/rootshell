@@ -53,15 +53,20 @@ final class ScrollbackPersistenceManager {
     private var periodicTimer: Timer?
     private var lifecycleObservers: [NSObjectProtocol] = []
 
-    /// Per-terminal hash of (dump bytes + mode flags) used to skip redundant saves.
-    /// Shared between the main-actor debounce path and the background periodic path,
-    /// so either path can observe the other's most recent save.
-    /// Both save paths read the surface on one thread and write the files
-    /// on another, so they pass through here to stay in capture order.
+    /// Saves gather on the main actor and capture and write off it, so they
+    /// pass through here to stay in capture order.
     nonisolated private static let saveOrder = TerminalSaveOrder()
 
-    nonisolated private static let lastSavedHashes = OSAllocatedUnfairLock(
-        initialState: [UUID: Int]()
+    /// What the last save that reached the disk captured. `hash` covers the
+    /// dumped bytes and mode flags; `inputs` lets an idle terminal skip the
+    /// capture altogether.
+    private nonisolated struct LandedSave {
+        let hash: Int
+        let inputs: SaveInputs
+    }
+
+    nonisolated private static let lastSaves = OSAllocatedUnfairLock(
+        initialState: [UUID: LandedSave]()
     )
 
     // MARK: - Storage
@@ -153,7 +158,7 @@ final class ScrollbackPersistenceManager {
         // The registration in `saveOrder` stays: a save gathered before a
         // scene teardown is still in flight and is the terminal's last.
         registeredTerminals.removeValue(forKey: uuid)
-        Self.lastSavedHashes.withLock { $0[uuid] = nil }
+        Self.lastSaves.withLock { $0[uuid] = nil }
         outputDebounceTasks[uuid]?.cancel()
         outputDebounceTasks.removeValue(forKey: uuid)
 
@@ -172,18 +177,8 @@ final class ScrollbackPersistenceManager {
         outputDebounceTasks[uuid]?.cancel()
         outputDebounceTasks[uuid] = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2))
-            guard !Task.isCancelled else { return }
-            self?.saveScrollback(for: uuid)
-        }
-    }
-
-    /// Save all registered terminals immediately (e.g., on app background).
-    func forceSaveAll() {
-        guard Self.isEnabled else { return }
-        for uuid in registeredTerminals.keys {
-            outputDebounceTasks[uuid]?.cancel()
-            outputDebounceTasks.removeValue(forKey: uuid)
-            saveScrollback(for: uuid)
+            guard !Task.isCancelled, let self else { return }
+            self.saveInBackground(self.gatherRefs(for: [uuid], skippingUnchanged: true))
         }
     }
 
@@ -215,6 +210,11 @@ final class ScrollbackPersistenceManager {
                 dict[surface] = SurfaceGuard(count: 1, semaphore: DispatchSemaphore(value: 0))
             }
         }
+    }
+
+    nonisolated private static func isSurfaceInFlight(_ surface: ghostty_surface_t) -> Bool {
+        nonisolated(unsafe) let surface = surface
+        return inFlightSurfaces.withLock { $0[surface] != nil }
     }
 
     /// Decrement the in-flight refcount. Signals the semaphore when it reaches zero.
@@ -264,32 +264,62 @@ final class ScrollbackPersistenceManager {
     nonisolated struct BackgroundTerminalRef: @unchecked Sendable {
         let surfacePointer: ghostty_surface_t
         let uuid: UUID
-        let isAtPrompt: Bool
-        let isAlternate: Bool
-        let isMouseCaptured: Bool
-        let isCursorKeyMode: Bool
-        let isFocusEventMode: Bool
+        let inputs: SaveInputs
         let contents: TerminalPersistedContents
         let registration: UInt64
     }
 
+    /// Everything a capture depends on that is cheap to read. Parsed bytes
+    /// only grow, so equal inputs on the same surface mean the screen is the
+    /// one the last landed save captured. `totalRows` catches a reset or
+    /// clear that drops history without parsing output, from any path.
+    nonisolated struct SaveInputs: Equatable {
+        let surface: UInt
+        let parsedBytes: UInt64
+        let columns: UInt16
+        let rows: UInt16
+        let totalRows: UInt
+        let snapshotParseTarget: UInt64?
+        let isAtPrompt: Bool
+        // Read again right after the capture: see `resamplingModes`.
+        var isAlternate: Bool
+        var isMouseCaptured: Bool
+        var isCursorKeyMode: Bool
+        var isFocusEventMode: Bool
+
+        /// The modes as they are just after a capture. A capture Ghostty
+        /// numbers later must not write modes read before an earlier one.
+        func resamplingModes(_ surface: ghostty_surface_t) -> SaveInputs {
+            var inputs = self
+            inputs.isAlternate = ghostty_surface_is_alternate_active(surface)
+            inputs.isMouseCaptured = ghostty_surface_mouse_captured(surface)
+            inputs.isCursorKeyMode = ghostty_surface_cursor_key_mode(surface)
+            inputs.isFocusEventMode = ghostty_surface_focus_event_mode(surface)
+            return inputs
+        }
+    }
+
     /// Gather terminal references for background save. MainActor, no I/O.
+    /// The app-background save leaves `skippingUnchanged` off: a reset or a
+    /// resize can change the screen without changing the cached inputs.
     /// Also cancels pending debounce tasks since the caller will perform a full save.
     /// Marks gathered surfaces as in-flight to prevent premature free by cleanup().
-    func gatherTerminalRefs() -> [BackgroundTerminalRef] {
+    func gatherTerminalRefs(skippingUnchanged: Bool = false) -> [BackgroundTerminalRef] {
         guard Self.isEnabled else { return [] }
+        outputDebounceTasks.values.forEach { $0.cancel() }
+        outputDebounceTasks.removeAll()
+        return gatherRefs(for: Array(registeredTerminals.keys), skippingUnchanged: skippingUnchanged)
+    }
 
+    /// Terminals whose screen may differ from their saved files, retained
+    /// for the background save.
+    private func gatherRefs(for uuids: [UUID], skippingUnchanged: Bool) -> [BackgroundTerminalRef] {
         var refs: [BackgroundTerminalRef] = []
-        for (uuid, termRef) in registeredTerminals {
-            guard let terminal = termRef.terminal,
+        for uuid in uuids {
+            guard let terminal = registeredTerminals[uuid]?.terminal,
                   let contents = terminal.persistableTerminalContents,
                   let registration = Self.saveOrder.registration(of: uuid),
                   let surface = terminal.surface else { continue }
-
-            let isAlternate = ghostty_surface_is_alternate_active(surface)
-            let isMouseCaptured = ghostty_surface_mouse_captured(surface)
-            let isCursorKeyMode = ghostty_surface_cursor_key_mode(surface)
-            let isFocusEventMode = ghostty_surface_focus_event_mode(surface)
 
             let isAtPrompt: Bool = {
                 #if targetEnvironment(macCatalyst)
@@ -303,14 +333,34 @@ final class ScrollbackPersistenceManager {
                 #endif
             }()
 
+            let size = ghostty_surface_size(surface)
+            let inputs = SaveInputs(
+                surface: UInt(bitPattern: surface),
+                parsedBytes: ghostty_surface_parsed_bytes(surface),
+                columns: size.columns,
+                rows: size.rows,
+                totalRows: ghostty_surface_total_rows(surface),
+                snapshotParseTarget: contents.snapshotParseTarget,
+                isAtPrompt: isAtPrompt,
+                isAlternate: ghostty_surface_is_alternate_active(surface),
+                isMouseCaptured: ghostty_surface_mouse_captured(surface),
+                isCursorKeyMode: ghostty_surface_cursor_key_mode(surface),
+                isFocusEventMode: ghostty_surface_focus_event_mode(surface)
+            )
+            // Only while no earlier save is gathered, accepted or failed but
+            // unwritten: the disk then holds the landed save's screen. The
+            // in-flight check comes first: only the main actor starts saves,
+            // so none can finish and update the cache after it.
+            let unchanged = skippingUnchanged
+                && !Self.isSurfaceInFlight(surface)
+                && Self.saveOrder.isSettled(uuid)
+                && Self.lastSaves.withLock { $0[uuid]?.inputs == inputs }
+            guard !unchanged else { continue }
+
             refs.append(BackgroundTerminalRef(
                 surfacePointer: surface,
                 uuid: uuid,
-                isAtPrompt: isAtPrompt,
-                isAlternate: isAlternate,
-                isMouseCaptured: isMouseCaptured,
-                isCursorKeyMode: isCursorKeyMode,
-                isFocusEventMode: isFocusEventMode,
+                inputs: inputs,
                 contents: contents,
                 registration: registration
             ))
@@ -322,14 +372,25 @@ final class ScrollbackPersistenceManager {
         for ref in refs {
             Self.retainSurface(ref.surfacePointer)
         }
-
-        // Cancel pending debounce tasks since we're doing a full save
-        for uuid in registeredTerminals.keys {
-            outputDebounceTasks[uuid]?.cancel()
-            outputDebounceTasks.removeValue(forKey: uuid)
-        }
-
         return refs
+    }
+
+    /// Captures, encrypts and writes `refs` off the main actor.
+    private func saveInBackground(_ refs: [BackgroundTerminalRef]) {
+        guard !refs.isEmpty else { return }
+        let key: SymmetricKey
+        do {
+            key = try ScrollbackEncryptionManager.shared.getKey()
+        } catch {
+            Self.logger.warning("Key fetch failed, skipping scrollback save: \(error.localizedDescription)")
+            Self.clearInFlightSurfaces(refs)
+            return
+        }
+        Task.detached(priority: .utility) {
+            for ref in refs {
+                Self.saveScrollbackInBackground(ref: ref, encryptionKey: key)
+            }
+        }
     }
 
     /// Save scrollback for a single terminal in the background. Thread-safe.
@@ -343,33 +404,37 @@ final class ScrollbackPersistenceManager {
 
         // Dump the screen (thread-safe C API call), newest content kept.
         guard let contents = captureContents(surface: ref.surfacePointer, ref.contents) else { return }
+        let inputs = ref.inputs.resamplingModes(ref.surfacePointer)
         let standing = saveOrder.accept(ref.uuid, capture: contents.capture, registration: ref.registration)
         guard standing != .superseded else { return }
         let data = contents.scrollback
         let terminalState = contents.terminalState
-        let alternateScreen = ref.isAlternate ? dumpAlternateScreen(ref.surfacePointer) : nil
+        let alternateScreen = inputs.isAlternate ? dumpAlternateScreen(ref.surfacePointer) : nil
 
         // Change detection: skip encrypt+write if content and mode flags are
         // unchanged since the last *successful* save. The hash is only
         // recorded after the write completes below, so a failed encrypt or
-        // I/O error will be retried on the next save tick. Shared with the
-        // main-actor path via `lastSavedHashes`.
+        // I/O error will be retried on the next save tick.
         var hasher = Hasher()
         hasher.combine(data)
         hasher.combine(alternateScreen)
         hasher.combine(terminalState)
-        hasher.combine(ref.isAlternate)
-        hasher.combine(ref.isAtPrompt)
-        hasher.combine(ref.isMouseCaptured)
-        hasher.combine(ref.isCursorKeyMode)
-        hasher.combine(ref.isFocusEventMode)
+        hasher.combine(inputs.isAlternate)
+        hasher.combine(inputs.isAtPrompt)
+        hasher.combine(inputs.isMouseCaptured)
+        hasher.combine(inputs.isCursorKeyMode)
+        hasher.combine(inputs.isFocusEventMode)
         let contentHash = hasher.finalize()
         // An unchanged screen still took its place in the order above, so an
         // older save that has not written yet can no longer land. If one is
         // pending, the disk may not hold this screen: write it anyway.
-        let alreadySaved = lastSavedHashes.withLock { $0[ref.uuid] == contentHash }
+        let alreadySaved = lastSaves.withLock { $0[ref.uuid]?.hash == contentHash }
         if alreadySaved, standing == .current {
-            saveOrder.settle(ref.uuid, capture: contents.capture)
+            // Nothing to write, but recorded under the write lock: a newer
+            // capture's write must not land between the check and the record.
+            guard saveOrder.beginWrite(ref.uuid, capture: contents.capture, registration: ref.registration) else { return }
+            lastSaves.withLock { $0[ref.uuid] = LandedSave(hash: contentHash, inputs: inputs) }
+            saveOrder.endWrite(ref.uuid, capture: contents.capture, succeeded: true)
             return
         }
 
@@ -386,20 +451,20 @@ final class ScrollbackPersistenceManager {
             encryptedTerminalState = try terminalState.map {
                 try ScrollbackEncryptionManager.encrypt($0, using: encryptionKey)
             }
-            encryptedAltFlag = ref.isAlternate
+            encryptedAltFlag = inputs.isAlternate
                 ? try ScrollbackEncryptionManager.encrypt(
                     TerminalAlternateScreenSnapshot.encode(alternateScreen), using: encryptionKey)
                 : nil
-            encryptedAtPromptFlag = ref.isAtPrompt
+            encryptedAtPromptFlag = inputs.isAtPrompt
                 ? try ScrollbackEncryptionManager.encrypt(Data([1]), using: encryptionKey)
                 : nil
-            encryptedMouseFlag = ref.isMouseCaptured
+            encryptedMouseFlag = inputs.isMouseCaptured
                 ? try ScrollbackEncryptionManager.encrypt(Data([1]), using: encryptionKey)
                 : nil
-            encryptedCursorKeyFlag = ref.isCursorKeyMode
+            encryptedCursorKeyFlag = inputs.isCursorKeyMode
                 ? try ScrollbackEncryptionManager.encrypt(Data([1]), using: encryptionKey)
                 : nil
-            encryptedFocusEventFlag = ref.isFocusEventMode
+            encryptedFocusEventFlag = inputs.isFocusEventMode
                 ? try ScrollbackEncryptionManager.encrypt(Data([1]), using: encryptionKey)
                 : nil
         } catch {
@@ -463,7 +528,7 @@ final class ScrollbackPersistenceManager {
 
             // Record the hash only after the write succeeds — a failed save
             // above must not short-circuit the next save tick.
-            lastSavedHashes.withLock { $0[ref.uuid] = contentHash }
+            lastSaves.withLock { $0[ref.uuid] = LandedSave(hash: contentHash, inputs: inputs) }
             written = true
         } catch {
             logger.warning("Background save failed for \(ref.uuid.uuidString.prefix(8)): \(error.localizedDescription)")
@@ -492,195 +557,8 @@ final class ScrollbackPersistenceManager {
         stopPeriodicTimer()
     }
 
-    /// Periodic save intentionally uses the background-save API so the
-    /// main actor never does a dump+hash+encrypt during a scene update.
-    /// The debounce path still uses `saveScrollback(for:)`: its payloads
-    /// are smaller (one terminal at a time) and it does not race with
-    /// foreground transitions.
     private func periodicSave() {
-        guard Self.isEnabled else { return }
-        let refs = gatherTerminalRefs()
-        guard !refs.isEmpty else { return }
-        let key: SymmetricKey
-        do {
-            key = try ScrollbackEncryptionManager.shared.getKey()
-        } catch {
-            let msg = error.localizedDescription
-            Self.logger.warning("periodicSave: key fetch failed, skipping: \(msg)")
-            Self.clearInFlightSurfaces(refs)
-            return
-        }
-        Task.detached(priority: .utility) {
-            for ref in refs {
-                Self.saveScrollbackInBackground(ref: ref, encryptionKey: key)
-            }
-        }
-    }
-
-    // MARK: - Save
-
-    private func saveScrollback(for uuid: UUID) {
-        guard let ref = registeredTerminals[uuid],
-              let terminal = ref.terminal,
-              let persistable = terminal.persistableTerminalContents,
-              let registration = Self.saveOrder.registration(of: uuid),
-              let surface = terminal.surface else { return }
-
-        // Check terminal mode state for persistence
-        let isAlternate = ghostty_surface_is_alternate_active(surface)
-        let isMouseCaptured = ghostty_surface_mouse_captured(surface)
-        let isCursorKeyMode = ghostty_surface_cursor_key_mode(surface)
-        let isFocusEventMode = ghostty_surface_focus_event_mode(surface)
-
-        // Check if the local shell is at a prompt (for seamless restore)
-        let isAtPrompt: Bool = {
-            #if targetEnvironment(macCatalyst)
-            return false
-            #else
-            guard let localSession = terminal.session as? LocalShellSession else { return false }
-            let mode = localSession.stdinLock.withLock { localSession.inputMode }
-            guard mode == .lineEditor else { return false }
-            if case .localShell = localSession.sessionMode { return true }
-            return false
-            #endif
-        }()
-
-        // Dump the primary screen with ANSI styling, newest content kept.
-        // Both save paths trim it the same way *before* hashing, so they
-        // share `lastSavedHashes` coherently.
-        guard let contents = Self.captureContents(surface: surface, persistable) else { return }
-        let standing = Self.saveOrder.accept(uuid, capture: contents.capture, registration: registration)
-        guard standing != .superseded else { return }
-        let data = contents.scrollback
-        let terminalState = contents.terminalState
-        let alternateScreen = isAlternate ? Self.dumpAlternateScreen(surface) : nil
-
-        // Change detection: skip save if content and mode flags are unchanged
-        // since the last *successful* write. The hash is recorded only after
-        // the Task.detached write below completes, so encrypt/I-O failures
-        // retry on the next tick. We hash the dumped content rather than
-        // checking row counts, because operations like CTRL-L change screen
-        // layout without changing total rows.
-        var hasher = Hasher()
-        hasher.combine(data)
-        hasher.combine(alternateScreen)
-        hasher.combine(terminalState)
-        hasher.combine(isAlternate)
-        hasher.combine(isAtPrompt)
-        hasher.combine(isMouseCaptured)
-        hasher.combine(isCursorKeyMode)
-        hasher.combine(isFocusEventMode)
-        let contentHash = hasher.finalize()
-        // See saveScrollbackInBackground: unchanged is only a reason to skip
-        // while no older save is still waiting to write.
-        let alreadySaved = Self.lastSavedHashes.withLock { $0[uuid] == contentHash }
-        if alreadySaved, standing == .current {
-            Self.saveOrder.settle(uuid, capture: contents.capture)
-            return
-        }
-
-        // Encrypt on MainActor before handing off to background write
-        let encryptedData: Data
-        let encryptedTerminalState: Data?
-        let encryptedAltFlag: Data?
-        let encryptedAtPromptFlag: Data?
-        let encryptedMouseFlag: Data?
-        let encryptedCursorKeyFlag: Data?
-        let encryptedFocusEventFlag: Data?
-        do {
-            encryptedData = try ScrollbackEncryptionManager.shared.encrypt(data)
-            encryptedTerminalState = try terminalState.map {
-                try ScrollbackEncryptionManager.shared.encrypt($0)
-            }
-            encryptedAltFlag = isAlternate
-                ? try ScrollbackEncryptionManager.shared.encrypt(
-                    TerminalAlternateScreenSnapshot.encode(alternateScreen))
-                : nil
-            encryptedAtPromptFlag = isAtPrompt
-                ? try ScrollbackEncryptionManager.shared.encrypt(Data([1]))
-                : nil
-            encryptedMouseFlag = isMouseCaptured
-                ? try ScrollbackEncryptionManager.shared.encrypt(Data([1]))
-                : nil
-            encryptedCursorKeyFlag = isCursorKeyMode
-                ? try ScrollbackEncryptionManager.shared.encrypt(Data([1]))
-                : nil
-            encryptedFocusEventFlag = isFocusEventMode
-                ? try ScrollbackEncryptionManager.shared.encrypt(Data([1]))
-                : nil
-        } catch {
-            Self.logger.warning("Encryption failed for \(uuid.uuidString.prefix(8)), skipping save: \(error.localizedDescription)")
-            return
-        }
-
-        let fileURL = scrollbackFileURL(for: uuid)
-        let legacyURL = legacyScrollbackFileURL(for: uuid)
-        let altFlagURL = alternateScreenFlagURL(for: uuid)
-        let terminalStateURL = terminalStateURL(for: uuid)
-        let atPromptFlagURL = atPromptFlagURL(for: uuid)
-        let mouseFlagURL = mouseCaptureURL(for: uuid)
-        let cursorKeyFlagURL = cursorKeyModeURL(for: uuid)
-        let focusEventFlagURL = focusEventModeURL(for: uuid)
-
-        // Write atomically on a utility queue
-        let directory = scrollbackDirectory
-        let capture = contents.capture
-        Task.detached(priority: .utility) {
-            // A save that read the surface later has taken this one's place,
-            // or the terminal has been replaced since.
-            guard Self.saveOrder.beginWrite(uuid, capture: capture, registration: registration) else { return }
-            var written = false
-            defer { Self.saveOrder.endWrite(uuid, capture: capture, succeeded: written) }
-
-            do {
-                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                try encryptedData.write(to: fileURL, options: .atomic)
-                if let encryptedTerminalState {
-                    try encryptedTerminalState.write(to: terminalStateURL, options: .atomic)
-                } else {
-                    try? FileManager.default.removeItem(at: terminalStateURL)
-                }
-                // Remove legacy plaintext file if it exists
-                try? FileManager.default.removeItem(at: legacyURL)
-                // Save or remove encrypted alternate screen flag
-                if let encryptedAltFlag {
-                    try encryptedAltFlag.write(to: altFlagURL, options: .atomic)
-                } else {
-                    try? FileManager.default.removeItem(at: altFlagURL)
-                }
-                // Save or remove encrypted at-prompt flag
-                if let encryptedAtPromptFlag {
-                    try encryptedAtPromptFlag.write(to: atPromptFlagURL, options: .atomic)
-                } else {
-                    try? FileManager.default.removeItem(at: atPromptFlagURL)
-                }
-                // Save or remove encrypted mouse capture flag
-                if let encryptedMouseFlag {
-                    try encryptedMouseFlag.write(to: mouseFlagURL, options: .atomic)
-                } else {
-                    try? FileManager.default.removeItem(at: mouseFlagURL)
-                }
-                // Save or remove encrypted cursor key mode flag
-                if let encryptedCursorKeyFlag {
-                    try encryptedCursorKeyFlag.write(to: cursorKeyFlagURL, options: .atomic)
-                } else {
-                    try? FileManager.default.removeItem(at: cursorKeyFlagURL)
-                }
-                // Save or remove encrypted focus event mode flag
-                if let encryptedFocusEventFlag {
-                    try encryptedFocusEventFlag.write(to: focusEventFlagURL, options: .atomic)
-                } else {
-                    try? FileManager.default.removeItem(at: focusEventFlagURL)
-                }
-
-                // Record the hash only after the write succeeds — failures
-                // above must not short-circuit the next save tick.
-                Self.lastSavedHashes.withLock { $0[uuid] = contentHash }
-                written = true
-            } catch {
-                ScrollbackPersistenceManager.logger.warning("Failed to save scrollback for \(uuid.uuidString.prefix(8)): \(error.localizedDescription)")
-            }
-        }
+        saveInBackground(gatherTerminalRefs(skippingUnchanged: true))
     }
 
     // MARK: - Restore
@@ -985,7 +863,7 @@ final class ScrollbackPersistenceManager {
     /// Remove all scrollback files (when feature is disabled).
     func removeAllScrollbackFiles() {
         try? FileManager.default.removeItem(at: scrollbackDirectory)
-        Self.lastSavedHashes.withLock { $0.removeAll() }
+        Self.lastSaves.withLock { $0.removeAll() }
         Self.logger.info("Removed all scrollback files")
     }
 }

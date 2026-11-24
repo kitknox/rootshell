@@ -197,13 +197,36 @@ final class TerminalRestorationSnapshotTests: XCTestCase {
         let terminal = UUID()
         let registration = order.register(terminal)
         XCTAssertEqual(order.accept(terminal, capture: 1, registration: registration), .current)
-        // Unchanged, nothing written: the next one may skip as well.
-        order.settle(terminal, capture: 1)
+        // Unchanged, nothing written, but recorded under the write lock:
+        // the next one may skip as well.
+        XCTAssertTrue(order.beginWrite(terminal, capture: 1, registration: registration))
+        order.endWrite(terminal, capture: 1, succeeded: true)
         XCTAssertEqual(order.accept(terminal, capture: 2, registration: registration), .current)
         // A write that failed leaves the disk behind the accepted screen.
         XCTAssertTrue(order.beginWrite(terminal, capture: 2, registration: registration))
         order.endWrite(terminal, capture: 2, succeeded: false)
         XCTAssertEqual(order.accept(terminal, capture: 3, registration: registration), .aheadOfPendingWrite)
+    }
+
+    func testSettledOnlyOnceTheNewestCaptureIsOnDisk() {
+        let order = TerminalSaveOrder()
+        let terminal = UUID()
+        let registration = order.register(terminal)
+        XCTAssertTrue(order.isSettled(terminal))
+        XCTAssertEqual(order.accept(terminal, capture: 1, registration: registration), .current)
+        XCTAssertFalse(order.isSettled(terminal))
+        XCTAssertTrue(order.beginWrite(terminal, capture: 1, registration: registration))
+        order.endWrite(terminal, capture: 1, succeeded: true)
+        XCTAssertTrue(order.isSettled(terminal))
+        // A failed write leaves the terminal unsettled until one lands.
+        XCTAssertEqual(order.accept(terminal, capture: 2, registration: registration), .current)
+        XCTAssertTrue(order.beginWrite(terminal, capture: 2, registration: registration))
+        order.endWrite(terminal, capture: 2, succeeded: false)
+        XCTAssertFalse(order.isSettled(terminal))
+        XCTAssertEqual(order.accept(terminal, capture: 3, registration: registration), .aheadOfPendingWrite)
+        XCTAssertTrue(order.beginWrite(terminal, capture: 3, registration: registration))
+        order.endWrite(terminal, capture: 3, succeeded: true)
+        XCTAssertTrue(order.isSettled(terminal))
     }
 
     func testSaveOfAReplacedRegistrationIsRefusedDespiteALaterCapture() {

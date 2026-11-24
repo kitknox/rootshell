@@ -269,10 +269,11 @@ nonisolated final class TerminalSaveOrder: @unchecked Sendable {
         }
     }
 
-    /// The files on disk already hold what `capture` would write.
-    func settle(_ uuid: UUID, capture: UInt64) {
+    /// No accepted capture of the terminal is still waiting to write or
+    /// failed to: the disk holds the newest accepted one.
+    func isSettled(_ uuid: UUID) -> Bool {
         state.withLock { state in
-            if state.entries[uuid]?.accepted == capture { state.entries[uuid]?.onDisk = capture }
+            state.entries[uuid].map { $0.accepted == $0.onDisk } ?? true
         }
     }
 

@@ -71,11 +71,6 @@ final class ScrollbackEncryptionManager {
 
     // MARK: - Encrypt / Decrypt
 
-    func encrypt(_ plaintext: Data) throws -> Data {
-        let key = try getOrCreateKey()
-        return try Self.encrypt(plaintext, using: key)
-    }
-
     /// Encrypt data using a pre-fetched key. Can be called from any thread.
     nonisolated static func encrypt(_ plaintext: Data, using key: SymmetricKey) throws -> Data {
         do {
