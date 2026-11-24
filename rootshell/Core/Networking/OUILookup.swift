@@ -1,3 +1,4 @@
+import Compression
 import Foundation
 
 enum OUILookup {
@@ -6,18 +7,29 @@ enum OUILookup {
         let website: String?
     }
 
-    private static let vendors: [String: [String: String]] = {
-        guard let url = Bundle.main.url(forResource: "oui_vendors", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: [String: String]]
-        else {
-            return [:]
-        }
-        return dict
-    }()
+    private struct VendorRecord {
+        let firstPrefix: String
+        let vendor: Vendor
+    }
 
-    private static let prefixLengths: [Int] = {
-        Array(Set(vendors.keys.map(\.count))).sorted(by: >)
+    private struct Database {
+        let vendors: [VendorRecord]
+        let prefixToVendorIndex: [String: Int]
+        let prefixLengths: [Int]
+
+        static let empty = Database(vendors: [], prefixToVendorIndex: [:], prefixLengths: [])
+    }
+
+    private static let maxDecompressedBytes = 32 * 1024 * 1024
+
+    private static let database: Database = {
+        guard let url = Bundle.main.url(forResource: "oui_vendors.tsv", withExtension: "lzfse"),
+              let compressed = try? Data(contentsOf: url),
+              let decompressed = decompressLZFSE(compressed)
+        else {
+            return .empty
+        }
+        return parseTSV(decompressed)
     }()
 
     static func lookup(bssid: String) -> Vendor? {
@@ -62,7 +74,7 @@ enum OUILookup {
 
         for variant in variants {
             let hex = variant.hexString
-            for length in prefixLengths where hex.count >= length {
+            for length in database.prefixLengths where hex.count >= length {
                 let prefix = String(hex.prefix(length))
                 if seen.insert(prefix).inserted {
                     prefixes.append(prefix)
@@ -74,10 +86,131 @@ enum OUILookup {
     }
 
     private static func vendor(forPrefixHex prefix: String) -> Vendor? {
-        guard let entry = vendors[prefix] else { return nil }
-        return Vendor(
-            name: entry["n"] ?? "",
-            website: entry["w"]
+        guard let index = database.prefixToVendorIndex[prefix] else { return nil }
+        return database.vendors[index].vendor
+    }
+
+    /// Decompresses a raw LZFSE stream using Apple's Compression framework.
+    private static func decompressLZFSE(_ input: Data) -> Data? {
+        guard !input.isEmpty else { return Data() }
+        let streamPointer = UnsafeMutablePointer<compression_stream>.allocate(capacity: 1)
+        defer { streamPointer.deallocate() }
+        guard compression_stream_init(streamPointer, COMPRESSION_STREAM_DECODE, COMPRESSION_LZFSE) == COMPRESSION_STATUS_OK else {
+            return nil
+        }
+        defer { compression_stream_destroy(streamPointer) }
+
+        let chunkSize = 64 * 1024
+        let dst = UnsafeMutablePointer<UInt8>.allocate(capacity: chunkSize)
+        defer { dst.deallocate() }
+
+        var output = Data()
+        output.reserveCapacity(input.count * 3)
+
+        return input.withUnsafeBytes { raw -> Data? in
+            guard let base = raw.bindMemory(to: UInt8.self).baseAddress else { return nil }
+            streamPointer.pointee.src_ptr = base
+            streamPointer.pointee.src_size = raw.count
+
+            while true {
+                streamPointer.pointee.dst_ptr = dst
+                streamPointer.pointee.dst_size = chunkSize
+                let status = compression_stream_process(streamPointer, Int32(COMPRESSION_STREAM_FINALIZE.rawValue))
+                let produced = chunkSize - streamPointer.pointee.dst_size
+                if produced > 0 {
+                    output.append(dst, count: produced)
+                    if output.count > maxDecompressedBytes { return nil }
+                }
+                switch status {
+                case COMPRESSION_STATUS_OK:
+                    if produced == 0 && streamPointer.pointee.src_size == 0 {
+                        return nil
+                    }
+                case COMPRESSION_STATUS_END:
+                    return output
+                default:
+                    return nil
+                }
+            }
+        }
+    }
+
+    /// Parses the deduplicated vendor table (`<prefix1>,<prefix2>,...\t<name>[\t<website>]\n`).
+    private static func parseTSV(_ data: Data) -> Database {
+        var vendors: [VendorRecord] = []
+        var prefixToVendorIndex: [String: Int] = [:]
+        var lengthSet = Set<Int>()
+
+        vendors.reserveCapacity(20_000)
+        prefixToVendorIndex.reserveCapacity(40_000)
+
+        data.withUnsafeBytes { raw in
+            let bytes = raw.bindMemory(to: UInt8.self)
+            let count = bytes.count
+            var i = 0
+
+            while i < count {
+                let lineStart = i
+                var tab1 = -1
+                var tab2 = -1
+
+                while i < count && bytes[i] != 0x0A { // '\n'
+                    if bytes[i] == 0x09 { // '\t'
+                        if tab1 == -1 {
+                            tab1 = i
+                        } else if tab2 == -1 {
+                            tab2 = i
+                        }
+                    }
+                    i += 1
+                }
+
+                var lineEnd = i
+                if lineEnd > lineStart && bytes[lineEnd - 1] == 0x0D { // '\r'
+                    lineEnd -= 1
+                }
+                i += 1
+
+                guard tab1 > lineStart else { continue }
+
+                let nameStart = tab1 + 1
+                let nameEnd = tab2 == -1 ? lineEnd : tab2
+                let name = String(decoding: bytes[nameStart..<nameEnd], as: UTF8.self)
+                let website: String? = (tab2 != -1 && tab2 + 1 < lineEnd)
+                    ? String(decoding: bytes[(tab2 + 1)..<lineEnd], as: UTF8.self)
+                    : nil
+
+                let vendorIndex = vendors.count
+                var firstPrefix: String?
+                var prefixStart = lineStart
+                var j = lineStart
+                while j <= tab1 {
+                    if j == tab1 || bytes[j] == 0x2C { // ','
+                        if j > prefixStart {
+                            let prefix = String(decoding: bytes[prefixStart..<j], as: UTF8.self)
+                            if firstPrefix == nil {
+                                firstPrefix = prefix
+                            }
+                            prefixToVendorIndex[prefix] = vendorIndex
+                            lengthSet.insert(prefix.count)
+                        }
+                        prefixStart = j + 1
+                    }
+                    j += 1
+                }
+
+                guard let firstPrefix else { continue }
+                vendors.append(VendorRecord(
+                    firstPrefix: firstPrefix,
+                    vendor: Vendor(name: name, website: website)
+                ))
+            }
+        }
+
+        return Database(
+            vendors: vendors,
+            prefixToVendorIndex: prefixToVendorIndex,
+            prefixLengths: Array(lengthSet).sorted(by: >)
         )
     }
 
@@ -98,26 +231,26 @@ enum OUILookup {
     /// prefixes to ~20K unique names. Prefers entries with a website URL.
     /// Computed once on first access.
     private static let uniqueVendorList: [VendorEntry] = {
-        var byName: [String: (prefix: String, name: String, website: String?)] = [:]
+        var byName: [String: VendorRecord] = [:]
+        byName.reserveCapacity(database.vendors.count)
 
-        for (prefix, entry) in vendors {
-            let name = entry["n"] ?? ""
+        for record in database.vendors {
+            let name = record.vendor.name
             guard !name.isEmpty else { continue }
             let key = name.lowercased()
-            let website = entry["w"]
 
             if let existing = byName[key] {
                 // Prefer the entry that has a website
-                if existing.website == nil && website != nil {
-                    byName[key] = (prefix, name, website)
+                if existing.vendor.website == nil && record.vendor.website != nil {
+                    byName[key] = record
                 }
             } else {
-                byName[key] = (prefix, name, website)
+                byName[key] = record
             }
         }
 
         return byName.values
-            .map { VendorEntry(id: $0.prefix, name: $0.name, website: $0.website) }
+            .map { VendorEntry(id: $0.firstPrefix, name: $0.vendor.name, website: $0.vendor.website) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }()
 
