@@ -34,6 +34,8 @@ final class EffectManager {
     var activeEffect: AnyTerminalEffect? {
         didSet {
             if !isReloading { saveActiveEffect() }
+            // Recorded on reloads too, so the toggle restores the effect last shown on this device.
+            if let id = activeEffect?.id { SettingsStore.shared.set(Settings.Shaders.lastActiveEffectId, id) }
             updateTextAboveEffectActive()
             effectDidChange.send()
         }
@@ -107,9 +109,6 @@ final class EffectManager {
     /// Version counter that increments on keyboard state changes to force SwiftUI re-render
     private(set) var keyboardStateVersion: Int = 0
 
-    /// Whether the effect has been toggled off (for toggle_background_effect action)
-    private(set) var isEffectDisabled: Bool = false
-
     /// Bottom inset fraction for terminal when ocean effect is active (0.0-1.0)
     var terminalBottomInsetFraction: CGFloat {
         guard let effect = activeEffect,
@@ -144,8 +143,6 @@ final class EffectManager {
     @ObservationIgnored private var hardwareKeyboardTask: Task<Void, Never>?
     @ObservationIgnored private var softwareKeyboardVisibilityTask: Task<Void, Never>?
     private static let softwareKeyboardHeightThreshold: CGFloat = 120
-    /// Saved effect ID for toggle restoration
-    @ObservationIgnored private var savedEffectId: String?
 
     // MARK: - Video Background Pending Activation
 
@@ -355,20 +352,12 @@ final class EffectManager {
         }
     }
 
-    /// Toggle the background effect on/off
-    /// When toggling off, saves the current effect ID for later restoration
+    /// Toggle the background effect off, or back on to the last one selected.
     func toggleEffect() {
-        if isEffectDisabled {
-            // Restore previously saved effect
-            if let savedId = savedEffectId {
-                activeEffect = effect(withId: savedId)
-            }
-            isEffectDisabled = false
-        } else {
-            // Save current effect and disable
-            savedEffectId = activeEffect?.id
+        if activeEffect != nil {
             activeEffect = nil
-            isEffectDisabled = true
+        } else if let lastId = SettingsStore.shared.get(Settings.Shaders.lastActiveEffectId) {
+            activeEffect = effect(withId: lastId)
         }
     }
 

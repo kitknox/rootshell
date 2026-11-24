@@ -216,6 +216,9 @@ nonisolated extension Settings {
         static let activeEffectId = SettingKey<String?>(
             "activeEffectId", default: nil, group: .shaders, configKey: "active-effect-id",
             title: String(localized: "Background Effect", comment: "Setting title"))
+        static let lastActiveEffectId = SettingKey<String?>(
+            "lastActiveEffectId", default: nil, group: .shaders, policy: .deviceOnly,
+            title: String(localized: "Last Background Effect", comment: "Setting title"))
         static let effectConfigurations = SettingKey<Data?>(
             "effectConfigurations", default: nil, group: .shaders,
             title: String(localized: "Effect Settings", comment: "Setting title"))
@@ -261,10 +264,11 @@ nonisolated extension Settings {
             title: String(localized: "Text Above Effect", comment: "Setting title"))
 
         static let all: [AnySettingDefinition] = [
-            animationMode.erased, activeEffectId.erased, effectConfigurations.erased, customShadersList.erased,
-            enabledCustomShaders.erased, pendingVideoActivation.erased, solarCachedLocation.erased,
-            videoPausedDownloads, effectIncludesPinnedSidebar.erased, keyboardBackgroundEffect.erased,
-            keyboardEffectId.erased, sidebarEffectId.erased, themeGradientBackdrop.erased, textAboveEffect.erased,
+            animationMode.erased, activeEffectId.erased, lastActiveEffectId.erased, effectConfigurations.erased,
+            customShadersList.erased, enabledCustomShaders.erased, pendingVideoActivation.erased,
+            solarCachedLocation.erased, videoPausedDownloads, effectIncludesPinnedSidebar.erased,
+            keyboardBackgroundEffect.erased, keyboardEffectId.erased, sidebarEffectId.erased,
+            themeGradientBackdrop.erased, textAboveEffect.erased,
         ]
     }
 }
