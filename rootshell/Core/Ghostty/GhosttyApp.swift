@@ -2206,6 +2206,16 @@ extension Ghostty {
         private nonisolated static let wakeupCoalescer = OSAllocatedUnfairLock(initialState: WakeupCoalescerState())
         private nonisolated static let deferredResumeTickPending = OSAllocatedUnfairLock(initialState: false)
 
+        /// Latest scrollbar per surface. A surface present here already has a
+        /// delivery task queued, which reads whatever value is newest when it runs.
+        private nonisolated static let pendingScrollbars = OSAllocatedUnfairLock(initialState: [Int: PendingScrollbar]())
+
+        private nonisolated struct PendingScrollbar {
+            var total: UInt64
+            var offset: UInt64
+            var len: UInt64
+        }
+
         private nonisolated struct WakeupCoalescerState {
             var pending: Bool = false
             var coalescedDuringBurst: Int = 0
@@ -2812,8 +2822,17 @@ extension Ghostty {
                     let surface = target.target.surface
                     // Use raw pointer address as key (not ObjectIdentifier which creates new wrapper each time)
                     let surfaceId = Int(bitPattern: surface)
+                    let latest = PendingScrollbar(
+                        total: scrollbar.total, offset: scrollbar.offset, len: scrollbar.len)
+                    let needsTask = pendingScrollbars.withLock { pending in
+                        pending.updateValue(latest, forKey: surfaceId) == nil
+                    }
+                    guard needsTask else { return true }
 
                     Task { @MainActor in
+                        guard let scrollbar = pendingScrollbars.withLock({
+                            $0.removeValue(forKey: surfaceId)
+                        }) else { return }
                         if let delegate = appInstance.surfaceDelegates[surfaceId]?.delegate {
                             delegate.handleScrollbar(
                                 total: scrollbar.total,

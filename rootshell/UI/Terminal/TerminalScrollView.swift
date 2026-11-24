@@ -2512,9 +2512,12 @@ extension Ghostty {
     private class ProgressBarView: UIView {
         private let backgroundView = UIView()
         private let foregroundView = UIView()
-        private var animationDisplayLink: CADisplayLink?
-        private var animationStartTime: CFTimeInterval = 0
         private var currentState: Ghostty.Action.ProgressReport.State = .remove
+        /// Width the running bounce animation was built for.
+        private var animatedWidth: CGFloat?
+        /// Layer-local start of the bounce cycle; rebuilds reuse it to keep phase.
+        private var bounceStartTime: CFTimeInterval?
+        private static let bounceAnimationKey = "progressBounce"
 
         override init(frame: CGRect) {
             super.init(frame: frame)
@@ -2523,10 +2526,6 @@ extension Ghostty {
 
         required init?(coder: NSCoder) {
             fatalError("init(coder:) has not been implemented")
-        }
-
-        deinit {
-            stopAnimation()
         }
 
         private func setupViews() {
@@ -2591,57 +2590,52 @@ extension Ghostty {
             }
         }
 
+        /// Bounces a quarter-width bar edge to edge, 1.2 s each way. Runs in
+        /// the render server, so it costs no main-thread frames and holds no
+        /// reference back to this view.
         private func startAnimation() {
-            guard animationDisplayLink == nil else { return }
+            let width = bounds.width
+            guard width > 0 else { return }
+            let layer = foregroundView.layer
+            if animatedWidth == width, layer.animation(forKey: Self.bounceAnimationKey) != nil { return }
 
-            animationStartTime = CACurrentMediaTime()
-            let displayLink = CADisplayLink(target: self, selector: #selector(updateAnimation))
-            displayLink.add(to: .main, forMode: .common)
-            animationDisplayLink = displayLink
+            let barWidth = width * 0.25
+            foregroundView.frame = CGRect(x: 0, y: 0, width: barWidth, height: bounds.height)
+
+            let bounce = CABasicAnimation(keyPath: "position.x")
+            bounce.fromValue = barWidth / 2
+            bounce.toValue = width - barWidth / 2
+            bounce.duration = 1.2
+            bounce.autoreverses = true
+            bounce.repeatCount = .infinity
+            // Quadratic ease-in-out, matching the old per-frame curve.
+            bounce.timingFunction = CAMediaTimingFunction(controlPoints: 0.455, 0.03, 0.515, 0.955)
+            bounce.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+            // Survive app backgrounding, which strips completable animations.
+            bounce.isRemovedOnCompletion = false
+            let startTime = bounceStartTime ?? layer.convertTime(CACurrentMediaTime(), from: nil)
+            bounceStartTime = startTime
+            bounce.beginTime = startTime
+            layer.add(bounce, forKey: Self.bounceAnimationKey)
+            animatedWidth = width
         }
 
         fileprivate func stopAnimation() {
-            animationDisplayLink?.invalidate()
-            animationDisplayLink = nil
+            foregroundView.layer.removeAnimation(forKey: Self.bounceAnimationKey)
+            animatedWidth = nil
+            bounceStartTime = nil
         }
 
-        @objc private func updateAnimation() {
-            let currentTime = CACurrentMediaTime()
-            let elapsed = currentTime - animationStartTime
-            // 1.2 seconds each way (matching SwiftUI's autoreverses behavior)
-            // Total cycle time is 2.4 seconds
-            let halfDuration = 1.2
-            let fullDuration = halfDuration * 2
-
-            // Calculate position (0 to 1 and back)
-            let cycleProgress = (elapsed.truncatingRemainder(dividingBy: fullDuration)) / fullDuration
-            var position: CGFloat
-
-            if cycleProgress < 0.5 {
-                // First half: 0 to 1
-                position = CGFloat(cycleProgress * 2)
-            } else {
-                // Second half: 1 to 0
-                position = CGFloat(2 - cycleProgress * 2)
+        private var isAnimatedState: Bool {
+            switch currentState {
+            case .indeterminate, .error, .pause: return true
+            default: return false
             }
-
-            // Apply easing
-            position = easeInOut(position)
-
-            // Bar width is 25% of total width
-            let barWidth = bounds.width * 0.25
-            let maxX = bounds.width - barWidth
-
-            foregroundView.frame = CGRect(
-                x: maxX * position,
-                y: 0,
-                width: barWidth,
-                height: bounds.height
-            )
         }
 
-        private func easeInOut(_ t: CGFloat) -> CGFloat {
-            return t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window != nil, isAnimatedState { startAnimation() }
         }
 
         override func layoutSubviews() {
@@ -2661,8 +2655,8 @@ extension Ghostty {
                     )
                 }
             case .indeterminate, .error, .pause:
-                // Animation will update frame on next display link callback
-                break
+                // Rebuilds only when the width changed.
+                startAnimation()
             default:
                 break
             }
