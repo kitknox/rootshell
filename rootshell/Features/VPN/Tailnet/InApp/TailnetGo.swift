@@ -11,7 +11,11 @@
 
 import Foundation
 import os
+#if CHINA_BUILD || targetEnvironment(macCatalyst)
 @preconcurrency import TrzszSSH
+#else
+@preconcurrency import TsshKit
+#endif
 
 nonisolated enum TailnetGo {
     struct GoError: LocalizedError {

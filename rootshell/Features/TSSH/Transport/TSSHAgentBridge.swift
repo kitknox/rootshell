@@ -13,7 +13,11 @@ import NIOCore
 import NIOFoundationCompat
 import os
 import OSLog
+#if CHINA_BUILD || targetEnvironment(macCatalyst)
 @preconcurrency import TrzszSSH
+#else
+@preconcurrency import TsshKit
+#endif
 
 /// Bridges Go's `AgentCallback` interface to Swift's `SSHAgentManager`.
 ///

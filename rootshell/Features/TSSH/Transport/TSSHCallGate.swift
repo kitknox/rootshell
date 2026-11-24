@@ -60,7 +60,11 @@
 import Foundation
 import os
 import OSLog
+#if CHINA_BUILD || targetEnvironment(macCatalyst)
 @preconcurrency import TrzszSSH
+#else
+@preconcurrency import TsshKit
+#endif
 
 // MARK: - Sendable handles
 

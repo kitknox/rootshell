@@ -10,7 +10,7 @@
 
 import Foundation
 import os.log
-@preconcurrency import VPNTunnel
+@preconcurrency import TsshKit
 
 nonisolated enum CaptureBridge {
     static let logger = Logger(subsystem: "com.rootshell.vpntunnel", category: "Capture")

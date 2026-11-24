@@ -20,7 +20,11 @@
 
 import Foundation
 import os
+#if CHINA_BUILD || targetEnvironment(macCatalyst)
 @preconcurrency import TrzszSSH
+#else
+@preconcurrency import TsshKit
+#endif
 
 /// Receives forwarded Unix-socket channels from the TSSHD UDP transport
 /// and feeds them to `onConnection`.

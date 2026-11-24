@@ -251,7 +251,7 @@
 		47F11E0000000000000000B4 /* rootshell/Features/FileManager/Storage/StorageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F11E0000000000000000A4 /* rootshell/Features/FileManager/Storage/StorageProvider.swift */; };
 		47F11E0000000000000000B5 /* rootshell/Features/FileManager/Storage/StorageProviderPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F11E0000000000000000A5 /* rootshell/Features/FileManager/Storage/StorageProviderPreset.swift */; };
 		47F11E0000000000000000B6 /* rootshell/Features/FileManager/Storage/S3KeyLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F11E0000000000000000A6 /* rootshell/Features/FileManager/Storage/S3KeyLogic.swift */; };
-		47FF768D2F33DD6900DFD408 /* TrzszSSH in Frameworks */ = {isa = PBXBuildFile; productRef = 47TSSH0112FC00000AABB0001 /* TrzszSSH */; };
+		47FF768D2F33DD6900DFD408 /* TrzszSSH in Frameworks */ = {isa = PBXBuildFile; platformFilter = maccatalyst; productRef = 47TSSH0112FC00000AABB0001 /* TrzszSSH */; };
 		47FLA0032FFA0000AABB0003 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; platformFilters = (ios, maccatalyst, ); productRef = 47FLA0012FFA0000AABB0001 /* FluidAudio */; };
 		47FLA0042FFA0000AABB0004 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; platformFilter = maccatalyst; productRef = 47FLA0022FFA0000AABB0002 /* FluidAudio */; };
 		47FONT022ED92ABC009B57F8 /* fonts in CopyFiles */ = {isa = PBXBuildFile; fileRef = 47FONT012ED92ABC009B57F8 /* fonts */; };
@@ -275,8 +275,9 @@
 		47SHADER22F01AAA0009B57F8 /* shaders in CopyFiles */ = {isa = PBXBuildFile; fileRef = 47SHADER12F01AAA0009B57F8 /* shaders */; };
 		47TINFO022F0000AABB000002 /* terminfo in CopyFiles */ = {isa = PBXBuildFile; fileRef = 47TINFO012F0000AABB000001 /* terminfo */; };
 		47TINFO032F0000AABB000003 /* terminfo in CopyFiles */ = {isa = PBXBuildFile; fileRef = 47TINFO012F0000AABB000001 /* terminfo */; };
+		47TSKT0012FC00000AABB0001 /* TsshKit in Frameworks */ = {isa = PBXBuildFile; platformFilters = (ios, xros, ); productRef = 47TSKT0002FC00000AABB0000 /* TsshKit */; };
+		47TSKT0022FC00000AABB0002 /* TsshKit in Frameworks */ = {isa = PBXBuildFile; productRef = 47TSKT0002FC00000AABB0000 /* TsshKit */; };
 		47VPN0012F460000BBCC0001 /* VPNTunnelExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 47VPN0032F460000BBCC0003 /* VPNTunnelExtension.appex */; platformFilters = (ios, xros, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		47VPN0412F460000BBCC0041 /* VPNTunnel in Frameworks */ = {isa = PBXBuildFile; productRef = 47TSSH0122FC00000AABB0002 /* VPNTunnel */; };
 		47VPN0512F460000BBCC0051 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = 47VPN0502F460000BBCC0050 /* Citadel */; };
 		47VPNT0100000000000000C2 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = 47VPNT0100000000000000C1 /* Citadel */; };
 		47VPNT0100000000000000E1 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 477738A82F9C3553009B5D30 /* AppIcon.icon */; };
@@ -1165,6 +1166,7 @@
 				47D8B2A12ECB90D100CA99EC /* Metal.framework in Frameworks */,
 				47RG00012F680000AABB0001 /* ripgrep_ios in Frameworks */,
 				47FF768D2F33DD6900DFD408 /* TrzszSSH in Frameworks */,
+				47TSKT0012FC00000AABB0001 /* TsshKit in Frameworks */,
 				47LG20012F680000AABB0001 /* libgit2 in Frameworks */,
 				47A0B0032F8A000000000003 /* vim in Frameworks */,
 				477408932ED51B9F0035CE92 /* Yams in Frameworks */,
@@ -1205,7 +1207,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				47VPN0412F460000BBCC0041 /* VPNTunnel in Frameworks */,
+				47TSKT0022FC00000AABB0002 /* TsshKit in Frameworks */,
 				47VPN0512F460000BBCC0051 /* Citadel in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1725,6 +1727,7 @@
 				47NWPKG12FF10000AABB0001 /* network_ios */,
 				1F83B189B33FFF1BDDA28F6B /* GhosttyKitAppStore */,
 				47TSSH0112FC00000AABB0001 /* TrzszSSH */,
+				47TSKT0002FC00000AABB0000 /* TsshKit */,
 				47HLX0012FD00000AABB0001 /* HelixKit */,
 				47B617122FF30000AABB0001 /* libgit2 */,
 				47FLA0012FFA0000AABB0001 /* FluidAudio */,
@@ -1794,7 +1797,7 @@
 			name = VPNTunnelExtension;
 			packageProductDependencies = (
 				47VPN0502F460000BBCC0050 /* Citadel */,
-				47TSSH0122FC00000AABB0002 /* VPNTunnel */,
+				47TSKT0002FC00000AABB0000 /* TsshKit */,
 			);
 			productName = VPNTunnelExtension;
 			productReference = 47VPN0032F460000BBCC0003 /* VPNTunnelExtension.appex */;
@@ -7203,7 +7206,7 @@
 			repositoryURL = "https://github.com/kitknox/trzsz-ssh-rootshell.git";
 			requirement = {
 				kind = exactVersion;
-				version = 0.2.29;
+				version = 0.2.30;
 			};
 		};
 		47XZPKG02FF00000AABB0000 /* XCRemoteSwiftPackageReference "xz_ios-rootshell" */ = {
@@ -7364,6 +7367,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 47S3PKG02FF40000AABB0000 /* XCRemoteSwiftPackageReference "soto" */;
 			productName = SotoS3;
+		};
+		47TSKT0002FC00000AABB0000 /* TsshKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 47TSSH0002FC00000AABB0000 /* XCRemoteSwiftPackageReference "trzsz-ssh-rootshell" */;
+			productName = TsshKit;
 		};
 		47TSSH0112FC00000AABB0001 /* TrzszSSH */ = {
 			isa = XCSwiftPackageProductDependency;

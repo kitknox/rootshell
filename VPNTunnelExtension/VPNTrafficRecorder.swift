@@ -8,7 +8,7 @@
 //
 
 import Foundation
-@preconcurrency import VPNTunnel
+@preconcurrency import TsshKit
 
 nonisolated final class VPNTrafficRecorder: @unchecked Sendable {
     private struct Snapshot {

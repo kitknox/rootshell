@@ -15,7 +15,11 @@
 import Foundation
 import os
 import OSLog
+#if CHINA_BUILD || targetEnvironment(macCatalyst)
 @preconcurrency import TrzszSSH
+#else
+@preconcurrency import TsshKit
+#endif
 
 /// Marshalled-on-the-bridge representation of a single forward callback.
 enum ForwardCallbackEvent: Sendable {

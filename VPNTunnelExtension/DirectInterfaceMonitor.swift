@@ -10,7 +10,7 @@
 import Foundation
 import Network
 import os
-@preconcurrency import VPNTunnel
+@preconcurrency import TsshKit
 
 nonisolated final class DirectInterfaceMonitor: @unchecked Sendable {
     static let shared = DirectInterfaceMonitor()
