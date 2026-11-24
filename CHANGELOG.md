@@ -3,6 +3,51 @@
 All notable changes to the rootshell app for iPhone, iPad, Vision Pro, and Mac, newest first.
 Versions are listed as `release-build`, matching the version shown in Settings, About.
 
+## 1.0.17-182 - November 24, 2026
+
+### Critical TSSH Security Update for KCP
+
+- **TSSH protocol v3** fixes a KCP packet reflection and replay vulnerability that could cause session output to be processed as shell input. Exploiting the reflection flaw requires intercepting KCP traffic and spoofing packets from your device.
+- **Upgrade rootshell and `tsshd`** to use the fix. Install a protocol v3 `tsshd` build (upstream commit `6a701f6` or later on `main`) on each host that handles KCP, including relays, then start a new session. Connections to older servers still use the vulnerable legacy protocol.
+- **Use QUIC for new TSSH sessions** until you can upgrade `tsshd`.
+
+### SSH and TSSH
+
+- **TCP SSH** sends keystrokes immediately and processes output off the main thread, so echoes and screen updates arrive sooner, including in tmux control mode.
+- **QUIC and KCP connection setup** use one deadline for the UDP handshake and session control setup. If either stalls, rootshell reports a timeout and closes the partial connection.
+- **OpenPubkey renewals** follow `opkssh` 0.20 token checks and prompt you to sign in again if validation fails. Use Your Own Client ID prefills the provider form and shows server setup guidance. Custom Google clients require a client secret.
+- **FIDO2 credential creation** avoids repeated PIN and touch prompts on PIN-protected keys such as the Nitrokey 3C NFC.
+
+### Terminal and Keyboard
+
+- **Tab switching** is faster and uses less CPU with the top tab bar and pinned sidebar visible. Recent tabs reappear sooner, and held tab-switch shortcuts stay responsive.
+- **System keyboard** includes a workaround for most crashes caused by an iOS 27 bug when switching input languages or reloading the keyboard on iPhone and iPad.
+- **Bundled Vim** defaults to UTF-8 on iOS, iPadOS, and visionOS, so typed Chinese, Japanese, and Korean text displays correctly.
+- **Scrollback saves** run off the main thread to reduce stutter. Periodic saves skip idle panes.
+- **Terminal progress animations** stop when their pane closes and keep their place on resize. Busy panes keep only the latest scrollbar update.
+- **Terminal scrollbars** adapt to each pane’s background, including Tint by Host, Theme Gradient, and colors set by programs.
+- **Stock herdr** echoes keystrokes sooner. The first screen update after a pause appears immediately, and bursts of updates are still batched.
+
+### Screen Sharing and KVM
+
+- **Keyboard toolbar** can float or dock in Screen Sharing and KVM on Mac. It’s off by default. Enable it in the session menu, connection settings, or Settings > Screen Sharing, where Toolbar Keys lets you customize it.
+- **Standard mode encryption** now covers the full session on supported Macs when you sign in with a macOS account, including screen updates, input, clipboard, and file transfers in both directions. Check Connection Info for encryption status.
+- **Standard mode with Apple DCT** updates the screen sooner and uses less CPU by reusing buffers and copying only changed regions.
+- **High Performance mode** uses less CPU and makes remote input more responsive by moving video compositing off the main thread.
+
+### Agent Usage
+
+- **Antigravity** refreshes faster. When desktop quota data is unavailable, rootshell requests quota data from Google in parallel and briefly reuses the remote sign-in in memory. Manual refresh retries sooner on busy connections.
+
+### Live Activities
+
+- **Live Activities** no longer crash the app when refreshing network info just after you return to rootshell.
+
+### App Size
+
+- **Framework sharing with the VPN extension** saves an estimated 18 MB of installed space in international iOS, iPadOS, and visionOS builds.
+- **Bundled assets** are smaller. An unused image set was removed, and the built-in Wi-Fi vendor database was compressed from about 2 MB to 339 KB.
+
 ## 1.0.16-181 - November 21, 2026
 
 ### Screen Sharing and KVM
