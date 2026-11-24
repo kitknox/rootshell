@@ -57971,7 +57971,7 @@
       }
     },
     "Add" : {
-      "comment" : "Add button",
+      "comment" : "Add button\nExternal SSH agents add discovered agent button\nLocal SSH agent audit action",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -81295,7 +81295,7 @@
       }
     },
     "Always" : {
-      "comment" : "Always On Display duration: never auto-lock\nCert validity: no start bound\nHole-punch mode: always perform\nLocation Diary authorization status\nPrediction mode: always show predictions\nShader animation: always\nTab hover preview activation",
+      "comment" : "Cert validity: no start bound\nHole-punch mode: always perform\nLocation Diary authorization status\nPrediction mode: always show predictions\nShader animation: always\nTab hover preview activation",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -163937,7 +163937,7 @@
       }
     },
     "Client" : {
-      "comment" : "HTTP capture field",
+      "comment" : "HTTP capture field\nLocal SSH agent client rule identity section",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -202245,7 +202245,7 @@
       }
     },
     "Copied" : {
-      "comment" : "Clipboard entry source: explicit copy\nCopy button state: copied\nShare link: copied to clipboard",
+      "comment" : "Clipboard entry source: explicit copy\nCopy button state: copied\nLocal SSH agent export copied button\nShare link: copied to clipboard",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -249401,7 +249401,7 @@
       }
     },
     "Denied" : {
-      "comment" : "Location Diary authorization status",
+      "comment" : "Local SSH agent audit outcome\nLocation Diary authorization status",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -318958,7 +318958,7 @@
       }
     },
     "Failed" : {
-      "comment" : "Tailscale SSH egress state",
+      "comment" : "Local SSH agent audit outcome\nTailscale SSH egress state",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -350655,6 +350655,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "「全螢幕」會在連線成功後展開此螢幕共享窗格。"
+          }
+        }
+      }
+    },
+    "Full Screen expands this Screen Sharing pane after the connection succeeds. Keyboard Toolbar controls the bar of keys shown over the remote screen." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يوسّع «ملء الشاشة» جزء مشاركة الشاشة هذا بعد نجاح الاتصال. ويتحكم «شريط أدوات لوحة المفاتيح» في شريط المفاتيح الظاهر فوق الشاشة البعيدة."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pantalla completa amplia aquesta subfinestra de Compartir pantalla quan la connexió s'estableix correctament. Barra d'eines del teclat controla la barra de tecles que es mostra sobre la pantalla remota."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Celá obrazovka roztáhne tento panel sdílení obrazovky po úspěšném připojení. Panel nástrojů klávesnice ovládá lištu kláves zobrazenou nad vzdálenou obrazovkou."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fuld skærm udvider denne skærmdelingsrude, når forbindelsen er oprettet. Tastaturværktøjslinje styrer bjælken med taster, der vises over fjernskærmen."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vollbild vergrößert diesen Bildschirmfreigabe-Bereich, nachdem die Verbindung hergestellt wurde. Tastatur-Symbolleiste steuert die Tastenleiste, die über dem entfernten Bildschirm angezeigt wird."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Pantalla completa» amplía este panel de Compartir pantalla una vez establecida la conexión. «Barra de herramientas del teclado» controla la barra de teclas que se muestra sobre la pantalla remota."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koko näyttö laajentaa tämän näytön jakamisen ruudun, kun yhteys on muodostettu. Näppäimistön työkalupalkki hallitsee etänäytön päällä näkyvää näppäinpalkkia."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plein écran agrandit ce volet Partage d'écran une fois la connexion établie. Barre d'outils du clavier contrôle la barre de touches affichée au-dessus de l'écran distant."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "מסך מלא מרחיב את חלונית שיתוף המסך הזו לאחר שהחיבור מצליח. סרגל הכלים של המקלדת שולט בסרגל המקשים שמוצג מעל המסך המרוחק."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Teljes képernyő a kapcsolat létrejötte után kiterjeszti ezt a képernyőmegosztási panelt. A Billentyűzet eszköztár a távoli képernyő fölött megjelenő billentyűsávot vezérli."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schermo intero espande questo riquadro di condivisione schermo dopo che la connessione è riuscita. Barra strumenti tastiera controlla la barra di tasti mostrata sopra lo schermo remoto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「フルスクリーン」は接続成功後にこの画面共有ペインを拡大します。「キーボードツールバー」はリモート画面の上に表示されるキーのバーを制御します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전체 화면은 연결에 성공한 후 이 화면 공유 창을 확대합니다. 키보드 도구 모음은 원격 화면 위에 표시되는 키 막대를 제어합니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fullskjerm utvider dette skjermdelingspanelet etter at tilkoblingen er opprettet. Tastaturverktøylinje styrer tastelinjen som vises over den eksterne skjermen."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volledig scherm vergroot dit Schermdelen-deelvenster nadat de verbinding tot stand is gekomen. Toetsenbordwerkbalk bepaalt de toetsenbalk die boven het externe scherm wordt getoond."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pełny ekran rozszerza ten panel udostępniania ekranu po udanym połączeniu. Pasek narzędzi klawiatury steruje paskiem klawiszy wyświetlanym nad zdalnym ekranem."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Tela Cheia expande este painel de Compartilhamento de Tela após a conexão ser estabelecida. A Barra de Ferramentas do Teclado controla a barra de teclas exibida sobre a tela remota."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ecrã Inteiro expande este painel de Partilha de Ecrã após a ligação ser estabelecida. Barra de Ferramentas do Teclado controla a barra de teclas apresentada sobre o ecrã remoto."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Ecran complet” extinde acest panou de partajare ecran după reușita conexiunii. „Bara de instrumente a tastaturii” controlează bara de taste afișată deasupra ecranului la distanță."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Celoten zaslon razširi to podokno skupne rabe zaslona po uspešni povezavi. Orodna vrstica tipkovnice upravlja vrstico tipk, prikazano nad oddaljenim zaslonom."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Helskärm expanderar den här skärmdelningsrutan när anslutningen har lyckats. Tangentbordets verktygsfält styr fältet med tangenter som visas över fjärrskärmen."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Повноекранний режим» розгортає цю область спільного доступу до екрана після успішного з'єднання. «Панель інструментів клавіатури» керує панеллю клавіш, що відображається над віддаленим екраном."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toàn màn hình sẽ mở rộng khung Chia sẻ màn hình này sau khi kết nối thành công. Thanh công cụ bàn phím kiểm soát thanh phím hiển thị phía trên màn hình từ xa."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“全屏”会在连接成功后展开此屏幕共享窗格。“键盘工具栏”控制显示在远程屏幕上方的按键栏。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「全螢幕」會在連線成功後展開此螢幕共享窗格。「鍵盤工具列」用於控制顯示在遠端螢幕上方的按鍵列。"
           }
         }
       }
@@ -392194,7 +392348,7 @@
       }
     },
     "Identity" : {
-      "comment" : "OpenPubkey field: signed-in account",
+      "comment" : "Local SSH agent client rule identity key label\nOpenPubkey field: signed-in account",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -394837,7 +394991,7 @@
       }
     },
     "Import" : {
-      "comment" : "Import button",
+      "comment" : "External agent identity import button\nImport button",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -448446,7 +448600,7 @@
       }
     },
     "Last Used" : {
-      "comment" : "VPN quick connect: caption above the last VPN's name",
+      "comment" : "Local SSH agent client rule last used label\nVPN quick connect: caption above the last VPN's name",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -466979,7 +467133,7 @@
       }
     },
     "Local SSH Agent" : {
-      "comment" : "Setting title",
+      "comment" : "Local SSH agent settings title\nSetting title\nSettings row: local SSH agent",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -506221,7 +506375,7 @@
       }
     },
     "Name" : {
-      "comment" : "File manager column\nFile manager name placeholder\nHTTP capture CA field\nHTTP capture session name field\nStorage metadata field name placeholder\nStorage provider field",
+      "comment" : "File manager column\nFile manager name placeholder\nHTTP capture CA field\nHTTP capture session name field\nLocal SSH agent client rule identity name label\nStorage metadata field name placeholder\nStorage provider field",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -539418,7 +539572,7 @@
       }
     },
     "None" : {
-      "comment" : "Auth method: no authentication\nBackground effect: no effect active\nBell sound: completely silent\nBookmarked locations: none saved\nCursor effect: no effect\nHTTP capture: no host decrypted\nKVM pre-disconnect action\nKey auth requirement: none\nKubernetes auth method: no authentication\nNotification sound: silent\nProfile folder: no folder selected\nQuick setup pair: disable both swipes\nScreen Sharing pre-disconnect action\nSettings status: none configured\nSplit border style: no border\nTailscale SSH egress: none\nTailscale exit node: none\nVNC jump selection\nVNC security preference\nVPN excluded routes: none configured",
+      "comment" : "Auth method: no authentication\nBackground effect: no effect active\nBell sound: completely silent\nCursor effect: no effect\nHTTP capture: no host decrypted\nKVM pre-disconnect action\nKey auth requirement: none\nKubernetes auth method: no authentication\nNotification sound: silent\nProfile folder: no folder selected\nQuick setup pair: disable both swipes\nScreen Sharing pre-disconnect action\nSettings status: none configured\nSplit border style: no border\nTailscale SSH egress: none\nTailscale exit node: none\nVNC jump selection\nVNC security preference\nVPN excluded routes: none configured",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -550397,7 +550551,7 @@
       }
     },
     "Off" : {
-      "comment" : "Agent notification policy: never notify\nAlways On Display duration: disabled\nLive Activity agent messages option\nMod-tap: no active rules\nSSHFP host key verification mode\nScreen Sharing clipboard sync default\nScreen Sharing three-finger swipe action\nSetting value display\nSettings VPN row: nothing running\nTailscale SSH egress state\nTailscale state\nTask notification policy: never notify\nToggle state: disabled\nTwo-finger long press: gesture disabled\nVNC keyboard toolbar preference",
+      "comment" : "Agent notification policy: never notify\nMod-tap: no active rules\nSSHFP host key verification mode\nScreen Sharing clipboard sync default\nScreen Sharing three-finger swipe action\nSetting value display\nSettings VPN row: nothing running\nSettings status: disabled\nTailscale SSH egress state\nTailscale state\nTask notification policy: never notify\nToggle state: disabled\nTwo-finger long press: gesture disabled\nVNC keyboard toolbar preference",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -551324,7 +551478,7 @@
       }
     },
     "On" : {
-      "comment" : "Setting value display\nSettings VPN row: in-app Tailscale waits to start\nTailscale VPN is active\nToggle state: enabled\nVNC keyboard toolbar preference",
+      "comment" : "Setting value display\nSettings VPN row: in-app Tailscale waits to start\nSettings status: enabled\nTailscale VPN is active\nToggle state: enabled\nVNC keyboard toolbar preference",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -581914,7 +582068,7 @@
       }
     },
     "Path" : {
-      "comment" : "Storage addressing style: bucket in the URL path",
+      "comment" : "Local SSH agent client rule identity path label\nStorage addressing style: bucket in the URL path",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -642919,7 +643073,7 @@
       }
     },
     "Remove" : {
-      "comment" : "Storage metadata: remove field",
+      "comment" : "Local SSH agent audit action\nStorage metadata: remove field",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -734217,6 +734371,314 @@
         }
       }
     },
+    "Show Keyboard Toolbar" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "إظهار شريط أدوات لوحة المفاتيح"
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostra la barra d'eines del teclat"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zobrazit panel nástrojů klávesnice"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vis tastaturværktøjslinje"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastatur-Symbolleiste einblenden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar barra de herramientas del teclado"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Näytä näppäimistön työkalupalkki"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afficher la barre d'outils du clavier"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הצגת סרגל הכלים של המקלדת"
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Billentyűzet eszköztár megjelenítése"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostra barra strumenti tastiera"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キーボードツールバーを表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키보드 도구 모음 보기"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vis tastaturverktøylinje"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toetsenbordwerkbalk tonen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pokaż pasek narzędzi klawiatury"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar Barra de Ferramentas do Teclado"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar barra de ferramentas do teclado"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afișează bara de instrumente a tastaturii"
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pokaži orodno vrstico tipkovnice"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visa tangentbordets verktygsfält"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Показати панель інструментів клавіатури"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hiện thanh công cụ bàn phím"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示键盘工具栏"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示鍵盤工具列"
+          }
+        }
+      }
+    },
+    "Show Keyboard Toolbar adds a bar of keys to Screen Sharing and KVM sessions whose connection follows the app setting. Change it for the current session from the Screen Sharing menu. Floating Toolbar puts the bar in glass over the remote screen, where you can drag and fold it away; turn it off to dock the bar along the bottom. Click and hold the bar's chevron to switch the current session." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يضيف «إظهار شريط أدوات لوحة المفاتيح» شريط مفاتيح إلى جلسات مشاركة الشاشة وKVM التي يتبع اتصالها إعداد التطبيق. غيّره للجلسة الحالية من قائمة مشاركة الشاشة. يضع «شريط الأدوات العائم» الشريط في زجاج فوق الشاشة البعيدة، حيث يمكنك سحبه وطيّه؛ أوقفه لإرساء الشريط على طول الحافة السفلية. انقر سهم الشريط مع الاستمرار لتبديل الجلسة الحالية."
+          }
+        },
+        "ca" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostra la barra d'eines del teclat afegeix una barra de tecles a les sessions de Compartir pantalla i KVM la connexió de les quals segueix l'ajust de l'app. Canvia-ho per a la sessió actual des del menú de Compartir pantalla. Barra d'eines flotant posa la barra en vidre sobre la pantalla remota, on la pots arrossegar i replegar; desactiva-ho per acoblar la barra a la part inferior. Fes clic i mantén premuda la fletxa de la barra per canviar la sessió actual."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zobrazit panel nástrojů klávesnice přidá lištu kláves do relací sdílení obrazovky a KVM, jejichž připojení se řídí nastavením aplikace. Pro aktuální relaci to změníte v nabídce Sdílení obrazovky. Plovoucí panel nástrojů umístí lištu do skla nad vzdálenou obrazovkou, kde ji můžete přetáhnout a sbalit; vypnutím lištu ukotvíte podél spodního okraje. Aktuální relaci přepnete kliknutím na šipku na liště a jejím podržením."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vis tastaturværktøjslinje tilføjer en bjælke med taster til Skærmdeling- og KVM-sessioner, hvis forbindelse følger appens indstilling. Skift den for den aktuelle session i menuen Skærmdeling. Flydende værktøjslinje placerer bjælken i glas over fjernskærmen, hvor du kan trække og folde den væk; slå den fra for at fastgøre bjælken langs bunden. Klik og hold på bjælkens pil for at skifte den aktuelle session."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastatur-Symbolleiste einblenden fügt Bildschirmfreigabe- und KVM-Sitzungen, deren Verbindung der App-Einstellung folgt, eine Tastenleiste hinzu. Für die aktuelle Sitzung ändern Sie dies im Bildschirmfreigabe-Menü. Schwebende Symbolleiste zeigt die Leiste in Glas über dem entfernten Bildschirm, wo Sie sie verschieben und einklappen können; deaktivieren Sie die Option, um die Leiste am unteren Rand anzudocken. Klicken und halten Sie den Pfeil der Leiste, um die aktuelle Sitzung umzuschalten."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Mostrar barra de herramientas del teclado» añade una barra de teclas a las sesiones de Compartir pantalla y KVM cuya conexión sigue el ajuste de la app. Cámbialo para la sesión actual desde el menú Compartir pantalla. «Barra de herramientas flotante» coloca la barra en cristal sobre la pantalla remota, donde puedes arrastrarla y plegarla; desactívalo para acoplar la barra en la parte inferior. Haz clic y mantén pulsada la flecha de la barra para cambiar la sesión actual."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Näytä näppäimistön työkalupalkki lisää näppäinpalkin näytön jakamisen ja KVM:n istuntoihin, joiden yhteys noudattaa sovelluksen asetusta. Muuta sitä nykyiselle istunnolle näytön jakamisen valikosta. Kelluva työkalupalkki sijoittaa palkin lasiin etänäytön päälle, jossa voit vetää sitä ja taittaa sen piiloon; laita tämä pois päältä, niin palkki kiinnitetään alareunaan. Vaihda nykyistä istuntoa klikkaamalla palkin nuolipainiketta ja pitämällä sitä painettuna."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afficher la barre d'outils du clavier ajoute une barre de touches aux sessions Partage d'écran et KVM dont la connexion suit le réglage de l'app. Modifiez-le pour la session en cours depuis le menu Partage d'écran. Barre d'outils flottante place la barre en verre au-dessus de l'écran distant, où vous pouvez la déplacer et la replier ; désactivez cette option pour ancrer la barre en bas. Cliquez longuement sur le chevron de la barre pour changer la session en cours."
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "הצגת סרגל הכלים של המקלדת מוסיפה סרגל מקשים להפעלות שיתוף מסך ו-KVM שהחיבור שלהן פועל לפי הגדרת האפליקציה. ניתן לשנות זאת להפעלה הנוכחית מתפריט שיתוף המסך. סרגל כלים צף מציב את הסרגל בזכוכית מעל המסך המרוחק, שם אפשר לגרור ולקפל אותו הצידה; כבה כדי לעגן את הסרגל לאורך החלק התחתון. לחץ והחזק את החץ של הסרגל כדי להחליף בהפעלה הנוכחית."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Billentyűzet eszköztár megjelenítése egy billentyűsávot ad azokhoz a Képernyőmegosztás- és KVM-munkamenetekhez, amelyek kapcsolata az alkalmazás beállítását követi. Az aktuális munkamenetben a Képernyőmegosztás menüben módosíthatja. A Lebegő eszköztár üvegben jeleníti meg a sávot a távoli képernyő fölött, ahol elhúzhatja és összecsukhatja; kapcsolja ki, ha a sávot az alsó szélhez szeretné dokkolni. Az aktuális munkamenetben való váltáshoz kattintson a sáv nyílgombjára, és tartsa lenyomva."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostra barra strumenti tastiera aggiunge una barra di tasti alle sessioni di Condivisione schermo e KVM la cui connessione segue l'impostazione dell'app. Puoi cambiarla per la sessione corrente dal menu Condivisione schermo. Barra strumenti mobile mette la barra in vetro sopra lo schermo remoto, dove puoi trascinarla e ripiegarla; disattiva l'opzione per ancorare la barra lungo il bordo inferiore. Fai clic e tieni premuta la freccia della barra per cambiare la sessione corrente."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「キーボードツールバーを表示」は、接続がアプリ設定に従う画面共有およびKVMセッションにキーのバーを追加します。現在のセッションでは画面共有メニューから変更できます。「フローティングツールバー」はバーをリモート画面の上のガラスに表示し、ドラッグしたり折りたたんだりできます。オフにすると、バーは下端にドッキングされます。現在のセッションで切り替えるには、バーのシェブロンをクリックしたままにします。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키보드 도구 모음 보기는 연결이 앱 설정을 따르는 화면 공유 및 KVM 세션에 키 막대를 추가합니다. 현재 세션에서는 화면 공유 메뉴에서 변경할 수 있습니다. 플로팅 도구 모음은 원격 화면 위의 글래스에 막대를 표시하며, 막대를 드래그하거나 접어 둘 수 있습니다. 끄면 막대가 하단에 고정됩니다. 현재 세션에서 전환하려면 막대의 화살표 버튼을 클릭한 채로 유지하십시오."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vis tastaturverktøylinje legger til en tastelinje i Skjermdeling- og KVM-økter der tilkoblingen følger appinnstillingen. Endre den for gjeldende økt fra Skjermdeling-menyen. Flytende verktøylinje legger linjen i glass over den eksterne skjermen, der du kan dra og felle den sammen; slå av for å feste linjen langs bunnen. Klikk og hold på linjens vinkelpil for å bytte i den gjeldende økten."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toetsenbordwerkbalk tonen voegt een toetsenbalk toe aan Schermdelen- en KVM-sessies waarvan de verbinding de app-instelling volgt. Wijzig dit voor de huidige sessie via het Schermdelen-menu. Zwevende werkbalk plaatst de balk in glas boven het externe scherm, waar je hem kunt slepen en wegvouwen; schakel dit uit om de balk langs de onderkant vast te koppelen. Klik en houd de chevron van de balk ingedrukt om de huidige sessie om te schakelen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pokaż pasek narzędzi klawiatury dodaje pasek klawiszy do sesji udostępniania ekranu i KVM, których połączenie korzysta z ustawienia aplikacji. Dla bieżącej sesji zmień to w menu udostępniania ekranu. Pływający pasek narzędzi umieszcza pasek na szkle nad zdalnym ekranem, gdzie możesz go przeciągać i zwijać; wyłącz, aby zadokować pasek wzdłuż dolnej krawędzi. Aby przełączyć bieżącą sesję, kliknij i przytrzymaj strzałkę paska."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A opção Mostrar Barra de Ferramentas do Teclado adiciona uma barra de teclas às sessões de Compartilhamento de Tela e KVM cuja conexão segue o ajuste do app. Altere-a para a sessão atual no menu Compartilhamento de Tela. A Barra de Ferramentas Flutuante coloca a barra em vidro sobre a tela remota, onde você pode arrastá-la e recolhê-la; desative para encaixar a barra na parte inferior. Clique e segure a seta da barra para alternar a sessão atual."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar barra de ferramentas do teclado adiciona uma barra de teclas às sessões de Partilha de Ecrã e KVM cuja ligação segue a definição da app. Altere-a para a sessão atual no menu Partilha de Ecrã. Barra de Ferramentas Flutuante coloca a barra em vidro sobre o ecrã remoto, onde a pode arrastar e recolher; desative para encaixar a barra ao longo da parte inferior. Clique e mantenha premida a seta da barra para alternar a sessão atual."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Afișează bara de instrumente a tastaturii” adaugă o bară de taste sesiunilor de partajare ecran și KVM a căror conexiune urmează setarea aplicației. Modific-o pentru sesiunea curentă din meniul de partajare ecran. „Bară de instrumente flotantă” plasează bara în sticlă deasupra ecranului la distanță, unde o poți trage și restrânge; dezactiveaz-o pentru a andoca bara de-a lungul marginii de jos. Fă clic și ține apăsată săgeata barei pentru a comuta sesiunea curentă."
+          }
+        },
+        "sl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pokaži orodno vrstico tipkovnice doda vrstico tipk sejam skupne rabe zaslona in KVM, katerih povezava sledi nastavitvi aplikacije. Za trenutno sejo jo spremenite v meniju skupne rabe zaslona. Plavajoča orodna vrstica postavi vrstico v steklo nad oddaljenim zaslonom, kjer jo lahko povlečete in strnete; izklopite, da vrstico zasidrate ob spodnjem robu. Za preklop trenutne seje kliknite puščico vrstice in jo zadržite."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visa tangentbordets verktygsfält lägger till ett fält med tangenter i Skärmdelning- och KVM-sessioner vars anslutning följer appinställningen. Ändra det för den aktuella sessionen i menyn Skärmdelning. Flytande verktygsfält lägger fältet i glas över fjärrskärmen, där du kan dra och fälla undan det. Stäng av för att docka fältet längs nederkanten. Klicka och håll ned fältets pilknapp för att växla den aktuella sessionen."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Показати панель інструментів клавіатури» додає панель клавіш до сеансів спільного доступу до екрана й KVM, з'єднання яких використовує налаштування застосунку. Для поточного сеансу це можна змінити в меню спільного доступу до екрана. «Плаваюча панель інструментів» розміщує панель на склі над віддаленим екраном, де її можна перетягувати й згортати; вимкніть, щоб закріпити панель уздовж нижнього краю. Клацніть і утримуйте шеврон панелі, щоб перемкнути поточний сеанс."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hiện thanh công cụ bàn phím thêm một thanh phím vào các phiên Chia sẻ màn hình và KVM có kết nối theo cài đặt của ứng dụng. Thay đổi cho phiên hiện tại từ menu Chia sẻ màn hình. Thanh công cụ nổi đặt thanh trong lớp kính phía trên màn hình từ xa, nơi bạn có thể kéo và thu gọn; tắt để cố định thanh dọc theo cạnh dưới. Bấm và giữ nút mũi tên của thanh để chuyển đổi phiên hiện tại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“显示键盘工具栏”会为连接遵循 App 设置的屏幕共享和 KVM 会话添加按键栏。可从“屏幕共享”菜单更改当前会话的设置。“浮动工具栏”会将按键栏以玻璃样式置于远程屏幕上方，可拖动或收起；关闭后按键栏会停靠在底部。点按并按住该栏的箭头按钮即可切换当前会话。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「顯示鍵盤工具列」會為連線遵循 App 設定的螢幕共享與 KVM 工作階段加入按鍵列。可從「螢幕共享」選單變更目前工作階段的設定。「浮動工具列」會將按鍵列以玻璃樣式置於遠端螢幕上方，可拖曳或收起；關閉後按鍵列會停駐在底部。按住該列的 V 形箭頭即可切換目前的工作階段。"
+          }
+        }
+      }
+    },
     "Show Multiplexer Tabs" : {
       "localizations" : {
         "ar" : {
@@ -764996,7 +765458,7 @@
       }
     },
     "SSH Agent" : {
-      "comment" : "Setting group title",
+      "comment" : "Agent key section header\nSetting group title",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -955633,7 +956095,7 @@
       }
     },
     "Weekly" : {
-      "comment" : "Agent usage window title: weekly quota",
+      "comment" : "Agent usage window title: weekly quota\nUpdate interval: weekly",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
