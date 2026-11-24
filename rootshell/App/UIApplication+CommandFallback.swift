@@ -120,6 +120,10 @@ extension UIApplication {
         ghostty_postNotification(.toggleAgentInbox)
     }
 
+    @objc func menuToggleGitDiff(_ sender: Any?) {
+        ghostty_postNotification(.toggleGitDiff)
+    }
+
     @objc func menuToggleThemePicker(_ sender: Any?) {
         ghostty_postNotification(.toggleThemePicker)
     }

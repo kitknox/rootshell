@@ -346,6 +346,14 @@ struct FileCommands: Commands {
                 )
             }
             .modifier(DynamicShortcut(action: .toggle_agent_inbox, shortcuts: shortcutState.shortcuts))
+
+            Button("Git Diff") {
+                UIApplication.shared.sendMenuAction(
+                    #selector(Ghostty.TerminalView.menuToggleGitDiff(_:)),
+                    from: nil
+                )
+            }
+            .modifier(DynamicShortcut(action: .toggle_git_diff, shortcuts: shortcutState.shortcuts))
         }
     }
 }

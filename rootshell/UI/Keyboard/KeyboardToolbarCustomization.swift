@@ -83,6 +83,7 @@ nonisolated enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
     case dictation
     case choosePaneToZoom
     case togglePaneZoom
+    case gitDiff
 
     // Toggles (1)
     case drawerToggle
@@ -154,6 +155,7 @@ nonisolated enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .dictation: return String(localized: "Dictation")
         case .choosePaneToZoom: return String(localized: "Choose Pane to Zoom")
         case .togglePaneZoom: return String(localized: "Toggle Pane Zoom")
+        case .gitDiff: return String(localized: "Git Diff")
         case .drawerToggle: return String(localized: "Drawer Toggle")
         }
     }
@@ -193,6 +195,7 @@ nonisolated enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .dictation: return "mic"
         case .choosePaneToZoom: return "number.square"
         case .togglePaneZoom: return "arrow.up.left.and.down.right.magnifyingglass"
+        case .gitDiff: return GitDiffView.systemImage
         case .drawerToggle: return "ellipsis"
         default: return nil
         }
@@ -261,6 +264,7 @@ nonisolated enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .dictation: return "__dictation__"
         case .choosePaneToZoom: return "__choosePaneToZoom__"
         case .togglePaneZoom: return "__togglePaneZoom__"
+        case .gitDiff: return "__gitDiff__"
         case .drawerToggle: return "__extraDrawer__"
         }
     }
@@ -335,7 +339,7 @@ nonisolated enum KeyID: String, Codable, CaseIterable, Hashable, Sendable {
         case .dismiss, .tabSwitcher, .compose, .writingAssistance, .toolbarSettings, .paste, .voiceAgent,
              .toggleFullScreen, .toggleTabBar, .newConnection, .appSettings,
              .toggleMouseCapture, .aiAgent, .brightnessBoost, .typePassword, .clipboardManager, .fileManager, .httpCapture, .dictation,
-             .choosePaneToZoom, .togglePaneZoom: return .action
+             .choosePaneToZoom, .togglePaneZoom, .gitDiff: return .action
         case .drawerToggle: return .toggle
         default: return .symbol
         }
@@ -646,7 +650,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
 
     // MARK: - Defaults
 
-    static let currentVersion = 19
+    static let currentVersion = 20
 
     static func defaultConfig(for idiom: UIUserInterfaceIdiom) -> ToolbarLayoutConfig {
         switch idiom {
@@ -716,6 +720,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
             .builtIn(.brightnessBoost),
             .builtIn(.clipboardManager),
             .builtIn(.fileManager),
+            .builtIn(.gitDiff),
             .builtIn(.httpCapture),
             .builtIn(.appSettings),
         ]],
@@ -773,6 +778,7 @@ struct ToolbarLayoutConfig: Equatable, Sendable {
             .builtIn(.brightnessBoost),
             .builtIn(.clipboardManager),
             .builtIn(.fileManager),
+            .builtIn(.gitDiff),
             .builtIn(.httpCapture),
             .builtIn(.appSettings),
         ]],

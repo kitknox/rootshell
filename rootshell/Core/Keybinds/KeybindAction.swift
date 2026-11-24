@@ -157,6 +157,7 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
     case toggle_http_capture = "toggle_http_capture"
     /// Show or hide the agent inbox (hook messages from coding agents)
     case toggle_agent_inbox = "toggle_agent_inbox"
+    case toggle_git_diff = "toggle_git_diff"
     /// Open host browser
     case browse_hosts = "browse_hosts"
     /// Open profiles browser
@@ -338,7 +339,7 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
              .toggle_auto_redact:
             return .view
 
-        case .toggle_visor, .open_settings, .toggle_quick_settings, .open_in_folder, .toggle_file_manager, .toggle_ip_lookup, .toggle_http_capture, .toggle_agent_inbox, .browse_hosts, .browse_profiles, .open_profile, .toggle_ai_agent, .toggle_voice_agent,
+        case .toggle_visor, .open_settings, .toggle_quick_settings, .open_in_folder, .toggle_file_manager, .toggle_ip_lookup, .toggle_http_capture, .toggle_agent_inbox, .toggle_git_diff, .browse_hosts, .browse_profiles, .open_profile, .toggle_ai_agent, .toggle_voice_agent,
              .toggle_dictation:
             return .shell
 
@@ -413,6 +414,7 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
         case .toggle_ip_lookup: return String(localized: "IP Lookup", comment: "Keybind action: show or hide the IP geo lookup HUD")
         case .toggle_http_capture: return String(localized: "HTTP Capture", comment: "Keybind action: show or hide the HTTP capture panel")
         case .toggle_agent_inbox: return String(localized: "Agent Inbox", comment: "Keybind action: show or hide the agent inbox panel")
+        case .toggle_git_diff: return String(localized: "Git Diff", comment: "Keybind action: show or hide the git diff panel")
         case .open_settings: return String(localized: "Settings", comment: "Keybind action: open settings")
         case .browse_hosts: return String(localized: "Browse Hosts", comment: "Keybind action")
         case .browse_profiles: return String(localized: "Browse Profiles", comment: "Keybind action")
@@ -513,6 +515,7 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
         case .toggle_ip_lookup: return .toggleIPLookup
         case .toggle_http_capture: return .toggleHTTPCapture
         case .toggle_agent_inbox: return .toggleAgentInbox
+        case .toggle_git_diff: return .toggleGitDiff
         case .browse_hosts: return .browseHosts
         case .browse_profiles: return .browseProfiles
         case .open_profile: return .openConnectionProfile
@@ -654,7 +657,7 @@ enum KeybindAction: String, CaseIterable, Codable, Identifiable, Hashable {
              .navigate_split_right, .navigate_split_up, .navigate_split_down,
              .toggle_split_zoom, .equalize_splits, .choose_pane_to_zoom, .choose_pane_to_swap,
              .open_settings, .toggle_quick_settings, .open_in_folder,
-             .toggle_file_manager, .toggle_ip_lookup, .toggle_http_capture, .toggle_agent_inbox, .browse_hosts,
+             .toggle_file_manager, .toggle_ip_lookup, .toggle_http_capture, .toggle_agent_inbox, .toggle_git_diff, .browse_hosts,
              .browse_profiles, .toggle_ai_agent, .toggle_voice_agent, .toggle_dictation, .toggle_tab_bar, .toggle_group_mode,
              .toggle_transparency, .toggle_titlebar, .toggle_auto_redact,
              .toggle_background_effect, .toggle_tab_switcher, .toggle_tab_expose, .show_tmux_sessions,

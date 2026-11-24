@@ -122,6 +122,7 @@ extension MainView {
         if httpCaptureShowsOverlay && httpCapturePresentation == .full { return true }
         #endif
         if agentInboxShowsOverlay && agentInboxPresentation == .full { return true }
+        if gitDiffShowsOverlay && gitDiffPresentation == .full { return true }
         return fileManagerShowsOverlay && fileManagerPresentation == .full
     }
 

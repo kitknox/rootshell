@@ -89,70 +89,8 @@ nonisolated enum ProjectProbeCommand {
         // prints the environment inline and `lsof` reports the cwd. Both are
         // restricted to our own processes, which is exactly the scope wanted.
         if let paneToken, !paneToken.isEmpty {
-            let needle = singleQuoted("\(TerminalIdentity.paneTokenVariable)=\(paneToken)")
             script += " printf '::CWD_\(nonce)::\\n';"
-            script += " _d='';"
-
-            // Linux: match the pane token in a process environment. Exact and
-            // cheap where it is available.
-            //
-            // One `grep -z` reads every environ in a single process. A loop
-            // of `tr | grep` per PID cost two forks per process on the host,
-            // hundreds per probe on a busy box (#565). BusyBox grep has no
-            // `-z`, so there the loop remains, skipping the environ files of
-            // other users, which cannot be read anyway.
-            script += " if [ -r /proc/self/environ ]; then"
-            script += " if printf 'x\\0' | grep -qxzF x 2>/dev/null; then"
-            script += " for _e in $(grep -lsxzF \(needle) /proc/[0-9]*/environ); do"
-            script += " _d=$(readlink \"${_e%/environ}/cwd\" 2>/dev/null) && [ -n \"$_d\" ] && break;"
-            script += " done;"
-            script += " else"
-            script += " for _e in /proc/[0-9]*; do"
-            script += " [ -r \"$_e/environ\" ] || continue;"
-            script += " tr '\\0' '\\n' 2>/dev/null < \"$_e/environ\" | grep -qxF \(needle) || continue;"
-            script += " _d=$(readlink \"$_e/cwd\" 2>/dev/null) && [ -n \"$_d\" ] && break;"
-            script += " done;"
-            script += " fi;"
-            script += " fi;"
-
-            // Everywhere else (notably macOS, which does NOT expose process
-            // environments to ps at all) fall back to the process TREE: this
-            // exec channel and the pane's interactive shell are both children
-            // of the same connection's sshd, so the pane is identifiable with
-            // no environment access. Walk to that shared ancestor, then take
-            // the deepest descendant outside our own branch that has a cwd.
-            // Everywhere else (notably macOS, which does NOT expose process
-            // environments to ps at all) fall back to the process TREE: this
-            // exec channel and the pane's interactive shell are both children
-            // of the same connection's sshd.
-            //
-            // The depth of that shared ancestor is NOT fixed. sshd may exec our
-            // command directly from the connection process (shell is our
-            // sibling) or via a per-session child (shell is a cousin), and on
-            // macOS sshd itself is spawned per connection by launchd. So walk
-            // UP level by level and, at each ancestor, look for a process
-            // outside our own chain that has a cwd. Nearest ancestor first, so
-            // the closest relative wins.
-            script += " if [ -z \"$_d\" ]; then"
-            script += " _chain=\" $$ \"; _a=$$;"
-            script += " for _lvl in 1 2 3; do"
-            script += " _a=$(ps -o ppid= -p \"$_a\" 2>/dev/null | tr -d ' ');"
-            script += " [ -z \"$_a\" ] || [ \"$_a\" = 0 ] || [ \"$_a\" = 1 ] && break;"
-            script += " _chain=\"$_chain$_a \";"
-            script += " for _k in $(ps -o pid=,ppid= -ax 2>/dev/null"
-            script += " | awk -v a=\"$_a\" '$2==a {print $1}'); do"
-            script += " case \"$_chain\" in *\" $_k \"*) continue;; esac;"
-            script += " for _c in $(ps -o pid=,ppid= -ax 2>/dev/null"
-            script += " | awk -v s=\"$_k\" '$2==s {print $1}') \"$_k\"; do"
-            script += " _d=$(lsof -a -p \"$_c\" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1);"
-            script += " [ -n \"$_d\" ] && break;"
-            script += " done;"
-            script += " [ -n \"$_d\" ] && break;"
-            script += " done;"
-            script += " [ -n \"$_d\" ] && break;"
-            script += " done;"
-            script += " fi;"
-
+            script += paneDirectoryScript(paneToken: paneToken)
             script += " [ -n \"$_d\" ] && printf '%s\\n' \"$_d\";"
         }
 
@@ -199,6 +137,75 @@ nonisolated enum ProjectProbeCommand {
         script += " exit 0"
 
         return (script, nonce)
+    }
+
+    /// sh that sets `_d` to the working directory of the process carrying
+    /// `paneToken`, or leaves it empty. Shared with the git diff probe.
+    static func paneDirectoryScript(paneToken: String) -> String {
+        let needle = singleQuoted("\(TerminalIdentity.paneTokenVariable)=\(paneToken)")
+        var script = ""
+        script += " _d='';"
+
+        // Linux: match the pane token in a process environment. Exact and
+        // cheap where it is available.
+        //
+        // One `grep -z` reads every environ in a single process. A loop
+        // of `tr | grep` per PID cost two forks per process on the host,
+        // hundreds per probe on a busy box (#565). BusyBox grep has no
+        // `-z`, so there the loop remains, skipping the environ files of
+        // other users, which cannot be read anyway.
+        script += " if [ -r /proc/self/environ ]; then"
+        script += " if printf 'x\\0' | grep -qxzF x 2>/dev/null; then"
+        script += " for _e in $(grep -lsxzF \(needle) /proc/[0-9]*/environ); do"
+        script += " _d=$(readlink \"${_e%/environ}/cwd\" 2>/dev/null) && [ -n \"$_d\" ] && break;"
+        script += " done;"
+        script += " else"
+        script += " for _e in /proc/[0-9]*; do"
+        script += " [ -r \"$_e/environ\" ] || continue;"
+        script += " tr '\\0' '\\n' 2>/dev/null < \"$_e/environ\" | grep -qxF \(needle) || continue;"
+        script += " _d=$(readlink \"$_e/cwd\" 2>/dev/null) && [ -n \"$_d\" ] && break;"
+        script += " done;"
+        script += " fi;"
+        script += " fi;"
+
+        // Everywhere else (notably macOS, which does NOT expose process
+        // environments to ps at all) fall back to the process TREE: this
+        // exec channel and the pane's interactive shell are both children
+        // of the same connection's sshd, so the pane is identifiable with
+        // no environment access. Walk to that shared ancestor, then take
+        // the deepest descendant outside our own branch that has a cwd.
+        // Everywhere else (notably macOS, which does NOT expose process
+        // environments to ps at all) fall back to the process TREE: this
+        // exec channel and the pane's interactive shell are both children
+        // of the same connection's sshd.
+        //
+        // The depth of that shared ancestor is NOT fixed. sshd may exec our
+        // command directly from the connection process (shell is our
+        // sibling) or via a per-session child (shell is a cousin), and on
+        // macOS sshd itself is spawned per connection by launchd. So walk
+        // UP level by level and, at each ancestor, look for a process
+        // outside our own chain that has a cwd. Nearest ancestor first, so
+        // the closest relative wins.
+        script += " if [ -z \"$_d\" ]; then"
+        script += " _chain=\" $$ \"; _a=$$;"
+        script += " for _lvl in 1 2 3; do"
+        script += " _a=$(ps -o ppid= -p \"$_a\" 2>/dev/null | tr -d ' ');"
+        script += " [ -z \"$_a\" ] || [ \"$_a\" = 0 ] || [ \"$_a\" = 1 ] && break;"
+        script += " _chain=\"$_chain$_a \";"
+        script += " for _k in $(ps -o pid=,ppid= -ax 2>/dev/null"
+        script += " | awk -v a=\"$_a\" '$2==a {print $1}'); do"
+        script += " case \"$_chain\" in *\" $_k \"*) continue;; esac;"
+        script += " for _c in $(ps -o pid=,ppid= -ax 2>/dev/null"
+        script += " | awk -v s=\"$_k\" '$2==s {print $1}') \"$_k\"; do"
+        script += " _d=$(lsof -a -p \"$_c\" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1);"
+        script += " [ -n \"$_d\" ] && break;"
+        script += " done;"
+        script += " [ -n \"$_d\" ] && break;"
+        script += " done;"
+        script += " [ -n \"$_d\" ] && break;"
+        script += " done;"
+        script += " fi;"
+        return script
     }
 
     /// Quotes a remote path or script for the login shell.

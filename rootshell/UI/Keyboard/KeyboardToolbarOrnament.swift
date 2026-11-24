@@ -135,6 +135,10 @@ struct KeyboardToolbarRepresentable: UIViewRepresentable {
             NotificationCenter.default.post(name: .toggleHTTPCapture, object: toolbar)
         }
 
+        toolbar.onGitDiffRequested = { [weak toolbar] in
+            NotificationCenter.default.post(name: .toggleGitDiff, object: toolbar)
+        }
+
         toolbar.onModifiersChanged = { [weak coordinator] modifiers in
             coordinator?.focusedTerminal?.activeKeyboardModifiers = modifiers
         }

@@ -93,6 +93,7 @@ extension MainView {
     /// HTTP capture panel holding that spot.
     private func yieldPanelSlotToAgentInbox(_ presentation: PanelPresentation) {
         guard !isPhone else { return }
+        yieldGitDiffSlot(to: presentation)
         if showFileManager, fileManagerPresentation.sharesSlot(with: presentation) {
             closeFileManager()
         }

@@ -77,6 +77,7 @@ extension MainView {
             fileManagerOwnsKeyboard ||
             httpCaptureHoldsKeyboard ||
             agentInboxOwnsKeyboard ||
+            gitDiffOwnsKeyboard ||
             // The iPhone presentation is a sheet that owns the keyboard. On
             // regular width the clipboard manager is a passthrough glass HUD (like
             // the Find HUD, which is intentionally absent here) and must NOT count
@@ -216,6 +217,7 @@ extension MainView {
             .modifier(httpCapturePhoneSheetModifier(sheetTheme: sheetTheme))
             #endif
             .modifier(agentInboxPhoneSheetModifier(sheetTheme: sheetTheme))
+            .modifier(gitDiffPhoneSheetModifier(sheetTheme: sheetTheme))
             .sheet(item: $connectionInfoToShow) { info in
                 ConnectionInfoSheet(info: info)
                     .themedSheet(themeColors: sheetTheme.themeColors, accentColor: sheetTheme.accentColor, colorScheme: sheetTheme.colorScheme)

@@ -178,6 +178,10 @@ extension Ghostty {
         /// Used to set initial occlusion state when surface is created.
         var isTabVisible: Bool = true
 
+        /// Bumped on every screen change. The git diff panel polls only
+        /// while this moves, since output is when files change.
+        var surfaceContentSerial: UInt64 = 0
+
         /// Whether tab/window state has explicitly supplied `isTabVisible`.
         /// Before a surface exists, `setOcclusion` records the desired state
         /// here so surface creation never has to assume every new tab is visible.
@@ -5460,6 +5464,7 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
     }
 
     func handleSurfaceContentChanged() {
+        surfaceContentSerial &+= 1
         AgentAttentionCenter.shared.noteContentChanged(terminal: self)
         noteLocalForegroundMayHaveChanged()
         if let binding = tmuxPaneBinding,

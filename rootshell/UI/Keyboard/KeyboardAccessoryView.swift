@@ -176,6 +176,13 @@ class KeyboardAccessoryView: UIInputView {
         }
     }
 
+    /// Callback when the git diff button is tapped
+    var onGitDiffRequested: (() -> Void)? {
+        didSet {
+            toolbarView.onGitDiffRequested = onGitDiffRequested
+        }
+    }
+
     /// Callback when accessory layout changes and input views should refresh
     var onLayoutInvalidated: (() -> Void)?
 

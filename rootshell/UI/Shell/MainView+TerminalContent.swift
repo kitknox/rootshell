@@ -322,6 +322,8 @@ extension MainView {
 
             agentInboxOverlays(fullSize: true)
 
+            gitDiffOverlays(fullSize: true)
+
             // Compose text overlay
             composeOverlay(composeStateVersion: composeStateVersion)
 
@@ -365,6 +367,9 @@ extension MainView {
             #endif
 
             agentInboxOverlays(fullSize: false)
+
+            // Git diff HUD, or its summary pill
+            gitDiffOverlays(fullSize: false)
 
             // Theme picker overlay
             themePickerOverlayView(isPresented: $showThemePickerOverlay)
@@ -1338,6 +1343,7 @@ extension MainView {
         #if !CHINA_BUILD
         if httpCaptureShowsOverlay && httpCapturePresentation == .full { return true }
         #endif
+        if gitDiffShowsOverlay && gitDiffPresentation == .full { return true }
         if agentInboxShowsOverlay && agentInboxPresentation == .full { return true }
         return fileManagerShowsOverlay && fileManagerPresentation == .full
     }
@@ -1462,6 +1468,7 @@ extension MainView {
         let fileManager: CGFloat
         let httpCapture: CGFloat
         let agentInbox: CGFloat
+        let gitDiff: CGFloat
         let terminal: CGFloat
     }
 
@@ -1497,13 +1504,18 @@ extension MainView {
         let agentInboxWidth = agentInboxShowsSidebar
             ? min(agentInboxSidebarWidth, max(AgentInboxSidebarView.minWidth, rowWidth - dockedWidth - sidebarWidth - 320))
             : 0
+        let gitDiffWidth = gitDiffShowsSidebar
+            ? min(gitDiffSidebarWidth, max(GitDiffSidebarView.minWidth, rowWidth - dockedWidth - sidebarWidth - 320))
+            : 0
         return TerminalRowColumns(
             docked: dockedWidth,
             aiSidebar: sidebarWidth,
             fileManager: fileManagerWidth,
             httpCapture: httpCaptureWidth,
             agentInbox: agentInboxWidth,
-            terminal: rowWidth - sidebarWidth - dockedWidth - fileManagerWidth - httpCaptureWidth - agentInboxWidth)
+            gitDiff: gitDiffWidth,
+            terminal: rowWidth - sidebarWidth - dockedWidth - fileManagerWidth - httpCaptureWidth - agentInboxWidth
+                - gitDiffWidth)
     }
 
     /// The complete terminal and AI sidebar content.
@@ -1548,6 +1560,7 @@ extension MainView {
         let fileManagerWidth = columns.fileManager
         let httpCaptureWidth = columns.httpCapture
         let agentInboxWidth = columns.agentInbox
+        let gitDiffWidth = columns.gitDiff
         let terminalWidth = columns.terminal
         let portsTerminal = showRemotePorts && terminals.indices.contains(selectedTabIndex)
             ? terminals[selectedTabIndex].focusedPane?.asTerminal
@@ -1601,6 +1614,8 @@ extension MainView {
             fileManagerSidebarColumn(width: fileManagerWidth, totalWidth: geometry.size.width)
 
             agentInboxSidebarColumn(width: agentInboxWidth, totalWidth: geometry.size.width)
+
+            gitDiffSidebarColumn(width: gitDiffWidth, totalWidth: geometry.size.width)
 
             #if !CHINA_BUILD
             httpCaptureSidebarColumn(width: httpCaptureWidth, totalWidth: geometry.size.width)
@@ -1680,6 +1695,7 @@ extension MainView {
         .animation(tabSidebarIsDragging ? .none : .interactiveSpring(), value: dockedWidth)
         .animation(fileManagerSidebarIsDragging ? .none : .spring(response: 0.3, dampingFraction: 0.85), value: fileManagerWidth)
         .animation(agentInboxSidebarIsDragging ? .none : .spring(response: 0.3, dampingFraction: 0.85), value: agentInboxWidth)
+        .animation(gitDiffSidebarIsDragging ? .none : .spring(response: 0.3, dampingFraction: 0.85), value: gitDiffWidth)
         #if !CHINA_BUILD
         .animation(httpCaptureSidebarIsDragging ? .none : .spring(response: 0.3, dampingFraction: 0.85), value: httpCaptureWidth)
         .animation(

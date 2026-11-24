@@ -636,6 +636,9 @@ class KeyboardToolbarView: UIView {
     /// Callback when the HTTP capture button is tapped
     var onHTTPCaptureRequested: (() -> Void)?
 
+    /// Callback when the git diff button is tapped
+    var onGitDiffRequested: (() -> Void)?
+
     /// Callback when drawer opens/closes (for height updates)
     var onDrawerStateChanged: (() -> Void)?
 
@@ -1578,7 +1581,7 @@ class KeyboardToolbarView: UIView {
             let button = KeyboardSymbolButton(key: keyID.keyValue, display: .icon("mic"), sizes: sizes)
             button.delegate = self
             return button
-        case .choosePaneToZoom, .togglePaneZoom:
+        case .choosePaneToZoom, .togglePaneZoom, .gitDiff:
             let button = KeyboardSymbolButton(key: keyID.keyValue, display: .icon(keyID.iconName ?? ""), sizes: sizes)
             button.accessibilityLabel = keyID.displayName
             button.delegate = self
@@ -2526,6 +2529,10 @@ extension KeyboardToolbarView: KeyboardButtonDelegate {
         }
         if key == KeyID.httpCapture.keyValue {
             onHTTPCaptureRequested?()
+            return
+        }
+        if key == KeyID.gitDiff.keyValue {
+            onGitDiffRequested?()
             return
         }
         if key == KeyID.choosePaneToZoom.keyValue {

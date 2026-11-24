@@ -1296,6 +1296,11 @@ class CatalystAppDelegate: AppDelegate {
             action: #selector(UIApplication.menuToggleAgentInbox(_:)),
             keybind: .toggle_agent_inbox
         ))
+        sceneItems.append(keybindMenuCommand(
+            title: String(localized: "Git Diff"),
+            action: #selector(UIApplication.menuToggleGitDiff(_:)),
+            keybind: .toggle_git_diff
+        ))
         builder.replaceChildren(ofMenu: .newScene) { _ in releasingRemoteScreenKeyEquivalents(sceneItems) }
     }
 

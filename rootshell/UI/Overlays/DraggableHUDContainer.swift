@@ -55,6 +55,7 @@ struct DraggableHUDContainer<Content: View>: UIViewRepresentable {
     var forwardsIPLookupToggle: Bool
     var forwardsHTTPCaptureToggle: Bool
     var forwardsAgentInboxToggle: Bool
+    var forwardsGitDiffToggle: Bool
     /// Handles a forwarded toggle menu action instead of `onDismiss`. Needed by
     /// the clipboard manager, whose toggle is a 3-state cycle (open → keyboard
     /// mode → close) rather than a plain dismiss: the HUD's field can hold
@@ -79,6 +80,7 @@ struct DraggableHUDContainer<Content: View>: UIViewRepresentable {
          forwardsIPLookupToggle: Bool = false,
          forwardsHTTPCaptureToggle: Bool = false,
          forwardsAgentInboxToggle: Bool = false,
+         forwardsGitDiffToggle: Bool = false,
          onForwardedToggle: (() -> Void)? = nil,
          onFind: (() -> Void)? = nil,
          onDismiss: (() -> Void)? = nil,
@@ -97,6 +99,7 @@ struct DraggableHUDContainer<Content: View>: UIViewRepresentable {
         self.forwardsIPLookupToggle = forwardsIPLookupToggle
         self.forwardsHTTPCaptureToggle = forwardsHTTPCaptureToggle
         self.forwardsAgentInboxToggle = forwardsAgentInboxToggle
+        self.forwardsGitDiffToggle = forwardsGitDiffToggle
         self.onForwardedToggle = onForwardedToggle
         self.onFind = onFind
         self.onDismiss = onDismiss
@@ -118,6 +121,7 @@ struct DraggableHUDContainer<Content: View>: UIViewRepresentable {
         view.forwardsIPLookupToggle = forwardsIPLookupToggle
         view.forwardsHTTPCaptureToggle = forwardsHTTPCaptureToggle
         view.forwardsAgentInboxToggle = forwardsAgentInboxToggle
+        view.forwardsGitDiffToggle = forwardsGitDiffToggle
         view.onForwardedToggle = onForwardedToggle
         view.onFind = onFind
         view.onDismiss = onDismiss
@@ -154,6 +158,7 @@ struct DraggableHUDContainer<Content: View>: UIViewRepresentable {
         uiView.forwardsIPLookupToggle = forwardsIPLookupToggle
         uiView.forwardsHTTPCaptureToggle = forwardsHTTPCaptureToggle
         uiView.forwardsAgentInboxToggle = forwardsAgentInboxToggle
+        uiView.forwardsGitDiffToggle = forwardsGitDiffToggle
         uiView.onForwardedToggle = onForwardedToggle
         uiView.setNeedsLayout()
     }
@@ -215,6 +220,7 @@ final class DraggableHUDHostView: UIView, UIGestureRecognizerDelegate {
     var forwardsIPLookupToggle = false
     var forwardsHTTPCaptureToggle = false
     var forwardsAgentInboxToggle = false
+    var forwardsGitDiffToggle = false
     var onForwardedToggle: (() -> Void)?
     var onFind: (() -> Void)?
     var onDismiss: (() -> Void)?
@@ -253,6 +259,7 @@ final class DraggableHUDHostView: UIView, UIGestureRecognizerDelegate {
         if action == #selector(menuToggleIPLookup(_:)) { return forwardsIPLookupToggle }
         if action == #selector(menuToggleHTTPCapture(_:)) { return forwardsHTTPCaptureToggle }
         if action == #selector(menuToggleAgentInbox(_:)) { return forwardsAgentInboxToggle }
+        if action == #selector(menuToggleGitDiff(_:)) { return forwardsGitDiffToggle }
         return super.canPerformAction(action, withSender: sender)
     }
 
@@ -261,6 +268,10 @@ final class DraggableHUDHostView: UIView, UIGestureRecognizerDelegate {
     }
 
     @objc func menuToggleAgentInbox(_ sender: Any?) {
+        (onForwardedToggle ?? onDismiss)?()
+    }
+
+    @objc func menuToggleGitDiff(_ sender: Any?) {
         (onForwardedToggle ?? onDismiss)?()
     }
 
@@ -352,6 +363,14 @@ final class DraggableHUDHostView: UIView, UIGestureRecognizerDelegate {
            !sequence.isSequence, let trigger = sequence.first {
             let command = UIKeyCommand(input: trigger.uiKeyInput, modifierFlags: trigger.uiModifierFlags,
                                        action: #selector(menuToggleAgentInbox(_:)))
+            command.wantsPriorityOverSystemBehavior = true
+            commands.append(command)
+        }
+        if forwardsGitDiffToggle,
+           let sequence = KeybindManager.shared.sequence(for: .toggle_git_diff),
+           !sequence.isSequence, let trigger = sequence.first {
+            let command = UIKeyCommand(input: trigger.uiKeyInput, modifierFlags: trigger.uiModifierFlags,
+                                       action: #selector(menuToggleGitDiff(_:)))
             command.wantsPriorityOverSystemBehavior = true
             commands.append(command)
         }

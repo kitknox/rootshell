@@ -2639,6 +2639,11 @@ extension Ghostty.TerminalView {
         NotificationCenter.default.post(name: .toggleAgentInbox, object: self)
     }
 
+    @objc func menuToggleGitDiff(_ sender: Any?) {
+        noteModTapCommand(sender as? UIKeyCommand)
+        NotificationCenter.default.post(name: .toggleGitDiff, object: self)
+    }
+
     @objc func menuToggleThemePicker(_ sender: Any?) {
         noteModTapCommand(sender as? UIKeyCommand)
         NotificationCenter.default.post(name: .toggleThemePicker, object: self)

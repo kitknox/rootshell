@@ -635,6 +635,13 @@ extension MainView {
             self.toggleAgentInbox()
         }
 
+        observerBag.observeOnMainActor(.toggleGitDiff) { [self] notification in
+            guard self.shouldHandleNotification(notification) else { return }
+            // Another sheet owns the screen; closing the panel is always allowed.
+            if !self.showGitDiff, self.isSheetPresentedBesidesFloatingTabSidebar { return }
+            self.toggleGitDiff()
+        }
+
         observerBag.observeOnMainActor(.toggleFileManager) { [self] notification in
             guard self.shouldHandleNotification(notification) else { return }
             // Another sheet owns the screen; the manager's own sheets are fine.

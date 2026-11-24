@@ -336,6 +336,16 @@ struct MainView: View {
     @State var agentInboxSidebarWidth: CGFloat = CGFloat(SettingsStore.shared.value(Settings.AgentInbox.sidebarWidth))
     @State var agentInboxSidebarIsDragging = false
 
+    // Git diff panel: follows the focused pane. The store is created on first
+    // open and kept while hidden, so reopening shows the last diff at once.
+    @State var showGitDiff = false
+    @State var gitDiffStore: GitDiffStore?
+    @State var gitDiffPresentation: PanelPresentation = SettingsStore.shared.value(Settings.GitDiff.presentation)
+    /// The overlay (and the iPhone presentation) shows only its summary pill.
+    @State var gitDiffCollapsed: Bool = SettingsStore.shared.value(Settings.GitDiff.collapsed)
+    @State var gitDiffSidebarWidth: CGFloat = CGFloat(SettingsStore.shared.value(Settings.GitDiff.sidebarWidth))
+    @State var gitDiffSidebarIsDragging = false
+
     #if !CHINA_BUILD
     // HTTP capture panel: shares the trailing docked slot with the file manager.
     @State var showHTTPCapture = false
@@ -680,7 +690,7 @@ struct MainView: View {
                     // AI agent sidebar the trailing edge.
                     .padding(.leading, dockedTabSidebarWidth(windowWidth: geometry.size.width))
                     .padding(.trailing, aiAgentSidebarCurrentWidth() + fileManagerSidebarCurrentWidth + httpCaptureDockedWidth
-                        + agentInboxSidebarCurrentWidth)
+                        + agentInboxSidebarCurrentWidth + gitDiffSidebarCurrentWidth)
                     .transition(.opacity)
                 }
             }

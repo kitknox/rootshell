@@ -2862,6 +2862,14 @@ extension Ghostty.TerminalView: UIContextMenuInteractionDelegate {
             NotificationCenter.default.post(name: .toggleAgentInbox, object: self)
         })
 
+        menuItems.append(UIAction(
+            title: String(localized: "Git Diff"),
+            image: UIImage(systemName: GitDiffView.systemImage)
+        ) { [weak self] _ in
+            guard let self else { return }
+            NotificationCenter.default.post(name: .toggleGitDiff, object: self)
+        })
+
         // Split actions menu
         let splitRight = UIAction(
             title: String(localized: "Split Right"),

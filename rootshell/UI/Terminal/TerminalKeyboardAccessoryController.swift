@@ -1613,6 +1613,11 @@ final class TerminalKeyboardAccessoryController: NSObject {
             NotificationCenter.default.post(name: .toggleHTTPCapture, object: host.keyboardHostView)
         }
 
+        keyboardAccessory?.onGitDiffRequested = { [weak host] in
+            guard let host else { return }
+            NotificationCenter.default.post(name: .toggleGitDiff, object: host.keyboardHostView)
+        }
+
         keyboardAccessory?.onLayoutInvalidated = { [weak self] in
             self?.refreshKeyboardLayoutAfterAccessoryChange()
         }

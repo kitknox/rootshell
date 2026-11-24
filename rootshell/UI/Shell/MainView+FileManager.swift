@@ -104,6 +104,7 @@ extension MainView {
         yieldSlotToFileManager(fileManagerPresentation)
         #endif
         yieldAgentInboxSlot(to: fileManagerPresentation)
+        yieldGitDiffSlot(to: fileManagerPresentation)
 
         if isPhone {
             resignFirstResponderForSheetPresentation()
@@ -136,6 +137,7 @@ extension MainView {
         yieldSlotToFileManager(presentation)
         #endif
         yieldAgentInboxSlot(to: presentation)
+        yieldGitDiffSlot(to: presentation)
         fileManagerPresentation = presentation
         SettingsStore.shared.set(Settings.Transfer.fileManagerPresentation, presentation)
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented || fileManagerOwnsKeyboard)

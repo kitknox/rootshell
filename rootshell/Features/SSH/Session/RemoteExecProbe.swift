@@ -105,17 +105,28 @@ enum RemoteExecProbe {
         #endif
         if TmuxController.gatewayTrzszSession(for: sessionOwner.session) != nil { return true }
         #if canImport(Citadel)
-        if let citadel = sessionOwner.session as? CitadelSSHSession, citadel.client != nil {
-            return true
-        }
-        // Mosh carries no exec channel, but the SSH connection that spawned
-        // mosh-server is retained for exactly this probe.
-        if let mosh = sessionOwner.session as? MoshSession, mosh.controlClient != nil {
-            return true
-        }
+        if liveClient(for: sessionOwner.session) != nil { return true }
         #endif
         return false
     }
+
+    #if canImport(Citadel)
+    /// The connected client behind a session, including an ssh or mosh that
+    /// the iOS local shell launched and now hosts.
+    private static func liveClient(for session: TerminalSession?) -> SSHClient? {
+        // Mosh carries no exec channel, but the SSH connection that spawned
+        // mosh-server is retained for exactly this probe.
+        if let mosh = session as? MoshSession { return mosh.controlClient }
+        if let citadel = session as? CitadelSSHSession { return citadel.client }
+        #if !targetEnvironment(macCatalyst)
+        if let local = session as? LocalShellSession {
+            if let mosh = local.embeddedMoshSession { return mosh.controlClient }
+            if let citadel = local.embeddedSSHSession as? CitadelSSHSession { return citadel.client }
+        }
+        #endif
+        return nil
+    }
+    #endif
 
     /// Runs `command` on the host behind `sessionOwner`'s session and returns
     /// the raw output, capped at `maxResponseBytes`.
@@ -219,13 +230,7 @@ enum RemoteExecProbe {
         // LIVE connections only. Opening a connection of our own for a
         // background probe would cost an extra authentication, and on a host
         // with 2FA it would prompt the user out of nowhere.
-        let client: SSHClient
-        if let mosh = sessionOwner.session as? MoshSession, let control = mosh.controlClient {
-            client = control
-        } else if let session = sessionOwner.session as? CitadelSSHSession,
-                  let citadelClient = session.client {
-            client = citadelClient
-        } else {
+        guard let client = liveClient(for: sessionOwner.session) else {
             throw ProbeError.unsupportedSession
         }
 
