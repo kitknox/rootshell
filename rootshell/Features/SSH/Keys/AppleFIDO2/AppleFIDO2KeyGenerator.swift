@@ -88,7 +88,9 @@ import os.log
             let request = provider.createCredentialRegistrationRequest(challenge: challenge, displayName: userName, name: userName, userID: currentUserHandle)
             request.credentialParameters = [ASAuthorizationPublicKeyCredentialParameters(algorithm: .ES256)]
             request.residentKeyPreference = .preferred
-            request.userVerificationPreference = .discouraged
+            // A key with a PIN set refuses a resident credential without UV. With .discouraged the
+            // system collects the PIN on PIN_REQUIRED but never sends it, so it loops (#778).
+            request.userVerificationPreference = .preferred
             request.attestationPreference = .none
             authorizationRequest = request
             #endif
