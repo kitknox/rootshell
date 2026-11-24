@@ -8,7 +8,11 @@
 //
 
 import Foundation
+#if os(macOS)
+@preconcurrency import VPNTunnel
+#else
 @preconcurrency import TsshKit
+#endif
 
 nonisolated final class VPNTrafficRecorder: @unchecked Sendable {
     private struct Snapshot {

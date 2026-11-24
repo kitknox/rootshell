@@ -17,7 +17,11 @@ import os.log
 import Darwin
 import WidgetKit
 @preconcurrency import Citadel
+#if os(macOS)
+@preconcurrency import VPNTunnel
+#else
 @preconcurrency import TsshKit
+#endif
 
 class SSHVPNTunnelProvider: NEPacketTunnelProvider {
     nonisolated static let logger = Logger(subsystem: "com.rootshell.vpntunnel", category: "TunnelProvider")

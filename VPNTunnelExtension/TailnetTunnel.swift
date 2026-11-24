@@ -14,7 +14,11 @@ import os.log
 import Security
 import WidgetKit
 @preconcurrency import Citadel
+#if os(macOS)
+@preconcurrency import VPNTunnel
+#else
 @preconcurrency import TsshKit
+#endif
 
 /// Go's tunnelNetworkSettings JSON (see vpntunnel/tailnetpath.go).
 nonisolated struct TailnetNetworkSettings: Decodable, Equatable, Sendable {
