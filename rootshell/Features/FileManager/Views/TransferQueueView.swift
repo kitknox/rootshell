@@ -230,20 +230,35 @@ private struct TransferJobRow: View {
 struct TransferPill: View {
     let onOpen: () -> Void
     private var center: FileTransferCenter { .shared }
+    private var edits: RemoteFileEditCenter { .shared }
+
+    private var showsEditStatus: Bool {
+        !center.hasActiveJobs && (edits.hasActiveUploads || edits.hasAttentionItems)
+    }
 
     var body: some View {
-        if center.hasActiveJobs {
+        if center.hasActiveJobs || showsEditStatus {
             Button(action: onOpen) {
                 HStack(spacing: 8) {
-                    ZStack {
-                        Circle().stroke(.secondary.opacity(0.3), lineWidth: 3)
-                        Circle()
-                            .trim(from: 0, to: center.aggregateFraction ?? 0.05)
-                            .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                            .rotationEffect(.degrees(-90))
+                    if center.hasActiveJobs {
+                        ZStack {
+                            Circle().stroke(.secondary.opacity(0.3), lineWidth: 3)
+                            Circle()
+                                .trim(from: 0, to: center.aggregateFraction ?? 0.05)
+                                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                                .rotationEffect(.degrees(-90))
+                        }
+                        .frame(width: 16, height: 16)
+                        Text(pillText).font(.caption.weight(.medium)).monospacedDigit()
+                    } else if edits.hasActiveUploads {
+                        ProgressView().controlSize(.mini)
+                        Text(editPillText).font(.caption.weight(.medium))
+                    } else {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                        Text(editPillText).font(.caption.weight(.medium))
                     }
-                    .frame(width: 16, height: 16)
-                    Text(pillText).font(.caption.weight(.medium)).monospacedDigit()
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
@@ -260,5 +275,24 @@ struct TransferPill: View {
         let rate = center.aggregateBytesPerSecond
         let count = String(localized: "\(active) transferring", comment: "Transfer pill: active job count")
         return rate > 0 ? "\(count) · \(TransferQueueView.rateText(rate))" : count
+    }
+
+    private var editPillText: String {
+        if let uploading = edits.sessions.first(where: { $0.state == .uploading }) {
+            return String(localized: "Uploading \(uploading.fileName)…", comment: "Transfer pill: auto-uploading external edit")
+        }
+        if let recovery = edits.recoveryConflicts.first {
+            return String(localized: "Recovery conflict: \(recovery.fileName)", comment: "Transfer pill: interrupted save recovery conflict")
+        }
+        if let preserved = edits.preservedEdits.first {
+            return String(localized: "Unsynced edit: \(preserved.fileName)", comment: "Transfer pill: preserved unsynced edit")
+        }
+        if let conflict = edits.sessions.first(where: { if case .conflict = $0.state { true } else { false } }) {
+            return String(localized: "Edit conflict: \(conflict.fileName)", comment: "Transfer pill: external edit conflict")
+        }
+        if let swapPending = edits.sessions.first(where: { if case .stagingFilesRemaining = $0.state { true } else { false } }) {
+            return String(localized: "Close editor: \(swapPending.fileName)", comment: "Transfer pill: editor swap file remains")
+        }
+        return String(localized: "Upload failed", comment: "Transfer pill: external edit upload failed")
     }
 }

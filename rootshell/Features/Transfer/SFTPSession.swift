@@ -62,18 +62,58 @@ nonisolated enum SFTPError: LocalizedError {
         }
     }
 
-    /// Map from SFTP error to SFTPError
-    static func from(sftpError: Error, path: String) -> SFTPError {
-        let description = String(describing: sftpError).lowercased()
+    /// Extract Citadel's typed SFTP protocol status payload when present.
+    static func sftpStatus(from error: Error) -> SFTPMessage.Status? {
+        if let status = error as? SFTPMessage.Status {
+            return status
+        }
+        if case Citadel.SFTPError.errorStatus(let status) = error {
+            return status
+        }
+        return nil
+    }
 
-        if description.contains("no such file") || description.contains("enoent") || description.contains("not found") {
-            return .fileNotFound(path: path)
-        } else if description.contains("permission denied") || description.contains("eacces") {
-            return .permissionDenied(path: path)
-        } else if description.contains("not empty") {
-            return .directoryNotEmpty(path: path)
-        } else if description.contains("is a directory") {
-            return .isADirectory(path: path)
+    /// Map from SFTP error to SFTPError using Citadel's typed status code first so
+    /// transport failures on paths containing words like "enoent" are never misclassified
+    /// as missing files, and servers with empty or localized error text still map cleanly.
+    static func from(sftpError: Error, path: String) -> SFTPError {
+        if let alreadyMapped = sftpError as? SFTPError {
+            return alreadyMapped
+        }
+
+        if let status = sftpStatus(from: sftpError) {
+            switch status.errorCode {
+            case .noSuchFile:
+                return .fileNotFound(path: path)
+            case .permissionDenied:
+                return .permissionDenied(path: path)
+            case .noConnection, .connectionLost:
+                return .notConnected
+            default:
+                let message = status.message.lowercased()
+                if message.contains("not empty") {
+                    return .directoryNotEmpty(path: path)
+                } else if message.contains("is a directory") {
+                    return .isADirectory(path: path)
+                }
+                let reason = status.message.isEmpty ? status.errorCode.debugDescription : status.message
+                return .transferFailed(file: path, reason: reason)
+            }
+        }
+
+        if case Citadel.SFTPError.connectionClosed = sftpError {
+            return .notConnected
+        }
+
+        if let posix = sftpError as? POSIXError {
+            switch posix.code {
+            case .ENOENT: return .fileNotFound(path: path)
+            case .EACCES, .EPERM: return .permissionDenied(path: path)
+            case .ENOTEMPTY: return .directoryNotEmpty(path: path)
+            case .EISDIR: return .isADirectory(path: path)
+            case .ENOTDIR: return .notADirectory(path: path)
+            default: break
+            }
         }
 
         return .transferFailed(file: path, reason: sftpError.localizedDescription)

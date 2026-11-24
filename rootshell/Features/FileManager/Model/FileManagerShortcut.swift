@@ -23,6 +23,8 @@ enum FileManagerCommand: CaseIterable {
     case connect
     case refresh
     case toggleHidden
+    case edit
+    case editExternal
     case quickLook
     case copyToOther
     case moveToOther
@@ -80,6 +82,7 @@ struct FileManagerShortcut {
             case UIKeyCommand.inputEscape: "esc"
             case UIKeyCommand.inputDelete: "⌫"
             case UIKeyCommand.f2: "F2"
+            case UIKeyCommand.f4: "F4"
             case UIKeyCommand.f5: "F5"
             case UIKeyCommand.f6: "F6"
             case "\r": "↩"
@@ -143,6 +146,10 @@ struct FileManagerShortcut {
               chords: [Chord(input: " ", modifiers: [])], isFieldHandled: true),
         .init(command: .selectAll, title: String(localized: "Select All", comment: "File manager shortcut"), group: .select,
               chords: [Chord(input: "a", modifiers: .command)], isFieldHandled: true),
+        .init(command: .edit, title: String(localized: "Edit", comment: "File manager shortcut"), group: .manage,
+              chords: [Chord(input: UIKeyCommand.f4, modifiers: []), Chord(input: "e", modifiers: .command)]),
+        .init(command: .editExternal, title: String(localized: "Edit in External Editor", comment: "File manager shortcut"), group: .manage,
+              chords: [Chord(input: "e", modifiers: [.command, .alternate])]),
         .init(command: .quickLook, title: String(localized: "Quick Look", comment: "File manager shortcut"), group: .select,
               chords: [Chord(input: "y", modifiers: .command)]),
 

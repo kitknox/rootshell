@@ -39,6 +39,7 @@ final class FileManagerPrompts {
     let hostKey = HostKeyPrompt()
     private(set) var current: Request?
     private var continuation: CheckedContinuation<Answer, Never>?
+    private(set) var isCancelled = false
 
     func keyboardInteractive(_ challenge: KeyboardInteractiveChallenge, label: String) async -> [String]? {
         guard case .responses(let responses) = await ask(.keyboardInteractive(challenge, label: label)) else { return nil }
@@ -68,12 +69,22 @@ final class FileManagerPrompts {
         pending?.resume(returning: answer)
     }
 
+    /// Cancels the active prompt and rejects any queued or future prompts owned by a closing window
+    /// so shared connection tasks awaiting these prompts unblock immediately on teardown.
+    func cancelAll() {
+        isCancelled = true
+        respond(.cancelled)
+        hostKey.cancelAll()
+    }
+
     private func ask(_ request: Request) async -> Answer {
+        if isCancelled { return .cancelled }
         // Serialize like HostKeyPrompt: one sheet at a time, bail if cancelled while queued.
         while continuation != nil {
+            if isCancelled { return .cancelled }
             do { try await Task.sleep(for: .milliseconds(100)) } catch { return .cancelled }
         }
-        if Task.isCancelled { return .cancelled }
+        if isCancelled || Task.isCancelled { return .cancelled }
         let requestID = request.id
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in

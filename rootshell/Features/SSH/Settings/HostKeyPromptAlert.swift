@@ -21,18 +21,21 @@ final class HostKeyPrompt {
     private(set) var message = ""
     private var continuation: CheckedContinuation<HostKeyValidationResult, Never>?
     private var currentPromptID: UUID?
+    private var isCancelled = false
 
     func validate(_ request: HostKeyValidationRequest) async -> HostKeyValidationResult {
+        if isCancelled { return .reject }
         // Serialize: one alert at a time. A cancelled waiter must not spin
         // (cancelled Task.sleep returns immediately) — bail out strictly.
         while continuation != nil {
+            if isCancelled { return .reject }
             do {
                 try await Task.sleep(nanoseconds: 100_000_000)
             } catch {
                 return .reject
             }
         }
-        if Task.isCancelled { return .reject }
+        if isCancelled || Task.isCancelled { return .reject }
 
         let promptID = UUID()
         return await withTaskCancellationHandler {
@@ -59,6 +62,14 @@ final class HostKeyPrompt {
         continuation?.resume(returning: result)
         continuation = nil
         currentPromptID = nil
+    }
+
+    /// Rejects any active, queued, or future host-key prompts when the owning window tears down.
+    func cancelAll() {
+        isCancelled = true
+        showNewKeyAlert = false
+        showChangedKeyAlert = false
+        respond(.reject)
     }
 
     /// Alert flag flipped to false. Button actions run in the same main-queue

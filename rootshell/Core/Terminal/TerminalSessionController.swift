@@ -437,7 +437,9 @@ final class TerminalSessionController {
             // here so a restored/reconnected session never re-opens the editor.
             if let fileToOpen = host.terminalPendingFileToOpen {
                 localSession.startupFileToEdit = fileToOpen
+                localSession.startupEditorCommand = host.terminalPendingEditorCommand
                 host.terminalPendingFileToOpen = nil
+                host.terminalPendingEditorCommand = nil
             }
         }
         localSession.onEmbeddedConnectionConfigChanged = { [weak self, weak localSession] embeddedConfig in

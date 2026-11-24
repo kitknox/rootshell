@@ -43,6 +43,21 @@ enum FileManagerPreviewCache {
         return destination
     }
 
+    /// Writes already-fetched bytes into the preview cache for Quick Look (e.g. after
+    /// sniffing an extensionless remote file and finding binary data).
+    static func storePreviewData(_ data: Data, named name: String) throws -> URL {
+        let folder = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let destination = folder.appendingPathComponent(name)
+        do {
+            try data.write(to: destination, options: .atomic)
+        } catch {
+            try? FileManager.default.removeItem(at: folder)
+            throw error
+        }
+        return destination
+    }
+
     /// Quick Look's Save to Files asserts on a URL that isn't an existing file,
     /// such as a broken link, so those never reach it.
     private static func isExistingFile(_ url: URL) -> Bool {

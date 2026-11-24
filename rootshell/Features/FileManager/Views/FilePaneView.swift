@@ -330,6 +330,7 @@ struct FilePaneView: View {
                     isCursor: pane.selection.cursor == entry.path,
                     showsCursor: isActive && (fieldFocused || usesPointerSemantics),
                     showsCheckbox: isSelecting,
+                    isExternallyEdited: !entry.isDirectory && RemoteFileEditCenter.shared.isWatching(endpoint: pane.endpoint, path: entry.path),
                     columns: columns
                 ),
                 pane: pane,
@@ -398,16 +399,42 @@ struct FilePaneView: View {
     }
 
     private func open(_ entry: RFEntry) {
-        if !pane.open(entry) { manager.preview(entry, in: pane) }
+        if !pane.open(entry) { manager.open(entry, in: pane) }
     }
 
     @ViewBuilder
     private func contextMenu(for entry: RFEntry) -> some View {
         let targets = dragEntries(for: entry)
         let plural = targets.count > 1
-        Button { open(entry) } label: {
-            Label(entry.isDirectory ? String(localized: "Open", comment: "File manager context menu") : FileManagerShortcut.shortcut(for: .quickLook).title,
-                  systemImage: entry.isDirectory ? "folder" : "eye")
+        if entry.isDirectory {
+            Button { open(entry) } label: {
+                Label(String(localized: "Open", comment: "File manager context menu"), systemImage: "folder")
+            }
+        } else {
+            Button { manager.editInApp(entry, in: pane) } label: {
+                Label(FileManagerShortcut.shortcut(for: .edit).title, systemImage: "square.and.pencil")
+            }
+            #if targetEnvironment(macCatalyst)
+            Button { manager.editExternally(entry, in: pane) } label: {
+                Label(FileManagerShortcut.shortcut(for: .editExternal).title, systemImage: "arrow.up.forward.app")
+            }
+            openWithSubmenu(for: entry)
+            #else
+            if manager.openInEmbeddedEditor != nil {
+                Button { manager.editInEmbeddedEditor(entry, in: pane, editor: .vim) } label: {
+                    Label(String(localized: "Edit in Vim", comment: "File manager context menu"), systemImage: "terminal")
+                }
+                Button { manager.editInEmbeddedEditor(entry, in: pane, editor: .hx) } label: {
+                    Label(String(localized: "Edit in Helix (hx)", comment: "File manager context menu"), systemImage: "terminal")
+                }
+            }
+            Button { manager.editExternally(entry, in: pane) } label: {
+                Label(String(localized: "Edit in External App…", comment: "File manager context menu"), systemImage: "arrow.up.forward.app")
+            }
+            #endif
+            Button { manager.preview(entry, in: pane) } label: {
+                Label(FileManagerShortcut.shortcut(for: .quickLook).title, systemImage: "eye")
+            }
         }
         Divider()
         Button { manager.transferToOther(move: false, entries: targets, from: pane.id) } label: {
@@ -450,6 +477,29 @@ struct FilePaneView: View {
             Label(FileManagerShortcut.shortcut(for: .delete).title, systemImage: "trash")
         }
     }
+
+    #if targetEnvironment(macCatalyst)
+    @ViewBuilder
+    private func openWithSubmenu(for entry: RFEntry) -> some View {
+        let probeURL: URL = pane.endpoint.isLocal
+            ? URL(fileURLWithPath: LocalPathResolver.current().resolve(entry.path))
+            : FileManager.default.temporaryDirectory.appendingPathComponent(entry.name)
+        let apps = ExternalEditorBridge.availableApps(for: probeURL, includePlainText: !FileEditClassification.isKnownBinary(name: entry.name))
+        Menu {
+            ForEach(apps) { app in
+                Button(app.name) {
+                    manager.editExternally(entry, in: pane, appURL: app.url)
+                }
+            }
+            if !apps.isEmpty { Divider() }
+            Button(String(localized: "Choose App…", comment: "File manager Open With submenu")) {
+                manager.externalAppPickerRequest = .openFile(entry, pane.endpoint)
+            }
+        } label: {
+            Label(String(localized: "Open With", comment: "File manager context menu"), systemImage: "square.grid.2x2")
+        }
+    }
+    #endif
 
     // MARK: - Touch selection bar
 

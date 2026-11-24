@@ -15,6 +15,7 @@ struct FileRowView: View, Equatable {
     /// The cursor ring only shows while this pane owns the keyboard.
     let showsCursor: Bool
     let showsCheckbox: Bool
+    var isExternallyEdited: Bool = false
     let columns: Columns
 
     enum Columns {
@@ -43,6 +44,12 @@ struct FileRowView: View, Equatable {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .accessibilityLabel(String(localized: "Symbolic link", comment: "File manager row accessibility"))
+                    }
+                    if isExternallyEdited {
+                        Image(systemName: "pencil.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(Color.accentColor)
+                            .accessibilityLabel(String(localized: "Editing externally, auto-uploading on save", comment: "File manager row accessibility"))
                     }
                 }
                 if columns == .compact, let detail = compactDetail {
@@ -111,19 +118,25 @@ struct FileRowView: View, Equatable {
 
     static func symbol(for entry: RFEntry) -> String {
         if entry.isDirectory { return entry.isSymlink ? "folder.badge.gearshape" : "folder.fill" }
-        guard let type = UTType(filenameExtension: entry.fileExtension) else {
+        if let type = UTType(filenameExtension: entry.fileExtension) {
+            if type.conforms(to: .image) && !type.conforms(to: .svg) { return "photo" }
+            if type.conforms(to: .movie) || type.conforms(to: .video) { return "film" }
+            if type.conforms(to: .audio) { return "waveform" }
+            if type.conforms(to: .pdf) { return "doc.richtext" }
+            if type.conforms(to: .archive) { return "doc.zipper" }
+            if type.conforms(to: .sourceCode) || type.conforms(to: .script) || type.conforms(to: .shellScript) {
+                return "chevron.left.forwardslash.chevron.right"
+            }
+            if type.conforms(to: .text) { return "doc.text" }
+        }
+        switch FileEditorSyntax.detectLanguage(fileName: entry.name) {
+        case .cLike, .hashCode, .shell, .dockerfile, .makefile, .sql, .css, .markup, .json:
+            return "chevron.left.forwardslash.chevron.right"
+        case .yaml, .toml, .dotenv, .ini, .markdown:
+            return "doc.text"
+        case .plain:
+            if FileEditClassification.isKnownTextFile(name: entry.name) { return "doc.text" }
             return entry.isExecutable ? "terminal" : "doc"
         }
-        if type.conforms(to: .image) { return "photo" }
-        if type.conforms(to: .movie) || type.conforms(to: .video) { return "film" }
-        if type.conforms(to: .audio) { return "waveform" }
-        if type.conforms(to: .pdf) { return "doc.richtext" }
-        if type.conforms(to: .archive) { return "doc.zipper" }
-        if type.conforms(to: .sourceCode) || type.conforms(to: .script) || type.conforms(to: .shellScript) {
-            return "chevron.left.forwardslash.chevron.right"
-        }
-        if type.conforms(to: .text) { return "doc.text" }
-        if entry.isExecutable { return "terminal" }
-        return "doc"
     }
 }
