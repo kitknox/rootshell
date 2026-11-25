@@ -525,4 +525,92 @@ final class GitDiffTests: XCTestCase {
         XCTAssertEqual(kinds("x = 1  # why", path: "a.py").last, .comment)
         XCTAssertTrue(kinds("plain words", path: "README.md").isEmpty)
     }
+
+    // MARK: - Selection
+
+    private func position(_ file: Int, _ hunk: Int, _ line: Int, _ column: Int) -> GitDiffTextPosition {
+        GitDiffTextPosition(GitDiffLineID(file: file, hunk: hunk, line: line), column: column)
+    }
+
+    private func file(_ path: String, hunks: [[String]]) -> GitDiffFile {
+        var file = GitDiffFile(path: path, status: .modified)
+        file.hasPatch = true
+        file.hunks = hunks.map { lines in
+            GitDiffHunk(oldStart: 1, oldCount: lines.count, newStart: 1, newCount: lines.count, context: "",
+                        lines: lines.map { GitDiffLine(kind: .context, text: $0) })
+        }
+        return file
+    }
+
+    private lazy var selectionFiles = [
+        file("a.swift", hunks: [["let alpha = 1", "let beta = 2"], ["func gamma() {}"]]),
+        file("b.swift", hunks: [["first", "", "third"]]),
+    ]
+
+    func testPositionsOrderByFileHunkLineThenColumn() {
+        XCTAssertLessThan(position(0, 0, 1, 9), position(0, 1, 0, 0))
+        XCTAssertLessThan(position(0, 1, 0, 3), position(0, 1, 0, 4))
+        XCTAssertLessThan(position(0, 9, 9, 9), position(1, 0, 0, 0))
+    }
+
+    func testLineSelectionCoversTheStartMiddleAndEndLines() {
+        let selection = GitDiffSelection(anchor: position(0, 0, 0, 4), head: position(0, 1, 0, 4))
+        let first = selection.lineSelection(for: GitDiffLineID(file: 0, hunk: 0, line: 0), length: 13)
+        XCTAssertEqual(first, GitDiffLineSelection(range: 4..<13, includesLineEnd: true))
+        let middle = selection.lineSelection(for: GitDiffLineID(file: 0, hunk: 0, line: 1), length: 12)
+        XCTAssertEqual(middle, GitDiffLineSelection(range: 0..<12, includesLineEnd: true))
+        let last = selection.lineSelection(for: GitDiffLineID(file: 0, hunk: 1, line: 0), length: 15)
+        XCTAssertEqual(last, GitDiffLineSelection(range: 0..<4, includesLineEnd: false))
+        XCTAssertNil(selection.lineSelection(for: GitDiffLineID(file: 1, hunk: 0, line: 0), length: 5))
+    }
+
+    func testAnEmptySelectionHighlightsNothing() {
+        let selection = GitDiffSelection(anchor: position(0, 0, 0, 3), head: position(0, 0, 0, 3))
+        XCTAssertTrue(selection.isEmpty)
+        XCTAssertNil(selection.lineSelection(for: GitDiffLineID(file: 0, hunk: 0, line: 0), length: 13))
+    }
+
+    func testSelectedTextSpansHunksAndFilesInEitherDirection() {
+        let forward = GitDiffSelection(anchor: position(0, 0, 1, 4), head: position(1, 0, 2, 3))
+        let expected = "beta = 2\nfunc gamma() {}\nfirst\n\nthi"
+        XCTAssertEqual(forward.text(in: selectionFiles, isExpanded: { _ in true }), expected)
+        let backward = GitDiffSelection(anchor: forward.head, head: forward.anchor)
+        XCTAssertEqual(backward.text(in: selectionFiles, isExpanded: { _ in true }), expected)
+    }
+
+    func testEndingAtTheStartOfARowKeepsTheLineBreak() {
+        let throughBreak = GitDiffSelection(anchor: position(0, 0, 0, 0), head: position(0, 0, 1, 0))
+        XCTAssertEqual(throughBreak.text(in: selectionFiles, isExpanded: { _ in true }), "let alpha = 1\n")
+        let breakOnly = GitDiffSelection(anchor: position(0, 0, 0, 13), head: position(0, 0, 1, 0))
+        XCTAssertEqual(breakOnly.text(in: selectionFiles, isExpanded: { _ in true }), "\n")
+    }
+
+    func testSelectedTextSkipsCollapsedFiles() {
+        let selection = GitDiffSelection(anchor: position(0, 1, 0, 5), head: position(1, 0, 0, 5))
+        XCTAssertEqual(selection.text(in: selectionFiles, isExpanded: { $0 == 1 }), "first")
+    }
+
+    func testSelectAllRunsFromTheFirstToTheLastExpandedLine() throws {
+        let all = try XCTUnwrap(GitDiffSelection.all(in: selectionFiles, isExpanded: { $0 == 0 }))
+        XCTAssertEqual(all.text(in: selectionFiles, isExpanded: { $0 == 0 }),
+                       "let alpha = 1\nlet beta = 2\nfunc gamma() {}")
+        XCTAssertNil(GitDiffSelection.all(in: selectionFiles, isExpanded: { _ in false }))
+    }
+
+    func testWordRanges() {
+        let line = Array("  let max_value = foo(bar)")
+        XCTAssertEqual(GitDiffSelection.wordRange(in: line, at: 8), 6..<15)
+        XCTAssertEqual(GitDiffSelection.wordRange(in: line, at: 21), 21..<22)
+        XCTAssertEqual(GitDiffSelection.wordRange(in: line, at: 0), 0..<2)
+        XCTAssertEqual(GitDiffSelection.wordRange(in: line, at: 99), 25..<26)
+        XCTAssertEqual(GitDiffSelection.wordRange(in: [], at: 0), 0..<0)
+    }
+
+    func testColumnsCountCharactersNotUTF16() {
+        let line = Array("x = \"🇯🇵日本\"")
+        XCTAssertEqual(GitDiffSelection.wordRange(in: line, at: 6), 6..<8)
+        let files = [file("e.txt", hunks: [[String(line)]])]
+        let selection = GitDiffSelection(anchor: position(0, 0, 0, 5), head: position(0, 0, 0, 8))
+        XCTAssertEqual(selection.text(in: files, isExpanded: { _ in true }), "🇯🇵日本")
+    }
 }

@@ -57,6 +57,8 @@ struct GitDiffPalette: Equatable {
 
     var hunkTint: Color { modified.opacity(isDark ? 0.10 : 0.07) }
 
+    var selection: Color { Color.accentColor.opacity(isDark ? 0.45 : 0.30) }
+
     func token(_ token: GitDiffSyntax.Token) -> Color? {
         switch token {
         case .plain: nil
@@ -355,6 +357,7 @@ struct GitDiffHunkHeader: View, Equatable {
 struct GitDiffLineRow: View, Equatable {
     let line: GitDiffLine
     let style: GitDiffRowStyle
+    var selection: GitDiffLineSelection?
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
@@ -362,7 +365,7 @@ struct GitDiffLineRow: View, Equatable {
             Text(verbatim: marker)
                 .foregroundStyle(style.palette.accent(line.kind) ?? .clear)
                 .frame(width: style.markerWidth)
-            Text(GitDiffLineText.attributed(line, style: style))
+            Text(GitDiffLineText.attributed(line, style: style, selection: selection))
                 .frame(maxWidth: style.wrap ? .infinity : nil, alignment: .leading)
                 .fixedSize(horizontal: !style.wrap, vertical: true)
                 .padding(.trailing, 8)
@@ -375,15 +378,12 @@ struct GitDiffLineRow: View, Equatable {
         }
         // A bare colour, so the tint runs under a display's safe-area edge.
         .background(style.palette.rowTint(line.kind))
-        .contextMenu {
-            Button {
-                UIPasteboard.general.string = line.text
-            } label: {
-                Label(String(localized: "Copy Line", comment: "Git diff line action"), systemImage: "doc.on.doc")
-            }
-        }
+        // No context menu: its long press belongs to text selection.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
+        .accessibilityAction(named: Text(String(localized: "Copy Line", comment: "Git diff line action"))) {
+            UIPasteboard.general.string = line.text
+        }
     }
 
     private var marker: String {
@@ -423,13 +423,23 @@ struct GitDiffLineRow: View, Equatable {
     }
 }
 
-/// Builds a line's styled text: syntax colours, then the changed-span highlight.
+/// Builds a line's styled text: syntax colours, the changed-span highlight, then the selection.
 enum GitDiffLineText {
-    static func attributed(_ line: GitDiffLine, style: GitDiffRowStyle) -> AttributedString {
+    static func attributed(_ line: GitDiffLine, style: GitDiffRowStyle,
+                           selection: GitDiffLineSelection? = nil) -> AttributedString {
         let characters = Array(line.text)
-        guard !characters.isEmpty else { return AttributedString(" ") }
+        // A selected line break reads as one selected space past the text.
+        let lineEnd: AttributedString = {
+            var space = AttributedString(" ")
+            space.backgroundColor = style.palette.selection
+            return space
+        }()
+        guard !characters.isEmpty else {
+            return selection?.includesLineEnd == true ? lineEnd : AttributedString(" ")
+        }
         let tokens = GitDiffSyntax.language(forPath: style.path).map { GitDiffSyntax.tokens(characters, language: $0) }
         let emphasis = line.emphasis.map { $0.clamped(to: 0..<characters.count) }
+        let selected = selection.map { $0.range.clamped(to: 0..<characters.count) }
         let highlight = style.palette.emphasis(line.kind)
 
         var result = AttributedString()
@@ -437,17 +447,24 @@ enum GitDiffLineText {
         while start < characters.count {
             let token = tokens?[start] ?? .plain
             let emphasized = emphasis?.contains(start) ?? false
+            let isSelected = selected?.contains(start) ?? false
             var end = start + 1
             while end < characters.count, (tokens?[end] ?? .plain) == token,
-                  (emphasis?.contains(end) ?? false) == emphasized {
+                  (emphasis?.contains(end) ?? false) == emphasized,
+                  (selected?.contains(end) ?? false) == isSelected {
                 end += 1
             }
             var run = AttributedString(String(characters[start..<end]))
             if let color = style.palette.token(token) { run.foregroundColor = color }
-            if emphasized { run.backgroundColor = highlight }
+            if isSelected {
+                run.backgroundColor = style.palette.selection
+            } else if emphasized {
+                run.backgroundColor = highlight
+            }
             result.append(run)
             start = end
         }
+        if selection?.includesLineEnd == true { result.append(lineEnd) }
         if line.noNewlineAtEnd {
             var mark = AttributedString(" \u{29B8}")
             mark.foregroundColor = style.palette.token(.comment)

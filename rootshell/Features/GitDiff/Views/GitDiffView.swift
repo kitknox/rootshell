@@ -498,6 +498,9 @@ private struct GitDiffFileList: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @ScaledMetric(relativeTo: .callout) private var regularFontSize: CGFloat = 16
     @ScaledMetric(relativeTo: .subheadline) private var compactFontSize: CGFloat = 14
+    @State private var selection = GitDiffSelectionController()
+    /// The locale's direction, for the panel's own labels inside the left-to-right code stack.
+    @Environment(\.layoutDirection) private var layoutDirection
 
     var body: some View {
         GeometryReader { geometry in
@@ -528,16 +531,23 @@ private struct GitDiffFileList: View {
             width,
             gutter + GitDiffRowStyle.markerWidth(for: fontSize) + 16
                 + CGFloat(snapshot.files.reduce(0) { max($0, $1.maxColumns) } + 1) * characterWidth)
+        let files = snapshot.files
+        selection.update(
+            files: files,
+            style: GitDiffRowStyle(fontSize: fontSize, numberWidth: numberWidth, twoNumbers: twoNumbers,
+                                   wrap: wrap, palette: palette, path: "", rowWidth: rowWidth),
+            isExpanded: { [store] index in files.indices.contains(index) && store.isExpanded(files[index]) })
 
         return ScrollViewReader { proxy in
             ScrollView(wrap ? [.vertical] : [.vertical, .horizontal]) {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                     notices(width: rowWidth)
-                    ForEach(snapshot.files) { file in
+                        .environment(\.layoutDirection, layoutDirection)
+                    ForEach(Array(files.enumerated()), id: \.element.id) { index, file in
                         let expanded = store.isExpanded(file)
                         Section {
                             if expanded {
-                                GitDiffFileBody(file: file, style: GitDiffRowStyle(
+                                GitDiffFileBody(file: file, fileIndex: index, selection: selection, labelDirection: layoutDirection, style: GitDiffRowStyle(
                                     fontSize: fontSize, numberWidth: numberWidth, twoNumbers: twoNumbers,
                                     wrap: wrap, palette: palette, path: file.path, rowWidth: rowWidth))
                             }
@@ -546,14 +556,31 @@ private struct GitDiffFileList: View {
                                 file: file, expanded: expanded, palette: palette, background: headerSurface,
                                 width: rowWidth, onToggle: { store.setExpanded(!expanded, for: file) })
                                 .equatable()
+                                .environment(\.layoutDirection, layoutDirection)
+                                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                                    selection.headerHeight = $0
+                                }
                                 .id(file.id)
                         }
                     }
                 }
                 .frame(width: rowWidth, alignment: .leading)
+                // The anchor shares the stack's bounds, so its space is the rows' coordinate space.
+                .background { GitDiffSelectionAnchor(controller: selection) }
+                .overlay(alignment: .topLeading) { GitDiffSelectionHandles(controller: selection) }
+                .contentShape(Rectangle())
+                .gitDiffSelectionGestures(selection)
+                // Outside the overlay and gestures, so rows, handles and spatial gestures resolve one ancestor.
+                .coordinateSpace(.named(GitDiffSelectionController.coordinateSpace))
+                // Code reads left to right in every locale, and selection hit testing assumes it.
+                // Headers and notices take the locale's direction back.
+                .environment(\.layoutDirection, .leftToRight)
             }
             // A panel scroll view over the terminal; UIKit 26 would blur its edges.
             .modifier(ScrollEdgeEffectHiddenModifier())
+            // Line indices only mean the same text within one snapshot.
+            .onChange(of: snapshot.stamp) { selection.clear() }
+            .onChange(of: files.map { store.isExpanded($0) }) { selection.clearIfFolded() }
             .onChange(of: store.jumpTarget) { _, target in
                 guard let target else { return }
                 proxy.scrollTo(target, anchor: .top)
@@ -639,6 +666,9 @@ private struct GitDiffFileList: View {
 /// still creates rows only as they scroll in.
 private struct GitDiffFileBody: View {
     let file: GitDiffFile
+    let fileIndex: Int
+    let selection: GitDiffSelectionController
+    let labelDirection: LayoutDirection
     let style: GitDiffRowStyle
 
     var body: some View {
@@ -652,9 +682,19 @@ private struct GitDiffFileBody: View {
                 : String(localized: "No text changes", comment: "Git diff: an empty file or a mode change"))
         } else {
             ForEach(rows, id: \.self) { row in
-                if let line = row.line {
-                    GitDiffLineRow(line: file.hunks[row.hunk].lines[line], style: style)
+                if let lineIndex = row.line {
+                    let id = GitDiffLineID(file: fileIndex, hunk: row.hunk, line: lineIndex)
+                    let key = GitDiffRowKey(fileID: file.id, hunk: row.hunk, line: lineIndex)
+                    let line = file.hunks[row.hunk].lines[lineIndex]
+                    GitDiffLineRow(line: line, style: style,
+                                   selection: selection.lineSelection(for: id, text: line.text))
                         .equatable()
+                        .onGeometryChange(for: CGRect.self) {
+                            $0.frame(in: .named(GitDiffSelectionController.coordinateSpace))
+                        } action: {
+                            selection.register(key, frame: $0)
+                        }
+                        .onDisappear { selection.unregister(key) }
                 } else {
                     GitDiffHunkHeader(hunk: file.hunks[row.hunk], style: style)
                         .equatable()
@@ -696,5 +736,6 @@ private struct GitDiffFileBody: View {
             .padding(.vertical, 10)
             .frame(width: style.rowWidth, alignment: .leading)
             .frame(maxWidth: style.rowWidth == nil ? .infinity : nil, alignment: .leading)
+            .environment(\.layoutDirection, labelDirection)
     }
 }
