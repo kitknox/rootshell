@@ -111,6 +111,17 @@ final class StorageProviderTests: XCTestCase {
         XCTAssertEqual(S3KeyLogic.childName("top.txt", under: ""), "top.txt")
     }
 
+    func testConditionalPutSpellings() {
+        // HEAD returns the quoted form; Ceph's gateway only matches the bare one on PUT.
+        XCTAssertEqual(S3KeyLogic.ConditionalPut.quoted.ifMatch("\"abc\""), "\"abc\"")
+        XCTAssertEqual(S3KeyLogic.ConditionalPut.quoted.ifMatch("abc"), "\"abc\"")
+        XCTAssertEqual(S3KeyLogic.ConditionalPut.bare.ifMatch("\"abc\""), "abc")
+        XCTAssertNil(S3KeyLogic.ConditionalPut.unsupported.ifMatch("abc"))
+        XCTAssertEqual(S3KeyLogic.ConditionalPut.quoted.fallback, .bare)
+        XCTAssertEqual(S3KeyLogic.ConditionalPut.bare.fallback, .unsupported)
+        XCTAssertNil(S3KeyLogic.ConditionalPut.unsupported.fallback)
+    }
+
     func testKeyClassification() {
         XCTAssertEqual(S3KeyLogic.classify("docs/", under: "docs/"), .ignored, "the folder's own marker")
         XCTAssertEqual(S3KeyLogic.classify("other/a", under: "docs/"), .ignored)

@@ -411,6 +411,8 @@ struct RemoteFileEditorView: View {
         } label: {
             Image(systemName: "ellipsis.circle")
         }
+        // A save that ends in a conflict presents an alert; under an open menu that locked up the app.
+        .disabled(saveState == .saving)
         .accessibilityLabel(String(localized: "Editor Options", comment: "File editor overflow menu"))
     }
 

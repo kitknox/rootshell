@@ -119,6 +119,34 @@ nonisolated enum S3KeyLogic {
         }.joined(separator: "&")
     }
 
+    /// How a server wants `If-Match` spelled on a conditional PutObject. Ceph's
+    /// gateway compares the header to its stored ETag literally, so it refuses
+    /// the standard quoted form and only matches the bare one.
+    enum ConditionalPut: Equatable {
+        case quoted
+        case bare
+        /// Neither spelling is accepted, so the check before the upload is the only guard.
+        case unsupported
+
+        /// The next spelling to try after a server refused this one for an unchanged object.
+        var fallback: ConditionalPut? {
+            switch self {
+            case .quoted: .bare
+            case .bare: .unsupported
+            case .unsupported: nil
+            }
+        }
+
+        func ifMatch(_ eTag: String) -> String? {
+            let bare = eTag.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            return switch self {
+            case .quoted: "\"\(bare)\""
+            case .bare: bare
+            case .unsupported: nil
+            }
+        }
+    }
+
     /// The DNS-compatible bucket naming rules every provider accepts.
     static func isValidBucketName(_ name: String) -> Bool {
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-.")
