@@ -118,6 +118,16 @@ extension MainView {
                             onClose: { closeGitDiff() }
                         )
                     }
+                    #if !CHINA_BUILD
+                    if httpCaptureActionsInRail, let model = httpCaptureModel {
+                        HTTPCaptureRailItems(
+                            model: model,
+                            presentation: httpCapturePresentation,
+                            onSwitchPresentation: { switchHTTPCapturePresentation($0) },
+                            onClose: { closeHTTPCapture() }
+                        )
+                    }
+                    #endif
                 }
         } else {
             content

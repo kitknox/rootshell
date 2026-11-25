@@ -33,20 +33,29 @@ struct HTTPCaptureView: View {
     let onClose: () -> Void
     /// Switches between presentations; nil where only one presentation exists.
     let onSwitchPresentation: ((PanelPresentation) -> Void)?
+    /// The window's side rail carries the header actions.
+    var actionsInRail = false
 
     @Environment(\.sheetThemeColors) private var sheetThemeColors
     private var controller: CaptureController { .shared }
     private var ca: CaptureCAManager { .shared }
+    /// The phone sheet's own rail is up; reported from inside its navigation stack.
+    @State private var sheetRailActive = false
+
+    private var touch: Bool { PanelTouch.isTouchPlatform }
+    /// The split layout drops the stack that hosts the sheet's rail, so its report only counts when narrow.
+    private func railHoldsActions(split: Bool) -> Bool { actionsInRail || (sheetRailActive && !split) }
 
     private static let splitMinWidth: CGFloat = 760
 
     var body: some View {
         GeometryReader { geometry in
+            let split = geometry.size.width >= Self.splitMinWidth
             VStack(spacing: 0) {
-                header
+                header(inRail: railHoldsActions(split: split))
                 Divider()
                 CaptureStatusBanners(model: model)
-                if geometry.size.width >= Self.splitMinWidth {
+                if split {
                     HStack(spacing: 0) {
                         CaptureRequestList(model: model)
                             .frame(width: max(320, geometry.size.width * 0.42))
@@ -56,16 +65,22 @@ struct HTTPCaptureView: View {
                     }
                 } else {
                     NavigationStack(path: $model.path) {
-                        CaptureRequestList(model: model, pushesDetail: true)
-                            .toolbar(.hidden, for: .navigationBar)
-                            .navigationDestination(for: HTTPCaptureModel.Route.self) { route in
-                                switch route {
-                                case .transaction(let id):
-                                    if let document = model.document {
-                                        CaptureTransactionDetail(model: model, document: document, transactionID: id)
+                        PanelSideRailReader { readsRail in
+                            // Only the sheet owns its bar; a docked panel sits under the window's.
+                            let inRail = readsRail && style == .sheet
+                            CaptureRequestList(model: model, pushesDetail: true)
+                                .modifier(HTTPCaptureSheetRail(active: inRail, isRoot: true, model: model, onClose: onClose))
+                                .navigationDestination(for: HTTPCaptureModel.Route.self) { route in
+                                    switch route {
+                                    case .transaction(let id):
+                                        if let document = model.document {
+                                            CaptureTransactionDetail(model: model, document: document, transactionID: id)
+                                                .modifier(HTTPCaptureSheetRail(active: inRail, isRoot: false, model: model, onClose: onClose))
+                                        }
                                     }
                                 }
-                            }
+                                .onChange(of: inRail, initial: true) { _, inRail in sheetRailActive = inRail }
+                        }
                     }
                 }
             }
@@ -107,28 +122,34 @@ struct HTTPCaptureView: View {
 
     // MARK: - Header
 
-    private var header: some View {
+    private func header(inRail railHoldsActions: Bool) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "network.badge.shield.half.filled").foregroundStyle(Color.accentColor)
             CaptureSessionMenu(model: model, title: currentSessionTitle)
                 .equatable()
             Spacer(minLength: 4)
-            recordButton
-            CaptureMoreMenu(model: model)
-                .equatable()
-            if let onSwitchPresentation, let current = style.presentation {
-                PanelPresentationMenu(current: current, onSwitch: onSwitchPresentation)
+            if !railHoldsActions {
+                CaptureRecordControls(touchSized: touch)
+                CaptureMoreMenu(model: model, touchSized: touch)
                     .equatable()
+                if let onSwitchPresentation, let current = style.presentation {
+                    PanelPresentationMenu(current: current, onSwitch: onSwitchPresentation, touchSized: touch)
+                        .equatable()
+                }
+                Button(action: onClose) {
+                    Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary)
+                        .panelTouchTarget(touch)
+                }
+                .help(String(localized: "Close (esc)", comment: "HTTP capture close button tooltip"))
+                .accessibilityLabel(String(localized: "Close HTTP Capture", comment: "HTTP capture close button"))
             }
-            Button(action: onClose) {
-                Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary)
-            }
-            .help(String(localized: "Close (esc)", comment: "HTTP capture close button tooltip"))
-            .accessibilityLabel(String(localized: "Close HTTP Capture", comment: "HTTP capture close button"))
         }
         .buttonStyle(.borderless)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        // Touch buttons fill the row's height instead of adding to it.
+        .padding(.leading, 12)
+        .padding(.trailing, touch && !railHoldsActions ? 4 : 12)
+        .padding(.vertical, touch && !railHoldsActions ? 0 : 8)
+        .frame(minHeight: railHoldsActions ? 40 : nil)
     }
 
     private var currentSessionTitle: String {
@@ -136,37 +157,6 @@ struct HTTPCaptureView: View {
             return meta.name
         }
         return String(localized: "HTTP Capture", comment: "HTTP capture panel title")
-    }
-
-    @ViewBuilder
-    private var recordButton: some View {
-        if controller.isStarting {
-            ProgressView().controlSize(.small)
-        } else if controller.isRecording {
-            Button {
-                Task { await controller.clearActiveSession() }
-            } label: {
-                Image(systemName: "trash")
-            }
-            .disabled(controller.isStopping)
-            .help(String(localized: "Clear the captured requests and keep recording", comment: "HTTP capture clear tooltip"))
-            .accessibilityLabel(String(localized: "Clear", comment: "HTTP capture: clear the recording session"))
-            Button {
-                Task { await controller.stop() }
-            } label: {
-                Label(String(localized: "Stop", comment: "HTTP capture: stop recording"), systemImage: "stop.circle.fill")
-                    .foregroundStyle(.red)
-            }
-            .disabled(controller.isStopping)
-            .help(String(localized: "Stop recording", comment: "HTTP capture stop tooltip"))
-        } else {
-            Button {
-                Task { await controller.start() }
-            } label: {
-                Label(String(localized: "Record", comment: "HTTP capture: start recording"), systemImage: "record.circle")
-            }
-            .help(String(localized: "Start a new capture session", comment: "HTTP capture record tooltip"))
-        }
     }
 
     // MARK: - Sheets
@@ -265,6 +255,8 @@ private struct CaptureSessionMenu: View, Equatable {
                 Text(title).font(.headline).lineLimit(1)
                 Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
             }
+            .frame(minHeight: PanelTouch.isTouchPlatform ? 40 : nil)
+            .contentShape(Rectangle())
         }
         .menuStyle(.button)
         .accessibilityLabel(String(localized: "Capture Session", comment: "HTTP capture session picker"))
@@ -296,18 +288,22 @@ private struct CaptureSessionMenuItems: View {
 }
 
 /// Equatable owner for the overflow menu, same contract as the session picker.
-private struct CaptureMoreMenu: View, Equatable {
+struct CaptureMoreMenu: View, Equatable {
     let model: HTTPCaptureModel
+    var touchSized = false
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.model === rhs.model
+        lhs.model === rhs.model && lhs.touchSized == rhs.touchSized
     }
 
     var body: some View {
         Menu {
             CaptureMoreMenuItems(model: model)
         } label: {
-            Image(systemName: "ellipsis.circle")
+            // Titled, so a side rail's overflow can name it.
+            Label(String(localized: "More", comment: "HTTP capture overflow menu"), systemImage: "ellipsis.circle")
+                .labelStyle(.iconOnly)
+                .panelTouchTarget(touchSized)
         }
         .accessibilityLabel(String(localized: "More", comment: "HTTP capture overflow menu"))
     }

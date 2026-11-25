@@ -440,6 +440,7 @@ struct ClipboardManagerOverlay: View {
                 } label: {
                     Image(systemName: "chevron.backward")
                         .font(.subheadline.weight(.semibold))
+                        .panelTouchTarget(PanelTouch.isTouchPlatform, minWidth: 36)
                 }
                 .buttonStyle(.plain)
             }
@@ -463,6 +464,7 @@ struct ClipboardManagerOverlay: View {
                     Image(systemName: "trash")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
+                        .panelTouchTarget(PanelTouch.isTouchPlatform)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Clear All History"))
@@ -487,13 +489,17 @@ struct ClipboardManagerOverlay: View {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
                     .foregroundColor(.secondary)
+                    .panelTouchTarget(PanelTouch.isTouchPlatform)
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.escape, modifiers: [])
+            .accessibilityLabel(Text("Close"))
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
+        // Touch buttons fill the row's height instead of adding to it.
+        .padding(.leading, PanelTouch.isTouchPlatform && selectedEntry != nil ? 6 : 16)
+        .padding(.trailing, PanelTouch.isTouchPlatform ? 6 : 16)
+        .padding(.top, PanelTouch.isTouchPlatform ? 4 : 12)
+        .padding(.bottom, PanelTouch.isTouchPlatform ? 0 : 8)
     }
 
     /// UIKit-backed field (SidebarSearchField) so keyboard mode gets
@@ -1045,7 +1051,8 @@ struct ClipboardEntryDetailView: View {
             .accessibilityLabel(Text("Delete"))
         }
         .font(.subheadline)
-        .controlSize(.small)
+        // Full-size buttons on touch; the Mac HUD keeps them compact.
+        .controlSize(PanelTouch.isTouchPlatform ? .regular : .small)
     }
 
     // MARK: Transforms

@@ -39,8 +39,10 @@ struct CaptureRequestList: View {
             if !model.search.isEmpty {
                 Button { model.search = "" } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
+                        .panelTouchTarget(PanelTouch.isTouchPlatform, minWidth: 32, minHeight: 28)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(String(localized: "Clear Filter", comment: "HTTP capture: clear the search text"))
             }
         }
         .padding(.horizontal, 10)
@@ -74,13 +76,18 @@ struct CaptureRequestList: View {
                     chipLabel(model.statusFilter?.title ?? String(localized: "Status", comment: "HTTP capture filter"), selected: model.statusFilter != nil)
                 }
                 if model.hasFilters {
-                    Button(String(localized: "Clear", comment: "HTTP capture: clear filters")) { model.clearFilters() }
-                        .font(.caption)
-                        .buttonStyle(.borderless)
+                    Button { model.clearFilters() } label: {
+                        Text(String(localized: "Clear", comment: "HTTP capture: clear filters"))
+                            .frame(minHeight: PanelTouch.isTouchPlatform ? 40 : nil)
+                            .contentShape(Rectangle())
+                    }
+                    .font(.caption)
+                    .buttonStyle(.borderless)
                 }
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            // Touch chips take the row's height as their hit area instead.
+            .padding(.vertical, PanelTouch.isTouchPlatform ? 0 : 6)
         }
         .modifier(ScrollEdgeEffectHiddenModifier())
     }
@@ -97,6 +104,8 @@ struct CaptureRequestList: View {
             .padding(.vertical, 4)
             .background(selected ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.06), in: Capsule())
             .foregroundStyle(selected ? Color.accentColor : Color.primary)
+            .frame(minHeight: PanelTouch.isTouchPlatform ? 40 : nil)
+            .contentShape(Rectangle())
     }
 
     @ViewBuilder

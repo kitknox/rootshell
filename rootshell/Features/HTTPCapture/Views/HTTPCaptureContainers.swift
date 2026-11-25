@@ -16,6 +16,8 @@ struct HTTPCaptureSidebarView: View {
     @Binding var isDragging: Bool
     let totalWidth: CGFloat
     let theme: ResolvedSheetTheme
+    /// The window's side rail carries the header actions.
+    var actionsInRail = false
     let onClose: () -> Void
     let onSwitchPresentation: (PanelPresentation) -> Void
 
@@ -42,7 +44,8 @@ struct HTTPCaptureSidebarView: View {
                 backgroundColor: roundedPanes ? .clear : background,
                 onCommit: { SettingsStore.shared.set(Settings.HTTPCapture.sidebarWidth, Double($0)) }
             )
-            HTTPCaptureView(model: model, style: .sidebar, onClose: onClose, onSwitchPresentation: onSwitchPresentation)
+            HTTPCaptureView(model: model, style: .sidebar, onClose: onClose, onSwitchPresentation: onSwitchPresentation,
+                            actionsInRail: actionsInRail)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(background)
                 .clipShape(PaneCardStyle.trailingColumnShape(rounded: roundedPanes))
@@ -64,6 +67,8 @@ struct HTTPCaptureHUD: View {
     let onSwitchPresentation: (PanelPresentation) -> Void
     /// Set while Integrated tabs join the terminal card this panel covers.
     let integratedTabJoin: IntegratedTabJoin?
+    /// The window's side rail carries the header actions.
+    var actionsInRail = false
 
     @Setting(Settings.Window.roundedPanes) private var roundedPanes
     @Environment(\.paneCardBackdrop) private var paneCardBackdrop
@@ -76,7 +81,8 @@ struct HTTPCaptureHUD: View {
             forwardsHTTPCaptureToggle: true,
             onDismiss: onClose
         ) {
-            HTTPCaptureView(model: model, style: fills ? .full : .overlay, onClose: onClose, onSwitchPresentation: onSwitchPresentation)
+            HTTPCaptureView(model: model, style: fills ? .full : .overlay, onClose: onClose, onSwitchPresentation: onSwitchPresentation,
+                            actionsInRail: actionsInRail)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .panelHUDBackground(fills: fills, theme: theme, rounded: roundedPanes, cardBackdrop: paneCardBackdrop,
                                     integratedTabJoin: integratedTabJoin)
