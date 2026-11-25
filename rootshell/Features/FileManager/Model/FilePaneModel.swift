@@ -61,6 +61,8 @@ final class FilePaneModel: Identifiable {
     private(set) var isSearchingPrefix = false
     private(set) var prefixSearchError: String?
     var selection = FileRowSelection<FileEntryID>()
+    /// Touch Select mode: taps toggle rows. Here so the touch bar and the side rail can drive it.
+    var isSelecting = false
 
     var filterText = "" {
         didSet { if !filterText.utf8.elementsEqual(oldValue.utf8) { handleFilterChange() } }
@@ -74,8 +76,12 @@ final class FilePaneModel: Identifiable {
         didSet { if showHidden != oldValue { applyFilter() } }
     }
 
-    @ObservationIgnored private var backStack: [String] = []
-    @ObservationIgnored private var forwardStack: [String] = []
+    // Observed: a failed navigation still grows history, and Back must enable.
+    private var backStack: [String] = []
+    private var forwardStack: [String] = []
+    /// The folder a load in flight is opening; `path` only changes once it lists.
+    /// Observed, since a failed load clearing it can re-enable Back.
+    private var requestedPath: String?
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var loadMoreTask: Task<Void, Never>?
     @ObservationIgnored private var loadingMoreTarget: LoadMoreTarget?
@@ -210,13 +216,32 @@ final class FilePaneModel: Identifiable {
 
     func goBack() {
         guard let previous = backStack.popLast() else { return }
-        forwardStack.append(path)
+        forwardStack.append(requestedPath ?? path)
         load(previous, focus: nil)
+    }
+
+    /// Where touch's single Back goes: the previous folder, else the parent.
+    var touchBackTarget: String? {
+        if let previous = backStack.last { return previous }
+        let location = requestedPath ?? path
+        guard !location.isEmpty, location != "/" else { return nil }
+        return FileTransferLogic.parent(of: location)
+    }
+
+    /// Touch's single Back. Climbing to the parent records no history, so
+    /// repeated taps walk up to the root instead of bouncing back down.
+    func goBackOrUp() {
+        guard backStack.isEmpty else { return goBack() }
+        guard let parent = touchBackTarget else { return }
+        let child = requestedPath ?? path
+        forwardStack = []
+        filterText = ""
+        load(parent, focus: FileEntryID(path: child, isDirectory: true))
     }
 
     func goForward() {
         guard let next = forwardStack.popLast() else { return }
-        backStack.append(path)
+        backStack.append(requestedPath ?? path)
         load(next, focus: nil)
     }
 
@@ -255,6 +280,7 @@ final class FilePaneModel: Identifiable {
 
     private func load(_ requested: String?, focus: FileEntryID? = nil, resolvingHome: Bool = false) {
         loadTask?.cancel()
+        requestedPath = requested.flatMap { $0.isEmpty ? nil : $0 }
         resetPaginationState()
         loadGeneration &+= 1
         let generation = loadGeneration
@@ -297,6 +323,7 @@ final class FilePaneModel: Identifiable {
                 self.cancelLoadMore()
                 self.cancelPrefixSearch(clearResults: true)
                 self.path = target
+                self.requestedPath = nil
                 self.entries = loadedEntries
                 self.nextCursor = page.nextCursor
                 self.seenBaseCursors = page.nextCursor.map { [Array($0.utf8)] } ?? []
@@ -309,7 +336,14 @@ final class FilePaneModel: Identifiable {
                     self.schedulePrefixSearch(for: self.trimmedFilterQuery, immediate: true)
                 }
             } catch is CancellationError {
-                return
+                // A newer load cancelled this one and owns the state. Otherwise
+                // the connection closed under it (another window disconnected).
+                // The load already dropped pagination, so the old rows can't pass
+                // as complete: show the retryable error, with Back still working.
+                guard self.endpoint == endpoint, self.loadGeneration == generation else { return }
+                self.requestedPath = nil
+                self.pendingCursor = nil
+                self.status = .failed(String(localized: "The connection was closed.", comment: "File manager: a listing stopped because its connection closed"))
             } catch {
                 guard self.endpoint == endpoint, self.loadGeneration == generation, !Task.isCancelled else { return }
                 Self.logger.error("Listing failed: \(error.localizedDescription, privacy: .public)")
@@ -319,6 +353,7 @@ final class FilePaneModel: Identifiable {
                     self.load(nil, resolvingHome: true)
                     return
                 }
+                self.requestedPath = nil
                 self.status = .failed(error.localizedDescription)
             }
         }

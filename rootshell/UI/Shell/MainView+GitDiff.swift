@@ -40,6 +40,12 @@ extension MainView {
         gitDiffShowsSheet || (gitDiffShowsOverlay && gitDiffPresentation == .full)
     }
 
+    /// The window's side rail carries the expanded panel's actions (Duo's inner display).
+    /// An open file manager has the rail first.
+    var gitDiffActionsInRail: Bool {
+        showsDuoSideRail && !fileManagerActionsInRail && (gitDiffShowsSidebar || gitDiffShowsOverlay)
+    }
+
     var gitDiffSidebarCurrentWidth: CGFloat {
         gitDiffShowsSidebar ? gitDiffSidebarWidth : 0
     }
@@ -157,7 +163,7 @@ extension MainView {
     // MARK: - Views
 
     @ViewBuilder
-    func gitDiffSidebarColumn(width: CGFloat, totalWidth: CGFloat) -> some View {
+    func gitDiffSidebarColumn(width: CGFloat, totalWidth: CGFloat, bottomClearance: CGFloat = 0) -> some View {
         if gitDiffShowsSidebar, let store = gitDiffStore {
             GitDiffSidebarView(
                 store: store,
@@ -165,6 +171,8 @@ extension MainView {
                 isDragging: $gitDiffSidebarIsDragging,
                 totalWidth: totalWidth,
                 theme: resolvedSheetTheme(),
+                actionsInRail: gitDiffActionsInRail,
+                bottomClearance: bottomClearance,
                 onClose: { closeGitDiff() },
                 onSwitchPresentation: { switchGitDiffPresentation($0) }
             )
@@ -187,7 +195,8 @@ extension MainView {
                     onClose: { closeGitDiff() },
                     onCollapse: { setGitDiffCollapsed(true) },
                     onSwitchPresentation: { switchGitDiffPresentation($0) },
-                    integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs ? integratedTabJoin : nil
+                    integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs ? integratedTabJoin : nil,
+                    actionsInRail: gitDiffActionsInRail
                 )
                 .modifier(GitDiffFollowModifier(store: store, terminal: gitDiffTerminal, wantsPatch: true))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

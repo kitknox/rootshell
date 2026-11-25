@@ -16,6 +16,10 @@ struct FileManagerSidebarView: View {
     let totalWidth: CGFloat
     let canFocus: Bool
     let theme: ResolvedSheetTheme
+    /// The window's side rail carries the touch actions.
+    var actionsInRail = false
+    /// Lifts the content above a docked keyboard or toolbar; the row ignores the keyboard.
+    var bottomClearance: CGFloat = 0
     let onClose: () -> Void
     let onSwitchPresentation: (PanelPresentation) -> Void
 
@@ -48,9 +52,11 @@ struct FileManagerSidebarView: View {
                 style: .sidebar,
                 canFocus: canFocus,
                 onClose: onClose,
-                onSwitchPresentation: onSwitchPresentation
+                onSwitchPresentation: onSwitchPresentation,
+                actionsInRail: actionsInRail
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.bottom, bottomClearance)
             .background(background)
             .clipShape(PaneCardStyle.trailingColumnShape(rounded: roundedPanes))
             .shadow(color: .black.opacity(roundedPanes ? 0 : 0.15), radius: 8, x: -2, y: 0)
@@ -118,6 +124,8 @@ struct FileManagerHUD: View {
     let onSwitchPresentation: (PanelPresentation) -> Void
     /// Set while Integrated tabs join the terminal card this panel covers.
     let integratedTabJoin: IntegratedTabJoin?
+    /// The window's side rail carries the touch actions.
+    var actionsInRail = false
 
     @Setting(Settings.Window.roundedPanes) private var roundedPanes
     @Environment(\.paneCardBackdrop) private var paneCardBackdrop
@@ -135,7 +143,8 @@ struct FileManagerHUD: View {
                 style: fills ? .full : .overlay,
                 canFocus: canFocus,
                 onClose: onClose,
-                onSwitchPresentation: onSwitchPresentation
+                onSwitchPresentation: onSwitchPresentation,
+                actionsInRail: actionsInRail
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .panelHUDBackground(fills: fills, theme: theme, rounded: roundedPanes, cardBackdrop: paneCardBackdrop,

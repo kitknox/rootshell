@@ -18,28 +18,30 @@ struct FilePaneView: View {
     let canFocus: Bool
     let columns: FileRowView.Columns
     let otherPaneName: String
+    let chrome: FileManagerChrome
+    /// The location button; one touch pane shows it in the switcher instead.
+    let showsEndpoint: Bool
+    /// This pane's own touch bar, for two panes side by side.
+    let showsTouchBar: Bool
     let onClose: () -> Void
 
     @State private var arrowRepeat = ArrowKeyRepeatManager()
-    @State private var isSelecting = false
     @State private var lastClick: (rowID: FileEntryID, time: Date)?
     @State private var fieldFocused = false
     @State private var isDropTargeted = false
 
     private var hasHardwareKeyboard: Bool { KeyboardTracker.shared.isHardwareKeyboard }
 
-    private var usesPointerSemantics: Bool {
-        #if targetEnvironment(macCatalyst)
-        return true
-        #else
-        return hasHardwareKeyboard
-        #endif
-    }
+    private var usesPointerSemantics: Bool { FileManagerInput.usesPointerSemantics }
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            filterRow
+            if chrome == .pointer {
+                header
+                filterRow
+            } else {
+                touchLocation
+            }
             Divider()
             content
                 .contentShape(Rectangle())
@@ -49,9 +51,9 @@ struct FilePaneView: View {
                 Divider()
                 paginationBar
             }
-            if isSelecting || (!usesPointerSemantics && !pane.selection.isEmpty) {
+            if showsTouchBar {
                 Divider()
-                selectionBar
+                FileManagerTouchBar(manager: manager, side: pane.id)
             }
         }
         .background(isDropTargeted ? Color.accentColor.opacity(0.08) : .clear)
@@ -73,36 +75,16 @@ struct FilePaneView: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            Button { manager.sheet = .connect(pane.id) } label: {
-                HStack(spacing: 6) {
-                    if let domain = pane.endpoint.faviconDomain {
-                        FaviconIcon(domain: domain, fallbackSymbol: pane.endpoint.symbol, size: 15, tint: nil)
-                    } else {
-                        Image(systemName: pane.endpoint.symbol)
-                    }
-                    Text(pane.endpoint.displayName).fontWeight(.semibold).lineLimit(1)
-                    if pane.status == .connecting {
-                        ProgressView().controlSize(.mini)
-                    }
-                    Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
-                }
-            }
-            .help(FileManagerShortcut.shortcut(for: .connect).helpText)
-            .accessibilityLabel(String(localized: "Location: \(pane.endpoint.displayName)", comment: "File manager endpoint button"))
+            endpointButton
 
             Spacer(minLength: 4)
 
-            navButton("chevron.left", command: .back, enabled: pane.canGoBack) { pane.goBack() }
-            navButton("chevron.right", command: .forward, enabled: pane.canGoForward) { pane.goForward() }
-            navButton("arrow.up", command: .parent, enabled: !pane.path.isEmpty && pane.path != "/") { pane.goUp() }
+            // One Back, as on touch; Forward and Parent stay on their shortcuts.
+            navButton("chevron.left", command: .back, enabled: pane.touchBackTarget != nil,
+                      help: FileManagerTouchAction.backDestinationName(pane).map {
+                          String(localized: "Back to \($0)", comment: "File manager touch back button; argument is a folder name")
+                      }) { pane.goBackOrUp() }
             navButton("arrow.clockwise", command: .refresh, enabled: !pane.isBusy) { pane.refresh() }
-            if !usesPointerSemantics {
-                Button(isSelecting ? String(localized: "Done", comment: "File manager: leave selection mode") : String(localized: "Select", comment: "File manager: enter selection mode")) {
-                    isSelecting.toggle()
-                    if !isSelecting { pane.selection.clear() }
-                }
-                .font(.callout)
-            }
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, 10)
@@ -110,7 +92,61 @@ struct FilePaneView: View {
         .padding(.bottom, 4)
     }
 
-    private func navButton(_ symbol: String, command: FileManagerCommand, enabled: Bool, action: @escaping () -> Void) -> some View {
+    private var endpointButton: some View {
+        Button { manager.sheet = .connect(pane.id) } label: {
+            HStack(spacing: 6) {
+                if let domain = pane.endpoint.faviconDomain {
+                    FaviconIcon(domain: domain, fallbackSymbol: pane.endpoint.symbol, size: 15, tint: nil)
+                } else {
+                    Image(systemName: pane.endpoint.symbol)
+                }
+                Text(pane.endpoint.displayName).fontWeight(.semibold).lineLimit(1)
+                if pane.status == .connecting {
+                    ProgressView().controlSize(.mini)
+                }
+                Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
+            }
+            .frame(minHeight: chrome == .pointer ? nil : 40)
+            .contentShape(Rectangle())
+        }
+        .help(FileManagerShortcut.shortcut(for: .connect).helpText)
+        .accessibilityLabel(String(localized: "Location: \(pane.endpoint.displayName)", comment: "File manager endpoint button"))
+    }
+
+    /// Touch: the location button where the switcher doesn't name it, then the
+    /// path and filter. Navigation lives in the bottom bar or the rail.
+    private var touchLocation: some View {
+        VStack(spacing: 0) {
+            if showsEndpoint {
+                HStack {
+                    endpointButton
+                    Spacer(minLength: 0)
+                }
+                .buttonStyle(.borderless)
+            }
+            HStack(spacing: 8) {
+                FilePaneBreadcrumbMenu(pane: pane, manager: manager, path: pane.path, minHeight: 40)
+                    .equatable()
+                HStack(spacing: 5) {
+                    Image(systemName: "line.3.horizontal.decrease").foregroundStyle(.secondary).font(.caption)
+                    filterField(fontSize: 15)
+                        .frame(height: 34)
+                        .accessibilityLabel(String(localized: "Filter files", comment: "File manager filter accessibility"))
+                    if pane.status == .loading || pane.isSearchingPrefix {
+                        ProgressView().controlSize(.mini)
+                    }
+                }
+                .padding(.horizontal, 9)
+                .frame(minWidth: 110, maxWidth: 170)
+                .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 3)
+    }
+
+    private func navButton(_ symbol: String, command: FileManagerCommand, enabled: Bool, help: String? = nil,
+                           action: @escaping () -> Void) -> some View {
         let shortcut = FileManagerShortcut.shortcut(for: command)
         return Button(action: {
             manager.activeSide = pane.id
@@ -119,8 +155,8 @@ struct FilePaneView: View {
             Image(systemName: symbol).frame(width: 22, height: 22)
         }
         .disabled(!enabled)
-        .help(shortcut.helpText)
-        .accessibilityLabel(shortcut.title)
+        .help(help ?? shortcut.helpText)
+        .accessibilityLabel(help ?? shortcut.title)
     }
 
     // MARK: - Filter field
@@ -129,57 +165,64 @@ struct FilePaneView: View {
         HStack(spacing: 6) {
             breadcrumb
             Image(systemName: "line.3.horizontal.decrease").foregroundStyle(.secondary).font(.caption)
-            SidebarSearchField(
-                text: $pane.filterText,
-                placeholder: pane.isTruncatedServerListing
-                    ? String(localized: "Prefix or filter", comment: "File manager filter placeholder for truncated S3 listings")
-                    : String(localized: "Filter", comment: "File manager filter placeholder"),
-                fontSize: 14,
-                canFocus: canFocus && isActive,
-                focusRequestID: isActive ? manager.focusRequestID : 0,
-                onMoveUpBegan: { beginMove(-1, .up) },
-                onMoveUpEnded: { arrowRepeat.stop(direction: .up) },
-                onMoveDownBegan: { beginMove(1, .down) },
-                onMoveDownEnded: { arrowRepeat.stop(direction: .down) },
-                onEscape: handleEscape,
-                onSubmit: {
-                    arrowRepeat.stop()
-                    // On touch, Return closes the keyboard and kicks off any pending S3 prefix search immediately.
-                    guard hasHardwareKeyboard else {
-                        pane.searchPrefixNow()
-                        return dismissSoftwareKeyboard()
-                    }
-                    if !manager.queueFocused {
-                        if pane.cursorEntry != nil {
-                            manager.openCursor()
-                        } else {
-                            pane.searchPrefixNow()
-                        }
-                    }
-                },
-                onFocusChange: { focused in
-                    Task { @MainActor in
-                        fieldFocused = focused
-                        if focused { manager.activeSide = pane.id } else { arrowRepeat.stop() }
-                    }
-                },
-                onModifiedSubmit: { manager.perform(.openInTerminal) },
-                onTab: { arrowRepeat.stop(); manager.perform(.switchPane) },
-                onBackTab: { arrowRepeat.stop(); pane.goUp() },
-                extraCommands: keyCommands,
-                onSelectAll: { manager.perform(.selectAll) },
-                onPaste: { manager.paste($0, into: pane.id, directory: nil) },
-                claimsKeyboard: true
-            )
-            .frame(height: 22)
-            .frame(minWidth: 60, maxWidth: 180)
-            .accessibilityLabel(String(localized: "Filter files", comment: "File manager filter accessibility"))
+            filterField(fontSize: 14)
+                .frame(height: 22)
+                .frame(minWidth: 60, maxWidth: 180)
+                .accessibilityLabel(String(localized: "Filter files", comment: "File manager filter accessibility"))
             if pane.status == .loading || pane.isSearchingPrefix {
                 ProgressView().controlSize(.mini)
             }
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 6)
+    }
+
+    /// The pane's keyboard anchor: filter text, arrow keys and every pane shortcut.
+    private func filterField(fontSize: CGFloat) -> some View {
+        SidebarSearchField(
+            text: $pane.filterText,
+            placeholder: pane.isTruncatedServerListing
+                ? String(localized: "Prefix or filter", comment: "File manager filter placeholder for truncated S3 listings")
+                : String(localized: "Filter", comment: "File manager filter placeholder"),
+            fontSize: fontSize,
+            canFocus: canFocus && isActive,
+            // Touch never takes a focus request: a fresh field after the keyboard
+            // detaches would replay the last one and raise the on-screen keyboard.
+            focusRequestID: isActive && usesPointerSemantics ? manager.focusRequestID : 0,
+            onMoveUpBegan: { beginMove(-1, .up) },
+            onMoveUpEnded: { arrowRepeat.stop(direction: .up) },
+            onMoveDownBegan: { beginMove(1, .down) },
+            onMoveDownEnded: { arrowRepeat.stop(direction: .down) },
+            onEscape: handleEscape,
+            onSubmit: {
+                arrowRepeat.stop()
+                // On touch, Return closes the keyboard and kicks off any pending S3 prefix search immediately.
+                guard hasHardwareKeyboard else {
+                    pane.searchPrefixNow()
+                    return dismissSoftwareKeyboard()
+                }
+                if !manager.queueFocused {
+                    if pane.cursorEntry != nil {
+                        manager.openCursor()
+                    } else {
+                        pane.searchPrefixNow()
+                    }
+                }
+            },
+            onFocusChange: { focused in
+                Task { @MainActor in
+                    fieldFocused = focused
+                    if focused { manager.activeSide = pane.id } else { arrowRepeat.stop() }
+                }
+            },
+            onModifiedSubmit: { manager.perform(.openInTerminal) },
+            onTab: { arrowRepeat.stop(); manager.perform(.switchPane) },
+            onBackTab: { arrowRepeat.stop(); pane.goUp() },
+            extraCommands: keyCommands,
+            onSelectAll: { manager.perform(.selectAll) },
+            onPaste: { manager.paste($0, into: pane.id, directory: nil) },
+            claimsKeyboard: true
+        )
     }
 
     private var breadcrumb: some View {
@@ -231,7 +274,7 @@ struct FilePaneView: View {
             manager.queueFocused = false
         } else if !pane.selection.isEmpty {
             pane.selection.clear()
-            isSelecting = false
+            pane.isSelecting = false
         } else {
             onClose()
         }
@@ -499,7 +542,7 @@ struct FilePaneView: View {
                     isSelected: pane.selection.contains(rowID),
                     isCursor: pane.selection.cursor == rowID,
                     showsCursor: isActive && (fieldFocused || usesPointerSemantics),
-                    showsCheckbox: isSelecting,
+                    showsCheckbox: pane.isSelecting,
                     isExternallyEdited: !entry.isDirectory && RemoteFileEditCenter.shared.isWatching(endpoint: pane.endpoint, path: entry.path),
                     columns: columns
                 ),
@@ -545,7 +588,7 @@ struct FilePaneView: View {
         manager.activeSide = pane.id
         manager.requestFocus()
         dismissSoftwareKeyboard()
-        if isSelecting {
+        if pane.isSelecting && chrome != .pointer {
             pane.selection.toggle(rowID)
             return
         }
@@ -671,38 +714,6 @@ struct FilePaneView: View {
         }
     }
     #endif
-
-    // MARK: - Touch selection bar
-
-    private var selectionBar: some View {
-        let count = pane.selection.count
-        return HStack(spacing: 14) {
-            Text("\(count) selected").font(.callout).foregroundStyle(.secondary)
-            Spacer()
-            Button { pane.selection.selectAll(pane.visibleRowIDs) } label: { Image(systemName: "checkmark.circle") }
-                .accessibilityLabel(FileManagerShortcut.shortcut(for: .selectAll).title)
-            Button { manager.activeSide = pane.id; manager.transferToOther(move: false); isSelecting = false } label: {
-                Image(systemName: "doc.on.doc")
-            }
-            .accessibilityLabel(FileManagerShortcut.shortcut(for: .copyToOther).title)
-            Button { manager.activeSide = pane.id; manager.transferToOther(move: true); isSelecting = false } label: {
-                Image(systemName: "arrow.right.doc.on.clipboard")
-            }
-            .accessibilityLabel(FileManagerShortcut.shortcut(for: .moveToOther).title)
-            Button(role: .destructive) {
-                manager.activeSide = pane.id
-                let entries = pane.actionEntries
-                if !entries.isEmpty { manager.sheet = .confirmDelete(entries) }
-            } label: {
-                Image(systemName: "trash")
-            }
-            .accessibilityLabel(FileManagerShortcut.shortcut(for: .delete).title)
-        }
-        .disabled(count == 0)
-        .buttonStyle(.borderless)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-    }
 }
 
 // MARK: - Menu isolation
@@ -717,9 +728,10 @@ private struct FilePaneBreadcrumbMenu: View, Equatable {
     let pane: FilePaneModel
     let manager: FileManagerModel
     let path: String
+    var minHeight: CGFloat? = nil
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.pane === rhs.pane && lhs.manager === rhs.manager && lhs.path == rhs.path
+        lhs.pane === rhs.pane && lhs.manager === rhs.manager && lhs.path == rhs.path && lhs.minHeight == rhs.minHeight
     }
 
     var body: some View {
@@ -736,6 +748,8 @@ private struct FilePaneBreadcrumbMenu: View, Equatable {
                 .lineLimit(1)
                 .truncationMode(.head)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: minHeight)
+                .contentShape(Rectangle())
         }
         .menuStyle(.button)
         .buttonStyle(.borderless)

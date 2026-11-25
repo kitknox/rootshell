@@ -16,6 +16,10 @@ struct GitDiffSidebarView: View {
     @Binding var isDragging: Bool
     let totalWidth: CGFloat
     let theme: ResolvedSheetTheme
+    /// The window's side rail carries the panel's actions.
+    var actionsInRail = false
+    /// Lifts the content above a docked keyboard or toolbar; the row ignores the keyboard.
+    var bottomClearance: CGFloat = 0
     let onClose: () -> Void
     let onSwitchPresentation: (PanelPresentation) -> Void
 
@@ -43,8 +47,9 @@ struct GitDiffSidebarView: View {
                 onCommit: { SettingsStore.shared.set(Settings.GitDiff.sidebarWidth, Double($0)) }
             )
             GitDiffView(store: store, style: .sidebar, onClose: onClose, onCollapse: nil,
-                        onSwitchPresentation: onSwitchPresentation)
+                        onSwitchPresentation: onSwitchPresentation, actionsInRail: actionsInRail)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.bottom, bottomClearance)
                 .background(background)
                 .clipShape(PaneCardStyle.trailingColumnShape(rounded: roundedPanes))
                 .shadow(color: .black.opacity(roundedPanes ? 0 : 0.15), radius: 8, x: -2, y: 0)
@@ -66,6 +71,8 @@ struct GitDiffHUD: View {
     let onSwitchPresentation: (PanelPresentation) -> Void
     /// Set while Integrated tabs join the terminal card this panel covers.
     let integratedTabJoin: IntegratedTabJoin?
+    /// The window's side rail carries the panel's actions.
+    var actionsInRail = false
 
     @Setting(Settings.Window.roundedPanes) private var roundedPanes
     @Environment(\.paneCardBackdrop) private var paneCardBackdrop
@@ -80,7 +87,8 @@ struct GitDiffHUD: View {
             onDismiss: onClose
         ) {
             GitDiffView(store: store, style: fills ? .full : .overlay, onClose: onClose,
-                        onCollapse: fills ? nil : onCollapse, onSwitchPresentation: onSwitchPresentation)
+                        onCollapse: fills ? nil : onCollapse, onSwitchPresentation: onSwitchPresentation,
+                        actionsInRail: actionsInRail)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .panelHUDBackground(fills: fills, theme: theme, rounded: roundedPanes, cardBackdrop: paneCardBackdrop,
                                     integratedTabJoin: integratedTabJoin)
@@ -137,13 +145,18 @@ struct GitDiffPhoneSheetModifier: ViewModifier {
     func body(content: Content) -> some View {
         content.sheet(isPresented: $isPresented) {
             if let store {
-                GitDiffView(store: store, style: .sheet, onClose: onClose, onCollapse: onCollapse,
-                            onSwitchPresentation: nil)
-                    .modifier(GitDiffFollowModifier(store: store, terminal: terminal, wantsPatch: true))
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
-                    .themedSheet(themeColors: sheetTheme.themeColors, accentColor: sheetTheme.accentColor,
-                                 colorScheme: sheetTheme.colorScheme)
+                PanelSheetNavigation {
+                    PanelSideRailReader { inRail in
+                        GitDiffView(store: store, style: .sheet, onClose: onClose, onCollapse: onCollapse,
+                                    onSwitchPresentation: nil, actionsInRail: inRail)
+                            .modifier(GitDiffSheetRail(active: inRail, store: store, onCollapse: onCollapse, onClose: onClose))
+                    }
+                }
+                .modifier(GitDiffFollowModifier(store: store, terminal: terminal, wantsPatch: true))
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .themedSheet(themeColors: sheetTheme.themeColors, accentColor: sheetTheme.accentColor,
+                             colorScheme: sheetTheme.colorScheme)
             }
         }
     }

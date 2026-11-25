@@ -101,6 +101,23 @@ extension MainView {
                             ))
                         }
                     }
+                    // The open panel's actions, in place of its own small header buttons.
+                    if fileManagerActionsInRail, let model = fileManagerModel {
+                        FileManagerRailItems(
+                            manager: model,
+                            presentation: fileManagerPresentation,
+                            onSwitchPresentation: { switchFileManagerPresentation($0) },
+                            onClose: { closeFileManager() }
+                        )
+                    } else if gitDiffActionsInRail, let store = gitDiffStore {
+                        GitDiffRailItems(
+                            store: store,
+                            presentation: gitDiffPresentation,
+                            onSwitchPresentation: { switchGitDiffPresentation($0) },
+                            onCollapse: gitDiffPresentation == .overlay ? { setGitDiffCollapsed(true) } : nil,
+                            onClose: { closeGitDiff() }
+                        )
+                    }
                 }
         } else {
             content

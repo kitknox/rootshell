@@ -128,6 +128,17 @@ final class GitDiffStore {
         foldOverrides[file.id] = expanded
     }
 
+    /// A file the list should scroll to; the list clears it once there.
+    var jumpTarget: String?
+
+    /// Unfolds a file and scrolls the list to it.
+    func reveal(_ id: String) {
+        if let file = snapshot?.files.first(where: { $0.id == id }), !isExpanded(file) {
+            setExpanded(true, for: file)
+        }
+        jumpTarget = id
+    }
+
     func setAllExpanded(_ expanded: Bool) {
         guard let snapshot else { return }
         foldOverrides = Dictionary(snapshot.files.map { ($0.id, expanded) }, uniquingKeysWith: { first, _ in first })
