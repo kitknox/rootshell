@@ -177,7 +177,9 @@ struct ThemePickerOverlay: View {
                             .id(searchText)
                     }
                 }
+                #if !os(visionOS)
                 .scrollDismissesKeyboard(.interactively)
+                #endif
                 .onChange(of: keyboardSelection) { _, target in
                     guard let target else { return }
                     proxy.scrollTo(target, anchor: .center)
@@ -211,7 +213,9 @@ struct ThemePickerOverlay: View {
                         themeListContent(proxy: proxy)
                             .id(searchText)
                     }
+                    #if !os(visionOS)
                     .scrollDismissesKeyboard(.interactively)
+                    #endif
                     .onChange(of: keyboardSelection) { _, target in
                         guard let target else { return }
                         proxy.scrollTo(target, anchor: .center)

@@ -312,7 +312,9 @@ struct ThemeSettingsView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            #if !os(visionOS)
             .scrollDismissesKeyboard(.interactively)
+            #endif
             .themedList()
             .onAppear {
                 scrollToSelectedTheme(proxy: proxy)
@@ -477,7 +479,9 @@ struct ThemeSettingsView: View {
                 }
                 .padding()
             }
+            #if !os(visionOS)
             .scrollDismissesKeyboard(.interactively)
+            #endif
             .id(searchText + filterMode.rawValue)
             .onAppear {
                 scrollToSelectedTheme(proxy: proxy)

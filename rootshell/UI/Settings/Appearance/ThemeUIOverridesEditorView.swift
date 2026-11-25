@@ -65,7 +65,9 @@ struct ThemeUIOverridesEditorView: View {
                     }
                 }
             }
+            #if !os(visionOS)
             .scrollDismissesKeyboard(.interactively)
+            #endif
             .themedList()
             .navigationTitle(theme.displayName)
             .navigationBarTitleDisplayMode(.inline)

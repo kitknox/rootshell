@@ -145,7 +145,9 @@ struct ThemeEditorView: View {
                             }
                         }
                     }
+                    #if !os(visionOS)
                     .scrollDismissesKeyboard(.interactively)
+                    #endif
                     .themedList()
                 }
                 .background((sheetThemeColors?.background ?? Color(uiColor: .systemGroupedBackground)).ignoresSafeArea())
