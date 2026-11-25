@@ -65,6 +65,7 @@ struct ThemeUIOverridesEditorView: View {
                     }
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .themedList()
             .navigationTitle(theme.displayName)
             .navigationBarTitleDisplayMode(.inline)
@@ -92,13 +93,24 @@ struct ThemeUIOverridesEditorView: View {
 
     @ViewBuilder
     private func overrideRow(_ field: ThemeUIOverrideField, derived: DerivedThemeUIColors) -> some View {
-        let hasOverride = manager.overrides(for: theme.name)[field] != nil
-        HStack(spacing: 12) {
+        let overrideHex = manager.overrides(for: theme.name)[field]
+        let hasOverride = overrideHex != nil
+        let displayHex = (overrideHex ?? derived.color(for: field)?.hexString ?? "").uppercased()
+        HStack(spacing: 8) {
             ColorPicker(
-                field.displayName,
                 selection: binding(for: field, derived: derived),
                 supportsOpacity: false
-            )
+            ) {
+                HStack(spacing: 8) {
+                    Text(field.displayName)
+                    Spacer(minLength: 8)
+                    if !displayHex.isEmpty {
+                        Text(displayHex)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(hasOverride ? Color.accentColor : Color.secondary)
+                    }
+                }
+            }
             if hasOverride {
                 Button {
                     manager.clearField(field, for: theme.name)
@@ -106,6 +118,7 @@ struct ThemeUIOverridesEditorView: View {
                     Image(systemName: "arrow.uturn.backward.circle.fill")
                         .foregroundStyle(.secondary)
                         .imageScale(.medium)
+                        .panelTouchTarget(PanelTouch.isTouchPlatform, minWidth: 36, minHeight: 36)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Reset \(field.displayName) to default")

@@ -10,6 +10,7 @@ import UniformTypeIdentifiers
 
 struct ThemeSettingsView: View {
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.sheetThemeColors) private var sheetThemeColors
     var themeManager = ThemeManager.shared
     @ObservedObject private var dayNightManager = DayNightThemeManager.shared
@@ -50,17 +51,19 @@ struct ThemeSettingsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header: Search + Light/Dark filter
-            filterHeader
+        PanelSideRailReader { inRail in
+            VStack(spacing: 0) {
+                // Header: Search + Light/Dark filter
+                filterHeader(inRail: inRail)
 
-            // Responsive content
-            if horizontalSizeClass == .compact {
-                // iPhone: List layout with inline terminal preview
-                themeList
-            } else {
-                // iPad/Mac: 2-column grid
-                themeGrid
+                // Responsive content
+                if horizontalSizeClass == .compact {
+                    // iPhone: List layout with inline terminal preview
+                    themeList
+                } else {
+                    // iPad/Mac/unfolded Duo: 2-column grid
+                    themeGrid
+                }
             }
         }
         // Awaits the background parse if the browser is opened before it lands;
@@ -71,34 +74,36 @@ struct ThemeSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: 12) {
-                    Menu {
-                        Button {
-                            activeEditorMode = .new
-                        } label: {
-                            Label("Create Theme", systemImage: "paintbrush")
-                        }
-
-                        Button {
-                            showingFilePicker = true
-                        } label: {
-                            Label("Import Theme File...", systemImage: "square.and.arrow.down")
-                        }
+                Menu {
+                    Button {
+                        activeEditorMode = .new()
                     } label: {
-                        Image(systemName: "plus")
+                        Label("Create Theme", systemImage: "paintbrush")
                     }
 
-                    dayNightMenu
+                    Button {
+                        showingFilePicker = true
+                    } label: {
+                        Label("Import Theme File...", systemImage: "square.and.arrow.down")
+                    }
+                } label: {
+                    Label("Add Theme", systemImage: "plus")
                 }
+                .labelStyle(.iconOnly)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                dayNightMenu
             }
             SettingsScreenPinMenu(groups: [.theme])
         }
         .sheet(item: $activeEditorMode) { mode in
             ThemeEditorView(mode: mode)
+                .presentationDragIndicator(.visible)
                 .themedSubSheet(sheetThemeColors)
         }
         .sheet(item: $uiOverridesEditTarget) { theme in
             ThemeUIOverridesEditorView(theme: theme)
+                .presentationDragIndicator(.visible)
                 .themedSubSheet(sheetThemeColors)
         }
         .fileImporter(
@@ -110,6 +115,7 @@ struct ThemeSettingsView: View {
         }
         .sheet(isPresented: $showingImportNameSheet) {
             themeImportNameSheet
+                .presentationDragIndicator(.visible)
                 .themedSubSheet(sheetThemeColors)
         }
         .alert("Import Error", isPresented: $showingImportError) {
@@ -149,16 +155,18 @@ struct ThemeSettingsView: View {
                 )
             }
         } label: {
-            Image(systemName: "ellipsis.circle")
+            Label("Theme Options", systemImage: "ellipsis.circle")
                 .symbolVariant(dayNightManager.enabled ? .fill : .none)
                 .foregroundStyle(dayNightManager.enabled ? .orange : .primary)
         }
+        .labelStyle(.iconOnly)
     }
 
     // MARK: - Filter Header
 
-    private var filterHeader: some View {
-        VStack(spacing: 12) {
+    private func filterHeader(inRail: Bool) -> some View {
+        let isShort = verticalSizeClass == .compact
+        return VStack(spacing: isShort ? 8 : 12) {
             // Day/Night mode picker (when enabled)
             if dayNightManager.enabled {
                 Picker("Editing", selection: $editingMode) {
@@ -195,10 +203,14 @@ struct ThemeSettingsView: View {
                     Button { searchText = "" } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundColor(.secondary)
+                            .panelTouchTarget(PanelTouch.isTouchPlatform, minWidth: 32, minHeight: 32)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Clear search"))
                 }
             }
-            .padding(10)
+            .padding(.horizontal, 10)
+            .padding(.vertical, isShort ? 8 : 10)
             .background(sheetThemeColors?.rowBackground ?? Color(uiColor: .systemGray6))
             .cornerRadius(10)
 
@@ -218,7 +230,11 @@ struct ThemeSettingsView: View {
                 Spacer()
             }
         }
-        .padding()
+        .padding(.leading, 16)
+        // Inset-grouped lists align flush with the side rail's safe edge on Duo;
+        // matching that trailing inset prevents the header from looking indented.
+        .padding(.trailing, inRail && horizontalSizeClass == .compact ? 0 : 16)
+        .padding(.vertical, isShort ? 8 : 12)
     }
 
     // MARK: - Theme Selection
@@ -296,6 +312,7 @@ struct ThemeSettingsView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .scrollDismissesKeyboard(.interactively)
             .themedList()
             .onAppear {
                 scrollToSelectedTheme(proxy: proxy)
@@ -321,10 +338,10 @@ struct ThemeSettingsView: View {
         return Button {
             selectTheme(theme)
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 // Terminal preview (compact)
                 TerminalSnippetView(colors: theme.colors, compact: true)
-                    .frame(width: 120, height: 45)
+                    .frame(width: 108, height: 45)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
 
                 // Theme name and family
@@ -354,20 +371,26 @@ struct ThemeSettingsView: View {
                     }
                 }
 
-                Spacer()
+                Spacer(minLength: 4)
 
-                // Favorite button
-                Button {
-                    favoriteManager.toggleFavorite(theme.id)
-                } label: {
-                    Image(systemName: isFavorite ? "star.fill" : "star")
-                        .foregroundColor(isFavorite ? .yellow : .secondary.opacity(0.5))
-                }
-                .buttonStyle(.plain)
+                HStack(spacing: 2) {
+                    // Favorite button
+                    Button {
+                        favoriteManager.toggleFavorite(theme.id)
+                    } label: {
+                        Image(systemName: isFavorite ? "star.fill" : "star")
+                            .foregroundColor(isFavorite ? .yellow : .secondary.opacity(0.5))
+                            .panelTouchTarget(PanelTouch.isTouchPlatform, minWidth: 36, minHeight: 40)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(isFavorite
+                        ? Text("Remove from Favorites")
+                        : Text("Add to Favorites"))
 
-                if isThemeSelected(theme) {
-                    Image(systemName: "checkmark")
-                        .foregroundColor(.blue)
+                    if isThemeSelected(theme) {
+                        Image(systemName: "checkmark")
+                            .foregroundColor(.blue)
+                    }
                 }
             }
             .padding(.vertical, 4)
@@ -391,6 +414,19 @@ struct ThemeSettingsView: View {
                     Label("Edit", systemImage: "pencil")
                 }
                 .tint(.orange)
+            } else {
+                Button {
+                    activeEditorMode = .duplicate(theme)
+                } label: {
+                    Label("Duplicate", systemImage: "doc.on.doc")
+                }
+                .tint(.blue)
+                Button {
+                    uiOverridesEditTarget = theme
+                } label: {
+                    Label("UI Colors", systemImage: "paintpalette")
+                }
+                .tint(.purple)
             }
         }
         .themedRow()
@@ -441,6 +477,7 @@ struct ThemeSettingsView: View {
                 }
                 .padding()
             }
+            .scrollDismissesKeyboard(.interactively)
             .id(searchText + filterMode.rawValue)
             .onAppear {
                 scrollToSelectedTheme(proxy: proxy)
@@ -473,9 +510,13 @@ struct ThemeSettingsView: View {
                             .padding(6)
                             .background(Color.black.opacity(0.3))
                             .clipShape(Circle())
+                            .panelTouchTarget(PanelTouch.isTouchPlatform, minWidth: 36, minHeight: 36)
                     }
                     .buttonStyle(.plain)
-                    .padding(4)
+                    .accessibilityLabel(isFavorite
+                        ? Text("Remove from Favorites")
+                        : Text("Add to Favorites"))
+                    .padding(PanelTouch.isTouchPlatform ? 0 : 4)
                 }
 
                 // Theme name
@@ -518,7 +559,7 @@ struct ThemeSettingsView: View {
     // MARK: - Theme Import
 
     private var themeImportNameSheet: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section {
                     TextField("Theme Name", text: $importName)

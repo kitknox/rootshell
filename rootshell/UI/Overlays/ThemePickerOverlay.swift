@@ -8,12 +8,24 @@
 import SwiftUI
 
 /// Floating theme picker overlay that can be opened via keyboard shortcut (Cmd+Shift+T)
+/// or presented as a sheet when the available HUD area cannot fit a selectable row.
 struct ThemePickerOverlay: View {
+    enum Style { case hud, sheet }
+
+    /// Minimum HUD container height needed for the 24pt host inset, the
+    /// ultra-compact top row, and at least one 48pt selectable theme row.
+    static let minimumHUDHeight: CGFloat = 24 + ultraCompactChromeHeight + 48
+
+    var style: Style = .hud
     @Binding var isPresented: Bool
     let windowId: String
     let currentTabId: UUID?
+    /// Available container size from the HUD host so the panel adapts to narrow
+    /// displays, landscape, tabletop mode, and on-screen keyboards.
+    var availableSize: CGSize? = nil
     let onThemeSelected: (String, ThemePickerScope) -> Void
 
+    @Environment(\.sheetThemeColors) private var sheetThemeColors
     var themeManager = ThemeManager.shared
     @ObservedObject private var favoriteManager = FavoriteThemesManager.shared
     var overrideManager = ThemeOverrideManager.shared
@@ -23,6 +35,66 @@ struct ThemePickerOverlay: View {
     @State private var isSearchFocused = false
     @State private var keyboardSelection: ScrollTarget?
     @State private var arrowKeyRepeatManager = ArrowKeyRepeatManager()
+
+    private var shouldAutoFocusSearch: Bool {
+        #if targetEnvironment(macCatalyst)
+        true
+        #else
+        KeyboardTracker.shared.isHardwareKeyboard
+        #endif
+    }
+
+    private var panelWidth: CGFloat {
+        guard let width = availableSize?.width, width > 0 else { return 340 }
+        let maxUsable = max(240, width - 24)
+        // Fill evenly on compact widths (such as iPhone Duo's front display
+        // beside the side rail) so the panel sits centered instead of hugging
+        // one side; keep the classic 340pt floating card on wider screens.
+        return width <= 420 ? maxUsable : min(340, maxUsable)
+    }
+
+    private static let fullChromeHeight: CGFloat = 156
+    private static let compactChromeHeight: CGFloat = 112
+    private static let ultraCompactChromeHeight: CGFloat = 54
+    private static let minPinnedListHeight: CGFloat = 120
+    private static let minCompactListHeight: CGFloat = 80
+
+    /// Maximum height the panel may occupy inside `DraggableHUDContainer` (which
+    /// reserves `inset * 2` vertically). Nil when unconstrained.
+    private var maxPanelHeight: CGFloat? {
+        guard let height = availableSize?.height, height > 0 else { return nil }
+        return max(0, height - 24)
+    }
+
+    /// When the host is too short for the full chrome + a usable list (e.g.,
+    /// landscape with the on-screen keyboard visible), fold the scope picker
+    /// into the scroll view.
+    private var scrollsScope: Bool {
+        guard let maxPanelHeight else { return false }
+        return maxPanelHeight < Self.fullChromeHeight + Self.minPinnedListHeight
+    }
+
+    /// When even the header + search row would starve the results list (e.g.,
+    /// a landscape phone with the software keyboard up), collapse the drag
+    /// handle, search field, and close button onto one row so the list retains
+    /// usable height.
+    private var isUltraCompact: Bool {
+        guard let maxPanelHeight else { return false }
+        return maxPanelHeight < Self.compactChromeHeight + Self.minCompactListHeight
+    }
+
+    private var listHeight: CGFloat {
+        guard let maxPanelHeight else { return 350 }
+        let pinnedChrome: CGFloat
+        if isUltraCompact {
+            pinnedChrome = Self.ultraCompactChromeHeight
+        } else if scrollsScope {
+            pinnedChrome = Self.compactChromeHeight
+        } else {
+            pinnedChrome = Self.fullChromeHeight
+        }
+        return min(350, max(0, maxPanelHeight - pinnedChrome))
+    }
 
     private enum ScrollTarget: Hashable {
         case current(String)
@@ -45,10 +117,17 @@ struct ThemePickerOverlay: View {
     }
 
     var body: some View {
-        // Positioning + (no) dragging is handled by the hosting DraggableHUDContainer.
-        // A native UIKit host is required: as a plain SwiftUI overlay the search
-        // field's focus made .onKeyPress steal the X-button click on macOS.
-        pickerContent
+        // Positioning + dragging is handled by the hosting DraggableHUDContainer
+        // in `.hud` mode; `.sheet` mode is used as a fallback when the HUD area
+        // is too short to display a selectable row (e.g., tabletop + bottom tabs).
+        Group {
+            switch style {
+            case .hud:
+                pickerContent
+            case .sheet:
+                sheetContent
+            }
+        }
             .onDisappear {
                 arrowKeyRepeatManager.stop()
             }
@@ -68,107 +147,37 @@ struct ThemePickerOverlay: View {
 
     private var pickerContent: some View {
         VStack(spacing: 0) {
-            // Header with scope picker and close button
-            HStack {
-                Text("Theme")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-
-                Spacer()
-
-                Button(action: { isPresented = false }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.escape, modifiers: [])
+            // Outside the ScrollView so the HUD stays draggable by its header;
+            // hidden in ultra-compact mode where the drag handle and close
+            // button share the search row below.
+            if !isUltraCompact {
+                pickerHeader
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
 
-            // Scope picker
-            Picker("Scope", selection: $scope) {
-                ForEach(ThemePickerScope.allCases, id: \.self) { s in
-                    Text(s.displayName).tag(s)
-                }
+            if !scrollsScope {
+                scopePicker
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
 
-            // Search field
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                SidebarSearchField(
-                    text: $searchText,
-                    placeholder: String(localized: "Search themes"),
-                    fontSize: 17,
-                    canFocus: isPresented,
-                    focusRequestID: 1,
-                    onMoveUpBegan: { beginKeyboardMovement(by: -1, direction: .up) },
-                    onMoveUpEnded: { arrowKeyRepeatManager.stop(direction: .up) },
-                    onMoveDownBegan: { beginKeyboardMovement(by: 1, direction: .down) },
-                    onMoveDownEnded: { arrowKeyRepeatManager.stop(direction: .down) },
-                    onEscape: { isPresented = false },
-                    onSubmit: activateKeyboardSelection,
-                    onFocusChange: { focused in
-                        DispatchQueue.main.async {
-                            isSearchFocused = focused
-                            if !focused { arrowKeyRepeatManager.stop() }
-                        }
-                    }
-                )
-                .frame(maxWidth: .infinity)
-                .frame(height: 22)
-                if !searchText.isEmpty {
-                    Button(action: { searchText = "" }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(10)
-            .background(Color.primary.opacity(0.08))
-            .cornerRadius(8)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+            // Always kept at the same structural slot (and searchFieldBox at
+            // the same HStack slot) so SidebarSearchField stays mounted and
+            // retains first responder when the software keyboard shrinks height.
+            pickerSearchRow
 
             Divider()
 
-            // Theme list
+            // Theme list (plus scope picker when compact)
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 4) {
-                        // Current override info (if any)
-                        if let overrideInfo = currentOverrideInfo {
-                            overrideInfoSection(overrideInfo)
+                    VStack(spacing: 0) {
+                        if scrollsScope {
+                            scopePicker
+                                .padding(.top, 8)
                         }
-
-                        // Tap the pinned theme to reveal it in the full list.
-                        if searchText.isEmpty, let current = currentThemeInfo {
-                            currentSection(current) {
-                                keyboardSelection = .theme(current.id)
-                                withAnimation {
-                                    proxy.scrollTo(ScrollTarget.theme(current.id), anchor: .center)
-                                }
-                            }
-                        }
-
-                        // Favorites section
-                        if searchText.isEmpty, !visibleFavoriteThemes.isEmpty {
-                            favoritesSection(visibleFavoriteThemes)
-                        }
-
-                        // All themes (filtered)
-                        themesSection
+                        themeListContent(proxy: proxy)
+                            .id(searchText)
                     }
-                    .padding(.vertical, 8)
                 }
-                .id(searchText)
+                .scrollDismissesKeyboard(.interactively)
                 .onChange(of: keyboardSelection) { _, target in
                     guard let target else { return }
                     proxy.scrollTo(target, anchor: .center)
@@ -176,13 +185,183 @@ struct ThemePickerOverlay: View {
             }
             // Fixed (not max) height: hosted in a UIHostingController, a ScrollView
             // with only a max height collapses under intrinsic sizing.
-            .frame(height: 350)
+            .frame(height: listHeight)
         }
-        .frame(width: 340)
+        .frame(width: panelWidth)
         .floatingHUDPanelBackground()
         // Cmd-Shift-T / Escape dismissal is handled by host-level UIKeyCommands in
         // DraggableHUDContainer — a SwiftUI .onKeyPress here is preempted on macOS by
         // the app's registered Cmd-Shift-T menu shortcut.
+    }
+
+    private var sheetContent: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                scopePicker
+                    .padding(.top, 12)
+
+                searchFieldBox
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+
+                Divider()
+
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        themeListContent(proxy: proxy)
+                            .id(searchText)
+                    }
+                    .scrollDismissesKeyboard(.interactively)
+                    .onChange(of: keyboardSelection) { _, target in
+                        guard let target else { return }
+                        proxy.scrollTo(target, anchor: .center)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .background((sheetThemeColors?.background ?? Color(uiColor: .systemGroupedBackground)).ignoresSafeArea())
+            .navigationTitle("Theme")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { isPresented = false }
+                }
+            }
+        }
+    }
+
+    private var pickerHeader: some View {
+        HStack {
+            Text("Theme")
+                .font(.headline)
+                .fontWeight(.semibold)
+
+            Spacer()
+
+            closeButton
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, PanelTouch.isTouchPlatform ? 6 : 16)
+        .padding(.top, PanelTouch.isTouchPlatform ? 4 : 12)
+        .padding(.bottom, PanelTouch.isTouchPlatform ? 0 : 8)
+    }
+
+    private var closeButton: some View {
+        Button(action: { isPresented = false }) {
+            Image(systemName: "xmark.circle.fill")
+                .font(.title2)
+                .foregroundColor(.secondary)
+                .panelTouchTarget(PanelTouch.isTouchPlatform)
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.escape, modifiers: [])
+        .accessibilityLabel(Text("Close"))
+    }
+
+    private var scopePicker: some View {
+        Picker("Scope", selection: $scope) {
+            ForEach(ThemePickerScope.allCases, id: \.self) { s in
+                Text(s.displayName).tag(s)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
+    }
+
+    private var pickerSearchRow: some View {
+        HStack(spacing: isUltraCompact ? 6 : 0) {
+            if isUltraCompact {
+                // Non-control drag handle so the HUD remains repositionable when
+                // the header collapses onto this single row.
+                Image(systemName: "line.3.horizontal")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 36)
+                    .contentShape(Rectangle())
+                    .accessibilityHidden(true)
+            }
+
+            searchFieldBox
+
+            if isUltraCompact {
+                closeButton
+            }
+        }
+        .padding(.leading, isUltraCompact ? 10 : 16)
+        .padding(.trailing, isUltraCompact ? (PanelTouch.isTouchPlatform ? 4 : 10) : 16)
+        .padding(.top, isUltraCompact ? 4 : 0)
+        .padding(.bottom, isUltraCompact ? 4 : 12)
+    }
+
+    private var searchFieldBox: some View {
+        HStack {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.secondary)
+            SidebarSearchField(
+                text: $searchText,
+                placeholder: String(localized: "Search themes"),
+                fontSize: 17,
+                canFocus: isPresented,
+                focusRequestID: shouldAutoFocusSearch ? 1 : 0,
+                onMoveUpBegan: { beginKeyboardMovement(by: -1, direction: .up) },
+                onMoveUpEnded: { arrowKeyRepeatManager.stop(direction: .up) },
+                onMoveDownBegan: { beginKeyboardMovement(by: 1, direction: .down) },
+                onMoveDownEnded: { arrowKeyRepeatManager.stop(direction: .down) },
+                onEscape: { isPresented = false },
+                onSubmit: activateKeyboardSelection,
+                onFocusChange: { focused in
+                    DispatchQueue.main.async {
+                        isSearchFocused = focused
+                        if !focused { arrowKeyRepeatManager.stop() }
+                    }
+                }
+            )
+            .frame(maxWidth: .infinity)
+            .frame(height: 22)
+            if !searchText.isEmpty {
+                Button(action: { searchText = "" }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                        .panelTouchTarget(PanelTouch.isTouchPlatform, minWidth: 32, minHeight: 32)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Clear search"))
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, PanelTouch.isTouchPlatform ? 8 : 10)
+        .background(Color.primary.opacity(0.08))
+        .cornerRadius(8)
+    }
+
+    @ViewBuilder
+    private func themeListContent(proxy: ScrollViewProxy) -> some View {
+        LazyVStack(spacing: 4) {
+            // Current override info (if any)
+            if let overrideInfo = currentOverrideInfo {
+                overrideInfoSection(overrideInfo)
+            }
+
+            // Tap the pinned theme to reveal it in the full list.
+            if searchText.isEmpty, let current = currentThemeInfo {
+                currentSection(current) {
+                    keyboardSelection = .theme(current.id)
+                    withAnimation {
+                        proxy.scrollTo(ScrollTarget.theme(current.id), anchor: .center)
+                    }
+                }
+            }
+
+            // Favorites section
+            if searchText.isEmpty, !visibleFavoriteThemes.isEmpty {
+                favoritesSection(visibleFavoriteThemes)
+            }
+
+            // All themes (filtered)
+            themesSection
+        }
+        .padding(.vertical, 8)
     }
 
     // MARK: - Current Override Info
@@ -376,11 +555,17 @@ struct ThemePickerOverlay: View {
                 Button(action: { toggleFavorite(theme) }) {
                     Image(systemName: isFavorite ? "star.fill" : "star")
                         .foregroundColor(isFavorite ? .yellow : .secondary.opacity(0.5))
+                        .panelTouchTarget(PanelTouch.isTouchPlatform, minWidth: 40, minHeight: 40)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(isFavorite
+                    ? Text("Remove from Favorites")
+                    : Text("Add to Favorites"))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.leading, 12)
+            .padding(.trailing, PanelTouch.isTouchPlatform ? 4 : 12)
+            .padding(.vertical, PanelTouch.isTouchPlatform ? 4 : 8)
+            .contentShape(Rectangle())
             .background(isSearchFocused && keyboardSelection == target
                         ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.001))
         }

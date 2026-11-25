@@ -186,20 +186,52 @@ extension MainView {
             // overlay let .onKeyPress steal the X-button click and got preempted by
             // the app's Cmd-Shift-T menu shortcut). Draggable by its chrome; the pan
             // yields to the theme list's scroll view. Dismissal via host UIKeyCommands.
-            DraggableHUDContainer(
-                dismissShortcuts: [.escape],
-                // Answer the app's toggle_theme_picker menu action while the picker is
-                // focused — that shortcut already honors KeybindManager remaps, and the
-                // terminal (its usual target) isn't reachable from the focused picker.
-                forwardsThemePickerToggle: true,
-                onDismiss: { isPresented.wrappedValue = false }
-            ) {
-                ThemePickerOverlay(
-                    isPresented: isPresented,
-                    windowId: windowId,
-                    currentTabId: terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].id : nil,
-                    onThemeSelected: handleThemePickerSelection
+            // Measure the HUD's actual global frame against the docked keyboard so
+            // bottom tabs (which already lift this container above the keyboard)
+            // never subtract keyboard height twice. If the remaining height cannot
+            // fit even the ultra-compact bar plus one theme row (e.g. tabletop
+            // mode with bottom tabs), latch the sheet fallback instead.
+            GeometryReader { proxy in
+                let _ = effectManager.keyboardStateVersion
+                let keyboardClearance: CGFloat = (duoTabletopAvailable && !duoTabletopDisabled)
+                    ? 0
+                    : keyboardCoverage(of: proxy.frame(in: .global), window: nil)
+                let available = CGSize(
+                    width: proxy.size.width,
+                    height: max(0, proxy.size.height - keyboardClearance)
                 )
+                let needsSheet = themePickerUsesSheet
+                    || (available.height > 0 && available.height < ThemePickerOverlay.minimumHUDHeight)
+                ZStack {
+                    Color.clear
+                        .allowsHitTesting(false)
+                        .onChange(of: available.height, initial: true) { _, height in
+                            if height > 0, height < ThemePickerOverlay.minimumHUDHeight, !themePickerUsesSheet {
+                                themePickerUsesSheet = true
+                            }
+                        }
+
+                    if !needsSheet, available.height > 0 {
+                        DraggableHUDContainer(
+                            dismissShortcuts: [.escape],
+                            // Answer the app's toggle_theme_picker menu action while the picker is
+                            // focused — that shortcut already honors KeybindManager remaps, and the
+                            // terminal (its usual target) isn't reachable from the focused picker.
+                            forwardsThemePickerToggle: true,
+                            onDismiss: { isPresented.wrappedValue = false }
+                        ) {
+                            ThemePickerOverlay(
+                                style: .hud,
+                                isPresented: isPresented,
+                                windowId: windowId,
+                                currentTabId: terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].id : nil,
+                                availableSize: available,
+                                onThemeSelected: handleThemePickerSelection
+                            )
+                        }
+                        .padding(.bottom, keyboardClearance)
+                    }
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -1523,7 +1555,8 @@ extension MainView {
     func terminalAndSidebarContent(
         geometry: GeometryProxy,
         theme: ResolvedTabBarTheme,
-        sheetTheme: ResolvedSheetTheme
+        sheetTheme: ResolvedSheetTheme,
+        duoFrontSafeTop: CGFloat = 0
     ) -> some View {
         // Docked (pinned) tab sidebar: a left column that shrinks the terminal.
         // Available on both China and non-China builds.
@@ -1632,6 +1665,11 @@ extension MainView {
         .overlay(alignment: .leading) {
             floatingHUDOverlays()
                 .modifier(DuoControlClearance())
+                // On Duo's front display in Side Rail mode the terminal canvas
+                // extends to the vertical screen edges, stripping safe area
+                // insets; keep floating HUDs clear of the rounded display corners.
+                .padding(.top, duoFrontSafeTop)
+                .padding(.bottom, duoLayout.extendsTerminalToVerticalEdges ? windowSafeAreaInsets.bottom : 0)
                 // Exposé covers the terminal, and with it these HUDs.
                 .opacity(tabExpose.isActive ? 0 : 1)
                 .frame(width: dockedWidth + terminalWidth)

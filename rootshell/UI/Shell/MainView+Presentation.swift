@@ -219,6 +219,16 @@ extension MainView {
             #endif
             .modifier(agentInboxPhoneSheetModifier(sheetTheme: sheetTheme))
             .modifier(gitDiffPhoneSheetModifier(sheetTheme: sheetTheme))
+            .modifier(ThemePickerSheetModifier(
+                isPresented: Binding(
+                    get: { showThemePickerOverlay && themePickerUsesSheet },
+                    set: { if !$0 { showThemePickerOverlay = false } }
+                ),
+                windowId: windowId,
+                currentTabId: terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].id : nil,
+                sheetTheme: sheetTheme,
+                onThemeSelected: handleThemePickerSelection
+            ))
             .sheet(item: $connectionInfoToShow) { info in
                 ConnectionInfoSheet(info: info)
                     .themedSheet(themeColors: sheetTheme.themeColors, accentColor: sheetTheme.accentColor, colorScheme: sheetTheme.colorScheme)
@@ -542,6 +552,7 @@ extension MainView {
                 }
             }
             .onChange(of: showThemePickerOverlay) { _, newValue in
+                if !newValue { themePickerUsesSheet = false }
                 handleThemePickerOverlayChange(newValue)
             }
             .onChange(of: showingTabSwitcher) { _, newValue in
@@ -634,6 +645,35 @@ private struct CloseConfirmationDialogModifier: ViewModifier {
             // Server reconciliation and tab removal bypass closeSplit.
             // Observe the live tree so those paths dismiss the dialog too.
             if !exists { dismiss() }
+        }
+    }
+}
+
+/// Sheet fallback for the theme picker when the HUD area is too short to fit
+/// even the ultra-compact header plus one selectable row (e.g. Duo tabletop + bottom tabs).
+private struct ThemePickerSheetModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let windowId: String
+    let currentTabId: UUID?
+    let sheetTheme: ResolvedSheetTheme
+    let onThemeSelected: (String, ThemePickerOverlay.ThemePickerScope) -> Void
+
+    func body(content: Content) -> some View {
+        content.sheet(isPresented: $isPresented) {
+            ThemePickerOverlay(
+                style: .sheet,
+                isPresented: $isPresented,
+                windowId: windowId,
+                currentTabId: currentTabId,
+                onThemeSelected: onThemeSelected
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .themedSheet(
+                themeColors: sheetTheme.themeColors,
+                accentColor: sheetTheme.accentColor,
+                colorScheme: sheetTheme.colorScheme
+            )
         }
     }
 }

@@ -46,7 +46,7 @@ extension MainView {
 
     /// How much of `frame` (global space) the docked keyboard or toolbar covers,
     /// by the terminal's own rules.
-    private func keyboardCoverage(of frame: CGRect, window: UIWindow?) -> CGFloat {
+    func keyboardCoverage(of frame: CGRect, window: UIWindow?) -> CGFloat {
         // Web-preview tabs have no pane, but their fields still raise the keyboard.
         let pane = terminals.indices.contains(selectedTabIndex) ? terminals[selectedTabIndex].focusedPane : nil
         return terminalBottomPadding(

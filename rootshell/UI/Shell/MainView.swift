@@ -311,6 +311,9 @@ struct MainView: View {
     
     // Theme picker overlay state
     @State var showThemePickerOverlay = false
+    /// Latched while the picker is open when the HUD area is too short to fit
+    /// a selectable row (e.g. tabletop mode with bottom tabs), falling back to a sheet.
+    @State var themePickerUsesSheet = false
     @State var showQuickSettingsOverlay = false
     @State var showKeyboardChooser = false
     @State var connectionSheetAwaitsKeyboardChooser = false
@@ -538,7 +541,14 @@ struct MainView: View {
                     GeometryReader { terminalGeometry in
                         // The detach banner also covers the empty state after tmux prunes its tabs.
                         if ghosttyApp.readiness == .ready, !terminals.isEmpty {
-                            terminalAndSidebarContent(geometry: terminalGeometry, theme: resolvedTheme, sheetTheme: sheetTheme)
+                            terminalAndSidebarContent(
+                                geometry: terminalGeometry,
+                                theme: resolvedTheme,
+                                sheetTheme: sheetTheme,
+                                duoFrontSafeTop: duoLayout.extendsTerminalToVerticalEdges
+                                    ? max(windowSafeAreaInsets.top, workspace.safeAreaTop)
+                                    : 0
+                            )
                         } else if ghosttyApp.readiness == .ready, terminals.isEmpty, !windowClosingAfterTabTransfer {
                             // Empty state - shown when all tabs are closed
                             EmptyStateResponder(
