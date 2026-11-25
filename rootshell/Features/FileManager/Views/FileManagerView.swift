@@ -214,23 +214,12 @@ struct FileManagerView: View {
     private func editorView(_ document: RemoteFileEditorDocument, chrome: FileManagerChrome, isActive: Bool) -> some View {
         RemoteFileEditorView(
             document: document,
+            manager: manager,
             zoom: editorZoom,
             focusRequestID: isActive && canFocus && !hasPresentedSheet ? manager.focusRequestID : 0,
             isActive: isActive,
             touchSized: chrome != .pointer,
-            onOpenExternal: { appURL in
-                manager.editExternally(document.entry, on: document.endpoint, appURL: appURL)
-            },
-            onOpenEmbedded: manager.openInEmbeddedEditor != nil ? { editor in
-                manager.editInEmbeddedEditor(document.entry, on: document.endpoint, editor: editor)
-            } : nil,
-            onQuickLook: {
-                manager.preview(document.entry, on: document.endpoint)
-            },
-            onClose: { manager.closeEditor(document) },
-            onRequestClose: { manager.requestCloseEditor(document) },
-            confirmsClose: manager.pendingEditorClose === document,
-            onCancelClose: { manager.pendingEditorClose = nil }
+            actionsInRail: chrome == .rail
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -240,7 +229,7 @@ struct FileManagerView: View {
         guard let onSwitchPresentation, let current = style.presentation else { return nil }
         let zoomed = current == .full
         return RemoteFileEditorView.Zoom(isZoomed: zoomed) {
-            onSwitchPresentation(zoomed ? manager.presentationBeforeZoom ?? .sidebar : .full)
+            onSwitchPresentation(manager.zoomTarget(from: current))
         }
     }
 

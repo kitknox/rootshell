@@ -44,37 +44,20 @@ struct RemoteFileEditorView: View {
     }
 
     @Bindable var document: RemoteFileEditorDocument
+    let manager: FileManagerModel
     var zoom: Zoom?
     /// The panel's focus request; a new value moves the keyboard into the text.
     let focusRequestID: Int
     /// False while another tab (or the file list) is on show over this one.
     var isActive = true
     var touchSized = false
-    let onOpenExternal: (URL?) -> Void
-    var onOpenEmbedded: ((FileManagerEmbeddedEditor) -> Void)? = nil
-    let onQuickLook: () -> Void
-    /// Closes this document without asking; callers settle unsaved changes first.
-    let onClose: () -> Void
-    /// Closes the tab, asking first when it holds unsaved changes.
-    let onRequestClose: () -> Void
-    /// The tab's close is waiting on Save or Discard.
-    var confirmsClose = false
-    var onCancelClose: () -> Void = {}
+    /// A side rail carries Find, Save, zoom and the menu; the toolbar keeps the path.
+    var actionsInRail = false
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.sheetThemeColors) private var sheetThemeColors
     @Setting(Settings.Transfer.fileManagerEditorWrapLines) private var wrapLines
     @Setting(Settings.Transfer.fileManagerEditorShowLineNumbers) private var showLineNumbers
-
-    @State private var findTrigger = 0
-    @State private var confirmsReload = false
-    @State private var pendingHandoff: PendingHandoff?
-
-    private enum PendingHandoff {
-        case external(URL?)
-        case embedded(FileManagerEmbeddedEditor)
-        case quickLook
-    }
 
     /// A question the editor needs answered. Asked in a bar inside the editor rather
     /// than a system dialog, which would float over the terminal in the window's
@@ -82,21 +65,17 @@ struct RemoteFileEditorView: View {
     private enum Decision {
         case conflict(RemoteFileEditorDocument.Conflict)
         case close
-        case handoff(PendingHandoff)
+        case handoff(RemoteFileEditorDocument.Handoff)
         case reload
     }
 
     private var decision: Decision? {
         if let conflict = document.conflict { return .conflict(conflict) }
-        if confirmsClose { return .close }
-        if let pendingHandoff { return .handoff(pendingHandoff) }
-        if confirmsReload { return .reload }
+        if manager.pendingEditorClose === document { return .close }
+        if let handoff = document.pendingHandoff { return .handoff(handoff) }
+        if document.confirmsReload { return .reload }
         return nil
     }
-
-    #if targetEnvironment(macCatalyst)
-    @State private var externalApps: [ExternalEditorBridge.ExternalApp] = []
-    #endif
 
     private var request: RemoteFileEditorRequest { document.request }
     private var isRemote: Bool { document.isRemote }
@@ -146,9 +125,6 @@ struct RemoteFileEditorView: View {
         .background(editorBackground)
         .environment(\.colorScheme, surfaceScheme)
         .accessibilityHidden(!isActive)
-        #if targetEnvironment(macCatalyst)
-        .task { loadExternalApps() }
-        #endif
     }
 
     private var chromeBackground: Color {
@@ -159,13 +135,15 @@ struct RemoteFileEditorView: View {
 
     private var toolbar: some View {
         HStack(spacing: touchSized ? 0 : 12) {
-            // The host stays readable; a long path gives up its start instead.
+            // The host gives up its middle only after the path has given up its start,
+            // and the row never grows past the panel (that pushed the text under a side rail).
             HStack(spacing: 6) {
                 Text(request.endpoint.displayName)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .fixedSize()
+                    .truncationMode(.middle)
+                    .layoutPriority(1)
                 Text(verbatim: request.entry.path)
                     .font(.caption.monospaced())
                     .foregroundStyle(.tertiary)
@@ -177,42 +155,45 @@ struct RemoteFileEditorView: View {
             .layoutPriority(-1)
             Spacer(minLength: 4)
             statusIndicator
-            if isReady {
-                Button {
-                    findTrigger += 1
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                        .panelTouchTarget(touchSized)
-                }
-                .help(String(localized: "Find & Replace (⌘F)", comment: "File editor find tooltip"))
-                .accessibilityLabel(String(localized: "Find", comment: "File editor find button"))
+            if !actionsInRail {
+                if isReady {
+                    Button {
+                        document.findRequestID += 1
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .panelTouchTarget(touchSized)
+                    }
+                    .help(String(localized: "Find & Replace (⌘F)", comment: "File editor find tooltip"))
+                    .accessibilityLabel(String(localized: "Find", comment: "File editor find button"))
 
-                Button {
-                    document.save()
-                } label: {
-                    Text(String(localized: "Save", comment: "File editor save button"))
-                        .fontWeight(.semibold)
-                        .panelTouchTarget(touchSized)
+                    Button {
+                        document.save()
+                    } label: {
+                        Text(String(localized: "Save", comment: "File editor save button"))
+                            .fontWeight(.semibold)
+                            .panelTouchTarget(touchSized)
+                    }
+                    .disabled(!document.isDirty || document.saveState == .saving)
+                    .help(isRemote
+                          ? String(localized: "Save and Upload (⌘S)", comment: "File editor save tooltip")
+                          : String(localized: "Save (⌘S)", comment: "File editor save tooltip"))
                 }
-                .disabled(!document.isDirty || document.saveState == .saving)
-                .help(isRemote
-                      ? String(localized: "Save and Upload (⌘S)", comment: "File editor save tooltip")
-                      : String(localized: "Save (⌘S)", comment: "File editor save tooltip"))
-            }
-            if let zoom {
-                Button(action: zoom.toggle) {
-                    Label(zoom.title, systemImage: zoom.systemImage)
-                        .labelStyle(.iconOnly)
-                        .panelTouchTarget(touchSized)
+                if let zoom {
+                    Button(action: zoom.toggle) {
+                        Label(zoom.title, systemImage: zoom.systemImage)
+                            .labelStyle(.iconOnly)
+                            .panelTouchTarget(touchSized)
+                    }
+                    .help(zoom.title)
                 }
-                .help(zoom.title)
+                RemoteFileEditorMenu(document: document, manager: manager, touchSized: touchSized)
             }
-            moreMenu
         }
         .buttonStyle(.borderless)
         .padding(.leading, 12)
         .padding(.trailing, touchSized ? 4 : 12)
         .padding(.vertical, touchSized ? 0 : 6)
+        .frame(minHeight: actionsInRail ? 32 : nil)
     }
 
     @ViewBuilder
@@ -238,104 +219,6 @@ struct RemoteFileEditorView: View {
         case .idle, .failed:
             EmptyView()
         }
-    }
-
-    private var moreMenu: some View {
-        Menu {
-            #if targetEnvironment(macCatalyst)
-            Button {
-                requestHandoff(.external(nil))
-            } label: {
-                Label(String(localized: "Edit in External Editor", comment: "File editor menu"), systemImage: "arrow.up.forward.app")
-            }
-            if !externalApps.isEmpty {
-                Menu {
-                    ForEach(externalApps) { app in
-                        Button(app.name) {
-                            requestHandoff(.external(app.url))
-                        }
-                    }
-                } label: {
-                    Label(String(localized: "Open With", comment: "File editor menu: choose macOS app"), systemImage: "square.grid.2x2")
-                }
-            }
-            #else
-            if onOpenEmbedded != nil {
-                Button {
-                    requestHandoff(.embedded(.vim))
-                } label: {
-                    Label(String(localized: "Edit in Vim", comment: "File editor menu"), systemImage: "terminal")
-                }
-                Button {
-                    requestHandoff(.embedded(.hx))
-                } label: {
-                    Label(String(localized: "Edit in Helix (hx)", comment: "File editor menu"), systemImage: "terminal")
-                }
-            }
-            Button {
-                requestHandoff(.external(nil))
-            } label: {
-                Label(String(localized: "Edit in External App…", comment: "File editor menu"), systemImage: "arrow.up.forward.app")
-            }
-            #endif
-
-            Button {
-                requestHandoff(.quickLook)
-            } label: {
-                Label(String(localized: "Quick Look", comment: "File editor menu"), systemImage: "eye")
-            }
-
-            if isReady {
-                Divider()
-                if document.language == .json {
-                    Button {
-                        document.formatJSON()
-                    } label: {
-                        Label(String(localized: "Format JSON", comment: "File editor menu"), systemImage: "curlybraces")
-                    }
-                }
-                Toggle(isOn: Binding(
-                    get: { wrapLines },
-                    set: { SettingsStore.shared.set(Settings.Transfer.fileManagerEditorWrapLines, $0) }
-                )) {
-                    Label(String(localized: "Wrap Lines", comment: "File editor menu"), systemImage: "text.word.spacing")
-                }
-                Toggle(isOn: Binding(
-                    get: { showLineNumbers },
-                    set: { SettingsStore.shared.set(Settings.Transfer.fileManagerEditorShowLineNumbers, $0) }
-                )) {
-                    Label(String(localized: "Line Numbers", comment: "File editor menu"), systemImage: "list.number")
-                }
-                Menu {
-                    Button(String(localized: "Larger Text", comment: "File editor font size")) {
-                        document.fontSize = min(24, document.fontSize + 1)
-                    }
-                    Button(String(localized: "Smaller Text", comment: "File editor font size")) {
-                        document.fontSize = max(10, document.fontSize - 1)
-                    }
-                    Button(String(localized: "Default Size", comment: "File editor font size")) {
-                        document.fontSize = 13
-                    }
-                } label: {
-                    Label(String(localized: "Font Size", comment: "File editor menu"), systemImage: "textformat.size")
-                }
-                Divider()
-                Button {
-                    if document.isDirty { confirmsReload = true } else { document.reload() }
-                } label: {
-                    Label(isRemote
-                          ? String(localized: "Reload from Server", comment: "File editor menu")
-                          : String(localized: "Reload from Disk", comment: "File editor menu"),
-                          systemImage: "arrow.clockwise")
-                }
-            }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .panelTouchTarget(touchSized)
-        }
-        // A save that ends in a conflict presents an alert; under an open menu that locked up the app.
-        .disabled(document.saveState == .saving)
-        .accessibilityLabel(String(localized: "Editor Options", comment: "File editor overflow menu"))
     }
 
     private var activeBannerMessage: String? {
@@ -402,13 +285,11 @@ struct RemoteFileEditorView: View {
                     .frame(maxWidth: 360)
                 HStack(spacing: 10) {
                     Button(String(localized: "Quick Look", comment: "File editor binary fallback")) {
-                        onClose()
-                        onQuickLook()
+                        manager.performHandoff(.quickLook, from: document)
                     }
                     .buttonStyle(.borderedProminent)
                     Button(String(localized: "Open in External App", comment: "File editor binary external fallback")) {
-                        onClose()
-                        onOpenExternal(nil)
+                        manager.performHandoff(.external(nil), from: document)
                     }
                     .buttonStyle(.bordered)
                 }
@@ -446,7 +327,7 @@ struct RemoteFileEditorView: View {
                 showLineNumbers: showLineNumbers,
                 isDark: surfaceScheme == .dark,
                 backgroundColor: editorBackgroundUIColor,
-                findTrigger: findTrigger,
+                findTrigger: document.findRequestID,
                 focusRequestID: focusRequestID,
                 isActive: isActive,
                 document: document,
@@ -458,7 +339,7 @@ struct RemoteFileEditorView: View {
                 onSaveShortcut: {
                     if document.isDirty { document.save() }
                 },
-                onCloseShortcut: onRequestClose,
+                onCloseShortcut: { manager.requestCloseEditor(document) },
                 onToggleZoom: zoom?.toggle,
                 onEscape: { cancelDecision() }
             )
@@ -533,9 +414,9 @@ struct RemoteFileEditorView: View {
     private func cancelDecision() -> Bool {
         switch decision {
         case .conflict: document.conflict = nil
-        case .close: onCancelClose()
-        case .handoff: pendingHandoff = nil
-        case .reload: confirmsReload = false
+        case .close: manager.pendingEditorClose = nil
+        case .handoff: document.pendingHandoff = nil
+        case .reload: document.confirmsReload = false
         case nil: return false
         }
         return true
@@ -559,13 +440,13 @@ struct RemoteFileEditorView: View {
                 nil,
                 [
                     DecisionAction(title: saveTitle, kind: .primary) {
-                        onCancelClose()
-                        document.save { onClose() }
+                        manager.pendingEditorClose = nil
+                        document.save { manager.closeEditor(document) }
                     },
                     DecisionAction(title: discardTitle, kind: .destructive) {
-                        onClose()
+                        manager.closeEditor(document)
                     },
-                    DecisionAction(title: cancelTitle, kind: .cancel) { onCancelClose() },
+                    DecisionAction(title: cancelTitle, kind: .cancel) { manager.pendingEditorClose = nil },
                 ]
             )
         case .handoff(let handoff):
@@ -576,18 +457,14 @@ struct RemoteFileEditorView: View {
             }
             return (title, nil, [
                 DecisionAction(title: String(localized: "Save & Continue", comment: "File editor save then continue handoff"), kind: .primary) {
-                    pendingHandoff = nil
-                    document.save {
-                        onClose()
-                        performHandoff(handoff)
-                    }
+                    document.pendingHandoff = nil
+                    document.save { manager.performHandoff(handoff, from: document) }
                 },
                 DecisionAction(title: discardTitle, kind: .destructive) {
-                    pendingHandoff = nil
-                    onClose()
-                    performHandoff(handoff)
+                    document.pendingHandoff = nil
+                    manager.performHandoff(handoff, from: document)
                 },
-                DecisionAction(title: cancelTitle, kind: .cancel) { pendingHandoff = nil },
+                DecisionAction(title: cancelTitle, kind: .cancel) { document.pendingHandoff = nil },
             ])
         case .reload:
             return (
@@ -597,10 +474,10 @@ struct RemoteFileEditorView: View {
                     : String(localized: "Your unsaved edits will be replaced with the file as it is on disk.", comment: "File editor reload confirmation message for a local file"),
                 [
                     DecisionAction(title: String(localized: "Discard Changes & Reload", comment: "File editor confirm reload"), kind: .destructive) {
-                        confirmsReload = false
+                        document.confirmsReload = false
                         document.reload()
                     },
-                    DecisionAction(title: cancelTitle, kind: .cancel) { confirmsReload = false },
+                    DecisionAction(title: cancelTitle, kind: .cancel) { document.confirmsReload = false },
                 ]
             )
         case .conflict(.deleted):
@@ -633,35 +510,125 @@ struct RemoteFileEditorView: View {
             )
         }
     }
+}
 
-    private func requestHandoff(_ handoff: PendingHandoff) {
-        if document.isDirty {
-            pendingHandoff = handoff
-        } else {
-            onClose()
-            performHandoff(handoff)
+/// The editor's ⋯ button, in its toolbar.
+private struct RemoteFileEditorMenu: View {
+    let document: RemoteFileEditorDocument
+    let manager: FileManagerModel
+    let touchSized: Bool
+
+    var body: some View {
+        Menu {
+            RemoteFileEditorMenuItems(document: document, manager: manager)
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .panelTouchTarget(touchSized)
+        }
+        // A save that ends in a conflict presents an alert; under an open menu that locked up the app.
+        .disabled(document.saveState == .saving)
+        .accessibilityLabel(String(localized: "Editor Options", comment: "File editor overflow menu"))
+    }
+}
+
+/// The editor's menu: other ways to open the file, and view and reload options.
+/// Shared by the toolbar's ⋯ button and a side rail's.
+struct RemoteFileEditorMenuItems: View {
+    let document: RemoteFileEditorDocument
+    let manager: FileManagerModel
+
+    @Setting(Settings.Transfer.fileManagerEditorWrapLines) private var wrapLines
+    @Setting(Settings.Transfer.fileManagerEditorShowLineNumbers) private var showLineNumbers
+
+    var body: some View {
+        #if targetEnvironment(macCatalyst)
+        Button {
+            manager.requestHandoff(.external(nil), from: document)
+        } label: {
+            Label(String(localized: "Edit in External Editor", comment: "File editor menu"), systemImage: "arrow.up.forward.app")
+        }
+        if !document.externalApps.isEmpty {
+            Menu {
+                ForEach(document.externalApps) { app in
+                    Button(app.name) {
+                        manager.requestHandoff(.external(app.url), from: document)
+                    }
+                }
+            } label: {
+                Label(String(localized: "Open With", comment: "File editor menu: choose macOS app"), systemImage: "square.grid.2x2")
+            }
+        }
+        #else
+        if manager.openInEmbeddedEditor != nil {
+            Button {
+                manager.requestHandoff(.embedded(.vim), from: document)
+            } label: {
+                Label(String(localized: "Edit in Vim", comment: "File editor menu"), systemImage: "terminal")
+            }
+            Button {
+                manager.requestHandoff(.embedded(.hx), from: document)
+            } label: {
+                Label(String(localized: "Edit in Helix (hx)", comment: "File editor menu"), systemImage: "terminal")
+            }
+        }
+        Button {
+            manager.requestHandoff(.external(nil), from: document)
+        } label: {
+            Label(String(localized: "Edit in External App…", comment: "File editor menu"), systemImage: "arrow.up.forward.app")
+        }
+        #endif
+
+        Button {
+            manager.requestHandoff(.quickLook, from: document)
+        } label: {
+            Label(String(localized: "Quick Look", comment: "File editor menu"), systemImage: "eye")
+        }
+
+        if document.loadState == .ready {
+            Divider()
+            if document.language == .json {
+                Button {
+                    document.formatJSON()
+                } label: {
+                    Label(String(localized: "Format JSON", comment: "File editor menu"), systemImage: "curlybraces")
+                }
+            }
+            Toggle(isOn: Binding(
+                get: { wrapLines },
+                set: { SettingsStore.shared.set(Settings.Transfer.fileManagerEditorWrapLines, $0) }
+            )) {
+                Label(String(localized: "Wrap Lines", comment: "File editor menu"), systemImage: "text.word.spacing")
+            }
+            Toggle(isOn: Binding(
+                get: { showLineNumbers },
+                set: { SettingsStore.shared.set(Settings.Transfer.fileManagerEditorShowLineNumbers, $0) }
+            )) {
+                Label(String(localized: "Line Numbers", comment: "File editor menu"), systemImage: "list.number")
+            }
+            Menu {
+                Button(String(localized: "Larger Text", comment: "File editor font size")) {
+                    document.fontSize = min(24, document.fontSize + 1)
+                }
+                Button(String(localized: "Smaller Text", comment: "File editor font size")) {
+                    document.fontSize = max(10, document.fontSize - 1)
+                }
+                Button(String(localized: "Default Size", comment: "File editor font size")) {
+                    document.fontSize = 13
+                }
+            } label: {
+                Label(String(localized: "Font Size", comment: "File editor menu"), systemImage: "textformat.size")
+            }
+            Divider()
+            Button {
+                if document.isDirty { document.confirmsReload = true } else { document.reload() }
+            } label: {
+                Label(document.isRemote
+                      ? String(localized: "Reload from Server", comment: "File editor menu")
+                      : String(localized: "Reload from Disk", comment: "File editor menu"),
+                      systemImage: "arrow.clockwise")
+            }
         }
     }
-
-    private func performHandoff(_ handoff: PendingHandoff?) {
-        switch handoff {
-        case .external(let appURL):
-            onOpenExternal(appURL)
-        case .embedded(let editor):
-            onOpenEmbedded?(editor)
-        case .quickLook:
-            onQuickLook()
-        case .none:
-            break
-        }
-    }
-
-    #if targetEnvironment(macCatalyst)
-    private func loadExternalApps() {
-        let probeURL = FileManager.default.temporaryDirectory.appendingPathComponent(request.entry.name)
-        externalApps = ExternalEditorBridge.availableApps(for: probeURL, includePlainText: true)
-    }
-    #endif
 }
 
 /// Its own view so per-keystroke cursor and size updates redraw only this row.
@@ -1039,6 +1006,8 @@ private struct RemoteCodeTextView: UIViewRepresentable {
 
         init(parent: RemoteCodeTextView) {
             self.parent = parent
+            // A rebuilt view opens the find bar only on a new request.
+            lastFindTrigger = parent.findTrigger
         }
 
         func attach(to container: CodeEditorContainerView) {
@@ -2130,4 +2099,22 @@ private extension View {
 /// Tab row height: a finger needs more than a pointer.
 private func editorTabHeight(_ touchSized: Bool) -> CGFloat {
     touchSized ? 34 : 26
+}
+
+/// Save for a side rail; its own view so typing redraws only this item.
+struct RemoteFileEditorRailSave: View {
+    let document: RemoteFileEditorDocument
+
+    var body: some View {
+        Button {
+            document.save()
+        } label: {
+            Label(document.isRemote
+                  ? String(localized: "Save and Upload", comment: "File editor save button in a side rail")
+                  : String(localized: "Save", comment: "File editor save button"),
+                  systemImage: "square.and.arrow.down")
+        }
+        .labelStyle(.iconOnly)
+        .disabled(!document.isDirty || document.saveState == .saving)
+    }
 }

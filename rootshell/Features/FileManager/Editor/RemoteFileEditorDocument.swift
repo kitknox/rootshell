@@ -36,6 +36,13 @@ final class RemoteFileEditorDocument: Identifiable {
         var column: Int
     }
 
+    /// Leaving the in-app editor for another editor, or for Quick Look.
+    enum Handoff {
+        case external(URL?)
+        case embedded(FileManagerEmbeddedEditor)
+        case quickLook
+    }
+
     private struct QueuedSave {
         /// The text when the save was asked for; later keystrokes stay unsaved.
         let text: String
@@ -67,6 +74,12 @@ final class RemoteFileEditorDocument: Identifiable {
     var fontSize: CGFloat = 13
     var inlineBanner: String?
     var conflict: Conflict?
+    /// A handoff waiting on Save or Discard.
+    var pendingHandoff: Handoff?
+    /// A reload waiting on Discard.
+    var confirmsReload = false
+    /// Bumped to open the find bar, from the editor's toolbar or the side rail.
+    var findRequestID = 0
 
     /// The last focus request the text view acted on.
     @ObservationIgnored var consumedFocusRequestID = 0
@@ -111,6 +124,19 @@ final class RemoteFileEditorDocument: Identifiable {
         return loadedPrincipal.reachesSameAccount(as: servedBy ?? pool.expectedPrincipal(for: endpoint))
             && pool.expectedPrincipal(for: request.endpoint).key == loadedPrincipal.key
     }
+
+    #if targetEnvironment(macCatalyst)
+    @ObservationIgnored private var cachedExternalApps: [ExternalEditorBridge.ExternalApp]?
+
+    /// Mac apps that open this kind of file, for Open With; looked up once.
+    var externalApps: [ExternalEditorBridge.ExternalApp] {
+        if let cachedExternalApps { return cachedExternalApps }
+        let probe = FileManager.default.temporaryDirectory.appendingPathComponent(request.entry.name)
+        let apps = ExternalEditorBridge.availableApps(for: probe, includePlainText: true)
+        cachedExternalApps = apps
+        return apps
+    }
+    #endif
 
     /// The text as it would be written, for recovery when the window closes unsaved.
     var encodedText: Data { document.encode(text) }

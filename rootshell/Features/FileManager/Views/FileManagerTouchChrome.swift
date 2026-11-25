@@ -216,17 +216,52 @@ struct FileManagerRailItems: ToolbarContent {
             .labelStyle(.iconOnly)
         }
         .visibilityPriority(.high)
-        slot(0).visibilityPriority(.high)
-        slot(1).visibilityPriority(.high)
-        slot(2).visibilityPriority(.high)
-        // Selection-only slots leave the rail while browsing.
-        if FileManagerTouchAction.isSelecting(manager.activePane) {
-            slot(3)
-            slot(4)
-        }
-        ToolbarItem(placement: .topBarTrailing) {
-            FileManagerMoreMenu(manager: manager)
-                .equatable()
+        if let document = manager.focusedEditor {
+            // An editor tab on show: its actions, not the hidden file list's.
+            ToolbarItem(placement: .topBarTrailing) {
+                RemoteFileEditorRailSave(document: document)
+            }
+            .visibilityPriority(.high)
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { document.findRequestID += 1 } label: {
+                    Label(String(localized: "Find", comment: "File editor find button"), systemImage: "magnifyingglass")
+                }
+                .labelStyle(.iconOnly)
+                .disabled(document.loadState != .ready)
+            }
+            .visibilityPriority(.high)
+            if let presentation, let onSwitchPresentation {
+                let zoom = RemoteFileEditorView.Zoom(isZoomed: presentation == .full) {
+                    onSwitchPresentation(manager.zoomTarget(from: presentation))
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: zoom.toggle) {
+                        Label(zoom.title, systemImage: zoom.systemImage)
+                    }
+                    .labelStyle(.iconOnly)
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    RemoteFileEditorMenuItems(document: document, manager: manager)
+                } label: {
+                    Label(String(localized: "Editor Options", comment: "File editor overflow menu"), systemImage: "ellipsis.circle")
+                }
+                .labelStyle(.iconOnly)
+            }
+        } else {
+            slot(0).visibilityPriority(.high)
+            slot(1).visibilityPriority(.high)
+            slot(2).visibilityPriority(.high)
+            // Selection-only slots leave the rail while browsing.
+            if FileManagerTouchAction.isSelecting(manager.activePane) {
+                slot(3)
+                slot(4)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                FileManagerMoreMenu(manager: manager)
+                    .equatable()
+            }
         }
         if let presentation, let onSwitchPresentation {
             ToolbarItem(placement: .topBarTrailing) {

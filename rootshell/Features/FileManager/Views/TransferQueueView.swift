@@ -228,7 +228,7 @@ private struct TransferJobRow: View {
 
 /// Floating progress over the terminal while the file manager is hidden.
 struct TransferPill: View {
-    /// Its open editors; unsaved ones keep the pill up while the panel is hidden.
+    /// Opens on the file list, where transfers and edit problems are listed.
     let manager: FileManagerModel?
     let onOpen: () -> Void
     private var center: FileTransferCenter { .shared }
@@ -238,20 +238,10 @@ struct TransferPill: View {
         !center.hasActiveJobs && (edits.hasActiveUploads || edits.hasAttentionItems)
     }
 
-    /// Transfers or edit problems, which outrank unsaved editor tabs and live under Files.
-    private var showsTransferStatus: Bool {
-        center.hasActiveJobs || showsEditStatus
-    }
-
-    private var unsavedEditors: [RemoteFileEditorDocument] {
-        manager?.editors.filter(\.isDirty) ?? []
-    }
-
     var body: some View {
-        let unsaved = unsavedEditors
-        if showsTransferStatus || !unsaved.isEmpty {
+        if center.hasActiveJobs || showsEditStatus {
             Button {
-                if showsTransferStatus { manager?.showFiles() }
+                manager?.showFiles()
                 onOpen()
             } label: {
                 HStack(spacing: 8) {
@@ -268,16 +258,11 @@ struct TransferPill: View {
                     } else if edits.hasActiveUploads {
                         ProgressView().controlSize(.mini)
                         Text(editPillText).font(.caption.weight(.medium))
-                    } else if showsEditStatus {
+                    } else {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.caption)
                             .foregroundStyle(.orange)
                         Text(editPillText).font(.caption.weight(.medium))
-                    } else {
-                        Circle()
-                            .fill(Color.accentColor)
-                            .frame(width: 7, height: 7)
-                        Text(unsavedPillText(unsaved)).font(.caption.weight(.medium))
                     }
                 }
                 .padding(.horizontal, 12)
@@ -285,18 +270,9 @@ struct TransferPill: View {
                 .background(.regularMaterial, in: Capsule())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(showsTransferStatus
-                ? String(localized: "File transfers in progress. Open file manager.", comment: "Transfer pill accessibility")
-                : String(localized: "Unsaved edits. Open file manager.", comment: "Transfer pill accessibility: editor tabs with unsaved changes"))
+            .accessibilityLabel(String(localized: "File transfers in progress. Open file manager.", comment: "Transfer pill accessibility"))
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
-    }
-
-    private func unsavedPillText(_ unsaved: [RemoteFileEditorDocument]) -> String {
-        if unsaved.count == 1, let document = unsaved.first {
-            return String(localized: "Unsaved: \(document.entry.name)", comment: "Transfer pill: one editor tab with unsaved changes; argument is a file name")
-        }
-        return String(localized: "\(unsaved.count) unsaved files", comment: "Transfer pill: editor tabs with unsaved changes; argument is a count")
     }
 
     private var pillText: String {

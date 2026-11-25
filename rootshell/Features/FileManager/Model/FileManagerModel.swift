@@ -677,6 +677,35 @@ final class FileManagerModel {
         requestFocus()
     }
 
+    /// Leaves the in-app editor for another way of opening the file, asking first
+    /// when the tab holds unsaved changes.
+    func requestHandoff(_ handoff: RemoteFileEditorDocument.Handoff, from document: RemoteFileEditorDocument) {
+        if document.isDirty {
+            showEditor(document)
+            document.pendingHandoff = handoff
+        } else {
+            performHandoff(handoff, from: document)
+        }
+    }
+
+    /// Closes the tab, then opens its file the other way.
+    func performHandoff(_ handoff: RemoteFileEditorDocument.Handoff, from document: RemoteFileEditorDocument) {
+        closeEditor(document)
+        switch handoff {
+        case .external(let appURL):
+            editExternally(document.entry, on: document.endpoint, appURL: appURL)
+        case .embedded(let editor):
+            editInEmbeddedEditor(document.entry, on: document.endpoint, editor: editor)
+        case .quickLook:
+            preview(document.entry, on: document.endpoint)
+        }
+    }
+
+    /// Where the editor's zoom goes from `current`: full size, or back from it.
+    func zoomTarget(from current: PanelPresentation) -> PanelPresentation {
+        current == .full ? presentationBeforeZoom ?? .sidebar : .full
+    }
+
     /// Closes the tab, asking first when it holds unsaved changes.
     func requestCloseEditor(_ document: RemoteFileEditorDocument) {
         if document.isDirty {
