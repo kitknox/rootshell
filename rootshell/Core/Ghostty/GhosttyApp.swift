@@ -657,6 +657,20 @@ extension Ghostty {
             let signpost = TmuxPipelineSignposts.begin("app.tick")
             defer { TmuxPipelineSignposts.end("app.tick", signpost) }
             ghostty_app_tick(app)
+            if !Ghostty.isAppBackgroundedAtomic { applyHeldScrollbars() }
+        }
+
+        /// Runs with a foreground tick, where resume already allows action work.
+        /// Any scrollbar that tick reported has already replaced a held one.
+        private func applyHeldScrollbars() {
+            let scrollbars = Self.heldScrollbars.withLock { held in
+                defer { held.removeAll() }
+                return held
+            }
+            for (surfaceId, scrollbar) in scrollbars {
+                surfaceDelegates[surfaceId]?.delegate?.handleScrollbar(
+                    total: scrollbar.total, offset: scrollbar.offset, len: scrollbar.len)
+            }
         }
 
         func appTickAfterResumeQuietWindow() {
@@ -2157,6 +2171,8 @@ extension Ghostty {
             // Use raw pointer address as key (not ObjectIdentifier which creates new wrapper each time)
             let surfaceId = Int(bitPattern: surface)
             surfaceDelegates[surfaceId] = WeakActionDelegate(delegate: delegate)
+            // A scrollbar held for an earlier surface at this address is not ours.
+            Self.heldScrollbars.withLock { _ = $0.removeValue(forKey: surfaceId) }
         }
 
         func unregisterSurfaceDelegate(_ surface: ghostty_surface_t) {
@@ -2209,6 +2225,11 @@ extension Ghostty {
         /// Latest scrollbar per surface. A surface present here already has a
         /// delivery task queued, which reads whatever value is newest when it runs.
         private nonisolated static let pendingScrollbars = OSAllocatedUnfairLock(initialState: [Int: PendingScrollbar]())
+
+        /// Latest scrollbar per surface reported while backgrounded, applied by
+        /// `applyHeldScrollbars`. Written and drained on the main actor only:
+        /// scrollbar actions arrive from `ghostty_app_tick`.
+        private nonisolated static let heldScrollbars = OSAllocatedUnfairLock(initialState: [Int: PendingScrollbar]())
 
         private nonisolated struct PendingScrollbar {
             var total: UInt64
@@ -2496,6 +2517,10 @@ extension Ghostty {
             // hundreds-to-thousands of those Tasks flushed at once and
             // bogged down the main thread for >30s. Latest-state-wins is the
             // correct invariant here — the next post-resume event resyncs.
+            //
+            // The scrollbar is the exception to "next event resyncs": Ghostty
+            // sends it only on change, so the latest one is held and applied
+            // after the first foreground tick (`heldScrollbars`).
             //
             // Exceptions (NOT gated):
             //   - DESKTOP_NOTIFICATION: user-visible alert; must fire while
@@ -2814,7 +2839,6 @@ extension Ghostty {
                 return true
 
             case GHOSTTY_ACTION_SCROLLBAR:
-                if isBackgrounded { return true }
                 let scrollbar = action.action.scrollbar
 
                 // Route to the appropriate surface delegate
@@ -2824,6 +2848,17 @@ extension Ghostty {
                     let surfaceId = Int(bitPattern: surface)
                     let latest = PendingScrollbar(
                         total: scrollbar.total, offset: scrollbar.offset, len: scrollbar.len)
+                    if isBackgrounded {
+                        // Ghostty reports a scrollbar only when it changes, so a
+                        // dropped one leaves the scroll view on a stale range for
+                        // good. Hold it for the first foreground tick; no task here.
+                        heldScrollbars.withLock { $0[surfaceId] = latest }
+                        // A delivery still queued from the foreground is older.
+                        pendingScrollbars.withLock { _ = $0.removeValue(forKey: surfaceId) }
+                        return true
+                    }
+                    // This value is newer than anything still held.
+                    heldScrollbars.withLock { _ = $0.removeValue(forKey: surfaceId) }
                     let needsTask = pendingScrollbars.withLock { pending in
                         pending.updateValue(latest, forKey: surfaceId) == nil
                     }
