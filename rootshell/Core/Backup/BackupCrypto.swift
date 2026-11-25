@@ -1,6 +1,5 @@
 import Foundation
 import Crypto
-import CommonCrypto
 
 enum BackupCrypto {
 
@@ -154,27 +153,9 @@ enum BackupCrypto {
             throw BackupError.encryptionFailed(CryptoError.invalidPassword)
         }
 
-        var derivedKey = Data(count: derivedKeySize)
-
-        let status = derivedKey.withUnsafeMutableBytes { derivedKeyPtr in
-            salt.withUnsafeBytes { saltPtr in
-                passwordData.withUnsafeBytes { passwordPtr in
-                    CCKeyDerivationPBKDF(
-                        CCPBKDFAlgorithm(kCCPBKDF2),
-                        passwordPtr.baseAddress!.assumingMemoryBound(to: Int8.self),
-                        passwordData.count,
-                        saltPtr.baseAddress!.assumingMemoryBound(to: UInt8.self),
-                        salt.count,
-                        CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256),
-                        iterations,
-                        derivedKeyPtr.baseAddress!.assumingMemoryBound(to: UInt8.self),
-                        derivedKeySize
-                    )
-                }
-            }
-        }
-
-        guard status == kCCSuccess else {
+        guard let derivedKey = try? PBKDF2.sha256(
+            password: passwordData, salt: salt, iterations: iterations, keyLength: derivedKeySize
+        ) else {
             throw BackupError.encryptionFailed(CryptoError.keyDerivationFailed)
         }
 

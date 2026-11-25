@@ -13,7 +13,7 @@ import Foundation
 ///
 /// Every algorithm branch in the OpenPubkey builders funnels through here so
 /// the wire details live in one auditable spot.
-nonisolated enum OpenPubkeyEphemeralKey {
+nonisolated enum OpenPubkeyEphemeralKey: Sendable {
     case ecdsaP256(P256.Signing.PrivateKey)
     case ed25519(Curve25519.Signing.PrivateKey)
 

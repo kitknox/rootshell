@@ -2,35 +2,20 @@ import CryptoKit
 import Foundation
 import os.log
 
-/// Errors surfaced by OpenPubkey identity management. The
-/// reauthenticationRequired case is what connection paths see when the ID
-/// token has expired and silent renewal was impossible or failed.
+/// OpenPubkey-specific failures; shared ones live in ``ManagedCertificateError``.
 enum OpenPubkeyError: LocalizedError {
-    case keyNotFound
     case notAnOpenPubkeyKey
-    case keyMaterialUnavailable
-    case missingSecrets
     case subjectMismatch
     case refreshedTokenMismatch
-    case reauthenticationRequired(keyID: UUID, keyName: String, identity: String?)
 
     var errorDescription: String? {
         switch self {
-        case .keyNotFound:
-            return "SSH key not found"
         case .notAnOpenPubkeyKey:
             return "This key is not an OpenPubkey identity"
-        case .keyMaterialUnavailable:
-            return "Could not load the key material for this OpenPubkey identity"
-        case .missingSecrets:
-            return "OpenPubkey tokens for this key are missing from the Keychain"
         case .subjectMismatch:
             return "The refreshed token belongs to a different account; sign in again"
         case .refreshedTokenMismatch:
             return "The refreshed token doesn't match the original sign-in; sign in again"
-        case .reauthenticationRequired(_, let keyName, let identity):
-            let who = identity.map { " (\($0))" } ?? ""
-            return "OpenPubkey certificate for '\(keyName)'\(who) has expired. Open Settings, SSH Keys, \(keyName), and sign in again."
         }
     }
 }
@@ -63,15 +48,15 @@ final class OpenPubkeyManager {
     /// would need this lowered to be covered proactively.
     private static let maxOriginalTokenAge: TimeInterval = 20 * 3600
 
-    private let client = OpenPubkeyClient()
+    private let client = OIDCLoginClient()
+    private let renewals = KeyedTaskCoalescer()
+    private let reauths = KeyedTaskCoalescer()
 
-    /// Renewals already in flight, so concurrent connection attempts don't
-    /// race duplicate token-endpoint calls for the same key.
-    private var inFlightRenewals: [UUID: Task<Void, Error>] = [:]
-
-    /// Interactive browser re-auths already in flight, so two connection
-    /// attempts using the same expired key don't open two browser sheets.
-    private var inFlightReauths: [UUID: Task<Void, Error>] = [:]
+    /// opkssh client registrations need offline access for a refresh token.
+    private static let authParams = [
+        URLQueryItem(name: "access_type", value: "offline"),
+        URLQueryItem(name: "prompt", value: "consent"),
+    ]
 
     // MARK: - Identity Creation
 
@@ -87,35 +72,23 @@ final class OpenPubkeyManager {
         sendAccessToken: Bool,
         storageLevel: KeyStorageLevel
     ) async throws -> SSHKey {
-        let comment = "openpubkey \(provider.providerID)"
-        let generated: GeneratedSSHKey
-        switch keyAlgorithm {
-        case .ed25519:
-            generated = SSHKeyGenerator.generateEd25519(comment: comment)
-        case .ecdsaP256:
-            generated = SSHKeyGenerator.generateECDSAP256(comment: comment)
-        }
-        let parsed = try SSHKeyParser.parse(keyString: generated.privateKeyPEM, passphrase: nil)
-        let ephemeralKey = try Self.ephemeralKey(from: parsed)
+        let generated = try ManagedCertificateKeys.generate(
+            keyAlgorithm,
+            comment: "openpubkey \(provider.providerID)"
+        )
+        let ephemeralKey = generated.ephemeralKey
 
         // Run the browser flow BEFORE importing the key so a cancelled
         // sign-in leaves nothing behind.
         let cic = OpenPubkeyCIC.generate(for: ephemeralKey)
-        let tokens = try await client.login(provider: provider, cic: cic)
+        let tokens = try await login(provider: provider, cic: cic)
         let idSegments = try OpenPubkeyJOSE.split(compactJWS: tokens.idToken)
         let claims = try OpenPubkeyJOSE.decodeIDTokenClaims(payloadB64: idSegments.payloadB64)
 
         let cicToken = try PKTokenBuilder.cicToken(idToken: tokens.idToken, cic: cic, key: ephemeralKey)
         let compactPKT = try PKTokenBuilder.compactPKT(idToken: tokens.idToken, cicToken: cicToken)
 
-        let keyManager = SSHKeyManager.shared
-        let key = try keyManager.importKey(
-            name: name,
-            keyString: generated.privateKeyPEM,
-            storageLevel: storageLevel
-        )
-
-        do {
+        let key = try ManagedCertificateKeys.importKey(generated, name: name, storageLevel: storageLevel) { key in
             try applyCertificate(
                 keyID: key.id,
                 ephemeralKey: ephemeralKey,
@@ -124,7 +97,7 @@ final class OpenPubkeyManager {
                 accessToken: sendAccessToken ? tokens.accessToken : nil
             )
 
-            keyManager.setOpenPubkeyInfo(keyID: key.id, info: OpenPubkeyInfo(
+            SSHKeyManager.shared.setOpenPubkeyInfo(keyID: key.id, info: OpenPubkeyInfo(
                 provider: provider,
                 identityEmail: claims.email ?? claims.preferredUsername,
                 identitySubject: claims.subject,
@@ -139,10 +112,6 @@ final class OpenPubkeyManager {
                 originalCompactPKT: compactPKT,
                 accessToken: sendAccessToken ? tokens.accessToken : nil
             ), forKeyID: key.id)
-        } catch {
-            // Roll back the half-created identity.
-            try? keyManager.deleteKey(id: key.id)
-            throw error
         }
 
         let identity = claims.email ?? claims.subject
@@ -166,7 +135,7 @@ final class OpenPubkeyManager {
     /// connect path imposes no timeout on auth-building), so the connection
     /// proceeds with a fresh certificate instead of failing.
     ///
-    /// Throws ``OpenPubkeyError/reauthenticationRequired`` only when the user
+    /// Throws ``ManagedCertificateError/reauthenticationRequired`` only when the user
     /// cancels or the sign-in itself fails; the connect retry layer treats that
     /// as permanent (see `isPermanentConnectErrorApp`), so the connection fails
     /// cleanly instead of re-opening the browser on retry.
@@ -191,8 +160,8 @@ final class OpenPubkeyManager {
                 return
             } catch {
                 Self.logger.error("OpenPubkey re-mint failed for '\(key.name)': \(error.localizedDescription)")
-                throw OpenPubkeyError.reauthenticationRequired(
-                    keyID: id, keyName: key.name, identity: info.identityDisplay
+                throw ManagedCertificateError.reauthenticationRequired(
+                    keyID: id, keyName: key.name, identity: info.identityDisplay, issuer: "OpenPubkey"
                 )
             }
         }
@@ -220,8 +189,8 @@ final class OpenPubkeyManager {
             try await reauthenticate(keyID: id)
         } catch {
             Self.logger.error("Interactive OpenPubkey re-auth did not complete for '\(key.name)': \(error.localizedDescription)")
-            throw OpenPubkeyError.reauthenticationRequired(
-                keyID: id, keyName: key.name, identity: info.identityDisplay
+            throw ManagedCertificateError.reauthenticationRequired(
+                keyID: id, keyName: key.name, identity: info.identityDisplay, issuer: "OpenPubkey"
             )
         }
     }
@@ -266,29 +235,22 @@ final class OpenPubkeyManager {
     /// same ephemeral key. Concurrent calls for the same key share one
     /// renewal.
     func renewCertificate(forKeyID id: UUID) async throws {
-        if let existing = inFlightRenewals[id] {
-            return try await existing.value
+        try await renewals.run(id) { [weak self] in
+            try await self?.performRenewal(keyID: id)
         }
-        let task = Task { [weak self] in
-            guard let self else { return }
-            try await self.performRenewal(keyID: id)
-        }
-        inFlightRenewals[id] = task
-        defer { inFlightRenewals[id] = nil }
-        try await task.value
     }
 
     private func performRenewal(keyID id: UUID) async throws {
         let keyManager = SSHKeyManager.shared
         guard let key = keyManager.savedKeys.first(where: { $0.id == id }) else {
-            throw OpenPubkeyError.keyNotFound
+            throw ManagedCertificateError.keyNotFound
         }
         guard var info = key.openPubkeyInfo else {
             throw OpenPubkeyError.notAnOpenPubkeyKey
         }
         var secrets = try loadSecrets(forKeyID: id)
         guard let refreshToken = secrets.refreshToken else {
-            throw OpenPubkeyError.missingSecrets
+            throw ManagedCertificateError.missingSecrets
         }
 
         let tokens = try await client.refresh(provider: info.provider, refreshToken: refreshToken)
@@ -312,7 +274,7 @@ final class OpenPubkeyManager {
             freshIDToken: tokens.idToken
         )
 
-        let ephemeralKey = try loadEphemeralKey(forKeyID: id)
+        let ephemeralKey = try ManagedCertificateKeys.loadEphemeralKey(forKeyID: id)
         try applyCertificate(
             keyID: id,
             ephemeralKey: ephemeralKey,
@@ -349,30 +311,23 @@ final class OpenPubkeyManager {
         // Share one browser sign-in across concurrent callers for the same key
         // (e.g. two tabs connecting with the same expired identity, or the
         // "Sign In Again" button racing a connection attempt).
-        if let existing = inFlightReauths[id] {
-            return try await existing.value
+        try await reauths.run(id) { [weak self] in
+            try await self?.performReauthenticate(keyID: id)
         }
-        let task = Task { [weak self] in
-            guard let self else { return }
-            try await self.performReauthenticate(keyID: id)
-        }
-        inFlightReauths[id] = task
-        defer { inFlightReauths[id] = nil }
-        try await task.value
     }
 
     private func performReauthenticate(keyID id: UUID) async throws {
         let keyManager = SSHKeyManager.shared
         guard let key = keyManager.savedKeys.first(where: { $0.id == id }) else {
-            throw OpenPubkeyError.keyNotFound
+            throw ManagedCertificateError.keyNotFound
         }
         guard var info = key.openPubkeyInfo else {
             throw OpenPubkeyError.notAnOpenPubkeyKey
         }
 
-        let ephemeralKey = try loadEphemeralKey(forKeyID: id)
+        let ephemeralKey = try ManagedCertificateKeys.loadEphemeralKey(forKeyID: id)
         let cic = OpenPubkeyCIC.generate(for: ephemeralKey)
-        let tokens = try await client.login(provider: info.provider, cic: cic)
+        let tokens = try await login(provider: info.provider, cic: cic)
 
         let idSegments = try OpenPubkeyJOSE.split(compactJWS: tokens.idToken)
         let claims = try OpenPubkeyJOSE.decodeIDTokenClaims(payloadB64: idSegments.payloadB64)
@@ -406,16 +361,18 @@ final class OpenPubkeyManager {
         let keyName = key.name
         Self.logger.info("Re-authenticated OpenPubkey identity for '\(keyName)'")
     }
-
-    // MARK: - Cleanup
-
-    /// Removes the Keychain secrets for an identity (key deletion calls
-    /// KeychainManager directly; this is for callers that have the manager).
-    func deleteSecrets(forKeyID id: UUID) {
-        KeychainManager.shared.deleteOpenPubkeySecrets(forKey: id.uuidString)
-    }
-
     // MARK: - Helpers
+
+    /// Browser sign-in whose nonce commits to the CIC, on the loopback
+    /// ports and path the public opkssh client registrations allow.
+    private func login(provider: OIDCProviderConfig, cic: OpenPubkeyCIC) async throws -> OIDCLoginClient.Tokens {
+        try await client.login(
+            provider: provider,
+            nonce: cic.nonce,
+            redirect: .openPubkey,
+            extraAuthParams: Self.authParams
+        )
+    }
 
     /// Builds the self-signed cert for the PK token and attaches it to the
     /// key through the standard certificate path (validates the embedded
@@ -437,52 +394,11 @@ final class OpenPubkeyManager {
         try SSHKeyManager.shared.attachUserCertificate(keyID: keyID, parsed: parsedCert)
     }
 
-    /// Loads the stored ephemeral private key for JWS signing and cert
-    /// re-signing, choosing the algorithm from the parsed key's type.
-    /// OpenPubkey keys are passphrase-less software keys.
-    private func loadEphemeralKey(forKeyID id: UUID) throws -> OpenPubkeyEphemeralKey {
-        let keyData = try KeychainManager.shared.loadPrivateKey(identifier: id.uuidString)
-        guard let keyString = String(data: keyData, encoding: .utf8) else {
-            throw OpenPubkeyError.keyMaterialUnavailable
-        }
-        let parsed = try SSHKeyParser.parse(keyString: keyString, passphrase: nil)
-        return try Self.ephemeralKey(from: parsed)
-    }
-
-    /// Wraps a freshly parsed software key as an ``OpenPubkeyEphemeralKey``,
-    /// rejecting key types OpenPubkey can't sign with.
-    private static func ephemeralKey(
-        from parsed: SSHKeyParser.ParsedKey
-    ) throws -> OpenPubkeyEphemeralKey {
-        switch parsed.keyType {
-        case .ed25519:
-            guard let key = parsed.underlyingEd25519Key else {
-                throw OpenPubkeyError.keyMaterialUnavailable
-            }
-            return .ed25519(key)
-        case .ecdsaP256:
-            guard let key = parsed.underlyingP256Key else {
-                throw OpenPubkeyError.keyMaterialUnavailable
-            }
-            return .ecdsaP256(key)
-        default:
-            throw OpenPubkeyError.keyMaterialUnavailable
-        }
-    }
-
     private func saveSecrets(_ secrets: OpenPubkeySecrets, forKeyID id: UUID) throws {
-        let data = try JSONEncoder().encode(secrets)
-        // Place the secrets at the owning key's storage level so synced keys
-        // can silently renew on other devices and device-only keys keep
-        // their tokens out of backups.
-        let storageLevel = SSHKeyManager.shared.savedKeys.first(where: { $0.id == id })?.storageLevel ?? .backupOnly
-        try KeychainManager.shared.saveOpenPubkeySecrets(data, forKey: id.uuidString, storageLevel: storageLevel)
+        try ManagedCertificateKeys.saveSecrets(secrets, forKeyID: id, service: .openPubkey)
     }
 
     private func loadSecrets(forKeyID id: UUID) throws -> OpenPubkeySecrets {
-        guard let data = KeychainManager.shared.loadOpenPubkeySecrets(forKey: id.uuidString) else {
-            throw OpenPubkeyError.missingSecrets
-        }
-        return try JSONDecoder().decode(OpenPubkeySecrets.self, from: data)
+        try ManagedCertificateKeys.loadSecrets(OpenPubkeySecrets.self, forKeyID: id, service: .openPubkey)
     }
 }

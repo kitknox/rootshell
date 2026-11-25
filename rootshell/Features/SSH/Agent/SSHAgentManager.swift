@@ -92,7 +92,14 @@ final class SSHAgentManager: ObservableObject {
         Self.logger.info("Listing \(availableKeys.count) identities for agent forwarding")
 
         var identities: [SSHAgentIdentity] = []
-        for key in availableKeys {
+        for var key in availableKeys {
+            // Renew a managed certificate silently (never opens UI) so a long
+            // forwarded session keeps a usable one, then list the fresh copy.
+            if key.hasManagedCertificate {
+                _ = try? await ManagedCertificateIdentities.certificateAvailableForPassiveAgentListing(forKeyID: key.id)
+                key = keyManager.savedKeys.first(where: { $0.id == key.id }) ?? key
+            }
+
             // First, try to use cached public key blob (no Keychain access needed)
             if let cachedBlob = key.publicKeyBlob {
                 Self.logger.info("Using cached blob for identity: \(key.name)")
@@ -132,7 +139,8 @@ final class SSHAgentManager: ObservableObject {
     /// ssh-agent behavior (a certified key appears as both the plain key and the
     /// certificate). The remote `ssh` picks whichever the server wants.
     private func appendCertificateIdentity(for key: SSHKey, to identities: inout [SSHAgentIdentity]) {
-        guard let cert = key.userCertificate else { return }
+        // A stale certificate is a guaranteed server-side reject.
+        guard let cert = key.userCertificate, !cert.isExpired, !cert.isNotYetValid else { return }
         Self.logger.info("Adding certificate identity for: \(key.name)")
         identities.append(SSHAgentIdentity(
             publicKeyBlob: ByteBuffer(data: cert.certificateBlob),

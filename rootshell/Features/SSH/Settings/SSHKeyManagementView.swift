@@ -6,6 +6,7 @@ struct SSHKeyManagementView: View {
     @State private var showingCertImportSheet = false
     @State private var showingGenerate = false
     @State private var showingOpenPubkeySignIn = false
+    @State private var showingStepCASignIn = false
     @State private var showingDeleteConfirmation = false
     @State private var showingPasskeySheet = false
     #if !os(visionOS)
@@ -79,6 +80,8 @@ struct SSHKeyManagementView: View {
 
                     Button(action: { showingOpenPubkeySignIn = true }) { Label("Sign In with OpenPubkey", systemImage: "person.badge.key") }
 
+                    Button(action: { showingStepCASignIn = true }) { Label("Sign In with Smallstep", systemImage: "checkmark.shield") }
+
                     #if targetEnvironment(macCatalyst) && STANDALONE
                     Button(action: { showingExternalAgents = true }) { Label("Import from SSH Agent", systemImage: "key.radiowaves.forward") }
                     #endif
@@ -106,6 +109,9 @@ struct SSHKeyManagementView: View {
         }
         .navigationDestination(isPresented: $showingOpenPubkeySignIn) {
             OpenPubkeySignInView(embedInNavigationStack: false)
+        }
+        .navigationDestination(isPresented: $showingStepCASignIn) {
+            StepCASignInView(embedInNavigationStack: false)
         }
         #if targetEnvironment(macCatalyst) && STANDALONE
         .navigationDestination(isPresented: $showingExternalAgents) { ExternalSSHAgentsView() }
@@ -197,12 +203,13 @@ struct SSHKeyRow: View {
                         }.foregroundColor(.yellow).padding(.horizontal, 4).padding(.vertical, 2).background(Color.yellow.opacity(0.2)).cornerRadius(4)
                     }
 
-                    if let opk = key.openPubkeyInfo {
-                        // OpenPubkey badge: colored by ID token expiry (the
-                        // cert itself never expires at the SSH level).
-                        Image(systemName: opk.isExpired ? "person.badge.key.fill" : "person.badge.key").font(.caption2).foregroundColor(
-                            openPubkeyBadgeColor(opk)
-                        ).padding(.horizontal, 4).padding(.vertical, 2).background(openPubkeyBadgeColor(opk).opacity(0.2)).cornerRadius(4)
+                    if key.hasManagedCertificate, let expiry = key.managedCertificateExpiry {
+                        // OpenPubkey / Smallstep badge: colored by how soon the app
+                        // must renew (OpenPubkey: ID token expiry; step-ca: cert expiry).
+                        let expired = expiry.timeIntervalSinceNow <= 0
+                        Image(systemName: expired ? "person.badge.key.fill" : "person.badge.key").font(.caption2).foregroundColor(
+                            managedCertificateBadgeColor(expiry)
+                        ).padding(.horizontal, 4).padding(.vertical, 2).background(managedCertificateBadgeColor(expiry).opacity(0.2)).cornerRadius(4)
                     } else if let cert = key.userCertificate {
                         // Certificate badge: green valid, orange expiring soon, red expired
                         Image(systemName: cert.isExpired ? "xmark.seal.fill" : "checkmark.seal.fill").font(.caption2).foregroundColor(
@@ -251,9 +258,10 @@ struct SSHKeyRow: View {
         return .green
     }
 
-    private func openPubkeyBadgeColor(_ info: OpenPubkeyInfo) -> Color {
-        if info.isExpired { return .red }
-        if info.tokenExpiry.timeIntervalSinceNow < 3600 { return .orange }
+    private func managedCertificateBadgeColor(_ expiry: Date) -> Color {
+        let remaining = expiry.timeIntervalSinceNow
+        if remaining <= 0 { return .red }
+        if remaining < 3600 { return .orange }
         return .green
     }
 }

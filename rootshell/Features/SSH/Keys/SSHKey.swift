@@ -258,6 +258,11 @@ nonisolated struct SSHKey: Codable, Identifiable, Hashable, Sendable {
     /// renewed from the OIDC provider rather than a CA-issued one.
     var openPubkeyInfo: OpenPubkeyInfo?
 
+    /// Smallstep (step-ca) identity metadata. Present when this key was
+    /// created via "Sign In with Smallstep": an ordinary software key whose
+    /// certificate is short-lived and re-issued by the CA.
+    var stepCAInfo: StepCAInfo?
+
     /// External-agent metadata (nil unless this key is served by a local
     /// OpenSSH agent on macOS). Decodable on every platform so a stray
     /// record can't crash decode; only the Catalyst Standalone build can
@@ -266,6 +271,10 @@ nonisolated struct SSHKey: Codable, Identifiable, Hashable, Sendable {
 
     /// True when this key is an OpenPubkey identity.
     var isOpenPubkey: Bool { openPubkeyInfo != nil }
+
+    /// True when this key's certificate is renewed by the app (OpenPubkey
+    /// or step-ca) rather than imported by hand.
+    var hasManagedCertificate: Bool { openPubkeyInfo != nil || stepCAInfo != nil }
 
     /// True when this key is served by an external OpenSSH agent.
     var isExternalAgentKey: Bool { externalAgentInfo != nil }
@@ -329,6 +338,7 @@ nonisolated struct SSHKey: Codable, Identifiable, Hashable, Sendable {
         self.secureEnclaveInfo = nil
         self.userCertificate = nil
         self.openPubkeyInfo = nil
+        self.stepCAInfo = nil
         self.externalAgentInfo = nil
     }
 
@@ -341,6 +351,7 @@ nonisolated struct SSHKey: Codable, Identifiable, Hashable, Sendable {
         case yubiKeyInfo, appleFIDO2Info, secureEnclaveInfo
         case userCertificate
         case openPubkeyInfo
+        case stepCAInfo
         case externalAgentInfo
     }
 
@@ -367,6 +378,7 @@ nonisolated struct SSHKey: Codable, Identifiable, Hashable, Sendable {
         secureEnclaveInfo = try container.decodeIfPresent(SecureEnclaveKeyInfo.self, forKey: .secureEnclaveInfo)
         userCertificate = try container.decodeIfPresent(SSHUserCertificateInfo.self, forKey: .userCertificate)
         openPubkeyInfo = try container.decodeIfPresent(OpenPubkeyInfo.self, forKey: .openPubkeyInfo)
+        stepCAInfo = try container.decodeIfPresent(StepCAInfo.self, forKey: .stepCAInfo)
         externalAgentInfo = try container.decodeIfPresent(ExternalAgentKeyInfo.self, forKey: .externalAgentInfo)
     }
 
@@ -389,6 +401,7 @@ nonisolated struct SSHKey: Codable, Identifiable, Hashable, Sendable {
         try container.encodeIfPresent(secureEnclaveInfo, forKey: .secureEnclaveInfo)
         try container.encodeIfPresent(userCertificate, forKey: .userCertificate)
         try container.encodeIfPresent(openPubkeyInfo, forKey: .openPubkeyInfo)
+        try container.encodeIfPresent(stepCAInfo, forKey: .stepCAInfo)
         try container.encodeIfPresent(externalAgentInfo, forKey: .externalAgentInfo)
     }
 

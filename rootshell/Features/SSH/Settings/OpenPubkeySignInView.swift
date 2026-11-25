@@ -273,73 +273,27 @@ struct OpenPubkeySignInView: View {
                 }
             }
 
-            Section {
-                TextField(defaultKeyName, text: $keyName)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .themedRow()
-            } header: {
-                Text("Key Name")
+            ManagedKeyOptionsSections(
+                defaultKeyName: defaultKeyName,
+                keyName: $keyName,
+                keyAlgorithm: $keyAlgorithm,
+                keyTypeFooter: Text("Ed25519 is recommended. The server's opkssh verifier must accept the chosen key type."),
+                storageLevel: $storageLevel,
+                showOptions: $showOptions
+            ) {
+                Toggle("Send Access Token", isOn: $sendAccessToken)
+                    .padding(.top, 4)
+                Text("Include the OAuth access token in the certificate so the server can query the provider's userinfo endpoint. Leave off unless your server requires it.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
-            Section {
-                Picker("Key Type", selection: $keyAlgorithm) {
-                    ForEach(OpenPubkeyKeyAlgorithm.allCases) { algorithm in
-                        Text(algorithm.displayName).tag(algorithm)
-                    }
-                }
-                .pickerStyle(.menu)
-                .themedRow()
-            } header: {
-                Text("Key Type")
-            } footer: {
-                Text("Ed25519 is recommended. The server's opkssh verifier must accept the chosen key type.")
-            }
-
-            Section {
-                DisclosureGroup("Options", isExpanded: $showOptions) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Picker("Key Storage", selection: $storageLevel) {
-                            ForEach(KeyStorageLevel.allCases, id: \.self) { level in
-                                Label(level.displayName, systemImage: level.iconName)
-                                    .tag(level)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        Text(storageLevel.description)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-
-                        Toggle("Send Access Token", isOn: $sendAccessToken)
-                            .padding(.top, 4)
-                        Text("Include the OAuth access token in the certificate so the server can query the provider's userinfo endpoint. Leave off unless your server requires it.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.vertical, 4)
-                }
-                .themedRow()
-            }
-
-            Section {
-                Button(action: signIn) {
-                    HStack {
-                        Spacer()
-                        if isAuthenticating {
-                            ProgressView()
-                                .padding(.trailing, 8)
-                        }
-                        Text(isAuthenticating
-                             ? String(localized: "Waiting for Sign-In...", comment: "OpenPubkey sign-in: in progress")
-                             : String(localized: "Sign In", comment: "OpenPubkey sign-in: button"))
-                        Spacer()
-                    }
-                }
-                .disabled(!canSignIn || isAuthenticating)
-                .themedRow()
-            } footer: {
-                Text("Certificates last about 24 hours. The app renews them automatically when the provider issues a refresh token; otherwise you sign in again from the key's detail page.")
-            }
+            ManagedSignInButtonSection(
+                isAuthenticating: isAuthenticating,
+                canSignIn: canSignIn,
+                footer: Text("Certificates last about 24 hours. The app renews them automatically when the provider issues a refresh token; otherwise you sign in again from the key's detail page."),
+                action: signIn
+            )
         }
         .themedList()
         #if !os(visionOS)
@@ -414,7 +368,7 @@ struct OpenPubkeySignInView: View {
                 let identity = key.openPubkeyInfo?.identityDisplay ?? name
                 Self.logger.info("OpenPubkey sign-in complete for \(identity)")
                 dismiss()
-            } catch OpenPubkeyClient.ClientError.cancelled {
+            } catch OIDCLoginClient.ClientError.cancelled {
                 // User closed the browser sheet; stay on the form.
             } catch {
                 errorMessage = error.localizedDescription

@@ -32,10 +32,6 @@ struct SSHKeyDetailView: View {
     // OpenPGP public key export
     @State private var showingGPGExportSheet = false
 
-    // OpenPubkey identity actions
-    @State private var isRenewingOpenPubkey = false
-    @State private var isReauthenticatingOpenPubkey = false
-
     // User certificate
     @State private var showingCertImport = false
     @State private var showingCertRemoveConfirmation = false
@@ -151,69 +147,9 @@ struct SSHKeyDetailView: View {
                 }
             }
 
-            // OpenPubkey identity section
-            if let opk = currentKey.openPubkeyInfo {
-                Section {
-                    HStack {
-                        Text(String(localized: "Provider", comment: "OpenPubkey field: OIDC provider"))
-                        Spacer()
-                        if let logo = opk.provider.logoImageName {
-                            Image(logo)
-                                .renderingMode(.original)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 20, height: 20)
-                        }
-                        Text(opk.provider.displayName)
-                            .foregroundColor(.secondary)
-                    }
-                    .themedRow()
-                    LabeledRow(label: String(localized: "Identity", comment: "OpenPubkey field: signed-in account"), value: opk.identityDisplay)
-                        .themedRow()
-
-                    HStack {
-                        Text("Certificate Expires")
-                        Spacer()
-                        Text(opk.tokenExpiry, format: .relative(presentation: .named))
-                            .foregroundColor(opk.isExpired ? .red : (opk.tokenExpiry.timeIntervalSinceNow < 3600 ? .orange : .secondary))
-                    }
-                    .themedRow()
-
-                    LabeledRow(label: String(localized: "Last Sign-In", comment: "OpenPubkey field: last browser login"), value: formatDate(opk.lastLoginDate))
-                        .themedRow()
-
-                    Button(action: renewOpenPubkey) {
-                        HStack {
-                            Label("Renew Now", systemImage: "arrow.clockwise")
-                            if isRenewingOpenPubkey {
-                                Spacer()
-                                ProgressView()
-                            }
-                        }
-                    }
-                    .disabled(!opk.hasRefreshToken || isRenewingOpenPubkey || isReauthenticatingOpenPubkey)
-                    .themedRow()
-
-                    Button(action: reauthenticateOpenPubkey) {
-                        HStack {
-                            Label("Sign In Again", systemImage: "person.crop.circle.badge.checkmark")
-                            if isReauthenticatingOpenPubkey {
-                                Spacer()
-                                ProgressView()
-                            }
-                        }
-                    }
-                    .disabled(isRenewingOpenPubkey || isReauthenticatingOpenPubkey)
-                    .themedRow()
-                } header: {
-                    Text("OpenPubkey")
-                } footer: {
-                    if opk.hasRefreshToken {
-                        Text("The certificate renews automatically before connections. Renewal keeps this key; only the embedded token changes.")
-                    } else {
-                        Text("The provider did not issue a refresh token, so a new browser sign-in is needed roughly every 24 hours.")
-                    }
-                }
+            // OpenPubkey / Smallstep identity section
+            if currentKey.hasManagedCertificate {
+                ManagedCertificateSection(key: currentKey)
             }
 
             // External agent section
@@ -279,7 +215,7 @@ struct SSHKeyDetailView: View {
             // Certificate section
             Section {
                 if let cert = currentKey.userCertificate {
-                    certificateStatusRow(for: cert)
+                    certificateStatusRow(for: cert, autoRenewed: currentKey.hasManagedCertificate)
                         .themedRow()
 
                     LabeledRow(label: String(localized: "Key ID", comment: "Cert field: CA-assigned identity"), value: cert.keyID)
@@ -332,10 +268,10 @@ struct SSHKeyDetailView: View {
                     }
                     .themedRow()
 
-                    // OpenPubkey certificates are managed by the section
+                    // OpenPubkey and Smallstep certificates are managed by the section
                     // above (renew / re-login); manual replace or remove
                     // would orphan the identity.
-                    if currentKey.openPubkeyInfo == nil {
+                    if !currentKey.hasManagedCertificate {
                         Button(action: { showingCertImport = true }) {
                             Label("Replace Certificate…", systemImage: "arrow.triangle.2.circlepath")
                         }
@@ -715,34 +651,6 @@ struct SSHKeyDetailView: View {
     }
 
     // MARK: - Actions
-
-    private func renewOpenPubkey() {
-        isRenewingOpenPubkey = true
-        Task {
-            defer { isRenewingOpenPubkey = false }
-            do {
-                try await OpenPubkeyManager.shared.renewCertificate(forKeyID: key.id)
-            } catch {
-                errorMessage = error.localizedDescription
-                showingError = true
-            }
-        }
-    }
-
-    private func reauthenticateOpenPubkey() {
-        isReauthenticatingOpenPubkey = true
-        Task {
-            defer { isReauthenticatingOpenPubkey = false }
-            do {
-                try await OpenPubkeyManager.shared.reauthenticate(keyID: key.id)
-            } catch OpenPubkeyClient.ClientError.cancelled {
-                // User closed the browser sheet.
-            } catch {
-                errorMessage = error.localizedDescription
-                showingError = true
-            }
-        }
-    }
 
     #if targetEnvironment(macCatalyst) && STANDALONE
     private func checkAgentAvailability() {

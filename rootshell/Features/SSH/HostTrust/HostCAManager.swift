@@ -156,6 +156,22 @@ final class HostCAManager: ObservableObject {
         return ca
     }
 
+    /// Adds the CA, or, when the same key (by fingerprint, as `addCA`
+    /// dedupes) is already trusted, extends that record with `hostPatterns`.
+    func addOrExtendCA(name: String, openSSHPublicKey: String, hostPatterns: [String]) throws {
+        do {
+            try addCA(name: name, openSSHPublicKey: openSSHPublicKey, hostPatterns: hostPatterns)
+        } catch HostCAImportError.duplicate {
+            SSHCustomAlgorithms.ensureRegistered()
+            let key = try NIOSSHPublicKey(openSSHPublicKey: openSSHPublicKey.trimmingCharacters(in: .whitespacesAndNewlines))
+            let fingerprint = SSHHostKeyFormatter.fingerprint(for: key)
+            guard let existing = store.activeRecords.first(where: { $0.fingerprint == fingerprint }) else { return }
+            let added = Self.normalizePatterns(hostPatterns).filter { !existing.hostPatterns.contains($0) }
+            guard !added.isEmpty else { return }
+            try update(id: existing.id, name: existing.name, hostPatterns: existing.hostPatterns + added)
+        }
+    }
+
     /// Re-mirror VPN profile snapshots so the trusted-CA lists stay current
     /// for extension/widget starts.
     private func refreshVPNProfileMirror() {
@@ -163,7 +179,7 @@ final class HostCAManager: ObservableObject {
     }
 
     /// Update an existing CA's name and/or host patterns.
-    func update(id: UUID, name: String, hostPatterns: [String]) {
+    func update(id: UUID, name: String, hostPatterns: [String]) throws {
         guard let existing = store.record(for: id) else { return }
         let patterns = Self.normalizePatterns(hostPatterns)
         guard !patterns.isEmpty else { return }
@@ -181,7 +197,7 @@ final class HostCAManager: ObservableObject {
             isDeleted: false
         )
         objectWillChange.send()
-        try? store.save(updated)
+        try store.save(updated)
         refreshVPNProfileMirror()
     }
 

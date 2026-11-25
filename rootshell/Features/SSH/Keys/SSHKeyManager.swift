@@ -465,6 +465,17 @@ class SSHKeyManager: ObservableObject {
             throw DeleteError.keyNotFound
         }
 
+        // Certificate identity secrets go first: a refresh token or remembered
+        // provisioner password must not outlive the key that owns it, and the
+        // key must still be listed so the user can retry a failed delete.
+        do {
+            for service in KeychainManager.IdentitySecretsService.allCases {
+                try keychainManager.deleteIdentitySecrets(forKey: id.uuidString, service: service)
+            }
+        } catch {
+            throw DeleteError.keychainError(error)
+        }
+
         // Remove from Keychain (private key + metadata + passphrase). For a
         // Secure Enclave key the "private key" item is the opaque
         // dataRepresentation; removing it makes the enclave key permanently
@@ -479,10 +490,6 @@ class SSHKeyManager: ObservableObject {
 
         // Drop any cached Secure Enclave auth context for this key.
         SSHKeyAuthManager.shared.clearSecureEnclaveContext(for: id)
-
-        // Drop OpenPubkey secrets (refresh token + PK token) if this was an
-        // opkssh identity key.
-        keychainManager.deleteOpenPubkeySecrets(forKey: id.uuidString)
 
         // Remove from saved keys
         savedKeys.remove(at: index)
@@ -1089,7 +1096,8 @@ class SSHKeyManager: ObservableObject {
                    oldKey.authRequirement != newKey.authRequirement ||
                    oldKey.securityModifiedDate != newKey.securityModifiedDate ||
                    oldKey.userCertificate != newKey.userCertificate ||
-                   oldKey.openPubkeyInfo != newKey.openPubkeyInfo {
+                   oldKey.openPubkeyInfo != newKey.openPubkeyInfo ||
+                   oldKey.stepCAInfo != newKey.stepCAInfo {
                     hasChanges = true
                     let keyName = newKey.name
                     Self.logger.info("Key metadata changed: \(keyName)")
@@ -1176,6 +1184,16 @@ class SSHKeyManager: ObservableObject {
             return
         }
         savedKeys[index].openPubkeyInfo = info
+        saveKeys()
+        keysDidChange.send()
+    }
+
+    /// Sets (or clears) the step-ca identity metadata on a key.
+    func setStepCAInfo(keyID: UUID, info: StepCAInfo?) {
+        guard let index = savedKeys.firstIndex(where: { $0.id == keyID }) else {
+            return
+        }
+        savedKeys[index].stepCAInfo = info
         saveKeys()
         keysDidChange.send()
     }
@@ -1837,6 +1855,31 @@ class SSHKeyManager: ObservableObject {
         // Keep the old in-memory metadata authoritative until its durable
         // Keychain replacement succeeds. This is especially important for
         // synchronizable keys, where metadata is the authentication gate.
+        // Step 3b: Move certificate identity secrets (refresh tokens, a
+        // remembered provisioner password) to the new storage level; they can
+        // mint certificates on their own, so they must not stay synced.
+        var originalSecrets: [(KeychainManager.IdentitySecretsService, Data)] = []
+        do {
+            for service in KeychainManager.IdentitySecretsService.allCases {
+                guard let data = try keychainManager.loadIdentitySecrets(forKey: id.uuidString, service: service) else {
+                    continue
+                }
+                originalSecrets.append((service, data))
+                try keychainManager.saveIdentitySecrets(
+                    data,
+                    forKey: id.uuidString,
+                    service: service,
+                    storageLevel: newStorageLevel
+                )
+            }
+        } catch {
+            let originalError = error
+            Self.logger.error("Identity-secrets migration failed, restoring original key and secrets")
+            var rollbackFailures = restorePrivateKeyAfterFailedMigration(keyData, originalKey: key)
+            rollbackFailures.append(contentsOf: restoreIdentitySecretsAfterFailedMigration(originalSecrets, originalKey: key))
+            throw migrationError(original: originalError, rollbackFailures: rollbackFailures)
+        }
+
         var migratedKey = key
         migratedKey.storageLevel = newStorageLevel
         migratedKey.authRequirement = newAuthRequirement
@@ -1857,6 +1900,7 @@ class SSHKeyManager: ObservableObject {
             let originalError = error
             Self.logger.error("Metadata migration failed, restoring original key and metadata")
             var rollbackFailures = restorePrivateKeyAfterFailedMigration(keyData, originalKey: key)
+            rollbackFailures.append(contentsOf: restoreIdentitySecretsAfterFailedMigration(originalSecrets, originalKey: key))
             rollbackFailures.append(contentsOf: restoreMetadataAfterFailedMigration(
                 originalKey: key,
                 originalWasDeleted: metadataWasDeleted
@@ -1901,6 +1945,28 @@ class SSHKeyManager: ObservableObject {
             failures.append("restore original private key: \(error.localizedDescription)")
         }
 
+        return failures
+    }
+
+    /// Best-effort restoration of certificate identity secrets at the key's
+    /// original storage level.
+    private func restoreIdentitySecretsAfterFailedMigration(
+        _ originals: [(KeychainManager.IdentitySecretsService, Data)],
+        originalKey: SSHKey
+    ) -> [String] {
+        var failures: [String] = []
+        for (service, data) in originals {
+            do {
+                try keychainManager.saveIdentitySecrets(
+                    data,
+                    forKey: originalKey.id.uuidString,
+                    service: service,
+                    storageLevel: originalKey.storageLevel
+                )
+            } catch {
+                failures.append("restore \(service.rawValue) secrets: \(error.localizedDescription)")
+            }
+        }
         return failures
     }
 

@@ -149,6 +149,7 @@ struct HostCertificateAuthorityDetailView: View {
     @State private var showingDeleteAlert = false
     @State private var fingerprintCopied = false
     @State private var publicKeyCopied = false
+    @State private var saveError: String?
 
     init(ca: HostCertificateAuthority) {
         self.ca = ca
@@ -265,11 +266,25 @@ struct HostCertificateAuthorityDetailView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
-                    manager.update(id: ca.id, name: name, hostPatterns: [patternsText])
-                    dismiss()
+                    // Stay on the editor if the save fails: dismissing would
+                    // leave the previous (possibly broader) scope in place.
+                    do {
+                        try manager.update(id: ca.id, name: name, hostPatterns: [patternsText])
+                        dismiss()
+                    } catch {
+                        saveError = error.localizedDescription
+                    }
                 }
                 .disabled(!hasChanges)
             }
+        }
+        .alert("Couldn't Save", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveError ?? "")
         }
         .alert("Remove This Authority?", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) { }

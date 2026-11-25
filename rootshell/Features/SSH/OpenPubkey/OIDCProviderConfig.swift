@@ -17,11 +17,6 @@ nonisolated struct OIDCProviderConfig: Codable, Hashable, Sendable {
     /// Space-separated OIDC scopes.
     var scopes: String
 
-    /// Loopback ports the public clients are registered for, in priority order.
-    static let redirectPorts: [UInt16] = [3000, 10001, 11110]
-    /// Redirect path the public clients are registered for.
-    static let redirectPath = "/login-callback"
-
     static let google = OIDCProviderConfig(
         providerID: "google",
         displayName: "Google",
@@ -86,25 +81,3 @@ nonisolated struct OIDCProviderConfig: Codable, Hashable, Sendable {
     }
 }
 
-/// The subset of the OIDC discovery document OpenPubkey needs.
-struct OIDCDiscoveryDocument: Decodable, Sendable {
-    let authorizationEndpoint: URL
-    let tokenEndpoint: URL
-
-    enum CodingKeys: String, CodingKey {
-        case authorizationEndpoint = "authorization_endpoint"
-        case tokenEndpoint = "token_endpoint"
-    }
-
-    static func fetch(issuer: String) async throws -> OIDCDiscoveryDocument {
-        let base = issuer.hasSuffix("/") ? String(issuer.dropLast()) : issuer
-        guard let url = URL(string: "\(base)/.well-known/openid-configuration") else {
-            throw OpenPubkeyClient.ClientError.invalidIssuer(issuer)
-        }
-        let (data, response) = try await URLSession.shared.data(from: url)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw OpenPubkeyClient.ClientError.discoveryFailed(issuer)
-        }
-        return try JSONDecoder().decode(OIDCDiscoveryDocument.self, from: data)
-    }
-}

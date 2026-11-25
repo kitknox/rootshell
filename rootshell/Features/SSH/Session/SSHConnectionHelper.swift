@@ -138,9 +138,9 @@ enum SSHConnectionHelper {
             return .passwordBased(username: username, password: password)
 
         case .key(let keyID):
-            // OpenPubkey keys: renew the PK-token certificate silently if the
-            // ID token is (nearly) expired. No-op for ordinary keys.
-            try await OpenPubkeyManager.shared.ensureFreshCertificate(forKeyID: keyID)
+            // Managed certificate keys (OpenPubkey, step-ca): renew if stale.
+            // No-op for ordinary keys.
+            try await ManagedCertificateIdentities.ensureFreshCertificate(forKeyID: keyID)
             let keyVariant = try await SSHKeyManager.shared.loadPrivateKey(id: keyID)
             let certifiedKey = SSHKeyManager.shared.usableCertifiedKey(forKeyID: keyID, username: username)
 
@@ -192,7 +192,7 @@ enum SSHConnectionHelper {
             // forwarded to the same delegate object.
             return PasswordAuthDelegate(username: username, password: password)
         case .key(let keyID):
-            try await OpenPubkeyManager.shared.ensureFreshCertificate(forKeyID: keyID)
+            try await ManagedCertificateIdentities.ensureFreshCertificate(forKeyID: keyID)
             let keyVariant = try await SSHKeyManager.shared.loadPrivateKey(id: keyID)
             return makeKeyDelegate(username: username, keyID: keyID, variant: keyVariant)
         case .savedPassword:
@@ -284,7 +284,7 @@ enum SSHConnectionHelper {
     ) async throws -> SSHAuthenticationMethod {
         var keysToTry: [SSHAuthKeyCandidate] = []
 
-        try await OpenPubkeyManager.shared.ensureFreshCertificate(forKeyID: primaryKeyID)
+        try await ManagedCertificateIdentities.ensureFreshCertificate(forKeyID: primaryKeyID)
         let primaryKey = try await SSHKeyManager.shared.loadPrivateKey(id: primaryKeyID)
         keysToTry.append(SSHAuthKeyCandidate(
             variant: primaryKey,
@@ -293,9 +293,9 @@ enum SSHConnectionHelper {
 
         for fallbackID in fallbackKeyIDs {
             do {
-                // A stale OpenPubkey fallback shouldn't kill the connection;
+                // A stale managed-certificate fallback shouldn't kill the connection;
                 // it just offers the plain key (which the server may reject).
-                try? await OpenPubkeyManager.shared.ensureFreshCertificate(forKeyID: fallbackID)
+                try? await ManagedCertificateIdentities.ensureFreshCertificate(forKeyID: fallbackID)
                 let fallbackKey = try await SSHKeyManager.shared.loadPrivateKey(id: fallbackID)
                 keysToTry.append(SSHAuthKeyCandidate(
                     variant: fallbackKey,

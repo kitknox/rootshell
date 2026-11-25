@@ -1128,8 +1128,8 @@ final class TrzszSession: TerminalSession, MainChannelReplacing {
             Self.logger.error("trzsz session failed: \(error.localizedDescription)")
             onError?(error)
             throw error
-        } catch let error as OpenPubkeyError {
-            // A cancelled/failed inline opkssh sign-in during the tsshd SSH
+        } catch let error as ManagedCertificateError {
+            // A cancelled/failed inline certificate sign-in during the tsshd SSH
             // bootstrap. Preserve the typed error (don't flatten it into an opaque
             // sshConnectionFailed) so the retry layer classifies it as permanent.
             state = .failed

@@ -393,8 +393,10 @@ enum SSHUserCertificateFormatting {
 }
 
 /// Status row showing Valid / Expired / Not yet valid / Expires in N days.
+/// `autoRenewed` certificates (OpenPubkey, step-ca) are short-lived by
+/// design, so the 30-day "expires soon" warning is skipped for them.
 @ViewBuilder
-func certificateStatusRow(for info: SSHUserCertificateInfo) -> some View {
+func certificateStatusRow(for info: SSHUserCertificateInfo, autoRenewed: Bool = false) -> some View {
     HStack {
         if info.isExpired {
             Label(String(localized: "Expired", comment: "Cert status"), systemImage: "xmark.seal.fill")
@@ -402,7 +404,7 @@ func certificateStatusRow(for info: SSHUserCertificateInfo) -> some View {
         } else if info.isNotYetValid {
             Label(String(localized: "Not Yet Valid", comment: "Cert status"), systemImage: "exclamationmark.triangle.fill")
                 .foregroundColor(.orange)
-        } else if info.isExpiringSoon {
+        } else if info.isExpiringSoon, !autoRenewed {
             Label(String(localized: "Expires in \(SSHUserCertificateFormatting.daysUntilExpiry(info)) days", comment: "Cert status"), systemImage: "exclamationmark.triangle.fill")
                 .foregroundColor(.orange)
         } else {

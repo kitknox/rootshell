@@ -913,6 +913,8 @@ struct SettingsSearchEntry: Identifiable, Hashable {
                 keywords: ["user certificate", "cert", "signed key"]),
             row("ssh-openpubkey", String(localized: "Sign In with OpenPubkey"), in: .sshKeys, icon: "person.badge.key",
                 keywords: ["openpubkey", "oidc", "sso", "google", "github"]),
+            row("ssh-smallstep", String(localized: "Sign In with Smallstep"), in: .sshKeys, icon: "checkmark.shield",
+                keywords: ["smallstep", "step-ca", "step", "certificate authority", "oidc", "sso", "short-lived"]),
             row("ssh-import-from-agent", String(localized: "Import from SSH Agent"), in: .sshKeys, icon: "key.radiowaves.forward",
                 keywords: ["agent", "socket", "1password", "secretive"], available: isStandaloneMac),
             row("ssh-passkey", String(localized: "Passkey"), in: .sshKeys, icon: "person.badge.key.fill",

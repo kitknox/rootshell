@@ -126,6 +126,12 @@ actor OAuthCallbackServer {
         }
     }
 
+    /// The port the listener actually bound, once `start()` returned. Differs
+    /// from the requested port when that was 0 (any free port).
+    var boundPort: UInt16? {
+        listener?.port?.rawValue
+    }
+
     /// Wait for the OAuth callback, starting the server first if needed.
     /// - Parameter expectedState: The state parameter to validate (from PKCE)
     /// - Returns: The OAuth callback containing the authorization code

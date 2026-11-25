@@ -471,25 +471,31 @@ class KeychainManager {
         // Ignore errors - passphrase may not exist
     }
 
-    // MARK: - OpenPubkey Secrets Storage
+    // MARK: - Certificate Identity Secrets Storage
 
-    /// Saves the OpenPubkey secrets blob (refresh token + compact PK token)
-    /// for an opkssh identity key. Overwrites any existing blob, since
-    /// renewals rewrite it. Storage placement mirrors the owning key's
-    /// storage level (same mapping as `savePrivateKey(_:identifier:storageLevel:authRequirement:)`)
-    /// so a synced key carries its refresh token along and a device-only
-    /// key's tokens stay out of backups. No access control: renewal must
-    /// run silently at connection time.
-    /// - Parameters:
-    ///   - data: JSON-encoded OpenPubkeySecrets
-    ///   - identifier: The owning SSHKey's UUID string
-    ///   - storageLevel: The owning key's storage level
-    func saveOpenPubkeySecrets(_ data: Data, forKey identifier: String, storageLevel: KeyStorageLevel) throws {
-        deleteOpenPubkeySecrets(forKey: identifier)
+    /// Keychain services for the per-key secrets blob of a managed
+    /// certificate identity. The OpenPubkey value predates step-ca support
+    /// and must not change, or existing refresh tokens are lost.
+    nonisolated enum IdentitySecretsService: String, CaseIterable {
+        case openPubkey = "com.ghostty.ssh.openpubkey"
+        case stepCA = "com.ghostty.ssh.stepca"
+    }
+
+    /// Saves the secrets blob (refresh token, PK token, provisioner password)
+    /// for a certificate identity key, replacing any existing one. Placement
+    /// mirrors the owning key's storage level (same mapping as
+    /// `savePrivateKey(_:identifier:storageLevel:authRequirement:)`) so a
+    /// synced key can renew on other devices and a device-only key's tokens
+    /// stay out of backups. No access control: renewal must run silently at
+    /// connection time.
+    func saveIdentitySecrets(_ data: Data, forKey identifier: String, service: IdentitySecretsService, storageLevel: KeyStorageLevel) throws {
+        // Synchronizability is part of the item's primary key: if the old
+        // (say, synced) copy survives, adding the new one would leave both.
+        try deleteIdentitySecrets(forKey: identifier, service: service)
 
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "com.ghostty.ssh.openpubkey",
+            kSecAttrService as String: service.rawValue,
             kSecAttrAccount as String: identifier,
             kSecValueData as String: data,
             kSecAttrAccessGroup as String: accessGroup
@@ -513,11 +519,13 @@ class KeychainManager {
         }
     }
 
-    /// Loads the OpenPubkey secrets blob for an opkssh identity key.
-    nonisolated func loadOpenPubkeySecrets(forKey identifier: String) -> Data? {
+    /// Loads the secrets blob for a certificate identity key: nil only when
+    /// no item exists; any other Keychain failure throws, so callers never
+    /// mistake an unreadable item for an absent one.
+    nonisolated func loadIdentitySecrets(forKey identifier: String, service: IdentitySecretsService) throws -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "com.ghostty.ssh.openpubkey",
+            kSecAttrService as String: service.rawValue,
             kSecAttrAccount as String: identifier,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
@@ -527,24 +535,30 @@ class KeychainManager {
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess, let data = result as? Data else {
+        if status == errSecItemNotFound {
             return nil
+        }
+        guard status == errSecSuccess, let data = result as? Data else {
+            throw KeychainError.unexpectedStatus(status)
         }
         return data
     }
 
-    /// Deletes the OpenPubkey secrets blob for an opkssh identity key.
-    func deleteOpenPubkeySecrets(forKey identifier: String) {
+    /// Deletes the secrets blob for a certificate identity key. A missing
+    /// item is not an error.
+    func deleteIdentitySecrets(forKey identifier: String, service: IdentitySecretsService) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "com.ghostty.ssh.openpubkey",
+            kSecAttrService as String: service.rawValue,
             kSecAttrAccount as String: identifier,
             kSecAttrAccessGroup as String: accessGroup,
             kSecAttrSynchronizable as String: kSecAttrSynchronizableAny
         ]
 
-        SecItemDelete(query as CFDictionary)
-        // Ignore errors - secrets may not exist
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.unexpectedStatus(status)
+        }
     }
 
     // MARK: - List Keys

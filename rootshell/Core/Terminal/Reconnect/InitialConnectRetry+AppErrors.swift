@@ -49,10 +49,10 @@ extension InitialConnectRetry {
             return true
         }
 
-        // The user cancelled (or failed) the inline opkssh browser sign-in that
+        // The user cancelled (or failed) the inline certificate sign-in that
         // ensureFreshCertificate runs during auth-building. Retrying would just
         // re-open the browser, so treat it as permanent.
-        if case OpenPubkeyError.reauthenticationRequired = error { return true }
+        if case ManagedCertificateError.reauthenticationRequired = error { return true }
 
         return false
     }

@@ -391,12 +391,12 @@ final class LocalSSHAgentManager {
         var identities: [SSHAgentWireCodec.Identity] = []
         for key in keyManager.savedKeys where allowedIDs == nil || allowedIDs?.contains(key.id) == true {
             var includeCertificate = true
-            if key.isOpenPubkey {
+            if key.hasManagedCertificate {
                 do {
                     if destination != nil {
-                        try await OpenPubkeyManager.shared.ensureFreshCertificate(forKeyID: key.id)
+                        try await ManagedCertificateIdentities.ensureFreshCertificate(forKeyID: key.id)
                     } else {
-                        includeCertificate = try await OpenPubkeyManager.shared.certificateAvailableForPassiveAgentListing(forKeyID: key.id)
+                        includeCertificate = try await ManagedCertificateIdentities.certificateAvailableForPassiveAgentListing(forKeyID: key.id)
                     }
                 } catch {
                     includeCertificate = false
@@ -451,9 +451,9 @@ final class LocalSSHAgentManager {
             return SSHAgentWireCodec.failureFrame
         }
 
-        if keyMeta.isOpenPubkey {
+        if keyMeta.hasManagedCertificate {
             do {
-                try await OpenPubkeyManager.shared.ensureFreshCertificate(forKeyID: keyMeta.id)
+                try await ManagedCertificateIdentities.ensureFreshCertificate(forKeyID: keyMeta.id)
             } catch {
                 audit(peer: peer, action: .sign, keyName: keyMeta.name, destination: destination, outcome: .failed, detail: error.localizedDescription)
                 return SSHAgentWireCodec.failureFrame

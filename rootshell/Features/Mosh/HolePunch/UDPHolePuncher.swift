@@ -890,6 +890,7 @@ final class UDPHolePuncher {
             throw HolePunchError.authenticationFailed("Saved password not found")
 
         case .key(let keyID):
+            try await ManagedCertificateIdentities.ensureFreshCertificate(forKeyID: keyID)
             let keyVariant = try await SSHKeyManager.shared.loadPrivateKey(id: keyID)
             return try buildKeyAuthMethod(username: config.username, keyID: keyID, keyVariant: keyVariant)
 
@@ -922,6 +923,7 @@ final class UDPHolePuncher {
             throw HolePunchError.authenticationFailed("Jump host saved password not found")
 
         case .key(let keyID):
+            try await ManagedCertificateIdentities.ensureFreshCertificate(forKeyID: keyID)
             let keyVariant = try await SSHKeyManager.shared.loadPrivateKey(id: keyID)
             return try buildKeyAuthMethod(username: jumpHost.username, keyID: keyID, keyVariant: keyVariant)
 

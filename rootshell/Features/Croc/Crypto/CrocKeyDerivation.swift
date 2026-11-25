@@ -1,6 +1,5 @@
 #if !targetEnvironment(macCatalyst)
 
-import CommonCrypto
 import Foundation
 
 /// PBKDF2-SHA256 key derivation matching Go's `crypt.New`.
@@ -35,25 +34,10 @@ nonisolated enum CrocKeyDerivation {
             actualSalt = randomSalt
         }
 
-        var derivedKey = Data(count: 32)
-        let result = derivedKey.withUnsafeMutableBytes { derivedKeyPtr in
-            passphrase.withUnsafeBytes { passphrasePtr in
-                actualSalt.withUnsafeBytes { saltPtr in
-                    CCKeyDerivationPBKDF(
-                        CCPBKDFAlgorithm(kCCPBKDF2),
-                        passphrasePtr.baseAddress?.assumingMemoryBound(to: Int8.self),
-                        passphrase.count,
-                        saltPtr.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                        actualSalt.count,
-                        CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256),
-                        100, // iterations — matches Go's pbkdf2.Key(..., 100, ...)
-                        derivedKeyPtr.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                        32
-                    )
-                }
-            }
-        }
-        guard result == kCCSuccess else {
+        // 100 iterations matches Go's pbkdf2.Key(..., 100, ...).
+        guard let derivedKey = try? PBKDF2.sha256(
+            password: passphrase, salt: actualSalt, iterations: 100, keyLength: 32
+        ) else {
             throw CrocError.encryptionFailed
         }
 

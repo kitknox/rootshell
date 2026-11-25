@@ -2,19 +2,48 @@ import CryptoKit
 import Foundation
 import os.log
 
-/// Runs the OIDC side of the OpenPubkey protocol: a browser-based
-/// authorization-code + PKCE flow whose nonce commits to the CIC, and the
-/// refresh-token grant used for silent certificate renewal.
-///
-/// The public opkssh client registrations only allow localhost loopback
-/// redirect URIs, so the flow runs an in-app loopback HTTP server
-/// (OAuthCallbackServer) that catches the provider redirect and bounces it
-/// to the rootshell:// scheme that ASWebAuthenticationSession captures.
+/// Where the OIDC provider sends the browser back to. Both issuers use an
+/// in-app loopback server (OAuthCallbackServer) that 302s to the rootshell://
+/// scheme ASWebAuthenticationSession captures; they differ only in the
+/// registered host, path and ports.
+nonisolated struct LoopbackRedirect: Sendable {
+    /// Host written into the redirect URI.
+    let host: String
+    /// Path the loopback server answers on.
+    let handlerPath: String
+    /// Path appended to the redirect URI; must match the registration exactly.
+    let uriPath: String
+    /// Tried in order; 0 binds any free port.
+    let ports: [UInt16]
+
+    /// The public opkssh client registrations fix both the ports and the path.
+    static let openPubkey = LoopbackRedirect(
+        host: "localhost",
+        handlerPath: "/login-callback",
+        uriPath: "/login-callback",
+        ports: [3000, 10001, 11110]
+    )
+
+    /// `step oauth` redirect: `http://127.0.0.1:<port>` (no path), any port,
+    /// or the host and port of the provisioner's `listenAddress`. The
+    /// callback server only listens on loopback, so a wildcard or remote
+    /// host falls back to 127.0.0.1.
+    static func stepCA(host: String?, port: UInt16?) -> LoopbackRedirect {
+        let loopbackHosts: Set<String> = ["localhost", "127.0.0.1", "[::1]"]
+        let host = host.map { $0.lowercased() }.flatMap { loopbackHosts.contains($0) ? $0 : nil } ?? "127.0.0.1"
+        return LoopbackRedirect(host: host, handlerPath: "/", uriPath: "", ports: [port ?? 0])
+    }
+}
+
+/// Browser-based OIDC authorization-code + PKCE flow and the refresh-token
+/// grant, shared by OpenPubkey and Smallstep identities. The caller picks the
+/// nonce (OpenPubkey commits it to the CIC; step-ca uses a random one) and
+/// the loopback redirect its client registration allows.
 @MainActor
-final class OpenPubkeyClient {
+final class OIDCLoginClient {
     private nonisolated static let logger = Logger(
         subsystem: "com.rootshell",
-        category: "OpenPubkeyClient"
+        category: "OIDCLoginClient"
     )
 
     enum ClientError: LocalizedError {
@@ -34,7 +63,7 @@ final class OpenPubkeyClient {
             case .discoveryFailed(let issuer):
                 return "OIDC discovery failed for \(issuer)"
             case .loopbackPortUnavailable:
-                return "Could not start the sign-in callback server (ports 3000, 10001 and 11110 are all in use)"
+                return "Could not start the sign-in callback server because its port is in use"
             case .authorizationFailed(let detail):
                 return "Sign-in failed: \(detail)"
             case .tokenExchangeFailed(let detail):
@@ -42,7 +71,7 @@ final class OpenPubkeyClient {
             case .missingIDToken:
                 return "The provider did not return an ID token"
             case .nonceMismatch:
-                return "The returned ID token does not commit to this key (nonce mismatch)"
+                return "The returned ID token does not match this sign-in (nonce mismatch)"
             case .cancelled:
                 return "Sign-in was cancelled"
             }
@@ -74,36 +103,38 @@ final class OpenPubkeyClient {
 
     private let webAuthProvider = ASWebAuthSessionProvider()
 
-    /// Full browser sign-in. The CIC's nonce is sent as the OIDC nonce so
-    /// the ID token commits to the ephemeral key.
-    func login(provider: OIDCProviderConfig, cic: OpenPubkeyCIC) async throws -> Tokens {
+    /// Full browser sign-in. The returned ID token must carry `nonce`.
+    func login(
+        provider: OIDCProviderConfig,
+        nonce: String,
+        redirect: LoopbackRedirect,
+        extraAuthParams: [URLQueryItem] = []
+    ) async throws -> Tokens {
         let discovery = try await OIDCDiscoveryDocument.fetch(issuer: provider.issuer)
 
         // PKCE + state
-        var verifierBytes = [UInt8](repeating: 0, count: 32)
-        _ = SecRandomCopyBytes(kSecRandomDefault, verifierBytes.count, &verifierBytes)
-        let codeVerifier = Data(verifierBytes).base64URLEncodedString()
+        let codeVerifier = Self.randomBase64URL(byteCount: 32)
         let codeChallenge = Data(SHA256.hash(data: Data(codeVerifier.utf8))).base64URLEncodedString()
-        var stateBytes = [UInt8](repeating: 0, count: 16)
-        _ = SecRandomCopyBytes(kSecRandomDefault, stateBytes.count, &stateBytes)
-        let state = Data(stateBytes).base64URLEncodedString()
+        let state = Self.randomBase64URL(byteCount: 16)
 
-        // The opkssh client registrations fix both the ports and the path.
-        // Bind a listener FIRST (falling back through the registered ports),
-        // so the browser is only ever sent to a redirect URI that something
-        // is actually listening on.
+        // Bind a listener FIRST, so the browser is only ever sent to a
+        // redirect URI that something is actually listening on.
         var boundServer: OAuthCallbackServer?
         var boundPort: UInt16 = 0
-        for port in OIDCProviderConfig.redirectPorts {
+        for port in redirect.ports {
             let server = OAuthCallbackServer(
                 port: port,
                 redirectURLScheme: "rootshell",
-                callbackPath: OIDCProviderConfig.redirectPath
+                callbackPath: redirect.handlerPath
             )
             do {
                 try await server.start()
+                guard let actual = await server.boundPort, actual != 0 else {
+                    await server.stop()
+                    continue
+                }
                 boundServer = server
-                boundPort = port
+                boundPort = actual
                 break
             } catch {
                 Self.logger.warning("Loopback port \(port) unavailable: \(error.localizedDescription)")
@@ -113,9 +144,13 @@ final class OpenPubkeyClient {
             throw ClientError.loopbackPortUnavailable
         }
 
-        let redirectURI = "http://localhost:\(boundPort)\(OIDCProviderConfig.redirectPath)"
-        var components = URLComponents(url: discovery.authorizationEndpoint, resolvingAgainstBaseURL: false)!
-        components.queryItems = [
+        let redirectURI = "http://\(redirect.host):\(boundPort)\(redirect.uriPath)"
+        guard var components = URLComponents(url: discovery.authorizationEndpoint, resolvingAgainstBaseURL: false) else {
+            await server.stop()
+            throw ClientError.invalidIssuer(provider.issuer)
+        }
+        var queryItems = components.queryItems ?? []
+        queryItems += [
             URLQueryItem(name: "client_id", value: provider.clientID),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
             URLQueryItem(name: "response_type", value: "code"),
@@ -123,10 +158,10 @@ final class OpenPubkeyClient {
             URLQueryItem(name: "state", value: state),
             URLQueryItem(name: "code_challenge", value: codeChallenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
-            URLQueryItem(name: "nonce", value: cic.nonce),
-            URLQueryItem(name: "access_type", value: "offline"),
-            URLQueryItem(name: "prompt", value: "consent"),
+            URLQueryItem(name: "nonce", value: nonce),
         ]
+        queryItems += extraAuthParams
+        components.queryItems = queryItems
         guard let authorizationURL = components.url else {
             await server.stop()
             throw ClientError.invalidIssuer(provider.issuer)
@@ -144,7 +179,7 @@ final class OpenPubkeyClient {
                 redirectURI: redirectURI,
                 provider: provider,
                 tokenEndpoint: discovery.tokenEndpoint,
-                expectedNonce: cic.nonce
+                expectedNonce: nonce
             )
         } catch ASWebAuthSessionProvider.SessionError.userCancelled {
             throw ClientError.cancelled
@@ -158,7 +193,7 @@ final class OpenPubkeyClient {
     }
 
     /// Silent renewal via the refresh-token grant. The fresh ID token has no
-    /// nonce requirement; the verifier checks subject and freshness instead.
+    /// nonce requirement; callers check subject and freshness instead.
     func refresh(provider: OIDCProviderConfig, refreshToken: String) async throws -> Tokens {
         let discovery = try await OIDCDiscoveryDocument.fetch(issuer: provider.issuer)
 
@@ -183,10 +218,17 @@ final class OpenPubkeyClient {
         )
     }
 
+    /// Random bytes, base64url-encoded (PKCE verifier, state, step-ca nonce).
+    nonisolated static func randomBase64URL(byteCount: Int) -> String {
+        var bytes = [UInt8](repeating: 0, count: byteCount)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        return Data(bytes).base64URLEncodedString()
+    }
+
     // MARK: - Internals
 
     /// Starts the loopback server and the browser session concurrently; the
-    /// browser lands on localhost, which 302s to rootshell:// so the
+    /// browser lands on the loopback URL, which 302s to rootshell:// so the
     /// ASWebAuthenticationSession completes. The code is taken from the
     /// server's parse (it validated state already).
     private func runBrowserFlow(
@@ -237,7 +279,6 @@ final class OpenPubkeyClient {
             throw ClientError.missingIDToken
         }
 
-        // Client-side sanity check: the ID token must commit to our CIC.
         let segments = try OpenPubkeyJOSE.split(compactJWS: idToken)
         let claims = try OpenPubkeyJOSE.decodeIDTokenClaims(payloadB64: segments.payloadB64)
         guard claims.nonce == expectedNonce else {
@@ -255,6 +296,7 @@ final class OpenPubkeyClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = body
             .map { key, value in
                 let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
@@ -275,5 +317,44 @@ final class OpenPubkeyClient {
             throw ClientError.tokenExchangeFailed(detail)
         }
         return try JSONDecoder().decode(TokenEndpointResponse.self, from: data)
+    }
+}
+
+/// The subset of the OIDC discovery document the login flow needs.
+nonisolated struct OIDCDiscoveryDocument: Decodable, Sendable {
+    let authorizationEndpoint: URL
+    let tokenEndpoint: URL
+
+    enum CodingKeys: String, CodingKey {
+        case authorizationEndpoint = "authorization_endpoint"
+        case tokenEndpoint = "token_endpoint"
+    }
+
+    /// `issuer` is either an issuer URL or a full discovery URL (step-ca
+    /// provisioners publish `configurationEndpoint`).
+    static func fetch(issuer: String) async throws -> OIDCDiscoveryDocument {
+        guard let url = discoveryURL(for: issuer), url.scheme?.lowercased() == "https" else {
+            throw OIDCLoginClient.ClientError.invalidIssuer(issuer)
+        }
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw OIDCLoginClient.ClientError.discoveryFailed(issuer)
+        }
+        let document = try JSONDecoder().decode(OIDCDiscoveryDocument.self, from: data)
+        // The code, verifier and client secret travel to these endpoints.
+        guard document.authorizationEndpoint.scheme?.lowercased() == "https",
+              document.tokenEndpoint.scheme?.lowercased() == "https" else {
+            throw OIDCLoginClient.ClientError.discoveryFailed(issuer)
+        }
+        return document
+    }
+
+    static func discoveryURL(for issuer: String) -> URL? {
+        let wellKnown = "/.well-known/openid-configuration"
+        if issuer.contains(wellKnown) {
+            return URL(string: issuer)
+        }
+        let base = issuer.hasSuffix("/") ? String(issuer.dropLast()) : issuer
+        return URL(string: base + wellKnown)
     }
 }
