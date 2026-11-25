@@ -10,6 +10,137 @@ struct KeyboardInteractivePrompt: Sendable, Hashable {
     /// Whether the typed response should be echoed. `false` for secrets
     /// (passwords, one-time codes); `true` for visible fields.
     let echo: Bool
+
+    /// Server text above the input line. OpenSSH's PAM bridge prepends info
+    /// messages (QR codes, login URLs) to the prompt, so only the text after
+    /// the last newline labels the field.
+    var message: String { KeyboardInteractiveText.split(prompt).message }
+
+    /// The field label; empty when the prompt ends in a newline.
+    var label: String { KeyboardInteractiveText.split(prompt).label }
+
+    /// The label decides; the message only when the label names no kind
+    /// (empty, or generic like "Response:"), so QR or URL text can't override it.
+    var secretKind: KeyboardInteractiveSecretKind {
+        let parts = KeyboardInteractiveText.split(prompt)
+        return .signal(parts.label) ?? .signal(parts.message) ?? .password
+    }
+
+    /// http(s) URLs anywhere in the prompt, the label line included.
+    var urls: [URL] {
+        let parts = KeyboardInteractiveText.split(prompt)
+        return SSHBanner.extractHTTPURLs(from: parts.message + "\n" + parts.label)
+    }
+}
+
+/// Splits server-supplied keyboard-interactive text into sanitized display parts.
+nonisolated enum KeyboardInteractiveText {
+    static func split(_ raw: String) -> (message: String, label: String) {
+        let normalized = paintingANSIBackgrounds(raw)
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        guard let newline = normalized.lastIndex(of: "\n") else {
+            return ("", SSHBanner.terminalSafe(normalized))
+        }
+        let message = SSHBanner.plainText(String(normalized[..<newline]), trimsIndentation: false)
+        let label = SSHBanner.terminalSafe(String(normalized[normalized.index(after: newline)...]))
+        // "Verification code:\n" is still just a label.
+        if label.isEmpty, !message.contains("\n") {
+            return ("", SSHBanner.terminalSafe(message))
+        }
+        return (message, label)
+    }
+
+    /// Instruction text keeps its line layout (text-art must not reflow).
+    static func message(_ raw: String) -> String {
+        SSHBanner.plainText(paintingANSIBackgrounds(raw), trimsIndentation: false)
+    }
+
+    /// QR codes drawn as spaces on colored backgrounds would vanish when
+    /// `plainText` strips SGR, so spaces on a dark background become `█`
+    /// first. Only rows whose visible text is all spaces and block glyphs are
+    /// converted, so colored prose keeps the spaces that delimit its URLs.
+    /// The SGR sequences stay for `plainText` to strip.
+    static func paintingANSIBackgrounds(_ raw: String) -> String {
+        guard raw.contains("\u{1B}[") else { return raw }
+        // "\r\n" is one Character, so normalize before splitting into rows.
+        let normalized = raw
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        var dark = false
+        let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map { line in
+            let scalars = Array(line.unicodeScalars)
+            var painted = String.UnicodeScalarView()
+            var isArtRow = true
+            var i = 0
+            while i < scalars.count {
+                if scalars[i] == "\u{1B}", i + 1 < scalars.count, scalars[i + 1] == "[" {
+                    var end = i + 2
+                    while end < scalars.count, !(0x40...0x7E).contains(scalars[end].value) { end += 1 }
+                    guard end < scalars.count else { break }
+                    if scalars[end] == "m" {
+                        let params = String(String.UnicodeScalarView(scalars[(i + 2)..<end]))
+                        dark = applySGR(params, dark: dark)
+                    }
+                    painted.append(contentsOf: scalars[i...end])
+                    i = end + 1
+                    continue
+                }
+                let scalar = scalars[i]
+                if scalar != " ", !(0x2580...0x259F).contains(scalar.value) {
+                    isArtRow = false
+                }
+                painted.append(dark && scalar == " " ? "\u{2588}" : scalar)
+                i += 1
+            }
+            return isArtRow ? String(painted) : String(line)
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Tracks whether the SGR background is dark (by luminance); other
+    /// attributes are skipped, including 38;5;n and 38;2;r;g;b operands.
+    private static func applySGR(_ params: String, dark: Bool) -> Bool {
+        let codes = params.split(separator: ";", omittingEmptySubsequences: false).map { Int($0) ?? 0 }
+        var dark = dark
+        var k = 0
+        while k < codes.count {
+            switch codes[k] {
+            case 0, 49: dark = false
+            case 40...47: dark = isDarkPalette(codes[k] - 40)
+            case 100...107: dark = isDarkPalette(codes[k] - 100 + 8)
+            case 38, 48:
+                let isBackground = codes[k] == 48
+                if k + 2 < codes.count, codes[k + 1] == 5 {
+                    if isBackground { dark = isDarkPalette(codes[k + 2]) }
+                    k += 2
+                } else if k + 4 < codes.count, codes[k + 1] == 2 {
+                    if isBackground { dark = isDark(r: codes[k + 2], g: codes[k + 3], b: codes[k + 4]) }
+                    k += 4
+                }
+            default: break
+            }
+            k += 1
+        }
+        return dark
+    }
+
+    /// xterm 256-color palette: 16 system colors, 6x6x6 cube, gray ramp.
+    private static func isDarkPalette(_ n: Int) -> Bool {
+        switch n {
+        case 0..<16: return [0, 1, 4, 5, 8].contains(n)
+        case 16...231:
+            let levels = [0, 95, 135, 175, 215, 255]
+            let c = n - 16
+            return isDark(r: levels[c / 36], g: levels[(c / 6) % 6], b: levels[c % 6])
+        case 232...255: return n < 244
+        default: return false
+        }
+    }
+
+    private static func isDark(r: Int, g: Int, b: Int) -> Bool {
+        0.2126 * Double(r) + 0.7152 * Double(g) + 0.0722 * Double(b) < 128
+    }
 }
 
 /// Semantic classification of a no-echo keyboard-interactive prompt, derived
@@ -23,13 +154,18 @@ enum KeyboardInteractiveSecretKind: Sendable {
     /// "password"); otherwise password-like; otherwise default to `.password`
     /// so the OS password manager remains reachable for unrecognised secrets.
     static func classify(_ promptText: String) -> KeyboardInteractiveSecretKind {
+        signal(promptText) ?? .password
+    }
+
+    /// The kind the text names, or nil when it names neither.
+    static func signal(_ promptText: String) -> KeyboardInteractiveSecretKind? {
         let t = promptText.lowercased()
         let otp = ["one-time", "one time", "onetime", "otp", "totp", "hotp",
                    "verification", "authenticator", "two-factor", "two factor",
                    "2fa", "token", "duo", "passcode", "yubikey", "security code"]
         if otp.contains(where: t.contains) { return .oneTimeCode }
         if t.contains("password") || t.contains("passphrase") { return .password }
-        return .password
+        return nil
     }
 }
 
@@ -49,6 +185,9 @@ struct KeyboardInteractiveChallenge: Sendable {
     let instruction: String
     /// The prompts to present, in order. May be empty (information-only round).
     let prompts: [KeyboardInteractivePrompt]
+
+    /// `instruction`, sanitized for native display with its lines intact.
+    var instructionMessage: String { KeyboardInteractiveText.message(instruction) }
 }
 
 /// Thrown to abort keyboard-interactive auth when the user cancels.
@@ -191,15 +330,25 @@ nonisolated final class KeyboardInteractiveAuthDelegate: NIOSSHClientUserAuthent
 
         // Auto-answer OpenSSH-style: a single hidden prompt with a stored/typed
         // password. One-shot, so a later round (e.g. an OTP) still prompts.
-        if let password = autoAnswerPassword, prompts.count == 1, prompts[0].echo == false {
+        // Never when the round carries server text the sheet would show (a QR
+        // code, instruction or login link the user must see before answering).
+        // The label must positively name a password: an ambiguous "Code:" is
+        // left to the user rather than risk sending the password as an OTP.
+        let mappedPrompts = prompts.map { KeyboardInteractivePrompt(prompt: String($0.prompt), echo: $0.echo) }
+        if let password = autoAnswerPassword, mappedPrompts.count == 1, !mappedPrompts[0].echo,
+           KeyboardInteractiveSecretKind.signal(mappedPrompts[0].label) == .password,
+           mappedPrompts[0].message.isEmpty, mappedPrompts[0].urls.isEmpty,
+           KeyboardInteractiveText.message(instruction).isEmpty {
             autoAnswerPassword = nil
             Self.logger.info("Auto-answering single hidden keyboard-interactive prompt with stored password")
             responsePromise.succeed([password])
             return
         }
+        // A round the user answers consumes the one-shot password too, so a
+        // later "Verification code:" round can never receive it.
+        autoAnswerPassword = nil
 
         // Copy to Sendable value types before crossing to the MainActor.
-        let mappedPrompts = prompts.map { KeyboardInteractivePrompt(prompt: String($0.prompt), echo: $0.echo) }
         let challenge = KeyboardInteractiveChallenge(
             sessionName: String(sessionName),
             username: String(username),

@@ -26,10 +26,16 @@ extension InitialConnectRetry {
 
         if let ssh = error as? SSHError, ssh.isAuthenticationRelated { return true }
 
+        // The user cancelled the keyboard-interactive sheet; a retry would
+        // just ask again.
+        if error is KeyboardInteractiveCancelledError { return true }
+
         if let jump = error as? SSHJumpError {
             switch jump {
             case .authenticationFailed, .hostKeyRejected:
                 return true
+            case .jumpConnectionFailed(_, let underlying), .targetConnectionFailed(_, let underlying):
+                return underlying is KeyboardInteractiveCancelledError
             default:
                 return false
             }

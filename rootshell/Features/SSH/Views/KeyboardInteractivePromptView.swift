@@ -54,27 +54,21 @@ struct KeyboardInteractivePromptView: View {
                         }
                     }
                     .themedRow()
+
+                    let instruction = challenge.instructionMessage
+                    if !instruction.isEmpty {
+                        serverMessageRow(instruction, urls: SSHBanner.extractHTTPURLs(from: instruction))
+                    }
                 } header: {
                     Text("Connection")
-                } footer: {
-                    if !challenge.instruction.isEmpty {
-                        Text(challenge.instruction)
-                    }
                 }
 
                 if let bannerState {
                     Section {
                         SSHAuthBannerContentView(
                             state: bannerState,
-                            onOpenURL: { url in
-                                UIApplication.shared.open(url)
-                            },
-                            onCopyURL: { url in
-                                UIPasteboard.general.string = url.absoluteString
-                                ClipboardHistoryManager.shared.record(
-                                    url.absoluteString, source: .copyLink
-                                )
-                            }
+                            onOpenURL: openURL,
+                            onCopyURL: copyURL
                         )
                         .themedRow()
                     } header: {
@@ -92,6 +86,10 @@ struct KeyboardInteractivePromptView: View {
                 } else {
                     Section {
                         ForEach(challenge.prompts.indices, id: \.self) { index in
+                            let prompt = challenge.prompts[index]
+                            if !prompt.message.isEmpty || !prompt.urls.isEmpty {
+                                serverMessageRow(prompt.message, urls: prompt.urls)
+                            }
                             promptField(index: index)
                         }
                     } header: {
@@ -114,7 +112,8 @@ struct KeyboardInteractivePromptView: View {
                 }
             }
             .onAppear {
-                guard !challenge.prompts.isEmpty else { return }
+                // The keyboard would cover a QR code or link the user must act on first.
+                guard !challenge.prompts.isEmpty, !hasServerMessage else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     focusedIndex = 0
                 }
@@ -129,6 +128,33 @@ struct KeyboardInteractivePromptView: View {
         .presentationDragIndicator(.visible)
     }
 
+    private var hasServerMessage: Bool {
+        !challenge.instructionMessage.isEmpty
+            || challenge.prompts.contains { !$0.message.isEmpty || !$0.urls.isEmpty }
+    }
+
+    private func openURL(_ url: URL) {
+        UIApplication.shared.open(url)
+    }
+
+    private func copyURL(_ url: URL) {
+        UIPasteboard.general.string = url.absoluteString
+        ClipboardHistoryManager.shared.record(url.absoluteString, source: .copyLink)
+    }
+
+    /// Server text plus Open/Copy actions for each http(s) URL it carries.
+    private func serverMessageRow(_ message: String, urls: [URL]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !message.isEmpty {
+                ServerMessageText(text: message)
+            }
+            ForEach(urls, id: \.absoluteString) { url in
+                SSHAuthBannerURLRow(url: url, onOpenURL: openURL, onCopyURL: copyURL)
+            }
+        }
+        .themedRow()
+    }
+
     /// Index of the first password-like (no-echo) prompt, if any. The hidden
     /// username AutoFill anchor is attached to this field so the OS password
     /// manager can match the saved credential. Nil for OTP-only challenges,
@@ -136,7 +162,7 @@ struct KeyboardInteractivePromptView: View {
     private var usernameAnchorIndex: Int? {
         guard !challenge.username.isEmpty else { return nil }
         return challenge.prompts.firstIndex {
-            !$0.echo && KeyboardInteractiveSecretKind.classify($0.prompt) == .password
+            !$0.echo && $0.secretKind == .password
         }
     }
 
@@ -153,22 +179,36 @@ struct KeyboardInteractivePromptView: View {
             .allowsHitTesting(false)
     }
 
-    @ViewBuilder
+    /// The label is the placeholder when it fits on one line; otherwise it
+    /// wraps as text above the field instead of truncating.
     private func promptField(index: Int) -> some View {
+        let label = challenge.prompts[index].label
+        return ViewThatFits(in: .horizontal) {
+            promptInput(index: index, placeholder: label.isEmpty ? "Response" : label)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(verbatim: label)
+                    .font(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+                promptInput(index: index, placeholder: "Response")
+            }
+        }
+        .themedRow()
+    }
+
+    @ViewBuilder
+    private func promptInput(index: Int, placeholder: String) -> some View {
         let prompt = challenge.prompts[index]
-        let label = prompt.prompt.isEmpty ? "Response" : prompt.prompt
         Group {
             if prompt.echo {
-                TextField(label, text: $responses[index])
+                TextField(placeholder, text: $responses[index])
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             } else {
                 // Hidden field. Pick the AutoFill content type from the prompt
                 // text: `.password` surfaces the OS password-manager key,
                 // `.oneTimeCode` surfaces the 2FA/OTP suggestion strip.
-                SecureField(label, text: $responses[index])
-                    .textContentType(KeyboardInteractiveSecretKind.classify(prompt.prompt) == .password
-                                     ? .password : .oneTimeCode)
+                SecureField(placeholder, text: $responses[index])
+                    .textContentType(prompt.secretKind == .password ? .password : .oneTimeCode)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .background { if index == usernameAnchorIndex { usernameAnchor } }
@@ -183,6 +223,110 @@ struct KeyboardInteractivePromptView: View {
                 onSubmit(responses)
             }
         }
-        .themedRow()
+    }
+}
+
+/// Server text with any text-art kept on its grid. Runs of lines holding
+/// block, box-drawing or braille glyphs (a terminal QR code) render in Menlo,
+/// unwrapped, shrunk so the widest art line fits the row, scrolling sideways
+/// below the minimum size. Menlo's block glyphs are one cell wide and fill the
+/// line height, so QR modules stay square and gapless. Prose keeps Dynamic Type.
+private struct ServerMessageText: View {
+    let text: String
+
+    @State private var width: CGFloat = 0
+
+    private enum Segment {
+        case prose(String)
+        case art(String)
+    }
+
+    private static let fontName = "Menlo-Regular"
+    private static let defaultSize: CGFloat = 12
+    private static let minimumSize: CGFloat = 6
+
+    private static let advancePerPoint: CGFloat = {
+        let font = UIFont(name: fontName, size: 100) ?? .monospacedSystemFont(ofSize: 100, weight: .regular)
+        return ("0" as NSString).size(withAttributes: [.font: font]).width / 100
+    }()
+
+    private static func isArt(_ line: Substring) -> Bool {
+        line.unicodeScalars.contains {
+            (0x2500...0x259F).contains($0.value) || (0x2800...0x28FF).contains($0.value)
+        }
+    }
+
+    /// Blank lines between art lines stay in the art run so the grid holds;
+    /// blank lines at prose edges are dropped in favor of stack spacing.
+    private static func segments(_ text: String) -> [Segment] {
+        var segments: [Segment] = []
+        var prose: [Substring] = []
+        var art: [Substring] = []
+        // Blank lines after an art line; they join the run only if art resumes.
+        var blanks: [Substring] = []
+        func flushProse() {
+            let joined = prose.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !joined.isEmpty { segments.append(.prose(joined)) }
+            prose = []
+        }
+        func closeArt() {
+            guard !art.isEmpty else { return }
+            segments.append(.art(art.joined(separator: "\n")))
+            art = []
+            prose = blanks
+            blanks = []
+        }
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            if isArt(line) {
+                if art.isEmpty { flushProse() }
+                art += blanks
+                blanks = []
+                art.append(line)
+            } else if !art.isEmpty, line.allSatisfy(\.isWhitespace) {
+                blanks.append(line)
+            } else {
+                closeArt()
+                prose.append(line)
+            }
+        }
+        closeArt()
+        flushProse()
+        return segments
+    }
+
+    /// One size for every art run, from the widest art line in the message.
+    private func artFontSize(_ segments: [Segment]) -> CGFloat {
+        let columns = segments.compactMap { segment -> Int? in
+            guard case .art(let art) = segment else { return nil }
+            return art.split(separator: "\n").map(\.count).max()
+        }.max() ?? 0
+        guard columns > 0, width > 0 else { return Self.defaultSize }
+        let fit = (width - 1) / (CGFloat(columns) * Self.advancePerPoint)
+        return min(Self.defaultSize, max(Self.minimumSize, (fit * 4).rounded(.down) / 4))
+    }
+
+    var body: some View {
+        let segments = Self.segments(text)
+        let artSize = artFontSize(segments)
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(segments.indices, id: \.self) { index in
+                switch segments[index] {
+                case .prose(let prose):
+                    Text(verbatim: prose)
+                        .font(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .art(let art):
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        Text(verbatim: art)
+                            .font(.custom(Self.fontName, fixedSize: artSize))
+                            .fixedSize()
+                    }
+                    .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .textSelection(.enabled)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 }

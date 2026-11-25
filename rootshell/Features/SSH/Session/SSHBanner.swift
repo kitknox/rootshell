@@ -55,7 +55,9 @@ nonisolated enum SSHBanner {
     /// sequences are stripped — including SGR — because native views render
     /// plain text. Keeps printable Unicode and TAB, drops C0/C1 controls and
     /// DEL, normalizes line endings to `\n`, and trims surrounding whitespace.
-    static func plainText(_ raw: String) -> String {
+    /// `trimsIndentation: false` trims only surrounding newlines, keeping the
+    /// first line's leading spaces (text-art such as QR codes).
+    static func plainText(_ raw: String, trimsIndentation: Bool = true) -> String {
         guard !raw.isEmpty else { return "" }
         var normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
         normalized = normalized.replacingOccurrences(of: "\r", with: "\n")
@@ -80,7 +82,7 @@ nonisolated enum SSHBanner {
             return String(out)
         }
         return lines.joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: trimsIndentation ? .whitespacesAndNewlines : .newlines)
     }
 
     /// A server-supplied name or message interpolated into terminal output (error text, remote

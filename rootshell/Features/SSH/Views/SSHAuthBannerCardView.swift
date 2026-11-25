@@ -176,15 +176,22 @@ struct SSHAuthBannerContentView: View {
                     }
                     SelectableBannerText(text: entry.item.text)
                     ForEach(entry.urls, id: \.absoluteString) { url in
-                        urlRow(url)
+                        SSHAuthBannerURLRow(url: url, onOpenURL: onOpenURL, onCopyURL: onCopyURL)
                     }
                 }
             }
         }
     }
+}
 
-    @ViewBuilder
-    private func urlRow(_ url: URL) -> some View {
+/// A server-provided URL with explicit Open and Copy actions. Shared with the
+/// keyboard-interactive sheet for URLs carried in prompt text.
+struct SSHAuthBannerURLRow: View {
+    let url: URL
+    let onOpenURL: (URL) -> Void
+    let onCopyURL: (URL) -> Void
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(verbatim: url.absoluteString)
                 .font(.system(size: 11, design: .monospaced))
