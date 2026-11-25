@@ -158,6 +158,13 @@ extension MainView {
         closeHTTPCapture()
     }
 
+    /// The window's side rail carries the open panel's actions (Duo's inner display).
+    /// The file manager and git diff have the rail first.
+    var httpCaptureActionsInRail: Bool {
+        showsDuoSideRail && !fileManagerActionsInRail && !gitDiffActionsInRail
+            && (httpCaptureShowsSidebar || httpCaptureShowsOverlay)
+    }
+
     // MARK: - Views
 
     @ViewBuilder
@@ -169,6 +176,7 @@ extension MainView {
                 isDragging: $httpCaptureSidebarIsDragging,
                 totalWidth: totalWidth,
                 theme: resolvedSheetTheme(),
+                actionsInRail: httpCaptureActionsInRail,
                 onClose: { closeHTTPCapture() },
                 onSwitchPresentation: { switchHTTPCapturePresentation($0) }
             )
@@ -187,7 +195,8 @@ extension MainView {
                 theme: resolvedSheetTheme(),
                 onClose: { closeHTTPCapture() },
                 onSwitchPresentation: { switchHTTPCapturePresentation($0) },
-                integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs ? integratedTabJoin : nil
+                integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs ? integratedTabJoin : nil,
+                actionsInRail: httpCaptureActionsInRail
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // A fresh host per presentation; the HUD host sets up dragging and resizing once.

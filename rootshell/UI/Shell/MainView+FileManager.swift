@@ -24,6 +24,11 @@ extension MainView {
         showFileManager && (isPhone || fileManagerPresentation.ownsKeyboard)
     }
 
+    /// The window's side rail carries the open panel's touch actions (Duo's inner display).
+    var fileManagerActionsInRail: Bool {
+        showsDuoSideRail && (fileManagerShowsSidebar || fileManagerShowsOverlay)
+    }
+
     var fileManagerSidebarCurrentWidth: CGFloat {
         fileManagerShowsSidebar ? fileManagerSidebarWidth : 0
     }
@@ -213,7 +218,7 @@ extension MainView {
 
     /// The docked column, placed beside the AI sidebar when both are open.
     @ViewBuilder
-    func fileManagerSidebarColumn(width: CGFloat, totalWidth: CGFloat) -> some View {
+    func fileManagerSidebarColumn(width: CGFloat, totalWidth: CGFloat, bottomClearance: CGFloat = 0) -> some View {
         if fileManagerShowsSidebar, let model = fileManagerModel {
             FileManagerSidebarView(
                 manager: model,
@@ -222,6 +227,8 @@ extension MainView {
                 totalWidth: totalWidth,
                 canFocus: showFileManager,
                 theme: resolvedSheetTheme(),
+                actionsInRail: fileManagerActionsInRail,
+                bottomClearance: bottomClearance,
                 onClose: { closeFileManager() },
                 onSwitchPresentation: { switchFileManagerPresentation($0) }
             )
@@ -242,7 +249,8 @@ extension MainView {
                 theme: resolvedSheetTheme(),
                 onClose: { closeFileManager() },
                 onSwitchPresentation: { switchFileManagerPresentation($0) },
-                integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs ? integratedTabJoin : nil
+                integratedTabJoin: integratedTabsJoinCards && showsHorizontalTabs ? integratedTabJoin : nil,
+                actionsInRail: fileManagerActionsInRail
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // A fresh host per presentation; the HUD host sets up dragging and resizing once.
@@ -285,13 +293,19 @@ struct FileManagerPhoneSheetModifier: ViewModifier {
     func body(content: Content) -> some View {
         content.sheet(isPresented: $isPresented) {
             if let model {
-                FileManagerView(
-                    manager: model,
-                    style: .sheet,
-                    canFocus: isPresented,
-                    onClose: onClose,
-                    onSwitchPresentation: nil
-                )
+                PanelSheetNavigation {
+                    PanelSideRailReader { inRail in
+                        FileManagerView(
+                            manager: model,
+                            style: .sheet,
+                            canFocus: isPresented,
+                            onClose: onClose,
+                            onSwitchPresentation: nil,
+                            actionsInRail: inRail
+                        )
+                        .modifier(FileManagerSheetRail(active: inRail, manager: model, onClose: onClose))
+                    }
+                }
                 .presentationDetents([.large])
                 .themedSheet(themeColors: sheetTheme.themeColors, accentColor: sheetTheme.accentColor, colorScheme: sheetTheme.colorScheme)
             }

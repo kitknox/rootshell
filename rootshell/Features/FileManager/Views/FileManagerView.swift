@@ -34,6 +34,8 @@ struct FileManagerView: View {
     let onClose: () -> Void
     /// Switches between presentations; nil where only one presentation exists.
     let onSwitchPresentation: ((PanelPresentation) -> Void)?
+    /// A side rail carries the touch actions: the window's rail, or the sheet's own.
+    var actionsInRail = false
 
     @State private var highlightsShortcutsTip = false
     @Environment(\.sheetThemeColors) private var sheetThemeColors
@@ -45,23 +47,37 @@ struct FileManagerView: View {
         GeometryReader { geometry in
             let dual = geometry.size.width >= Self.dualPaneMinWidth
             let paneWidth = dual ? geometry.size.width / 2 : geometry.size.width
+            let chrome = self.chrome
             VStack(spacing: 0) {
-                header
-                Divider()
+                if chrome == .pointer {
+                    header
+                    Divider()
+                } else if !(dual && chrome == .rail) {
+                    // The rail holds every header action; one pane still needs its switcher.
+                    touchHeader(dual: dual, chrome: chrome)
+                    Divider()
+                }
                 if dual {
                     HStack(spacing: 0) {
-                        paneView(.left, width: paneWidth)
+                        paneView(.left, width: paneWidth, chrome: chrome, dual: true)
                         Divider()
-                        paneView(.right, width: paneWidth)
+                        paneView(.right, width: paneWidth, chrome: chrome, dual: true)
                     }
                 } else {
-                    paneSwitcher
-                    Divider()
-                    paneView(manager.activeSide, width: paneWidth)
+                    if chrome == .pointer {
+                        paneSwitcher
+                        Divider()
+                    }
+                    paneView(manager.activeSide, width: paneWidth, chrome: chrome, dual: false)
                 }
                 ActiveEditsBarView(manager: manager)
                 TransferQueueView(manager: manager)
-                hintBar
+                if chrome == .touch && !dual {
+                    Divider()
+                    FileManagerTouchBar(manager: manager)
+                } else if chrome == .pointer || KeyboardTracker.shared.isHardwareKeyboard {
+                    hintBar
+                }
             }
         }
         // The sidebar paints its own themed fill; the iPhone sheet needs one here.
@@ -127,6 +143,12 @@ struct FileManagerView: View {
             Text(manager.errorMessage ?? "")
         }
         .onAppear(perform: appeared)
+        .onChange(of: chrome == .pointer, initial: true) { _, pointer in
+            // The keyboard layout has no Done; a held Select mode would eat every click.
+            guard pointer else { return }
+            manager.left.isSelecting = false
+            manager.right.isSelecting = false
+        }
         .onChange(of: manager.sheet == nil) { _, dismissed in
             // Hand the keyboard back to the list after any sheet closes.
             if dismissed { manager.requestFocus() }
@@ -142,7 +164,12 @@ struct FileManagerView: View {
             || manager.activityShareRequest != nil
     }
 
-    private func paneView(_ side: FilePaneModel.Side, width: CGFloat) -> some View {
+    private var chrome: FileManagerChrome {
+        if actionsInRail { return .rail }
+        return FileManagerInput.usesPointerSemantics ? .pointer : .touch
+    }
+
+    private func paneView(_ side: FilePaneModel.Side, width: CGFloat, chrome: FileManagerChrome, dual: Bool) -> some View {
         FilePaneView(
             pane: manager.pane(side),
             manager: manager,
@@ -150,6 +177,11 @@ struct FileManagerView: View {
             canFocus: canFocus && !hasPresentedSheet,
             columns: width >= Self.detailedColumnsMinPaneWidth ? .detailed : .compact,
             otherPaneName: manager.pane(side.other).endpoint.displayName,
+            chrome: chrome,
+            // One touch pane names its location in the switcher above it.
+            showsEndpoint: dual || chrome == .pointer,
+            // Side by side, each pane carries its own bar so it is clear which one it moves.
+            showsTouchBar: dual && chrome == .touch,
             onClose: onClose
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -179,6 +211,78 @@ struct FileManagerView: View {
         .buttonStyle(.borderless)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    /// Touch: one pane's switcher doubles as the title row. Buttons get 44pt hit areas.
+    private func touchHeader(dual: Bool, chrome: FileManagerChrome) -> some View {
+        HStack(spacing: 2) {
+            if dual {
+                Image(systemName: "folder.badge.gearshape").foregroundStyle(Color.accentColor)
+                Text("Files").font(.headline)
+                Spacer(minLength: 4)
+            } else {
+                touchPaneSwitcher
+            }
+            if chrome == .touch {
+                if let onSwitchPresentation, let current = style.presentation {
+                    PanelPresentationMenu(current: current, onSwitch: onSwitchPresentation, touchSized: true)
+                        .equatable()
+                }
+                FileManagerMoreMenu(manager: manager, touchSized: true)
+                    .equatable()
+                Button(action: onClose) {
+                    Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary)
+                        .panelTouchTarget()
+                }
+                .accessibilityLabel(String(localized: "Close File Manager", comment: "File manager close button"))
+            }
+        }
+        .buttonStyle(.borderless)
+        .padding(.leading, dual ? 14 : 10)
+        .padding(.trailing, chrome == .touch ? 4 : 10)
+        .padding(.vertical, chrome == .touch ? 0 : 2)
+    }
+
+    /// Tapping the other pane switches to it; tapping the current one picks its location.
+    private var touchPaneSwitcher: some View {
+        HStack(spacing: 6) {
+            ForEach(FilePaneModel.Side.allCases, id: \.self) { side in
+                let pane = manager.pane(side)
+                let isActive = manager.activeSide == side
+                Button {
+                    if isActive {
+                        manager.sheet = .connect(side)
+                    } else {
+                        manager.activeSide = side
+                        manager.requestFocus()
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(verbatim: side == .left ? "A" : "B").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+                        Text(pane.endpoint.displayName).lineLimit(1)
+                        if pane.isBusy { ProgressView().controlSize(.mini) }
+                        if isActive {
+                            Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                        }
+                    }
+                    .font(.callout.weight(isActive ? .semibold : .regular))
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, minHeight: 34)
+                    .background(isActive ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.05),
+                                in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .padding(.vertical, 5)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(pane.endpoint.displayName)
+                .accessibilityHint(isActive
+                    ? String(localized: "Chooses this pane's location", comment: "File manager pane switcher hint")
+                    : String(localized: "Shows this pane", comment: "File manager pane switcher hint"))
+                .accessibilityAddTraits(isActive ? .isSelected : [])
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(String(localized: "Panes", comment: "File manager pane switcher"))
     }
 
     // MARK: - Single-pane switcher
@@ -419,18 +523,22 @@ struct FileManagerView: View {
 
 /// Equatable owner for the overflow menu, same contract as the presentation
 /// menu. The items read live pane/transfer state in their own child scope.
-private struct FileManagerMoreMenu: View, Equatable {
+struct FileManagerMoreMenu: View, Equatable {
     let manager: FileManagerModel
+    var touchSized = false
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.manager === rhs.manager
+        lhs.manager === rhs.manager && lhs.touchSized == rhs.touchSized
     }
 
     var body: some View {
         Menu {
             FileManagerMoreMenuItems(manager: manager)
         } label: {
-            Image(systemName: "ellipsis.circle")
+            // Titled, so the rail's overflow can name it.
+            Label(String(localized: "More", comment: "File manager overflow menu"), systemImage: "ellipsis.circle")
+                .labelStyle(.iconOnly)
+                .panelTouchTarget(touchSized)
         }
         .accessibilityLabel(String(localized: "More", comment: "File manager overflow menu"))
     }

@@ -54,11 +54,14 @@ struct GitDiffView: View {
     let onCollapse: (() -> Void)?
     /// Switches between presentations; nil where only one presentation exists.
     let onSwitchPresentation: ((PanelPresentation) -> Void)?
+    /// A side rail carries the header and toolbar actions.
+    var actionsInRail = false
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.sheetThemeColors) private var sheetThemeColors
     @Setting(Settings.GitDiff.wrapLines) private var wrapLines
-    @State private var jumpTarget: String?
+
+    private var touch: Bool { PanelTouch.isTouchPlatform }
 
     /// A dark terminal theme can run under a light system scheme; colours
     /// must resolve against the panel's own surface.
@@ -102,26 +105,32 @@ struct GitDiffView: View {
                 .foregroundStyle(Color.accentColor)
             title
             Spacer(minLength: 4)
-            if let onSwitchPresentation, let current = style.presentation {
-                PanelPresentationMenu(current: current, onSwitch: onSwitchPresentation)
-                    .equatable()
-            }
-            if let onCollapse {
-                Button(action: onCollapse) {
-                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+            if !actionsInRail {
+                if let onSwitchPresentation, let current = style.presentation {
+                    PanelPresentationMenu(current: current, onSwitch: onSwitchPresentation, touchSized: touch)
+                        .equatable()
                 }
-                .help(String(localized: "Show Summary Only", comment: "Git diff panel button tooltip"))
-                .accessibilityLabel(String(localized: "Show Summary Only", comment: "Git diff panel button"))
+                if let onCollapse {
+                    Button(action: onCollapse) {
+                        Image(systemName: "arrow.down.right.and.arrow.up.left")
+                            .panelTouchTarget(touch)
+                    }
+                    .help(String(localized: "Show Summary Only", comment: "Git diff panel button tooltip"))
+                    .accessibilityLabel(String(localized: "Show Summary Only", comment: "Git diff panel button"))
+                }
+                Button(action: onClose) {
+                    Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary)
+                        .panelTouchTarget(touch)
+                }
+                .help(String(localized: "Close", comment: "Git diff close button tooltip"))
+                .accessibilityLabel(String(localized: "Close Git Diff", comment: "Git diff close button"))
             }
-            Button(action: onClose) {
-                Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary)
-            }
-            .help(String(localized: "Close", comment: "Git diff close button tooltip"))
-            .accessibilityLabel(String(localized: "Close Git Diff", comment: "Git diff close button"))
         }
         .buttonStyle(.borderless)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        // Touch buttons fill the row's height instead of adding to it.
+        .padding(.leading, 12)
+        .padding(.trailing, touch && !actionsInRail ? 4 : 12)
+        .padding(.vertical, touch && !actionsInRail ? 0 : 8)
     }
 
     @ViewBuilder
@@ -159,72 +168,79 @@ struct GitDiffView: View {
 
     // MARK: - Toolbar
 
+    /// Widest layout that fits: the file count goes first, then expand and the
+    /// view options fold into one menu, then the scope picker takes its own row.
     private func toolbar(_ snapshot: GitDiffSnapshot) -> some View {
-        HStack(spacing: 12) {
-            GitDiffScopeMenu(scope: store.scope, baseRef: snapshot.baseRef) { store.setScope($0) }
-                .equatable()
-            if !snapshot.isClean {
-                // The file count is the first thing a narrow panel gives up.
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        Text(String(localized: "\(snapshot.files.count) files", comment: "Git diff: number of changed files"))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .fixedSize()
-                        GitDiffStatLabel(additions: snapshot.additions, deletions: snapshot.deletions, palette: palette,
-                                         isPartial: snapshot.countsIncomplete)
-                    }
-                    GitDiffStatLabel(additions: snapshot.additions, deletions: snapshot.deletions, palette: palette,
-                                         isPartial: snapshot.countsIncomplete)
-                }
+        ViewThatFits(in: .horizontal) {
+            toolbarRow(snapshot, totals: .withCount, foldsOptions: false)
+            toolbarRow(snapshot, totals: .plain, foldsOptions: false)
+            toolbarRow(snapshot, totals: .plain, foldsOptions: true)
+            VStack(alignment: .leading, spacing: 0) {
+                scopeMenu(snapshot)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, touch ? 0 : 6)
+                toolbarRow(snapshot, totals: .shrinking, foldsOptions: true, showsScope: false)
             }
-            Spacer(minLength: 0)
-            if snapshot.files.count > 1 {
-                GitDiffFilesMenu(files: snapshot.files) { reveal($0) }
-                    .equatable()
-            }
-            if !snapshot.isClean {
-                Button {
-                    store.setAllExpanded(store.allCollapsed)
-                } label: {
-                    Image(systemName: store.allCollapsed ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
-                }
-                .help(store.allCollapsed
-                    ? String(localized: "Expand All Files", comment: "Git diff toolbar tooltip")
-                    : String(localized: "Collapse All Files", comment: "Git diff toolbar tooltip"))
-                .accessibilityLabel(store.allCollapsed
-                    ? String(localized: "Expand All Files", comment: "Git diff toolbar button")
-                    : String(localized: "Collapse All Files", comment: "Git diff toolbar button"))
-            }
-            GitDiffOptionsMenu(
-                wrapLines: wrapLines,
-                ignoreWhitespace: store.ignoreWhitespace,
-                onWrap: { wrapLines = $0 },
-                onIgnoreWhitespace: { store.setIgnoreWhitespace($0) })
-                .equatable()
-            Button {
-                store.refresh()
-            } label: {
-                ZStack {
-                    Image(systemName: "arrow.clockwise").opacity(store.isRefreshing ? 0 : 1)
-                    if store.isRefreshing { ProgressView().controlSize(.small) }
-                }
-            }
-            .help(String(localized: "Refresh", comment: "Git diff toolbar tooltip"))
-            .accessibilityLabel(String(localized: "Refresh", comment: "Git diff toolbar button"))
         }
         .buttonStyle(.borderless)
         .font(.callout)
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
     }
 
-    private func reveal(_ id: String) {
-        if let file = store.snapshot?.files.first(where: { $0.id == id }), !store.isExpanded(file) {
-            store.setExpanded(true, for: file)
+    /// `shrinking` scales down rather than push the buttons out; the last layout must fit.
+    private enum ToolbarTotals { case withCount, plain, shrinking }
+
+    private func toolbarRow(_ snapshot: GitDiffSnapshot, totals: ToolbarTotals, foldsOptions: Bool,
+                            showsScope: Bool = true) -> some View {
+        HStack(spacing: touch ? 4 : 12) {
+            if showsScope {
+                scopeMenu(snapshot)
+                    .padding(.trailing, touch ? 8 : 0)
+            }
+            if !snapshot.isClean {
+                totalsLabel(snapshot, totals: totals)
+            }
+            Spacer(minLength: 0)
+            if !actionsInRail {
+                if snapshot.files.count > 1 {
+                    GitDiffFilesMenu(files: snapshot.files, touchSized: touch) { store.reveal($0) }
+                        .equatable()
+                }
+                if foldsOptions {
+                    GitDiffMoreButton(store: store, touchSized: touch)
+                } else {
+                    if !snapshot.isClean {
+                        GitDiffExpandAllButton(store: store, touchSized: touch)
+                    }
+                    GitDiffOptionsButton(store: store, touchSized: touch)
+                }
+                GitDiffRefreshButton(store: store, touchSized: touch)
+            }
         }
-        jumpTarget = id
+        .padding(.leading, 12)
+        .padding(.trailing, touch && !actionsInRail ? 4 : 12)
+        .padding(.bottom, touch && !actionsInRail ? 2 : 8)
+        .frame(minHeight: actionsInRail ? 36 : nil)
+    }
+
+    private func scopeMenu(_ snapshot: GitDiffSnapshot) -> some View {
+        GitDiffScopeMenu(scope: store.scope, baseRef: snapshot.baseRef) { store.setScope($0) }
+            .equatable()
+    }
+
+    /// Fixed size unless shrinking, so a row that cannot hold it reads as not fitting.
+    private func totalsLabel(_ snapshot: GitDiffSnapshot, totals: ToolbarTotals) -> some View {
+        HStack(spacing: 8) {
+            if totals == .withCount {
+                Text(String(localized: "\(snapshot.files.count) files", comment: "Git diff: number of changed files"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            GitDiffStatLabel(additions: snapshot.additions, deletions: snapshot.deletions, palette: palette,
+                             isPartial: snapshot.countsIncomplete, allowsShrinking: totals == .shrinking)
+        }
+        .fixedSize(horizontal: totals != .shrinking, vertical: false)
+        .layoutPriority(totals == .shrinking ? -1 : 0)
     }
 
     // MARK: - Content
@@ -240,7 +256,7 @@ struct GitDiffView: View {
             } else {
                 GitDiffFileList(
                     store: store, snapshot: snapshot, wrap: wrapLines, palette: palette,
-                    surface: surface, headerSurface: headerSurface, jumpTarget: $jumpTarget)
+                    surface: surface, headerSurface: headerSurface)
             }
         } else {
             switch store.phase {
@@ -387,6 +403,9 @@ private struct GitDiffScopeMenu: View, Equatable {
             .background(Color.primary.opacity(0.08), in: Capsule())
             .contentShape(Capsule())
             .fixedSize()
+            // The capsule stays compact; touch gets the row's full height to hit.
+            .frame(minHeight: PanelTouch.isTouchPlatform ? 40 : nil)
+            .contentShape(Rectangle())
         }
         .accessibilityLabel(String(localized: "Compare", comment: "Git diff comparison menu"))
         .accessibilityValue(scope.title)
@@ -400,14 +419,15 @@ private struct GitDiffScopeMenu: View, Equatable {
     }
 }
 
-private struct GitDiffOptionsMenu: View, Equatable {
+struct GitDiffOptionsMenu: View, Equatable {
     let wrapLines: Bool
     let ignoreWhitespace: Bool
+    var touchSized = false
     let onWrap: (Bool) -> Void
     let onIgnoreWhitespace: (Bool) -> Void
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.wrapLines == rhs.wrapLines && lhs.ignoreWhitespace == rhs.ignoreWhitespace
+        lhs.wrapLines == rhs.wrapLines && lhs.ignoreWhitespace == rhs.ignoreWhitespace && lhs.touchSized == rhs.touchSized
     }
 
     var body: some View {
@@ -419,22 +439,25 @@ private struct GitDiffOptionsMenu: View, Equatable {
                 Label(String(localized: "Hide Whitespace Changes", comment: "Git diff option"), systemImage: "space")
             }
         } label: {
-            Image(systemName: "line.3.horizontal.decrease")
+            Label(String(localized: "View Options", comment: "Git diff options menu"), systemImage: "line.3.horizontal.decrease")
+                .labelStyle(.iconOnly)
+                .panelTouchTarget(touchSized)
         }
         .accessibilityLabel(String(localized: "View Options", comment: "Git diff options menu"))
     }
 }
 
 /// Jumps to a file. Shown in every width; the wide layout also lists files beside the diff.
-private struct GitDiffFilesMenu: View, Equatable {
+struct GitDiffFilesMenu: View, Equatable {
     let files: [GitDiffFile]
+    var touchSized = false
     let onSelect: (String) -> Void
 
     /// A menu past this is no faster than scrolling.
     private static let limit = 80
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.files.count == rhs.files.count && zip(lhs.files, rhs.files).allSatisfy {
+        lhs.touchSized == rhs.touchSized && lhs.files.count == rhs.files.count && zip(lhs.files, rhs.files).allSatisfy {
             $0.id == $1.id && $0.additions == $1.additions && $0.deletions == $1.deletions
         }
     }
@@ -450,7 +473,9 @@ private struct GitDiffFilesMenu: View, Equatable {
                 }
             }
         } label: {
-            Image(systemName: "list.bullet.indent")
+            Label(String(localized: "Jump to File", comment: "Git diff files menu"), systemImage: "list.bullet.indent")
+                .labelStyle(.iconOnly)
+                .panelTouchTarget(touchSized)
         }
         .accessibilityLabel(String(localized: "Jump to File", comment: "Git diff files menu"))
     }
@@ -465,7 +490,6 @@ private struct GitDiffFileList: View {
     let palette: GitDiffPalette
     let surface: Color
     let headerSurface: Color
-    @Binding var jumpTarget: String?
 
     /// Wide enough to list files beside the diff, as desktop diff views do.
     private static let fileColumnThreshold: CGFloat = 860
@@ -530,10 +554,10 @@ private struct GitDiffFileList: View {
             }
             // A panel scroll view over the terminal; UIKit 26 would blur its edges.
             .modifier(ScrollEdgeEffectHiddenModifier())
-            .onChange(of: jumpTarget) { _, target in
+            .onChange(of: store.jumpTarget) { _, target in
                 guard let target else { return }
                 proxy.scrollTo(target, anchor: .top)
-                jumpTarget = nil
+                store.jumpTarget = nil
             }
         }
     }
@@ -577,8 +601,7 @@ private struct GitDiffFileList: View {
             LazyVStack(alignment: .leading, spacing: 1) {
                 ForEach(snapshot.files) { file in
                     Button {
-                        if !store.isExpanded(file) { store.setExpanded(true, for: file) }
-                        jumpTarget = file.id
+                        store.reveal(file.id)
                     } label: {
                         HStack(spacing: 8) {
                             GitDiffStatusBadge(status: file.status, palette: palette)

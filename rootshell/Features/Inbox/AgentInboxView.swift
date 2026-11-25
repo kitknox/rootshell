@@ -129,18 +129,21 @@ struct AgentInboxView: View {
                 .font(.headline)
             Spacer(minLength: 4)
             if let onSwitchPresentation, let current = style.presentation {
-                PanelPresentationMenu(current: current, onSwitch: onSwitchPresentation)
+                PanelPresentationMenu(current: current, onSwitch: onSwitchPresentation, touchSized: PanelTouch.isTouchPlatform)
                     .equatable()
             }
             Button(action: onClose) {
                 Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary)
+                    .panelTouchTarget(PanelTouch.isTouchPlatform)
             }
             .help(String(localized: "Close (esc)", comment: "Agent inbox close button tooltip"))
             .accessibilityLabel(String(localized: "Close Agent Inbox", comment: "Agent inbox close button"))
         }
         .buttonStyle(.borderless)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        // Touch buttons fill the row's height instead of adding to it.
+        .padding(.leading, 12)
+        .padding(.trailing, PanelTouch.isTouchPlatform ? 4 : 12)
+        .padding(.vertical, PanelTouch.isTouchPlatform ? 0 : 8)
     }
 
     // MARK: - List

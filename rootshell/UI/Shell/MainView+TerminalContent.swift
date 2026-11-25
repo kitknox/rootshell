@@ -1611,11 +1611,14 @@ extension MainView {
                 }
             }
 
-            fileManagerSidebarColumn(width: fileManagerWidth, totalWidth: geometry.size.width)
+            // The row ignores the keyboard; touch controls at a column's foot must clear it.
+            fileManagerSidebarColumn(width: fileManagerWidth, totalWidth: geometry.size.width,
+                                     bottomClearance: fileManagerWidth > 0 ? trailingPanelBottomClearance(geometry) : 0)
 
             agentInboxSidebarColumn(width: agentInboxWidth, totalWidth: geometry.size.width)
 
-            gitDiffSidebarColumn(width: gitDiffWidth, totalWidth: geometry.size.width)
+            gitDiffSidebarColumn(width: gitDiffWidth, totalWidth: geometry.size.width,
+                                 bottomClearance: gitDiffWidth > 0 ? trailingPanelBottomClearance(geometry) : 0)
 
             #if !CHINA_BUILD
             httpCaptureSidebarColumn(width: httpCaptureWidth, totalWidth: geometry.size.width)
@@ -1823,7 +1826,10 @@ extension MainView {
     ///
     /// The sidebar applies `.ignoresSafeArea(.keyboard)`, so SwiftUI's own
     /// avoidance never double-applies; this value is the only bottom inset.
-    private func dockedSidebarBottomClearance() -> CGFloat {
+    ///
+    /// `columnBottom` (window space) caps the clearance at what actually
+    /// overlaps the column: Duo tabletop already ends the row above the fold.
+    private func dockedSidebarBottomClearance(columnBottom: CGFloat? = nil) -> CGFloat {
         #if os(visionOS) || targetEnvironment(macCatalyst)
         return 0
         #else
@@ -1843,14 +1849,31 @@ extension MainView {
             guard coverage > 0 else { return 0 }
             // Rounded cards end one card gap above the screen edge, not at the strip.
             let stripClearance = paneCardsEnterHomeIndicatorStrip ? PaneCardStyle.gap : windowSafeAreaInsets.bottom
-            return max(0, coverage - stripClearance)
+            return Self.capped(max(0, coverage - stripClearance), obstructionTop: keyboardFrame.minY, columnBottom: columnBottom)
         }
         // Not gated on the keyboard: the reservation itself requires the
         // pane to hold first responder (bridged across tab switches by
         // `activeKeyboardToolbarPane`), so it is 0 whenever no toolbar is
         // docked at the bottom edge.
-        return pane.reservedKeyboardToolbarHeightAtBottom
+        // A trailing column measures the toolbar where it really is: on Duo it
+        // can sit above the fold, with no reservation at the window bottom.
+        if let columnBottom, let accessory = pane.keyboardAccessoryFrameInScreen {
+            let frame = window.convert(accessory, from: window.screen.coordinateSpace)
+            return max(0, columnBottom - frame.minY)
+        }
+        let reservation = pane.reservedKeyboardToolbarHeightAtBottom
+        return Self.capped(reservation, obstructionTop: window.bounds.maxY - reservation, columnBottom: columnBottom)
         #endif
+    }
+
+    private static func capped(_ clearance: CGFloat, obstructionTop: CGFloat, columnBottom: CGFloat?) -> CGFloat {
+        guard let columnBottom else { return clearance }
+        return min(clearance, max(0, columnBottom - obstructionTop))
+    }
+
+    /// A trailing panel column's clearance, measured against the row it sits in.
+    func trailingPanelBottomClearance(_ row: GeometryProxy) -> CGFloat {
+        dockedSidebarBottomClearance(columnBottom: row.frame(in: .global).maxY)
     }
 
     #if !CHINA_BUILD

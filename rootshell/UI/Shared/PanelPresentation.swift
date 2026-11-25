@@ -46,9 +46,11 @@ enum PanelPresentation: String, CaseIterable, Codable, Sendable {
 struct PanelPresentationMenu: View, Equatable {
     let current: PanelPresentation
     let onSwitch: (PanelPresentation) -> Void
+    /// A 44pt hit area around the glyph, for touch chrome.
+    var touchSized = false
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.current == rhs.current
+        lhs.current == rhs.current && lhs.touchSized == rhs.touchSized
     }
 
     var body: some View {
@@ -64,7 +66,10 @@ struct PanelPresentationMenu: View, Equatable {
             }
             .pickerStyle(.inline)
         } label: {
-            Image(systemName: current.systemImage)
+            // Titled, so a side rail's overflow can name it.
+            Label(String(localized: "Show As", comment: "Panel presentation menu section title"), systemImage: current.systemImage)
+                .labelStyle(.iconOnly)
+                .panelTouchTarget(touchSized)
         }
         .accessibilityLabel(String(localized: "Presentation", comment: "Panel presentation menu"))
         .accessibilityValue(current.title)
