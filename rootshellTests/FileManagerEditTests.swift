@@ -792,4 +792,233 @@ final class FileManagerEditTests: XCTestCase {
         XCTAssertEqual(FileManagerEmbeddedEditor.vim.command, "vim")
         XCTAssertEqual(FileManagerEmbeddedEditor.hx.command, "hx")
     }
+
+    // MARK: - Line Index & Viewport Syntax Span Lookup
+
+    func testEditorLineIndexHandlesUTF16SurrogatesAndIncrementalEdits() {
+        let initial = "a🚀\ncafé\nend"
+        var index = EditorLineIndex(text: initial)
+        let nsInitial = initial as NSString
+        XCTAssertEqual(index, EditorLineIndex(nsString: nsInitial))
+        XCTAssertEqual(index.lineCount, 3)
+        // 'a'(0), '🚀'(1..2), '\n'(3) -> line 2 starts at 4; "café"(4..7), '\n'(8) -> line 3 starts at 9
+        XCTAssertEqual(index.lineStarts, [0, 4, 9])
+        XCTAssertEqual(index.utf16Length, nsInitial.length)
+
+        XCTAssertEqual(index.lineAndColumn(forUTF16Offset: 0).line, 1)
+        XCTAssertEqual(index.lineAndColumn(forUTF16Offset: 0).column, 1)
+        XCTAssertEqual(index.lineAndColumn(forUTF16Offset: 3).line, 1)
+        XCTAssertEqual(index.lineAndColumn(forUTF16Offset: 3).column, 4)
+        XCTAssertEqual(index.lineAndColumn(forUTF16Offset: 4).line, 2)
+        XCTAssertEqual(index.lineAndColumn(forUTF16Offset: 4).column, 1)
+        XCTAssertEqual(index.lineAndColumn(forUTF16Offset: 9).line, 3)
+        XCTAssertEqual(index.lineAndColumn(forUTF16Offset: 12).line, 3)
+        XCTAssertEqual(index.lineAndColumn(forUTF16Offset: 12).column, 4)
+
+        // Incremental insert without newline
+        let storage = NSMutableString(string: initial)
+        storage.insert("XY", at: 1)
+        index.applyEdit(editedRange: NSRange(location: 1, length: 2), changeInLength: 2, in: storage)
+        XCTAssertEqual(index, EditorLineIndex(nsString: storage))
+
+        // Incremental multiline replacement crossing an existing newline
+        let replaceRange = NSRange(location: 4, length: 4)
+        let replacement = "1\n2\n3"
+        let delta = (replacement as NSString).length - replaceRange.length
+        storage.replaceCharacters(in: replaceRange, with: replacement)
+        index.applyEdit(
+            editedRange: NSRange(location: replaceRange.location, length: (replacement as NSString).length),
+            changeInLength: delta,
+            in: storage
+        )
+        XCTAssertEqual(index, EditorLineIndex(nsString: storage))
+
+        // Incremental deletion of a newline
+        let nlLoc = storage.range(of: "\n").location
+        storage.deleteCharacters(in: NSRange(location: nlLoc, length: 1))
+        index.applyEdit(editedRange: NSRange(location: nlLoc, length: 0), changeInLength: -1, in: storage)
+        XCTAssertEqual(index, EditorLineIndex(nsString: storage))
+    }
+
+    func testEditorLineIndexHandlesStandaloneCRAndCRLFBoundaries() {
+        // Standalone CR breaks
+        let crOnly = "one\rtwo\rthree"
+        let crIndex = EditorLineIndex(text: crOnly)
+        XCTAssertEqual(crIndex, EditorLineIndex(nsString: crOnly as NSString))
+        XCTAssertEqual(crIndex.lineStarts, [0, 4, 8])
+        XCTAssertEqual(crIndex.lineCount, 3)
+        XCTAssertFalse(crIndex.endsWithNewline)
+
+        // Trailing standalone CR
+        let trailingCR = EditorLineIndex(text: "one\r")
+        XCTAssertEqual(trailingCR.lineStarts, [0, 4])
+        XCTAssertTrue(trailingCR.endsWithNewline)
+
+        // CRLF counts as a single break; CR followed by CRLF counts as two breaks.
+        let mixed = "a\r\nb\r\r\nc"
+        let mixedIndex = EditorLineIndex(text: mixed)
+        XCTAssertEqual(mixedIndex, EditorLineIndex(nsString: mixed as NSString))
+        XCTAssertEqual(mixedIndex.lineStarts, [0, 3, 5, 7])
+
+        // Incremental edit: inserting LF after standalone CR merges them into one CRLF break.
+        let s1 = NSMutableString(string: "a\rb")
+        var idx1 = EditorLineIndex(nsString: s1)
+        XCTAssertEqual(idx1.lineStarts, [0, 2])
+        s1.insert("\n", at: 2)
+        idx1.applyEdit(editedRange: NSRange(location: 2, length: 1), changeInLength: 1, in: s1)
+        XCTAssertEqual(idx1, EditorLineIndex(nsString: s1))
+        XCTAssertEqual(idx1.lineStarts, [0, 3])
+
+        // Incremental edit: deleting LF from CRLF turns the preceding CR into a standalone break.
+        s1.deleteCharacters(in: NSRange(location: 2, length: 1))
+        idx1.applyEdit(editedRange: NSRange(location: 2, length: 0), changeInLength: -1, in: s1)
+        XCTAssertEqual(idx1, EditorLineIndex(nsString: s1))
+        XCTAssertEqual(idx1.lineStarts, [0, 2])
+
+        // Incremental edit: inserting CR immediately before LF merges into one CRLF break.
+        let s2 = NSMutableString(string: "a\nb")
+        var idx2 = EditorLineIndex(nsString: s2)
+        s2.insert("\r", at: 1)
+        idx2.applyEdit(editedRange: NSRange(location: 1, length: 1), changeInLength: 1, in: s2)
+        XCTAssertEqual(idx2, EditorLineIndex(nsString: s2))
+        XCTAssertEqual(idx2.lineStarts, [0, 3])
+
+        // Incremental edit: inserting text between CR and LF splits CRLF into two breaks.
+        s2.insert("x", at: 2)
+        idx2.applyEdit(editedRange: NSRange(location: 2, length: 1), changeInLength: 1, in: s2)
+        XCTAssertEqual(idx2, EditorLineIndex(nsString: s2))
+        XCTAssertEqual(idx2.lineStarts, [0, 2, 4])
+
+        // Unicode paragraph separator (U+2029) breaks paragraphs in full build and incremental edits.
+        let paraSep = "one\u{2029}two\r\u{2029}three"
+        let paraIndex = EditorLineIndex(text: paraSep)
+        XCTAssertEqual(paraIndex, EditorLineIndex(nsString: paraSep as NSString))
+        XCTAssertEqual(paraIndex.lineStarts, [0, 4, 8, 9])
+        XCTAssertEqual(paraIndex.lineCount, 4)
+
+        let s3 = NSMutableString(string: "onetwo")
+        var idx3 = EditorLineIndex(nsString: s3)
+        s3.insert("\u{2029}", at: 3)
+        idx3.applyEdit(editedRange: NSRange(location: 3, length: 1), changeInLength: 1, in: s3)
+        XCTAssertEqual(idx3, EditorLineIndex(nsString: s3))
+        XCTAssertEqual(idx3.lineStarts, [0, 4])
+    }
+
+    func testOverlappingSpansFindsSingleAndMultiLineMatches() {
+        let code = "/* line1\nline2\nline3 */\nlet x = 42\n"
+        let spans = FileEditorSyntax.highlight(code, language: .cLike)
+        XCTAssertFalse(spans.isEmpty)
+
+        // Query middle line inside the multi-line block comment (line2: UTF-16 range 9..<14).
+        let midComment = FileEditorSyntax.overlappingSpans(in: spans, for: 9..<14)
+        XCTAssertEqual(midComment.count, 1)
+        XCTAssertEqual(midComment.first?.token, .comment)
+
+        // Query the code line ("let x = 42\n" starts at 24).
+        let codeLine = FileEditorSyntax.overlappingSpans(in: spans, for: 24..<34)
+        XCTAssertEqual(codeLine.map(\.token), [.keyword, .number])
+
+        // Empty query returns empty slice.
+        XCTAssertTrue(FileEditorSyntax.overlappingSpans(in: spans, for: 5..<5).isEmpty)
+    }
+
+    @MainActor
+    func testPreLaidOutTextKit1KeepsContentSizeStaticAcrossScroll() {
+        let textView = UITextView(usingTextLayoutManager: false)
+        textView.frame = CGRect(x: 0, y: 0, width: 420, height: 600)
+        textView.textContainerInset = UIEdgeInsets(top: 10, left: 8, bottom: 24, right: 10)
+        textView.textContainer.lineFragmentPadding = 4
+        textView.textContainer.widthTracksTextView = true
+        textView.layoutManager.allowsNonContiguousLayout = false
+
+        var lines: [String] = []
+        lines.reserveCapacity(2000)
+        for i in 1...2000 {
+            if i % 5 == 0 {
+                lines.append("let longWrappedLine\(i) = \"this is a significantly longer line of code intended to wrap across multiple visual lines in the editor viewport\"")
+            } else {
+                lines.append("let value\(i) = \(i)")
+            }
+        }
+        let body = lines.joined(separator: "\n") + "\n"
+        let lineIndex = EditorLineIndex(text: body)
+        let font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        textView.attributedText = NSAttributedString(string: body, attributes: [.font: font, .foregroundColor: UIColor.label])
+
+        let containerWidth = textView.bounds.width - textView.textContainerInset.left - textView.textContainerInset.right
+        textView.textContainer.size = CGSize(width: containerWidth, height: .greatestFiniteMagnitude)
+        textView.layoutManager.ensureLayout(for: textView.textContainer)
+        textView.layoutIfNeeded()
+
+        let initialHeight = textView.contentSize.height
+        XCTAssertGreaterThan(initialHeight, 20_000)
+
+        // Scrolling from top to bottom must not mutate contentSize.height (no scrollbar jutter),
+        // and the production gutter layout must report valid line numbers at every scroll stop.
+        let maxOffset = max(0, initialHeight - textView.bounds.height)
+        for step in 0...10 {
+            let y = maxOffset * CGFloat(step) / 10.0
+            textView.contentOffset = CGPoint(x: 0, y: y)
+            textView.layoutIfNeeded()
+            XCTAssertEqual(textView.contentSize.height, initialHeight, accuracy: 0.01)
+
+            let visible = EditorGutterLayout.visibleLines(
+                in: textView,
+                lineIndex: lineIndex,
+                editorLineHeight: font.lineHeight,
+                allowLayout: false
+            )
+            XCTAssertFalse(visible.isEmpty, "Expected gutter labels at scroll step \(step)")
+            if step == 0 {
+                XCTAssertEqual(visible.first?.lineNumber, 1)
+            } else if step == 10 {
+                // Document ends with '\n', so trailing line 2001 must appear at the bottom.
+                XCTAssertEqual(visible.last?.lineNumber, 2001)
+            }
+        }
+    }
+
+    @MainActor
+    func testNonContiguousProgrammaticJumpPopulatesDestinationGutterLabels() {
+        let textView = UITextView(usingTextLayoutManager: false)
+        textView.frame = CGRect(x: 0, y: 0, width: 420, height: 600)
+        textView.textContainerInset = UIEdgeInsets(top: 10, left: 8, bottom: 24, right: 10)
+        textView.textContainer.lineFragmentPadding = 4
+        textView.textContainer.widthTracksTextView = true
+        textView.layoutManager.allowsNonContiguousLayout = true
+
+        let lineCount = 4000
+        let body = (1...lineCount).map { "line \($0) payload text" }.joined(separator: "\n")
+        let lineIndex = EditorLineIndex(text: body)
+        let font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        textView.attributedText = NSAttributedString(string: body, attributes: [.font: font, .foregroundColor: UIColor.label])
+
+        let containerWidth = textView.bounds.width - textView.textContainerInset.left - textView.textContainerInset.right
+        textView.textContainer.size = CGSize(width: containerWidth, height: .greatestFiniteMagnitude)
+        textView.layoutIfNeeded()
+
+        // Programmatically jump to a distant match (simulating Find & Replace).
+        let targetLine = 3500
+        let targetRange = NSRange(location: lineIndex.lineStarts[targetLine - 1], length: 10)
+        textView.scrollRangeToVisible(targetRange)
+
+        // With allowLayout: true (programmatic jump / scroll end path), destination labels must populate
+        // and match the line actually positioned at the destination viewport's top.
+        let visible = EditorGutterLayout.visibleLines(
+            in: textView,
+            lineIndex: lineIndex,
+            editorLineHeight: font.lineHeight,
+            allowLayout: true
+        )
+        XCTAssertFalse(visible.isEmpty)
+        let topPoint = CGPoint(x: 0, y: max(0, textView.contentOffset.y - textView.textContainerInset.top))
+        let topGlyph = textView.layoutManager.glyphIndex(for: topPoint, in: textView.textContainer)
+        let topChar = textView.layoutManager.characterIndexForGlyph(at: topGlyph)
+        let expectedTopLine = lineIndex.lineNumber(forUTF16Offset: topChar)
+        XCTAssertGreaterThan(expectedTopLine, 3000)
+        XCTAssertTrue(
+            visible.contains(where: { $0.lineNumber == expectedTopLine }),
+            "Expected gutter to contain destination top line \(expectedTopLine), got \(visible.first?.lineNumber ?? -1)...\(visible.last?.lineNumber ?? -1)"
+        )
+    }
 }

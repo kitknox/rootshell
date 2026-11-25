@@ -220,6 +220,26 @@ nonisolated enum FileEditorSyntax {
         }
     }
 
+    /// Returns the slice of sorted, non-overlapping `spans` that intersect `utf16Range`.
+    static func overlappingSpans(in spans: [Span], for utf16Range: Range<Int>) -> ArraySlice<Span> {
+        guard !spans.isEmpty, !utf16Range.isEmpty else { return spans[0..<0] }
+        var lo = 0
+        var hi = spans.count
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2
+            if spans[mid].location + spans[mid].length <= utf16Range.lowerBound {
+                lo = mid + 1
+            } else {
+                hi = mid
+            }
+        }
+        var end = lo
+        while end < spans.count && spans[end].location < utf16Range.upperBound {
+            end += 1
+        }
+        return spans[lo..<end]
+    }
+
     // MARK: - ASCII Constants
 
     private static let uLF: UInt16 = 0x0A

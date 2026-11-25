@@ -44,6 +44,9 @@ struct RemoteFileEditorView: View {
     @State private var loadState: LoadState = .loading
     @State private var saveState: SaveState = .idle
     @State private var cursorPosition = CursorPosition(line: 1, column: 1)
+    @State private var lineCount = 1
+    @State private var byteCount = 0
+    @State private var externalTextRevision = 0
     @State private var fontSize: CGFloat = 13
     @State private var findTrigger = 0
     @State private var inlineBanner: String?
@@ -105,15 +108,16 @@ struct RemoteFileEditorView: View {
         sheetThemeColors?.background ?? Color(uiColor: .systemBackground)
     }
 
-    private var chromeBackground: Color {
-        sheetThemeColors?.rowBackground ?? Color(uiColor: .secondarySystemBackground)
+    private var editorBackgroundUIColor: UIColor {
+        let traits = UITraitCollection(userInterfaceStyle: surfaceScheme == .dark ? .dark : .light)
+        if let theme = sheetThemeColors {
+            return UIColor(theme.background).resolvedColor(with: traits)
+        }
+        return UIColor.systemBackground.resolvedColor(with: traits)
     }
 
-    private var lineCount: Int {
-        guard !text.isEmpty else { return 1 }
-        var count = 1
-        for byte in text.utf8 where byte == 0x0A { count += 1 }
-        return count
+    private var chromeBackground: Color {
+        sheetThemeColors?.rowBackground ?? Color(uiColor: .secondarySystemBackground)
     }
 
     var body: some View {
@@ -516,14 +520,20 @@ struct RemoteFileEditorView: View {
         case .ready:
             RemoteCodeTextView(
                 text: $text,
+                externalTextRevision: externalTextRevision,
                 language: language,
                 indentation: indentation,
                 fontSize: fontSize,
                 wrapLines: wrapLines,
                 showLineNumbers: showLineNumbers,
                 isDark: surfaceScheme == .dark,
+                backgroundColor: editorBackgroundUIColor,
                 findTrigger: findTrigger,
                 onCursorChange: { cursorPosition = $0 },
+                onStatsChange: { lines, bytes in
+                    if lineCount != lines { lineCount = lines }
+                    if byteCount != bytes { byteCount = bytes }
+                },
                 onSaveShortcut: { if isDirty && saveState != .saving { save(forceOverwrite: false) } }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -539,7 +549,7 @@ struct RemoteFileEditorView: View {
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
             Spacer(minLength: 4)
-            Text("\(lineCount) \(lineCount == 1 ? String(localized: "line", comment: "Singular line count") : String(localized: "lines", comment: "Plural line count")) · \(FileRowView.sizeText(Int64(text.utf8.count)))")
+            Text("\(lineCount) \(lineCount == 1 ? String(localized: "line", comment: "Singular line count") : String(localized: "lines", comment: "Plural line count")) · \(FileRowView.sizeText(Int64(byteCount)))")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
             Text("\(document.encoding.rawValue) · \(document.lineEnding.rawValue)")
@@ -584,6 +594,10 @@ struct RemoteFileEditorView: View {
             document = decoded
             text = decoded.text
             originalText = decoded.text
+            cursorPosition = CursorPosition(line: 1, column: 1)
+            lineCount = EditorLineIndex(text: decoded.text).lineCount
+            byteCount = decoded.text.utf8.count
+            externalTextRevision += 1
             fingerprint = loadedFingerprint
             language = FileEditorSyntax.detectLanguage(
                 fileName: request.entry.name,
@@ -736,7 +750,11 @@ struct RemoteFileEditorView: View {
 
     private func formatJSON() {
         do {
-            text = try FileEditJSONFormatter.prettyPrint(text)
+            let formatted = try FileEditJSONFormatter.prettyPrint(text)
+            text = formatted
+            lineCount = EditorLineIndex(text: formatted).lineCount
+            byteCount = formatted.utf8.count
+            externalTextRevision += 1
             inlineBanner = nil
         } catch {
             inlineBanner = error.localizedDescription
@@ -751,35 +769,55 @@ struct RemoteFileEditorView: View {
     #endif
 }
 
-// MARK: - UIKit Code Editor (UITextView + Line-Number Gutter + Syntax Highlighting)
+// MARK: - UIKit Code Editor (Pre-Laid-Out TextKit 1 UITextView + GPU-Composited Line-Number Gutter)
+
+private struct ResolvedColorKey: Equatable {
+    let r: CGFloat
+    let g: CGFloat
+    let b: CGFloat
+    let a: CGFloat
+
+    init(_ color: UIColor) {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 1
+        color.getRed(&r, green: &g, blue: &b, alpha: &a)
+        self.r = r
+        self.g = g
+        self.b = b
+        self.a = a
+    }
+}
 
 private struct RemoteCodeTextView: UIViewRepresentable {
     @Binding var text: String
+    let externalTextRevision: Int
     let language: FileEditorSyntax.Language
     let indentation: EditableTextDocument.Indentation
     let fontSize: CGFloat
     let wrapLines: Bool
     let showLineNumbers: Bool
     let isDark: Bool
+    let backgroundColor: UIColor
     let findTrigger: Int
     let onCursorChange: (RemoteFileEditorView.CursorPosition) -> Void
+    let onStatsChange: (Int, Int) -> Void
     let onSaveShortcut: () -> Void
 
     func makeUIView(context: Context) -> CodeEditorContainerView {
         let container = CodeEditorContainerView()
         let textView = container.textView
-        textView.delegate = context.coordinator
+        let coordinator = context.coordinator
+        textView.delegate = coordinator
         textView.onSaveShortcut = onSaveShortcut
-        textView.onIndent = { [weak textView, weak coordinator = context.coordinator] in
+        textView.onIndent = { [weak textView, weak coordinator] in
             guard let textView else { return }
             coordinator?.insertIndentation(in: textView)
         }
-        textView.onOutdent = { [weak textView, weak coordinator = context.coordinator] in
+        textView.onOutdent = { [weak textView, weak coordinator] in
             guard let textView else { return }
             coordinator?.outdentSelection(in: textView)
         }
-        context.coordinator.container = container
-        context.coordinator.configureAccessoryBarIfNeeded(on: textView)
+        coordinator.attach(to: container)
+        coordinator.configureAccessoryBarIfNeeded(on: textView)
         return container
     }
 
@@ -787,9 +825,11 @@ private struct RemoteCodeTextView: UIViewRepresentable {
         coordinator.tearDown()
         let textView = container.textView
         textView.delegate = nil
+        textView.layoutManager.delegate = nil
         textView.onSaveShortcut = nil
         textView.onIndent = nil
         textView.onOutdent = nil
+        textView.onDidLayoutNonContiguousViewport = nil
         #if !targetEnvironment(macCatalyst) && !os(visionOS)
         textView.inputAccessoryView = nil
         #endif
@@ -801,42 +841,79 @@ private struct RemoteCodeTextView: UIViewRepresentable {
         let textView = container.textView
         textView.onSaveShortcut = onSaveShortcut
 
-        let styleChanged = coordinator.lastFontSize != fontSize
-            || coordinator.lastIsDark != isDark
-            || coordinator.lastLanguage != language
+        let bgKey = ResolvedColorKey(backgroundColor)
+        let fontChanged = coordinator.lastFontSize != fontSize
+        let appearanceChanged = coordinator.lastIsDark != isDark
+            || coordinator.lastBackgroundKey != bgKey
+        let languageChanged = coordinator.lastLanguage != language
+        let styleChanged = fontChanged || appearanceChanged || languageChanged
         let layoutChanged = coordinator.lastWrapLines != wrapLines
             || coordinator.lastShowLineNumbers != showLineNumbers
-            || coordinator.lastFontSize != fontSize
+            || fontChanged
+        let textReplacedExternally = coordinator.lastExternalTextRevision != externalTextRevision
 
         coordinator.lastFontSize = fontSize
         coordinator.lastIsDark = isDark
+        coordinator.lastBackgroundKey = bgKey
         coordinator.lastLanguage = language
         coordinator.lastWrapLines = wrapLines
         coordinator.lastShowLineNumbers = showLineNumbers
+        coordinator.lastExternalTextRevision = externalTextRevision
 
         if layoutChanged {
             container.applyLayout(
                 wrapLines: wrapLines,
                 showLineNumbers: showLineNumbers,
                 fontSize: fontSize,
-                isDark: isDark
+                isDark: isDark,
+                backgroundColor: backgroundColor
             )
-        } else if styleChanged {
-            container.applyTheme(isDark: isDark, fontSize: fontSize)
+        } else if appearanceChanged {
+            container.applyTheme(isDark: isDark, fontSize: fontSize, backgroundColor: backgroundColor)
         }
 
-        if textView.text != text && !coordinator.isUpdatingBinding {
+        if textReplacedExternally {
             let previousSelection = textView.selectedRange
             coordinator.isApplyingExternalText = true
-            textView.text = text
-            let clampedLocation = min(previousSelection.location, (text as NSString).length)
+            coordinator.clearHighlightSpans()
+            let baseAttrs = coordinator.baseTextAttributes(fontSize: fontSize, isDark: isDark)
+            textView.attributedText = NSAttributedString(string: text, attributes: baseAttrs)
+            textView.typingAttributes = baseAttrs
+            let newUTF16Length = textView.textStorage.length
+            let clampedLocation = min(previousSelection.location, newUTF16Length)
             textView.selectedRange = NSRange(location: clampedLocation, length: 0)
             coordinator.isApplyingExternalText = false
+
+            coordinator.rebuildLineIndex(from: text)
+            container.updateLineIndex(coordinator.lineIndex, activeLine: coordinator.currentCursorLine, needsFullLayout: true)
             coordinator.scheduleHighlight(immediate: true)
-            container.refreshGutter()
+            coordinator.reportCursor(for: textView, deferParentNotification: true)
         } else if styleChanged {
-            coordinator.scheduleHighlight(immediate: true)
-            container.refreshGutter()
+            if fontChanged {
+                let baseAttrs = coordinator.baseTextAttributes(fontSize: fontSize, isDark: isDark)
+                let savedSelection = textView.selectedRange
+                let storage = textView.textStorage
+                if storage.length > 0 {
+                    storage.beginEditing()
+                    storage.addAttribute(.font, value: baseAttrs[.font]!, range: NSRange(location: 0, length: storage.length))
+                    storage.endEditing()
+                }
+                textView.font = baseAttrs[.font] as? UIFont
+                textView.typingAttributes = baseAttrs
+                textView.selectedRange = savedSelection
+                container.markNeedsFullLayout()
+            }
+            if appearanceChanged {
+                let baseAttrs = coordinator.baseTextAttributes(fontSize: fontSize, isDark: isDark)
+                textView.typingAttributes = baseAttrs
+            }
+            if languageChanged {
+                coordinator.clearHighlightSpans()
+                coordinator.scheduleHighlight(immediate: true)
+            } else if appearanceChanged {
+                coordinator.reapplyStoredHighlight(to: textView)
+            }
+            container.refreshVisibleGutterLines()
         }
 
         if coordinator.lastFindTrigger != findTrigger {
@@ -859,14 +936,21 @@ private struct RemoteCodeTextView: UIViewRepresentable {
 
         var lastFontSize: CGFloat = 0
         var lastIsDark: Bool?
+        var lastBackgroundKey: ResolvedColorKey?
         var lastLanguage: FileEditorSyntax.Language?
         var lastWrapLines: Bool?
         var lastShowLineNumbers: Bool?
         var lastFindTrigger = 0
+        var lastExternalTextRevision = -1
 
-        var isUpdatingBinding = false
         var isApplyingExternalText = false
+        private(set) var lineIndex = EditorLineIndex()
+        private(set) var currentCursorLine = 1
+        private var lastReportedCursor: RemoteFileEditorView.CursorPosition?
 
+        private var highlightSpans: [FileEditorSyntax.Span] = []
+        private var hasAppliedSyntaxColors = false
+        private var pendingHighlight: (spans: [FileEditorSyntax.Span], expectedUTF16Length: Int)?
         private var highlightTask: Task<Void, Never>?
         private var highlightRevision = 0
 
@@ -874,42 +958,135 @@ private struct RemoteCodeTextView: UIViewRepresentable {
             self.parent = parent
         }
 
+        func attach(to container: CodeEditorContainerView) {
+            self.container = container
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleTextStorageDidProcessEditing(_:)),
+                name: NSTextStorage.didProcessEditingNotification,
+                object: container.textView.textStorage
+            )
+        }
+
         func tearDown() {
             highlightTask?.cancel()
             highlightTask = nil
+            pendingHighlight = nil
+            NotificationCenter.default.removeObserver(self)
             container = nil
+        }
+
+        func baseTextAttributes(fontSize: CGFloat, isDark: Bool) -> [NSAttributedString.Key: Any] {
+            let font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            let baseColor: UIColor = isDark ? UIColor(white: 0.92, alpha: 1) : UIColor(white: 0.12, alpha: 1)
+            return [
+                .font: font,
+                .foregroundColor: baseColor,
+            ]
+        }
+
+        func rebuildLineIndex(from text: String) {
+            lineIndex = EditorLineIndex(text: text)
+        }
+
+        func clearHighlightSpans() {
+            highlightSpans = []
+            hasAppliedSyntaxColors = false
+            pendingHighlight = nil
+        }
+
+        func reapplyStoredHighlight(to textView: UITextView) {
+            applyHighlightColors(highlightSpans, to: textView, isDark: parent.isDark)
+        }
+
+        @objc private func handleTextStorageDidProcessEditing(_ notification: Notification) {
+            guard !isApplyingExternalText,
+                  let storage = notification.object as? NSTextStorage,
+                  storage.editedMask.contains(.editedCharacters) else {
+                return
+            }
+            lineIndex.applyEdit(
+                editedRange: storage.editedRange,
+                changeInLength: storage.changeInLength,
+                in: storage.string as NSString
+            )
         }
 
         func textViewDidChange(_ textView: UITextView) {
             guard !isApplyingExternalText else { return }
-            isUpdatingBinding = true
-            parent.text = textView.text ?? ""
-            isUpdatingBinding = false
-            container?.refreshGutter()
+            let storage = textView.textStorage
+            if lineIndex.utf16Length != storage.length {
+                lineIndex = EditorLineIndex(nsString: storage.string as NSString)
+            }
+            let updatedText = textView.text ?? ""
+            parent.text = updatedText
+            parent.onStatsChange(lineIndex.lineCount, updatedText.utf8.count)
+            reportCursor(for: textView)
+            container?.updateLineIndex(lineIndex, activeLine: currentCursorLine, needsFullLayout: false)
             scheduleHighlight(immediate: false)
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
-            container?.refreshGutter()
-            let nsText = (textView.text ?? "") as NSString
-            let location = min(textView.selectedRange.location, nsText.length)
-            let prefix = nsText.substring(to: location)
-            var line = 1
-            var lastNewlineUTF16 = 0
-            var index = 0
-            for unit in prefix.utf16 {
-                index += 1
-                if unit == 0x0A {
-                    line += 1
-                    lastNewlineUTF16 = index
+            guard !isApplyingExternalText else { return }
+            reportCursor(for: textView)
+        }
+
+        func reportCursor(for textView: UITextView, deferParentNotification: Bool = false) {
+            let location = min(textView.selectedRange.location, lineIndex.utf16Length)
+            let (line, column) = lineIndex.lineAndColumn(forUTF16Offset: location)
+            if line != currentCursorLine {
+                currentCursorLine = line
+                container?.updateActiveLine(line)
+            }
+            let pos = RemoteFileEditorView.CursorPosition(line: line, column: column)
+            if pos != lastReportedCursor {
+                lastReportedCursor = pos
+                if deferParentNotification {
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.lastReportedCursor == pos else { return }
+                        self.parent.onCursorChange(pos)
+                    }
+                } else {
+                    parent.onCursorChange(pos)
                 }
             }
-            let column = (location - lastNewlineUTF16) + 1
-            parent.onCursorChange(RemoteFileEditorView.CursorPosition(line: line, column: column))
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            container?.refreshGutter()
+            container?.syncGutterForScroll()
+        }
+
+        func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+            if !decelerate {
+                flushPendingHighlightIfIdle()
+                container?.refreshGutterAfterScrollEnded()
+            }
+        }
+
+        func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+            flushPendingHighlightIfIdle()
+            container?.refreshGutterAfterScrollEnded()
+        }
+
+        func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+            flushPendingHighlightIfIdle()
+            container?.refreshGutterAfterScrollEnded()
+        }
+
+        private func flushPendingHighlightIfIdle() {
+            guard let pending = pendingHighlight,
+                  let textView = container?.textView,
+                  !textView.isDragging,
+                  !textView.isDecelerating else {
+                return
+            }
+            pendingHighlight = nil
+            guard textView.markedTextRange == nil,
+                  textView.textStorage.length == pending.expectedUTF16Length else {
+                return
+            }
+            highlightSpans = pending.spans
+            applyHighlightColors(pending.spans, to: textView, isDark: parent.isDark)
         }
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText replacement: String) -> Bool {
@@ -922,9 +1099,11 @@ private struct RemoteCodeTextView: UIViewRepresentable {
             }
 
             if replacement == "\n" {
-                let nsText = (textView.text ?? "") as NSString
-                let lineRange = nsText.lineRange(for: NSRange(location: range.location, length: 0))
-                let linePrefix = nsText.substring(with: NSRange(location: lineRange.location, length: max(0, range.location - lineRange.location)))
+                let nsText = textView.textStorage.string as NSString
+                let safeLocation = min(range.location, nsText.length)
+                let lineRange = nsText.lineRange(for: NSRange(location: safeLocation, length: 0))
+                let prefixLength = max(0, safeLocation - lineRange.location)
+                let linePrefix = nsText.substring(with: NSRange(location: lineRange.location, length: prefixLength))
                 let leading = String(linePrefix.prefix(while: { $0 == " " || $0 == "\t" }))
                 if !leading.isEmpty {
                     let inserted = "\n" + leading
@@ -947,9 +1126,10 @@ private struct RemoteCodeTextView: UIViewRepresentable {
         }
 
         func outdentSelection(in textView: UITextView) {
-            let nsText = (textView.text ?? "") as NSString
+            let nsText = textView.textStorage.string as NSString
             let sel = textView.selectedRange
-            let lineRange = nsText.lineRange(for: NSRange(location: sel.location, length: 0))
+            let safeLocation = min(sel.location, nsText.length)
+            let lineRange = nsText.lineRange(for: NSRange(location: safeLocation, length: 0))
             let line = nsText.substring(with: lineRange)
             let removeCount: Int
             if line.hasPrefix("\t") {
@@ -971,17 +1151,28 @@ private struct RemoteCodeTextView: UIViewRepresentable {
             guard textView.markedTextRange == nil else { return }
 
             highlightTask?.cancel()
+            pendingHighlight = nil
             highlightRevision += 1
             let revision = highlightRevision
-            let snapshot = textView.text ?? ""
             let language = parent.language
-            let fontSize = parent.fontSize
-            let isDark = parent.isDark
+
+            let utf16Count = textView.textStorage.length
+            if language == .plain || utf16Count == 0 || utf16Count > FileEditorSyntax.maxHighlightUTF16Length {
+                let needsClear = hasAppliedSyntaxColors
+                highlightSpans = []
+                if needsClear {
+                    applyHighlightColors([], to: textView, isDark: parent.isDark)
+                }
+                return
+            }
+
+            let snapshot = textView.text ?? ""
 
             // Apply immediately for small files on initial load; debounce during active typing.
-            if immediate && snapshot.utf16.count <= 24_000 {
+            if immediate && utf16Count <= 24_000 {
                 let spans = FileEditorSyntax.highlight(snapshot, language: language)
-                applyHighlight(spans, to: textView, fontSize: fontSize, isDark: isDark)
+                highlightSpans = spans
+                applyHighlightColors(spans, to: textView, isDark: parent.isDark)
                 return
             }
 
@@ -996,46 +1187,47 @@ private struct RemoteCodeTextView: UIViewRepresentable {
                 guard !Task.isCancelled, let self, let textView else { return }
                 guard self.highlightRevision == revision,
                       textView.markedTextRange == nil,
-                      textView.text == snapshot else { return }
-                self.applyHighlight(spans, to: textView, fontSize: fontSize, isDark: isDark)
+                      textView.textStorage.length == utf16Count else { return }
+                // Never mutate textStorage while the user is actively dragging or coasting.
+                if textView.isDragging || textView.isDecelerating {
+                    self.pendingHighlight = (spans: spans, expectedUTF16Length: utf16Count)
+                    return
+                }
+                self.highlightSpans = spans
+                self.applyHighlightColors(spans, to: textView, isDark: self.parent.isDark)
             }
         }
 
-        private func applyHighlight(
+        /// Applies only `.foregroundColor` attributes — never `.font` — so TextKit 1
+        /// invalidates display without invalidating glyphs, line layout, or `contentSize`.
+        private func applyHighlightColors(
             _ spans: [FileEditorSyntax.Span],
             to textView: UITextView,
-            fontSize: CGFloat,
             isDark: Bool
         ) {
             let storage = textView.textStorage
             let fullLength = storage.length
-            let font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-            let boldFont = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .semibold)
             let baseColor: UIColor = isDark ? UIColor(white: 0.92, alpha: 1) : UIColor(white: 0.12, alpha: 1)
-
-            let baseAttrs: [NSAttributedString.Key: Any] = [
+            let font = UIFont.monospacedSystemFont(ofSize: parent.fontSize, weight: .regular)
+            textView.typingAttributes = [
                 .font: font,
                 .foregroundColor: baseColor,
             ]
-            textView.typingAttributes = baseAttrs
 
             guard fullLength > 0 else { return }
             let fullRange = NSRange(location: 0, length: fullLength)
             let palette = EditorSyntaxPalette(isDark: isDark)
 
             storage.beginEditing()
-            storage.addAttributes(baseAttrs, range: fullRange)
+            storage.addAttribute(.foregroundColor, value: baseColor, range: fullRange)
             for span in spans {
                 guard span.location >= 0, span.location + span.length <= fullLength else { continue }
-                let range = NSRange(location: span.location, length: span.length)
                 if let color = palette.color(for: span.token) {
-                    storage.addAttribute(.foregroundColor, value: color, range: range)
-                }
-                if span.token == .section {
-                    storage.addAttribute(.font, value: boldFont, range: range)
+                    storage.addAttribute(.foregroundColor, value: color, range: NSRange(location: span.location, length: span.length))
                 }
             }
             storage.endEditing()
+            hasAppliedSyntaxColors = !spans.isEmpty
         }
 
         func configureAccessoryBarIfNeeded(on textView: UITextView) {
@@ -1095,12 +1287,22 @@ private struct EditorSyntaxPalette {
     }
 }
 
-// MARK: - Custom UITextView & Container with Synchronized Line-Number Gutter
+// MARK: - Custom TextKit 1 UITextView & Container with GPU-Composited Line-Number Gutter
 
 private final class CodeEditorUITextView: UITextView {
     var onSaveShortcut: (() -> Void)?
     var onIndent: (() -> Void)?
     var onOutdent: (() -> Void)?
+    var onDidLayoutNonContiguousViewport: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // Only notify in noncontiguous mode (>1M chars) so normal pre-laid-out scrolling
+        // does zero extra work inside layoutSubviews().
+        if layoutManager.allowsNonContiguousLayout {
+            onDidLayoutNonContiguousViewport?()
+        }
+    }
 
     override var keyCommands: [UIKeyCommand]? {
         var commands = super.keyCommands ?? []
@@ -1118,7 +1320,11 @@ private final class CodeEditorUITextView: UITextView {
     }
 }
 
-private final class CodeEditorContainerView: UIView {
+private final class CodeEditorContainerView: UIView, NSLayoutManagerDelegate {
+    /// Files up to 1M UTF-16 code units pre-layout contiguously so `contentSize` stays 100%
+    /// static during scrolling — eliminating scrollbar jutter and momentum interruptions.
+    private static let maxContiguousLayoutUTF16Length = 1_000_000
+
     let textView: CodeEditorUITextView
     private let gutterView = LineNumberGutterView()
     private let separatorView = UIView()
@@ -1126,13 +1332,28 @@ private final class CodeEditorContainerView: UIView {
     private var showsGutter = true
     private var wrapLines = true
     private var currentFontSize: CGFloat = 13
+    private var lineIndex = EditorLineIndex()
+
+    private var needsFullLayout = false
+    private var lastLaidOutTextWidth: CGFloat = 0
+    private var gutterLayoutRefreshScheduled = false
+
+    private var cachedDigitFontSize: CGFloat = 0
+    private var cachedDigitWidth: CGFloat = 8
+    private var cachedGutterDigits = 2
+    private var cachedGutterWidth: CGFloat = 0
 
     override init(frame: CGRect) {
-        // TextKit 1 keeps line-fragment metrics exact for both wrapped and horizontal-scroll layouts.
+        // TextKit 1 with contiguous pre-layout keeps contentSize completely static during
+        // trackpad and touch scrolling (TextKit 2 viewport height estimation causes scrollbar
+        // jutter and disrupts momentum coasting).
         textView = CodeEditorUITextView(usingTextLayoutManager: false)
         super.init(frame: frame)
 
-        textView.backgroundColor = .clear
+        isOpaque = true
+        textView.isOpaque = true
+        textView.layoutManager.allowsNonContiguousLayout = false
+        textView.layoutManager.delegate = self
         textView.autocorrectionType = .no
         textView.autocapitalizationType = .none
         textView.spellCheckingType = .no
@@ -1142,12 +1363,18 @@ private final class CodeEditorContainerView: UIView {
         textView.inlinePredictionType = .no
         textView.isFindInteractionEnabled = true
         textView.alwaysBounceVertical = true
+        #if !targetEnvironment(macCatalyst) && !os(visionOS)
+        textView.keyboardDismissMode = KeyboardTracker.shared.isHardwareKeyboard ? .none : .interactive
+        #endif
         textView.textContainerInset = UIEdgeInsets(top: 10, left: 8, bottom: 24, right: 10)
         textView.textContainer.lineFragmentPadding = 4
+        textView.onDidLayoutNonContiguousViewport = { [weak self] in
+            self?.syncGutterAfterNonContiguousViewportLayout()
+        }
 
         gutterView.textView = textView
-        gutterView.isOpaque = false
-        gutterView.clipsToBounds = true
+        gutterView.isUserInteractionEnabled = false
+        separatorView.isUserInteractionEnabled = false
 
         addSubview(gutterView)
         addSubview(separatorView)
@@ -1157,45 +1384,140 @@ private final class CodeEditorContainerView: UIView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    func applyLayout(wrapLines: Bool, showLineNumbers: Bool, fontSize: CGFloat, isDark: Bool) {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        // Route touch pan and trackpad/scroll-wheel gestures over the gutter straight to textView.
+        if showsGutter && !gutterView.isHidden && gutterView.frame.contains(point) {
+            return textView
+        }
+        return super.hitTest(point, with: event)
+    }
+
+    func applyLayout(
+        wrapLines: Bool,
+        showLineNumbers: Bool,
+        fontSize: CGFloat,
+        isDark: Bool,
+        backgroundColor: UIColor
+    ) {
+        let wrapChanged = self.wrapLines != wrapLines
         self.wrapLines = wrapLines
         self.showsGutter = showLineNumbers
         self.currentFontSize = fontSize
 
-        applyTheme(isDark: isDark, fontSize: fontSize)
+        applyTheme(isDark: isDark, fontSize: fontSize, backgroundColor: backgroundColor)
 
         textView.textContainer.widthTracksTextView = wrapLines
         textView.textContainer.lineBreakMode = wrapLines ? .byWordWrapping : .byClipping
         textView.showsHorizontalScrollIndicator = !wrapLines
-        if !wrapLines {
+        textView.alwaysBounceHorizontal = false
+        if wrapLines {
+            if textView.bounds.width > 0 {
+                let containerWidth = max(40, textView.bounds.width - textView.textContainerInset.left - textView.textContainerInset.right)
+                textView.textContainer.size = CGSize(width: containerWidth, height: CGFloat.greatestFiniteMagnitude)
+            }
+            if wrapChanged && textView.contentOffset.x != -textView.adjustedContentInset.left {
+                textView.setContentOffset(
+                    CGPoint(x: -textView.adjustedContentInset.left, y: textView.contentOffset.y),
+                    animated: false
+                )
+            }
+        } else {
             textView.textContainer.size = CGSize(width: CGFloat(1_000_000), height: CGFloat.greatestFiniteMagnitude)
         }
+
+        if wrapChanged {
+            needsFullLayout = true
+        }
+
         setNeedsLayout()
-        layoutIfNeeded()
-        refreshGutter()
     }
 
-    func applyTheme(isDark: Bool, fontSize: CGFloat) {
+    func applyTheme(isDark: Bool, fontSize: CGFloat, backgroundColor: UIColor) {
         currentFontSize = fontSize
+        overrideUserInterfaceStyle = isDark ? .dark : .light
+        self.backgroundColor = backgroundColor
+        textView.backgroundColor = backgroundColor
         textView.keyboardAppearance = isDark ? .dark : .light
-        gutterView.isDark = isDark
-        gutterView.fontSize = max(10, fontSize - 1)
-        gutterView.backgroundColor = isDark
-            ? UIColor.white.withAlphaComponent(0.03)
-            : UIColor.black.withAlphaComponent(0.025)
-        separatorView.backgroundColor = isDark
-            ? UIColor.white.withAlphaComponent(0.09)
-            : UIColor.black.withAlphaComponent(0.08)
-        gutterView.setNeedsDisplay()
+
+        gutterView.applyTheme(isDark: isDark, editorFontSize: fontSize, backgroundColor: backgroundColor)
+        separatorView.backgroundColor = Self.blendedOpaqueColor(
+            overlay: isDark ? UIColor.white : UIColor.black,
+            alpha: isDark ? 0.09 : 0.08,
+            over: backgroundColor
+        )
+        separatorView.isOpaque = true
     }
 
-    func refreshGutter() {
-        guard showsGutter else { return }
-        let desired = computeGutterWidth()
-        if abs(gutterView.frame.width - desired) > 1 {
+    func markNeedsFullLayout() {
+        needsFullLayout = true
+        setNeedsLayout()
+    }
+
+    func updateLineIndex(_ index: EditorLineIndex, activeLine: Int, needsFullLayout: Bool) {
+        lineIndex = index
+        gutterView.setActiveLine(activeLine)
+
+        let shouldUseNonContiguous = textView.textStorage.length > Self.maxContiguousLayoutUTF16Length
+        let crossedThreshold = textView.layoutManager.allowsNonContiguousLayout != shouldUseNonContiguous
+        if crossedThreshold {
+            textView.layoutManager.allowsNonContiguousLayout = shouldUseNonContiguous
+        }
+
+        if needsFullLayout || (crossedThreshold && !shouldUseNonContiguous) {
+            self.needsFullLayout = true
             setNeedsLayout()
         }
-        gutterView.setNeedsDisplay()
+        guard showsGutter else { return }
+        let desired = computeGutterWidth()
+        if abs(gutterView.frame.width - desired) > 0.5 {
+            setNeedsLayout()
+        }
+        if !self.needsFullLayout {
+            gutterView.updateVisibleLines(lineIndex: lineIndex)
+        }
+    }
+
+    func updateActiveLine(_ line: Int) {
+        gutterView.setActiveLine(line)
+    }
+
+    func syncGutterForScroll() {
+        guard showsGutter else { return }
+        // During active drag/coasting, never request layout; for an instant programmatic jump
+        // (such as Find & Replace) in noncontiguous mode, allow visible-rect layout immediately.
+        let allowLayout = textView.layoutManager.allowsNonContiguousLayout
+            && !textView.isDragging
+            && !textView.isDecelerating
+        gutterView.syncScroll(contentOffsetY: textView.contentOffset.y, lineIndex: lineIndex, allowLayout: allowLayout)
+    }
+
+    private func syncGutterAfterNonContiguousViewportLayout() {
+        guard showsGutter, textView.layoutManager.allowsNonContiguousLayout else { return }
+        gutterView.syncScroll(contentOffsetY: textView.contentOffset.y, lineIndex: lineIndex, allowLayout: false)
+    }
+
+    func refreshVisibleGutterLines(allowLayout: Bool = false) {
+        guard showsGutter else { return }
+        gutterView.updateVisibleLines(lineIndex: lineIndex, allowLayout: allowLayout)
+    }
+
+    func refreshGutterAfterScrollEnded() {
+        guard showsGutter, textView.layoutManager.allowsNonContiguousLayout else { return }
+        gutterView.updateVisibleLines(lineIndex: lineIndex, allowLayout: true)
+    }
+
+    func layoutManager(
+        _ layoutManager: NSLayoutManager,
+        didCompleteLayoutFor textContainer: NSTextContainer?,
+        atEnd layoutFinishedFlag: Bool
+    ) {
+        guard showsGutter, layoutManager.allowsNonContiguousLayout, !gutterLayoutRefreshScheduled else { return }
+        gutterLayoutRefreshScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.gutterLayoutRefreshScheduled = false
+            self.refreshVisibleGutterLines(allowLayout: false)
+        }
     }
 
     override func layoutSubviews() {
@@ -1204,111 +1526,327 @@ private final class CodeEditorContainerView: UIView {
         gutterView.isHidden = !showsGutter
         separatorView.isHidden = !showsGutter
 
-        gutterView.frame = CGRect(x: 0, y: 0, width: gutterWidth, height: bounds.height)
-        separatorView.frame = CGRect(x: gutterWidth, y: 0, width: showsGutter ? 0.5 : 0, height: bounds.height)
+        let gutterFrame = CGRect(x: 0, y: 0, width: gutterWidth, height: bounds.height)
+        if gutterView.frame != gutterFrame {
+            gutterView.frame = gutterFrame
+        }
+        let separatorFrame = CGRect(x: gutterWidth, y: 0, width: showsGutter ? 0.5 : 0, height: bounds.height)
+        if separatorView.frame != separatorFrame {
+            separatorView.frame = separatorFrame
+        }
         let textX = showsGutter ? gutterWidth + 0.5 : 0
-        textView.frame = CGRect(x: textX, y: 0, width: max(0, bounds.width - textX), height: bounds.height)
+        let textFrame = CGRect(x: textX, y: 0, width: max(0, bounds.width - textX), height: bounds.height)
+        let widthChanged = abs(textView.frame.width - textFrame.width) > 0.5
+        if textView.frame != textFrame {
+            textView.frame = textFrame
+        }
 
-        if wrapLines {
-            let containerWidth = max(40, textView.bounds.width - textView.textContainerInset.left - textView.textContainerInset.right)
-            if abs(textView.textContainer.size.width - containerWidth) > 0.5 {
-                textView.textContainer.size = CGSize(width: containerWidth, height: CGFloat.greatestFiniteMagnitude)
+        let shouldPreLayout = textView.bounds.width > 0
+            && (needsFullLayout || (wrapLines && widthChanged && abs(lastLaidOutTextWidth - textView.bounds.width) > 0.5))
+        if shouldPreLayout {
+            needsFullLayout = false
+            lastLaidOutTextWidth = textView.bounds.width
+            if wrapLines {
+                let containerWidth = max(40, textView.bounds.width - textView.textContainerInset.left - textView.textContainerInset.right)
+                if abs(textView.textContainer.size.width - containerWidth) > 0.5 {
+                    textView.textContainer.size = CGSize(width: containerWidth, height: CGFloat.greatestFiniteMagnitude)
+                }
+            }
+            let useNonContiguous = textView.textStorage.length > Self.maxContiguousLayoutUTF16Length
+            textView.layoutManager.allowsNonContiguousLayout = useNonContiguous
+            if !useNonContiguous {
+                textView.layoutManager.ensureLayout(for: textView.textContainer)
+                textView.layoutIfNeeded()
             }
         }
-        gutterView.setNeedsDisplay()
+
+        if showsGutter {
+            gutterView.syncScroll(contentOffsetY: textView.contentOffset.y, lineIndex: lineIndex)
+        }
     }
 
     private func computeGutterWidth() -> CGFloat {
-        let count = max(1, (textView.text ?? "").utf8.reduce(1) { $0 + ($1 == 0x0A ? 1 : 0) })
-        let digits = max(2, String(count).count)
-        let font = UIFont.monospacedDigitSystemFont(ofSize: max(10, currentFontSize - 1), weight: .regular)
-        let digitWidth = ("8" as NSString).size(withAttributes: [.font: font]).width
-        return ceil(CGFloat(digits) * digitWidth + 16)
+        let digits = max(2, Self.digitCount(of: lineIndex.lineCount))
+        let gutterFontSize = max(10, currentFontSize - 1)
+        if cachedDigitFontSize != gutterFontSize {
+            let font = UIFont.monospacedDigitSystemFont(ofSize: gutterFontSize, weight: .regular)
+            cachedDigitWidth = ("8" as NSString).size(withAttributes: [.font: font]).width
+            cachedDigitFontSize = gutterFontSize
+            cachedGutterWidth = 0
+        }
+        if cachedGutterDigits != digits || cachedGutterWidth == 0 {
+            cachedGutterDigits = digits
+            cachedGutterWidth = ceil(CGFloat(digits) * cachedDigitWidth + 16)
+        }
+        return cachedGutterWidth
+    }
+
+    private static func digitCount(of value: Int) -> Int {
+        var n = max(1, value)
+        var count = 0
+        while n > 0 {
+            n /= 10
+            count += 1
+        }
+        return count
+    }
+
+    static func blendedOpaqueColor(overlay: UIColor, alpha: CGFloat, over base: UIColor) -> UIColor {
+        var br: CGFloat = 0, bg: CGFloat = 0, bb: CGFloat = 0, ba: CGFloat = 1
+        var or_: CGFloat = 0, og: CGFloat = 0, ob: CGFloat = 0, oa: CGFloat = 1
+        base.getRed(&br, green: &bg, blue: &bb, alpha: &ba)
+        overlay.getRed(&or_, green: &og, blue: &ob, alpha: &oa)
+        let inv = 1 - alpha
+        return UIColor(
+            red: br * inv + or_ * alpha,
+            green: bg * inv + og * alpha,
+            blue: bb * inv + ob * alpha,
+            alpha: 1
+        )
     }
 }
 
+/// Hardware-composited line-number gutter backed by a pool of recycled `CATextLayer`s.
+/// During scrolling, `contentLayer.bounds.origin.y` shifts in lockstep with `textView.contentOffset.y`
+/// in the same Core Animation transaction — zero `draw(_:)` rasterization, zero layout calls,
+/// and zero full-text scans.
 private final class LineNumberGutterView: UIView {
     weak var textView: UITextView?
-    var isDark = true
-    var fontSize: CGFloat = 12
 
-    override func draw(_ rect: CGRect) {
-        guard let textView else { return }
-        let layoutManager = textView.layoutManager
-        let textContainer = textView.textContainer
-        let nsText = (textView.text ?? "") as NSString
+    private let contentLayer = CALayer()
+    private var activeLayers: [Int: CATextLayer] = [:]
+    private var reusePool: [CATextLayer] = []
+    private var seenLines: Set<Int> = []
+    private var linesToRemove: [Int] = []
 
-        let font = UIFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .regular)
-        let normalColor: UIColor = isDark ? UIColor(white: 0.48, alpha: 1) : UIColor(white: 0.52, alpha: 1)
-        let activeColor: UIColor = isDark ? UIColor(white: 0.88, alpha: 1) : UIColor(white: 0.15, alpha: 1)
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .right
+    private var isDark = true
+    private var fontSize: CGFloat = 12
+    private var activeLine = 1
+    private var gutterFont: UIFont = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+    private var gutterLineHeight: CGFloat = 15
+    private var editorLineHeight: CGFloat = 16
+    private var normalColor: CGColor = UIColor(white: 0.48, alpha: 1).cgColor
+    private var activeColor: CGColor = UIColor(white: 0.88, alpha: 1).cgColor
+    private var lastContentOffsetY: CGFloat = .nan
+    private var lastWidth: CGFloat = 0
 
-        let visibleTextRect = CGRect(
-            x: 0,
-            y: max(0, textView.contentOffset.y - textView.textContainerInset.top),
-            width: textContainer.size.width,
-            height: textView.bounds.height + 40
-        )
-        let visibleGlyphRange = layoutManager.glyphRange(forBoundingRect: visibleTextRect, in: textContainer)
-        let visibleCharRange = layoutManager.characterRange(forGlyphRange: visibleGlyphRange, actualGlyphRange: nil)
+    private static let disabledActions: [String: CAAction] = [
+        "bounds": NSNull(),
+        "position": NSNull(),
+        "frame": NSNull(),
+        "contents": NSNull(),
+        "foregroundColor": NSNull(),
+        "string": NSNull(),
+        "fontSize": NSNull(),
+        "hidden": NSNull(),
+    ]
 
-        // Compute the 1-based line number of the first visible character.
-        var lineNumber = 1
-        let prefixLimit = min(visibleCharRange.location, nsText.length)
-        if prefixLimit > 0 {
-            let prefix = nsText.substring(to: prefixLimit)
-            for unit in prefix.utf16 where unit == 0x0A { lineNumber += 1 }
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        clipsToBounds = true
+        isOpaque = true
+        contentLayer.actions = Self.disabledActions
+        layer.addSublayer(contentLayer)
+
+        registerForTraitChanges([UITraitDisplayScale.self]) { (self: Self, _) in
+            self.updateContentsScale()
         }
+    }
 
-        // Current cursor line number for highlighting.
-        let cursorLocation = min(textView.selectedRange.location, nsText.length)
-        let cursorLineRange = nsText.lineRange(for: NSRange(location: cursorLocation, length: 0))
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
 
-        let topOffset = textView.textContainerInset.top - textView.contentOffset.y
-        var charIndex = visibleCharRange.location
+    private var currentDisplayScale: CGFloat {
+        let scale = traitCollection.displayScale
+        return scale > 0 ? scale : 2
+    }
 
-        if nsText.length == 0 {
-            let label = "1" as NSString
-            let drawRect = CGRect(x: 4, y: topOffset, width: bounds.width - 10, height: font.lineHeight)
-            label.draw(in: drawRect, withAttributes: [.font: font, .foregroundColor: activeColor, .paragraphStyle: paragraph])
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        updateContentsScale()
+    }
+
+    private func updateContentsScale() {
+        let scale = currentDisplayScale
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for layer in activeLayers.values {
+            layer.contentsScale = scale
+        }
+        for layer in reusePool {
+            layer.contentsScale = scale
+        }
+        CATransaction.commit()
+    }
+
+    func applyTheme(isDark: Bool, editorFontSize: CGFloat, backgroundColor: UIColor) {
+        self.isDark = isDark
+        let newFontSize = max(10, editorFontSize - 1)
+        let fontChanged = newFontSize != fontSize
+        fontSize = newFontSize
+        gutterFont = .monospacedDigitSystemFont(ofSize: fontSize, weight: .regular)
+        gutterLineHeight = gutterFont.lineHeight
+        editorLineHeight = UIFont.monospacedSystemFont(ofSize: editorFontSize, weight: .regular).lineHeight
+        normalColor = (isDark ? UIColor(white: 0.48, alpha: 1) : UIColor(white: 0.52, alpha: 1)).cgColor
+        activeColor = (isDark ? UIColor(white: 0.88, alpha: 1) : UIColor(white: 0.15, alpha: 1)).cgColor
+        self.backgroundColor = CodeEditorContainerView.blendedOpaqueColor(
+            overlay: isDark ? UIColor.white : UIColor.black,
+            alpha: isDark ? 0.03 : 0.025,
+            over: backgroundColor
+        )
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let labelHeight = ceil(gutterLineHeight)
+        for (line, layer) in activeLayers {
+            if fontChanged {
+                layer.font = gutterFont
+                layer.fontSize = fontSize
+                var f = layer.frame
+                f.size.height = labelHeight
+                layer.frame = f
+            }
+            layer.foregroundColor = (line == activeLine) ? activeColor : normalColor
+        }
+        if fontChanged {
+            for layer in reusePool {
+                layer.font = gutterFont
+                layer.fontSize = fontSize
+            }
+        }
+        CATransaction.commit()
+    }
+
+    func setActiveLine(_ newLine: Int) {
+        guard newLine != activeLine else { return }
+        let oldLine = activeLine
+        activeLine = newLine
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        activeLayers[oldLine]?.foregroundColor = normalColor
+        activeLayers[newLine]?.foregroundColor = activeColor
+        CATransaction.commit()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let offsetY = textView?.contentOffset.y ?? 0
+        lastContentOffsetY = offsetY
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        contentLayer.frame = bounds
+        contentLayer.bounds = CGRect(x: 0, y: offsetY, width: bounds.width, height: bounds.height)
+        if abs(bounds.width - lastWidth) > 0.5 {
+            lastWidth = bounds.width
+            let labelWidth = max(0, bounds.width - 10)
+            for layer in activeLayers.values {
+                var f = layer.frame
+                f.size.width = labelWidth
+                layer.frame = f
+            }
+        }
+        CATransaction.commit()
+    }
+
+    func syncScroll(contentOffsetY: CGFloat, lineIndex: EditorLineIndex, allowLayout: Bool = false) {
+        if contentOffsetY != lastContentOffsetY {
+            lastContentOffsetY = contentOffsetY
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            contentLayer.bounds = CGRect(x: 0, y: contentOffsetY, width: bounds.width, height: bounds.height)
+            CATransaction.commit()
+        }
+        updateVisibleLines(lineIndex: lineIndex, allowLayout: allowLayout)
+    }
+
+    func updateVisibleLines(lineIndex: EditorLineIndex, allowLayout: Bool = false) {
+        guard !isHidden,
+              bounds.width > 0,
+              bounds.height > 0,
+              let textView else {
             return
         }
 
-        while charIndex <= NSMaxRange(visibleCharRange) && charIndex < nsText.length {
-            let lineRange = nsText.lineRange(for: NSRange(location: charIndex, length: 0))
-            let glyphIndex = layoutManager.glyphIndexForCharacter(at: lineRange.location)
-            let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil, withoutAdditionalLayout: true)
-            let y = lineRect.minY + topOffset
-            if y > bounds.height { break }
+        let insetTop = textView.textContainerInset.top
+        let offsetY = textView.contentOffset.y
+        let scale = currentDisplayScale
+        let labelWidth = max(0, bounds.width - 10)
+        let labelHeight = ceil(gutterLineHeight)
 
-            let isActiveLine = lineRange.location == cursorLineRange.location
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: isActiveLine ? activeColor : normalColor,
-                .paragraphStyle: paragraph,
-            ]
-            let drawRect = CGRect(x: 4, y: y + (lineRect.height - font.lineHeight) / 2, width: bounds.width - 10, height: font.lineHeight)
-            ("\(lineNumber)" as NSString).draw(in: drawRect, withAttributes: attrs)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
 
-            lineNumber += 1
-            charIndex = NSMaxRange(lineRange)
+        if offsetY != lastContentOffsetY {
+            lastContentOffsetY = offsetY
+            contentLayer.bounds = CGRect(x: 0, y: offsetY, width: bounds.width, height: bounds.height)
         }
 
-        // Trailing empty line after a final newline.
-        if nsText.length > 0, nsText.character(at: nsText.length - 1) == 0x0A, charIndex == nsText.length {
-            let extraRect = layoutManager.extraLineFragmentRect
-            if extraRect.height > 0 {
-                let y = extraRect.minY + topOffset
-                if y <= bounds.height {
-                    let isActiveLine = cursorLocation == nsText.length
-                    let attrs: [NSAttributedString.Key: Any] = [
-                        .font: font,
-                        .foregroundColor: isActiveLine ? activeColor : normalColor,
-                        .paragraphStyle: paragraph,
-                    ]
-                    let drawRect = CGRect(x: 4, y: y + (extraRect.height - font.lineHeight) / 2, width: bounds.width - 10, height: font.lineHeight)
-                    ("\(lineNumber)" as NSString).draw(in: drawRect, withAttributes: attrs)
+        seenLines.removeAll(keepingCapacity: true)
+
+        let visibleLines = EditorGutterLayout.visibleLines(
+            in: textView,
+            lineIndex: lineIndex,
+            editorLineHeight: editorLineHeight,
+            allowLayout: allowLayout
+        )
+        for line in visibleLines {
+            let rawY = insetTop + line.minY + (line.height - gutterLineHeight) / 2
+            let alignedY = round(rawY * scale) / scale
+            seenLines.insert(line.lineNumber)
+            placeLayer(for: line.lineNumber, y: alignedY, width: labelWidth, height: labelHeight, scale: scale)
+        }
+
+        recycleUnseenLayers()
+        CATransaction.commit()
+    }
+
+    private func placeLayer(for lineNumber: Int, y: CGFloat, width: CGFloat, height: CGFloat, scale: CGFloat) {
+        let targetFrame = CGRect(x: 4, y: y, width: width, height: height)
+        let targetColor = (lineNumber == activeLine) ? activeColor : normalColor
+
+        if let existing = activeLayers[lineNumber] {
+            if existing.frame != targetFrame {
+                existing.frame = targetFrame
+            }
+            if existing.foregroundColor != targetColor {
+                existing.foregroundColor = targetColor
+            }
+            return
+        }
+
+        let layer: CATextLayer
+        if let recycled = reusePool.popLast() {
+            layer = recycled
+            layer.isHidden = false
+        } else {
+            layer = CATextLayer()
+            layer.actions = Self.disabledActions
+            layer.alignmentMode = .right
+            layer.truncationMode = .none
+            layer.contentsScale = scale
+            layer.font = gutterFont
+            layer.fontSize = fontSize
+            contentLayer.addSublayer(layer)
+        }
+
+        layer.string = "\(lineNumber)"
+        layer.foregroundColor = targetColor
+        layer.frame = targetFrame
+        activeLayers[lineNumber] = layer
+    }
+
+    private func recycleUnseenLayers() {
+        linesToRemove.removeAll(keepingCapacity: true)
+        for line in activeLayers.keys where !seenLines.contains(line) {
+            linesToRemove.append(line)
+        }
+        for line in linesToRemove {
+            if let layer = activeLayers.removeValue(forKey: line) {
+                if reusePool.count < 128 {
+                    layer.isHidden = true
+                    reusePool.append(layer)
+                } else {
+                    layer.removeFromSuperlayer()
                 }
             }
         }

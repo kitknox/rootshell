@@ -10,6 +10,9 @@
 
 import CryptoKit
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 import UniformTypeIdentifiers
 
 /// Embedded terminal editors bundled on iOS, iPadOS, and visionOS.
@@ -1242,3 +1245,329 @@ nonisolated enum FileEditJSONFormatter {
         return result
     }
 }
+
+// MARK: - Line Index (O(log L) UTF-16 Line & Column Lookup)
+
+/// Tracks the UTF-16 starting offset of every logical line (`lineStarts[0] == 0`).
+/// Rebuilt on document load and updated incrementally on edits so scrolling and
+/// cursor movement never bridge or rescan the full text buffer.
+nonisolated struct EditorLineIndex: Equatable, Sendable {
+    /// UTF-16 code-unit offset of the first character of each 0-based line.
+    /// Always non-empty (`[0]` for an empty document).
+    private(set) var lineStarts: [Int]
+    /// Total UTF-16 code-unit length of the indexed text.
+    private(set) var utf16Length: Int
+
+    var lineCount: Int { lineStarts.count }
+    var endsWithNewline: Bool { utf16Length > 0 && lineStarts.last == utf16Length }
+
+    init() {
+        self.lineStarts = [0]
+        self.utf16Length = 0
+    }
+
+    init(text: String) {
+        var starts: [Int] = [0]
+        var utf16Offset = 0
+
+        let indexedFast = text.utf8.withContiguousStorageIfAvailable { bytes -> Bool in
+            starts.reserveCapacity(max(16, bytes.count / 40))
+            let count = bytes.count
+            var i = 0
+            while i < count {
+                let byte = bytes[i]
+                if byte < 0x80 {
+                    utf16Offset += 1
+                    if byte == 0x0A {
+                        starts.append(utf16Offset)
+                    } else if byte == 0x0D && (i + 1 >= count || bytes[i + 1] != 0x0A) {
+                        starts.append(utf16Offset)
+                    }
+                } else if byte == 0xE2 && i + 2 < count && bytes[i + 1] == 0x80 && bytes[i + 2] == 0xA9 {
+                    // Unicode paragraph separator (U+2029), treated by TextKit as a paragraph break.
+                    utf16Offset += 1
+                    starts.append(utf16Offset)
+                    i += 3
+                    continue
+                } else if byte >= 0xF0 {
+                    utf16Offset += 2
+                } else if byte >= 0xC0 {
+                    utf16Offset += 1
+                }
+                i += 1
+            }
+            return true
+        } ?? false
+
+        if !indexedFast {
+            var prevWasCR = false
+            for unit in text.utf16 {
+                if prevWasCR && unit != 0x0A {
+                    starts.append(utf16Offset)
+                }
+                utf16Offset += 1
+                if unit == 0x0A || unit == 0x2029 {
+                    starts.append(utf16Offset)
+                    prevWasCR = false
+                } else {
+                    prevWasCR = (unit == 0x0D)
+                }
+            }
+            if prevWasCR {
+                starts.append(utf16Offset)
+            }
+        }
+
+        self.lineStarts = starts
+        self.utf16Length = utf16Offset
+    }
+
+    init(nsString: NSString) {
+        let totalLength = nsString.length
+        var starts: [Int] = [0]
+        starts.reserveCapacity(max(16, totalLength / 40))
+
+        let chunkSize = 4096
+        var buffer = [unichar](repeating: 0, count: chunkSize)
+        var offset = 0
+        var prevWasCR = false
+        while offset < totalLength {
+            let count = min(chunkSize, totalLength - offset)
+            nsString.getCharacters(&buffer, range: NSRange(location: offset, length: count))
+            for i in 0..<count {
+                let unit = buffer[i]
+                if prevWasCR && unit != 0x0A {
+                    starts.append(offset + i)
+                }
+                if unit == 0x0A || unit == 0x2029 {
+                    starts.append(offset + i + 1)
+                    prevWasCR = false
+                } else {
+                    prevWasCR = (unit == 0x0D)
+                }
+            }
+            offset += count
+        }
+        if prevWasCR {
+            starts.append(totalLength)
+        }
+
+        self.lineStarts = starts
+        self.utf16Length = totalLength
+    }
+
+    /// Incrementally updates `lineStarts` after an `NSTextStorage` edit.
+    /// `editedRange` is the post-edit range in `nsString`; `changeInLength` is `newLength - oldLength`.
+    mutating func applyEdit(editedRange: NSRange, changeInLength: Int, in nsString: NSString) {
+        let newTotalLength = nsString.length
+        let oldEditedLength = editedRange.length - changeInLength
+        guard editedRange.location >= 0,
+              oldEditedLength >= 0,
+              NSMaxRange(editedRange) <= newTotalLength,
+              !(editedRange.location == 0 && editedRange.length == newTotalLength) else {
+            self = EditorLineIndex(nsString: nsString)
+            return
+        }
+
+        let editStart = editedRange.location
+        let oldEnd = editStart + oldEditedLength
+        let newEnd = NSMaxRange(editedRange)
+
+        // Include 1 character before editStart so a preceding CR that gains or loses a following LF
+        // is re-evaluated cleanly alongside the edited slice.
+        let scanStart = max(0, editStart - 1)
+
+        // Old line starts produced by breaks in [scanStart, oldEnd) lie in (scanStart, oldEnd].
+        let firstRemoved = firstIndexGreaterThan(scanStart)
+        let afterRemoved = firstIndexGreaterThan(oldEnd, startingAt: firstRemoved)
+
+        // Scan only [scanStart, newEnd) for LF, U+2029, and standalone CR breaks.
+        var insertedStarts: [Int] = []
+        let scanLength = newEnd - scanStart
+        if scanLength > 0 {
+            let chunkSize = min(4096, scanLength)
+            var buffer = [unichar](repeating: 0, count: chunkSize)
+            var offset = scanStart
+            var prevWasCR = false
+            while offset < newEnd {
+                let count = min(chunkSize, newEnd - offset)
+                nsString.getCharacters(&buffer, range: NSRange(location: offset, length: count))
+                for i in 0..<count {
+                    let unit = buffer[i]
+                    if prevWasCR && unit != 0x0A {
+                        insertedStarts.append(offset + i)
+                    }
+                    if unit == 0x0A || unit == 0x2029 {
+                        insertedStarts.append(offset + i + 1)
+                        prevWasCR = false
+                    } else {
+                        prevWasCR = (unit == 0x0D)
+                    }
+                }
+                offset += count
+            }
+            if prevWasCR && (newEnd == newTotalLength || nsString.character(at: newEnd) != 0x0A) {
+                insertedStarts.append(newEnd)
+            }
+        }
+
+        if changeInLength != 0 && afterRemoved < lineStarts.count {
+            for i in afterRemoved..<lineStarts.count {
+                lineStarts[i] += changeInLength
+            }
+        }
+
+        if firstRemoved != afterRemoved || !insertedStarts.isEmpty {
+            lineStarts.replaceSubrange(firstRemoved..<afterRemoved, with: insertedStarts)
+        }
+
+        utf16Length = newTotalLength
+    }
+
+    /// 1-based line number containing `utf16Offset`.
+    func lineNumber(forUTF16Offset utf16Offset: Int) -> Int {
+        lineIndex(forUTF16Offset: utf16Offset) + 1
+    }
+
+    /// 1-based line and column (in UTF-16 code units) for `utf16Offset`.
+    func lineAndColumn(forUTF16Offset utf16Offset: Int) -> (line: Int, column: Int) {
+        let clamped = max(0, min(utf16Offset, utf16Length))
+        let idx = lineIndex(forUTF16Offset: clamped)
+        return (line: idx + 1, column: (clamped - lineStarts[idx]) + 1)
+    }
+
+    /// 0-based index into `lineStarts` for the line containing `utf16Offset`.
+    private func lineIndex(forUTF16Offset utf16Offset: Int) -> Int {
+        let clamped = max(0, min(utf16Offset, utf16Length))
+        var lo = 0
+        var hi = lineStarts.count - 1
+        while lo < hi {
+            let mid = lo + (hi - lo + 1) / 2
+            if lineStarts[mid] <= clamped {
+                lo = mid
+            } else {
+                hi = mid - 1
+            }
+        }
+        return lo
+    }
+
+    /// Smallest index >= `startingAt` (and >= 1) whose value is strictly greater than `target`.
+    private func firstIndexGreaterThan(_ target: Int, startingAt start: Int = 1) -> Int {
+        var lo = max(1, start)
+        var hi = lineStarts.count
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2
+            if lineStarts[mid] <= target {
+                lo = mid + 1
+            } else {
+                hi = mid
+            }
+        }
+        return lo
+    }
+}
+
+#if canImport(UIKit)
+// MARK: - Visible Gutter Line Layout (Shared with Tests)
+
+struct EditorVisibleGutterLine: Equatable {
+    let lineNumber: Int
+    let minY: CGFloat
+    let height: CGFloat
+}
+
+@MainActor
+enum EditorGutterLayout {
+    /// Computes the visible logical line numbers and their container-relative Y bounds for a
+    /// TextKit 1 `UITextView`. During active drag/deceleration (`allowLayout == false`), uses
+    /// `glyphRange(forBoundingRectWithoutAdditionalLayout:in:)` so scrolling never triggers layout.
+    /// After a programmatic jump or when scrolling settles (`allowLayout == true`), ensures layout
+    /// for the visible query rect so noncontiguous documents never leave the gutter blank.
+    static func visibleLines(
+        in textView: UITextView,
+        lineIndex: EditorLineIndex,
+        editorLineHeight: CGFloat,
+        overscan: CGFloat = 48,
+        allowLayout: Bool
+    ) -> [EditorVisibleGutterLine] {
+        let totalLength = textView.textStorage.length
+        if totalLength == 0 || lineIndex.utf16Length == 0 {
+            return [EditorVisibleGutterLine(lineNumber: 1, minY: 0, height: editorLineHeight)]
+        }
+
+        let layoutManager = textView.layoutManager
+        let textContainer = textView.textContainer
+        let insetTop = textView.textContainerInset.top
+        let offsetY = textView.contentOffset.y
+
+        let visibleMinY = offsetY - insetTop - overscan
+        let visibleMaxY = offsetY + textView.bounds.height - insetTop + overscan
+        let queryMinY = max(0, visibleMinY)
+        let queryHeight = max(1, visibleMaxY - queryMinY)
+        // Line fragments always begin at x = 0 in textContainer coordinates.
+        let queryRect = CGRect(
+            x: 0,
+            y: queryMinY,
+            width: max(1, textView.bounds.width),
+            height: queryHeight
+        )
+
+        if allowLayout {
+            layoutManager.ensureLayout(forBoundingRect: queryRect, in: textContainer)
+        }
+        let visibleGlyphRange = allowLayout
+            ? layoutManager.glyphRange(forBoundingRect: queryRect, in: textContainer)
+            : layoutManager.glyphRange(forBoundingRectWithoutAdditionalLayout: queryRect, in: textContainer)
+        let visibleCharRange = layoutManager.characterRange(forGlyphRange: visibleGlyphRange, actualGlyphRange: nil)
+
+        var result: [EditorVisibleGutterLine] = []
+
+        if visibleGlyphRange.length > 0 {
+            let firstLineIdx = max(0, lineIndex.lineNumber(forUTF16Offset: visibleCharRange.location) - 1)
+            let maxChar = NSMaxRange(visibleCharRange)
+            let totalGlyphs = layoutManager.numberOfGlyphs
+
+            for idx in firstLineIdx..<lineIndex.lineCount {
+                let charStart = lineIndex.lineStarts[idx]
+                if charStart >= totalLength { break }
+                if charStart > maxChar { break }
+
+                let glyphIndex = layoutManager.glyphIndexForCharacter(at: charStart)
+                guard glyphIndex < totalGlyphs else { break }
+
+                let lineRect = layoutManager.lineFragmentRect(
+                    forGlyphAt: glyphIndex,
+                    effectiveRange: nil,
+                    withoutAdditionalLayout: !allowLayout
+                )
+                guard lineRect.height > 0 else { continue }
+                if lineRect.minY > visibleMaxY { break }
+                guard lineRect.maxY >= visibleMinY else { continue }
+
+                result.append(EditorVisibleGutterLine(
+                    lineNumber: idx + 1,
+                    minY: lineRect.minY,
+                    height: lineRect.height
+                ))
+            }
+        }
+
+        // Trailing empty line after a final line break (LF, CR, CRLF, or U+2029).
+        if lineIndex.endsWithNewline {
+            let extraRect = layoutManager.extraLineFragmentRect
+            if extraRect.height > 0,
+               extraRect.maxY >= visibleMinY,
+               extraRect.minY <= visibleMaxY {
+                result.append(EditorVisibleGutterLine(
+                    lineNumber: lineIndex.lineCount,
+                    minY: extraRect.minY,
+                    height: extraRect.height
+                ))
+            }
+        }
+
+        return result
+    }
+}
+#endif
