@@ -263,7 +263,7 @@ nonisolated enum GitDiffProbeCommand {
             case "G": gone.insert(decodedName(line))
             case "C":
                 // `path:count`; split at the last colon, paths may hold one.
-                guard let colon = line.lastIndex(of: ":"), let count = Int(line[line.index(after: colon)...]) else { continue }
+                guard let colon = line.lastIndex(of: ":"), let count = GitDiffCount.parse(line[line.index(after: colon)...]) else { continue }
                 untrackedCounts[decodedName(line[..<colon])] = count
             default:
                 let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
@@ -281,15 +281,15 @@ nonisolated enum GitDiffProbeCommand {
                     if fields.count > 2, !fields[2].isEmpty { snapshot.headSHA = String(fields[2]) }
                 case "F": if fields.count > 1, !fields[1].isEmpty { snapshot.baseRef = String(fields[1]) }
                 case "S": snapshot.stamp = fields.count > 1 ? String(fields[1]) : ""
-                case "N": untrackedTotal = fields.count > 1 ? Int(fields[1]) ?? 0 : 0
+                case "N": untrackedTotal = fields.count > 1 ? GitDiffCount.parse(fields[1]) ?? 0 : 0
                 case "U": unchanged = true
                 default:
                     if line.hasPrefix("# branch.upstream ") {
                         snapshot.upstream = String(line.dropFirst("# branch.upstream ".count))
                     } else if line.hasPrefix("# branch.ab ") {
                         for part in line.dropFirst("# branch.ab ".count).split(separator: " ") {
-                            if part.first == "+" { snapshot.ahead = Int(part.dropFirst()) ?? 0 }
-                            if part.first == "-" { snapshot.behind = Int(part.dropFirst()) ?? 0 }
+                            if part.first == "+" { snapshot.ahead = GitDiffCount.parse(part.dropFirst()) ?? 0 }
+                            if part.first == "-" { snapshot.behind = GitDiffCount.parse(part.dropFirst()) ?? 0 }
                         }
                     }
                 }
@@ -323,10 +323,10 @@ nonisolated enum GitDiffProbeCommand {
     /// so they agree by position; by path is the fallback if they ever differ.
     static func trackedFiles(nameStatus: [[Substring]], numstat: [[Substring]]) -> [GitDiffFile] {
         let aligned = nameStatus.count == numstat.count
-        var countsByPath: [String: (Int?, Int?)] = [:]
+        var numstatByPath: [String: [Substring]] = [:]
         if !aligned {
             for fields in numstat where fields.count == 3 {
-                countsByPath[GitDiffPatchParser.unquote(String(fields[2]))] = (Int(fields[0]), Int(fields[1]))
+                numstatByPath[GitDiffPatchParser.unquote(String(fields[2]))] = fields
             }
         }
         var files: [GitDiffFile] = []
@@ -337,14 +337,13 @@ nonisolated enum GitDiffProbeCommand {
             let path = GitDiffPatchParser.unquote(String(fields[hasOrigin ? 2 : 1]))
             var file = GitDiffFile(path: path, oldPath: hasOrigin ? GitDiffPatchParser.unquote(String(fields[1])) : nil,
                                    status: status)
-            let counts: (Int?, Int?)? = aligned
-                ? (numstat[index].count >= 2 ? (Int(numstat[index][0]), Int(numstat[index][1])) : nil)
-                : countsByPath[path]
-            if let counts {
-                file.additions = counts.0
-                file.deletions = counts.1
-                // numstat prints "-" for both counts of a binary file.
-                file.isBinary = counts.0 == nil && counts.1 == nil
+            if let counts = aligned ? numstat[index] : numstatByPath[path], counts.count >= 2 {
+                file.additions = GitDiffCount.parse(counts[0])
+                file.deletions = GitDiffCount.parse(counts[1])
+                // numstat prints "-" for both counts of a binary file; a
+                // malformed count is only missing, never a binary marker.
+                file.isBinary = counts[0] == "-" && counts[1] == "-"
+                file.hasPartialCounts = !file.isBinary && (file.additions == nil || file.deletions == nil)
             }
             files.append(file)
         }
@@ -365,8 +364,11 @@ nonisolated enum GitDiffProbeCommand {
                 : candidates.first
             guard let index = match else {
                 // Listed by the patch only: a file that changed between the two git calls.
+                // Its counts are the visible lines, so a cut-off patch undercounts.
+                var file = patch
+                if file.isTruncated, !file.isBinary { file.hasPartialCounts = true }
                 indicesByPath[patch.path, default: []].append(snapshot.files.count)
-                snapshot.files.append(patch)
+                snapshot.files.append(file)
                 continue
             }
             snapshot.files[index].hunks = patch.hunks
@@ -374,9 +376,11 @@ nonisolated enum GitDiffProbeCommand {
             snapshot.files[index].hasPatch = true
             snapshot.files[index].isTruncated = patch.isTruncated
             if patch.isBinary { snapshot.files[index].isBinary = true }
-            if snapshot.files[index].additions == nil, !patch.isBinary {
-                snapshot.files[index].additions = patch.additions
-                snapshot.files[index].deletions = patch.deletions
+            if !patch.isBinary {
+                if snapshot.files[index].additions == nil { snapshot.files[index].additions = patch.additions }
+                if snapshot.files[index].deletions == nil { snapshot.files[index].deletions = patch.deletions }
+                // Visible lines are the true count only when the patch is whole.
+                if !patch.isTruncated, !patch.hasPartialCounts { snapshot.files[index].hasPartialCounts = false }
             }
         }
     }

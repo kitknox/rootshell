@@ -75,6 +75,9 @@ nonisolated struct GitDiffFile: Equatable, Sendable, Identifiable {
     var maxColumns = 0
     /// Over the size limit, so it was never read: no counts and no patch.
     var isTooLarge = false
+    /// git sent a count that failed to parse and no complete patch filled it
+    /// in, or the patch had a hunk that was skipped. Totals undercount it.
+    var hasPartialCounts = false
 
     /// A path can be listed twice: `git rm --cached` leaves it both a staged
     /// deletion and a new file. The two entries need separate identities.
@@ -112,11 +115,12 @@ nonisolated struct GitDiffSnapshot: Equatable, Sendable {
     /// Whether patches were requested for this snapshot.
     var includesPatch = false
 
-    var additions: Int { files.reduce(0) { $0 + ($1.additions ?? 0) } }
-    var deletions: Int { files.reduce(0) { $0 + ($1.deletions ?? 0) } }
+    var additions: Int { files.reduce(0) { GitDiffCount.sum($0, $1.additions ?? 0) } }
+    var deletions: Int { files.reduce(0) { GitDiffCount.sum($0, $1.deletions ?? 0) } }
     var isClean: Bool { files.isEmpty }
-    /// A file was too large to read, or went unlisted, so the totals are a floor.
-    var countsIncomplete: Bool { untrackedTruncated || files.contains { $0.isTooLarge } }
+    /// A file was too large to read, went unlisted, or had a bad count, so the
+    /// totals are a floor.
+    var countsIncomplete: Bool { untrackedTruncated || files.contains { $0.isTooLarge || $0.hasPartialCounts } }
 
     /// Drops any entry that repeats an identity, keeping the first, so
     /// nothing downstream can key two rows alike.
@@ -138,6 +142,27 @@ nonisolated enum GitDiffUnavailable: Equatable, Sendable {
     case gitMissing
     case noDirectory
     case notARepository(directory: String)
+}
+
+/// Counts and line numbers arrive as text from a remote host, so they are
+/// range-checked before any arithmetic touches them.
+nonisolated enum GitDiffCount {
+    /// Far beyond any real file, and small enough that numbering a hunk's
+    /// lines from it can never overflow.
+    static let limit = 1 << 40
+
+    /// Plain digits in `0...limit`, or nil. `Int(_:)` alone would take a sign.
+    static func parse(_ text: Substring) -> Int? {
+        guard !text.isEmpty, text.utf8.allSatisfy({ (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) }),
+              let value = Int(text), value <= limit else { return nil }
+        return value
+    }
+
+    /// Saturating, since a hostile reply can list enough files to overflow.
+    static func sum(_ lhs: Int, _ rhs: Int) -> Int {
+        let (result, overflow) = lhs.addingReportingOverflow(rhs)
+        return overflow ? (rhs < 0 ? .min : .max) : result
+    }
 }
 
 nonisolated enum GitDiffFormat {

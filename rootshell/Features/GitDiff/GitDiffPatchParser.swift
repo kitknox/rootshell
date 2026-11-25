@@ -20,6 +20,9 @@ nonisolated enum GitDiffPatchParser {
         var files: [GitDiffFile] = []
         var current: GitDiffFile?
         var hunk: GitDiffHunk?
+        // Inside a hunk whose header was rejected. Its body is skipped, or an
+        // added "++ x" line would read as a `+++` path marker.
+        var skippingHunk = false
         var oldLine = 0
         var newLine = 0
 
@@ -57,12 +60,15 @@ nonisolated enum GitDiffPatchParser {
 
             if line.hasPrefix("diff --git ") {
                 closeFile()
+                skippingHunk = false
                 let (old, new) = headerPaths(String(line.dropFirst("diff --git ".count)))
                 current = GitDiffFile(path: new, oldPath: nil, status: .modified)
                 if old != new { current?.oldPath = old }
                 continue
             }
             guard current != nil else { continue }
+            // Git puts no metadata between hunks, so only a header ends the skip.
+            if skippingHunk, !line.hasPrefix("@@") { continue }
 
             if hunk != nil, let first = line.first, first == " " || first == "+" || first == "-" || first == "\\" {
                 let text = clipped(line.dropFirst())
@@ -86,10 +92,13 @@ nonisolated enum GitDiffPatchParser {
 
             if line.hasPrefix("@@") {
                 closeHunk()
-                if let header = parseHunkHeader(line) {
-                    hunk = header
-                    oldLine = header.oldStart
-                    newLine = header.newStart
+                hunk = parseHunkHeader(line)
+                skippingHunk = hunk == nil
+                // Skipped lines go uncounted.
+                if skippingHunk { current?.hasPartialCounts = true }
+                if let hunk {
+                    oldLine = hunk.oldStart
+                    newLine = hunk.newStart
                 }
                 continue
             }
@@ -142,9 +151,11 @@ nonisolated enum GitDiffPatchParser {
         guard ranges.count == 2, ranges[0].first == "-", ranges[1].first == "+" else { return nil }
 
         func range(_ text: Substring) -> (Int, Int)? {
+            // Bounded so the per-line increments in `parse` cannot overflow.
             let parts = text.dropFirst().split(separator: ",", omittingEmptySubsequences: false)
-            guard let start = parts.first.flatMap({ Int($0) }) else { return nil }
-            let count = parts.count > 1 ? Int(parts[1]) ?? 1 : 1
+            guard parts.count <= 2, let start = parts.first.flatMap(GitDiffCount.parse) else { return nil }
+            guard parts.count == 2 else { return (start, 1) }
+            guard let count = GitDiffCount.parse(parts[1]) else { return nil }
             return (start, count)
         }
         guard let old = range(ranges[0]), let new = range(ranges[1]) else { return nil }

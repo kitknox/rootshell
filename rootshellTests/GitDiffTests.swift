@@ -65,6 +65,84 @@ final class GitDiffTests: XCTestCase {
         XCTAssertEqual(hunk.lines.map(\.kind), [.context, .deletion, .addition, .addition, .context, .context])
     }
 
+    func testOutOfRangeHunkHeadersAreRejected() {
+        for header in ["@@ -\(Int.max),1 +1 @@", "@@ -1 +1,\(Int.max) @@", "@@ --5 +1 @@", "@@ -+5 +1 @@",
+                       "@@ -1,2,3 +1 @@"] {
+            XCTAssertNil(GitDiffPatchParser.parseHunkHeader(Substring(header)), header)
+        }
+        // The rejected hunk's "+++" body lines must not rename the file, even after a blank line.
+        let files = GitDiffPatchParser.parse("""
+        diff --git a/f b/f
+        --- a/f
+        +++ b/f
+        @@ -1 +\(Int.max) @@
+        +++ evil
+        +line
+
+        +++ evil2
+        @@ -5 +5 @@
+        -old
+        +new
+
+        """)
+        XCTAssertEqual(files.map(\.path), ["f"])
+        XCTAssertEqual(files[0].hunks.map(\.oldStart), [5])
+        XCTAssertEqual(files[0].hunks[0].lines.map(\.text), ["old", "new"])
+        XCTAssertTrue(files[0].hasPartialCounts)
+    }
+
+    func testARejectedCountKeepsTotalsPartialUntilAWholePatch() {
+        let patch = GitDiffPatchParser.parse("diff --git a/a.swift b/a.swift\n@@ -1 +1 @@\n-old\n+new\n")
+        for truncated in [true, false] {
+            var snapshot = GitDiffSnapshot(repositoryRoot: "/repo")
+            snapshot.files = GitDiffProbeCommand.trackedFiles(nameStatus: [["M", "a.swift"]],
+                                                              numstat: [["5", "\(UInt64.max)", "a.swift"]])
+            XCTAssertTrue(snapshot.countsIncomplete)
+            var cut = patch
+            cut[0].isTruncated = truncated
+            GitDiffProbeCommand.merge(cut, into: &snapshot)
+            XCTAssertEqual(snapshot.files[0].additions, 5)
+            XCTAssertEqual(snapshot.files[0].deletions, 1)
+            XCTAssertEqual(snapshot.countsIncomplete, truncated)
+        }
+    }
+
+    func testACutPatchOnlyFileKeepsTotalsPartial() {
+        for truncated in [true, false] {
+            var snapshot = GitDiffSnapshot(repositoryRoot: "/repo")
+            let patch = GitDiffPatchParser.parse("diff --git a/late.swift b/late.swift\n@@ -1 +1 @@\n-old\n+new\n",
+                                                 truncated: truncated)
+            GitDiffProbeCommand.merge(patch, into: &snapshot)
+            XCTAssertEqual(snapshot.files.map(\.path), ["late.swift"])
+            XCTAssertEqual(snapshot.countsIncomplete, truncated)
+        }
+    }
+
+    func testOutOfRangeNumstatCountsAreNotBinary() {
+        let nameStatus: [[Substring]] = [["M", "a.swift"], ["M", "b.png"]]
+        let numstat: [[Substring]] = [["\(UInt64.max)", "\(UInt64.max)", "a.swift"], ["-", "-", "b.png"]]
+        for numstat in [numstat, numstat + [["1", "1", "extra"]]] {  // positional, then by path
+            let files = GitDiffProbeCommand.trackedFiles(nameStatus: nameStatus, numstat: numstat)
+            XCTAssertEqual(files.map(\.isBinary), [false, true])
+            XCTAssertNil(files[0].additions)
+        }
+    }
+
+    func testCountsAreBoundedAndTotalsSaturate() {
+        XCTAssertNil(GitDiffCount.parse("\(Int.max)"))
+        XCTAssertNil(GitDiffCount.parse("-1"))
+        XCTAssertNil(GitDiffCount.parse("+5"))
+        XCTAssertNil(GitDiffCount.parse(""))
+        XCTAssertEqual(GitDiffCount.parse("12"), 12)
+        XCTAssertEqual(GitDiffCount.sum(-1, .min), .min)
+        var snapshot = GitDiffSnapshot(repositoryRoot: "/repo")
+        snapshot.files = (0..<3).map {
+            GitDiffFile(path: "f\($0)", oldPath: nil, status: .modified, additions: Int.max / 2, deletions: 1)
+        }
+        XCTAssertEqual(snapshot.additions, Int.max)
+        XCTAssertEqual(snapshot.deletions, 3)
+    }
+
     func testMarksAMissingFinalNewlineOnTheLineAbove() {
         let lines = GitDiffPatchParser.parse(patch)[2].hunks[0].lines
         XCTAssertEqual(lines.count, 2)
