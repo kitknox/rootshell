@@ -15,11 +15,13 @@ import Synchronization
 
 nonisolated final class S3Connection: FileConnection {
     let session: S3Session
+    let principal: EditPrincipal
     private let isClosed = Mutex(false)
 
     init(provider: StorageProvider) throws {
         if let problem = provider.validationError { throw StorageError.misconfigured(problem) }
         session = S3Session(provider: provider)
+        principal = EditPrincipal(key: provider.principalIdentity)
     }
 
     var isActive: Bool { !isClosed.withLock { $0 } }

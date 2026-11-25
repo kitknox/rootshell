@@ -86,6 +86,7 @@ final class FileManagerModel {
         let stagedURL: URL
         let hash: Data
         let fingerprint: RemoteFileFingerprint
+        let principal: EditPrincipal
         let prompts: FileManagerPrompts
         let openToken: UUID
     }
@@ -418,17 +419,23 @@ final class FileManagerModel {
             let prompts = prompts
             Task {
                 do {
-                    let fs = try await FileConnectionPool.shared.fileSystem(for: endpoint, purpose: .browse, prompts: prompts)
+                    let (fs, served) = try await FileConnectionPool.shared.fileSystemAndPrincipal(
+                        for: endpoint, purpose: .browse, prompts: prompts
+                    )
                     let (data, fingerprint) = try await RemoteFileEditCenter.fetchRemoteFile(
                         path: entry.path,
                         fs: fs,
-                        endpointKey: endpoint.recoveryKey,
+                        endpointKey: served.key,
                         maxBytes: FileEditClassification.maxInAppEditBytes
                     )
                     // Abort if the window closed or the pane switched to another endpoint while downloading.
                     guard !isTornDown, !Task.isCancelled, pane.endpoint == endpoint else { return }
                     if FileEditClassification.isTextData(data) {
-                        openForPreferredEditor(entry, on: endpoint, preloaded: (data, fingerprint))
+                        openForPreferredEditor(
+                            entry,
+                            on: endpoint,
+                            preloaded: FetchedRemoteFile(data: data, fingerprint: fingerprint, principal: served)
+                        )
                     } else if endpoint.isLocal {
                         preview(entry, on: endpoint)
                     } else {
@@ -451,7 +458,7 @@ final class FileManagerModel {
     private func openForPreferredEditor(
         _ entry: RFEntry,
         on endpoint: FileEndpoint,
-        preloaded: (data: Data, fingerprint: RemoteFileFingerprint)?
+        preloaded: FetchedRemoteFile?
     ) {
         let rawPreference = SettingsStore.shared.value(Settings.Transfer.fileManagerEditorPreference)
         #if targetEnvironment(macCatalyst)
@@ -476,7 +483,7 @@ final class FileManagerModel {
         _ entry: RFEntry,
         in pane: FilePaneModel,
         editor: FileManagerEmbeddedEditor,
-        preloaded: (data: Data, fingerprint: RemoteFileFingerprint)? = nil
+        preloaded: FetchedRemoteFile? = nil
     ) {
         editInEmbeddedEditor(entry, on: pane.endpoint, editor: editor, preloaded: preloaded)
     }
@@ -485,7 +492,7 @@ final class FileManagerModel {
         _ entry: RFEntry,
         on endpoint: FileEndpoint,
         editor: FileManagerEmbeddedEditor,
-        preloaded: (data: Data, fingerprint: RemoteFileFingerprint)? = nil
+        preloaded: FetchedRemoteFile? = nil
     ) {
         guard !entry.isDirectory else { return }
         guard let launcher = openInEmbeddedEditor else {
@@ -502,11 +509,7 @@ final class FileManagerModel {
         }
 
         if let existing = RemoteFileEditCenter.shared.existingSession(for: endpoint, remotePath: entry.path) {
-            existing.embeddedEditor = editor
-            existing.editorName = editor.shortTitle
-            if !launcher(existing.localURL.path, editor) {
-                errorMessage = String(localized: "Couldn't launch \(editor.title).", comment: "File manager embedded editor error; argument is editor name")
-            }
+            reopenEmbeddedEdit(existing, editor: editor, launcher: launcher)
             return
         }
 
@@ -529,13 +532,24 @@ final class FileManagerModel {
                 RemoteFileEditCenter.shared.endOpen(token: openToken)
             }
             do {
-                let (stagedURL, hash, fingerprint) = try await RemoteFileEditCenter.shared.stageForExternalEdit(
+                let (stagedURL, hash, fingerprint, principal) = try await RemoteFileEditCenter.shared.stageForExternalEdit(
                     entry: entry,
                     endpoint: endpoint,
                     prompts: prompts,
                     preloaded: preloaded
                 )
                 guard !isTornDown, !Task.isCancelled else {
+                    RemoteFileEditCenter.removeStagingDirectory(stagedURL.deletingLastPathComponent())
+                    return
+                }
+                switch RemoteFileEditCenter.shared.confirmStagedOpen(token: openToken, servedBy: principal, remotePath: entry.path) {
+                case .launch:
+                    break
+                case .reuse(let existing):
+                    RemoteFileEditCenter.removeStagingDirectory(stagedURL.deletingLastPathComponent())
+                    reopenEmbeddedEdit(existing, editor: editor, launcher: launcher)
+                    return
+                case .drop:
                     RemoteFileEditCenter.removeStagingDirectory(stagedURL.deletingLastPathComponent())
                     return
                 }
@@ -546,6 +560,7 @@ final class FileManagerModel {
                 }
                 RemoteFileEditCenter.shared.registerSession(
                     endpoint: endpoint,
+                    principal: principal,
                     remotePath: entry.path,
                     fileName: entry.name,
                     localURL: stagedURL,
@@ -568,10 +583,22 @@ final class FileManagerModel {
         inFlightExternalOpenTasks[openToken] = task
     }
 
+    private func reopenEmbeddedEdit(
+        _ session: RemoteEditSession,
+        editor: FileManagerEmbeddedEditor,
+        launcher: (String, FileManagerEmbeddedEditor) -> Bool
+    ) {
+        session.embeddedEditor = editor
+        session.editorName = editor.shortTitle
+        if !launcher(session.localURL.path, editor) {
+            errorMessage = String(localized: "Couldn't launch \(editor.title).", comment: "File manager embedded editor error; argument is editor name")
+        }
+    }
+
     func editInApp(
         _ entry: RFEntry,
         in pane: FilePaneModel,
-        preloaded: (data: Data, fingerprint: RemoteFileFingerprint)? = nil
+        preloaded: FetchedRemoteFile? = nil
     ) {
         editInApp(entry, on: pane.endpoint, preloaded: preloaded)
     }
@@ -579,7 +606,7 @@ final class FileManagerModel {
     func editInApp(
         _ entry: RFEntry,
         on endpoint: FileEndpoint,
-        preloaded: (data: Data, fingerprint: RemoteFileFingerprint)? = nil
+        preloaded: FetchedRemoteFile? = nil
     ) {
         guard !entry.isDirectory else { return }
         guard entry.size <= FileEditClassification.maxInAppEditBytes else {
@@ -600,7 +627,7 @@ final class FileManagerModel {
         _ entry: RFEntry,
         in pane: FilePaneModel,
         appURL: URL? = nil,
-        preloaded: (data: Data, fingerprint: RemoteFileFingerprint)? = nil
+        preloaded: FetchedRemoteFile? = nil
     ) {
         editExternally(entry, on: pane.endpoint, appURL: appURL, preloaded: preloaded)
     }
@@ -609,7 +636,7 @@ final class FileManagerModel {
         _ entry: RFEntry,
         on endpoint: FileEndpoint,
         appURL: URL? = nil,
-        preloaded: (data: Data, fingerprint: RemoteFileFingerprint)? = nil
+        preloaded: FetchedRemoteFile? = nil
     ) {
         guard !entry.isDirectory else { return }
 
@@ -657,13 +684,24 @@ final class FileManagerModel {
                 }
             }
             do {
-                let (stagedURL, hash, fingerprint) = try await RemoteFileEditCenter.shared.stageForExternalEdit(
+                let (stagedURL, hash, fingerprint, principal) = try await RemoteFileEditCenter.shared.stageForExternalEdit(
                     entry: entry,
                     endpoint: endpoint,
                     prompts: prompts,
                     preloaded: preloaded
                 )
                 guard !isTornDown, !Task.isCancelled else {
+                    RemoteFileEditCenter.removeStagingDirectory(stagedURL.deletingLastPathComponent())
+                    return
+                }
+                switch RemoteFileEditCenter.shared.confirmStagedOpen(token: openToken, servedBy: principal, remotePath: entry.path) {
+                case .launch:
+                    break
+                case .reuse(let existing):
+                    RemoteFileEditCenter.removeStagingDirectory(stagedURL.deletingLastPathComponent())
+                    reopenExternalEdit(existing, withApp: appURL)
+                    return
+                case .drop:
                     RemoteFileEditCenter.removeStagingDirectory(stagedURL.deletingLastPathComponent())
                     return
                 }
@@ -680,6 +718,7 @@ final class FileManagerModel {
                     stagedURL: stagedURL,
                     hash: hash,
                     fingerprint: fingerprint,
+                    principal: principal,
                     appURL: appURL,
                     prompts: prompts
                 )
@@ -691,6 +730,7 @@ final class FileManagerModel {
                     stagedURL: stagedURL,
                     hash: hash,
                     fingerprint: fingerprint,
+                    principal: principal,
                     prompts: prompts,
                     openToken: openToken
                 ))
@@ -714,6 +754,7 @@ final class FileManagerModel {
         stagedURL: URL,
         hash: Data,
         fingerprint: RemoteFileFingerprint,
+        principal: EditPrincipal,
         appURL: URL?,
         prompts: FileManagerPrompts
     ) {
@@ -726,6 +767,7 @@ final class FileManagerModel {
                     stagedURL: stagedURL,
                     hash: hash,
                     fingerprint: fingerprint,
+                    principal: principal,
                     appURL: appURL,
                     prompts: prompts
                 )
@@ -790,6 +832,7 @@ final class FileManagerModel {
         let folderLabel = destinationURL.deletingLastPathComponent().lastPathComponent
         RemoteFileEditCenter.shared.registerSession(
             endpoint: request.endpoint,
+            principal: request.principal,
             remotePath: request.entry.path,
             fileName: request.entry.name,
             localURL: destinationURL,

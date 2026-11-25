@@ -171,6 +171,8 @@ nonisolated enum SudoSFTP {
         return SFTPConnection(
             browseClient: browseClient,
             label: label,
+            login: base.login,
+            isSudo: true,
             openChannel: openChannel,
             teardown: release
         )

@@ -16,6 +16,9 @@ actor SFTPConnection: FileConnection {
     /// Channel for listings and small metadata calls.
     nonisolated let browseClient: SFTPClient
     nonisolated let label: String
+    /// The account this connection actually signed in as, whatever endpoint asked for it.
+    nonisolated let login: FileEditRecoveryKey.Login
+    nonisolated let isSudo: Bool
     /// Runs a command on the same connection, stderr split out; nil when
     /// the connection can't run commands.
     nonisolated let openExec: (@Sendable (String) async throws -> RemoteExecChannel)?
@@ -28,18 +31,24 @@ actor SFTPConnection: FileConnection {
     init(
         browseClient: SFTPClient,
         label: String,
+        login: FileEditRecoveryKey.Login,
+        isSudo: Bool = false,
         openChannel: @escaping @Sendable () async throws -> SFTPClient,
         openExec: (@Sendable (String) async throws -> RemoteExecChannel)? = nil,
         teardown: @escaping @Sendable () async -> Void
     ) {
         self.browseClient = browseClient
         self.label = label
+        self.login = login
+        self.isSudo = isSudo
         self.openExec = openExec
         self.openChannel = openChannel
         self.teardown = teardown
     }
 
     nonisolated var isActive: Bool { browseClient.isActive }
+
+    nonisolated var principal: EditPrincipal { EditPrincipal(login: login, isSudo: isSudo) }
 
     nonisolated var browseFileSystem: FileSystemEndpoint {
         FileSystemEndpoint(backend: .sftp(browseClient))

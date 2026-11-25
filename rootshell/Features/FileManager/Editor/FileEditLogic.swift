@@ -906,6 +906,66 @@ nonisolated enum FileEditRecoveryKey {
         }
         return encoded
     }
+
+    /// One SSH login by value, so a live connection can name the account it serves.
+    struct Login: Equatable, Sendable {
+        let host: String
+        let port: Int
+        let username: String
+        let jumpHops: [JumpHop]
+        /// Not part of `key`; only lets `reachesSameAccount` match a host to its IP.
+        var cachedIP: String? = nil
+
+        func key(isSudo: Bool) -> String {
+            FileEditRecoveryKey.ssh(host: host, port: port, username: username, isSudo: isSudo, jumpHops: jumpHops)
+        }
+
+        /// Mirrors `SSHConfig.reachesSameAccount`: same user, port, and route, with any
+        /// shared host spelling (name or cached IP).
+        func reachesSameAccount(as other: Login) -> Bool {
+            guard username == other.username, port == other.port,
+                  jumpHops.count == other.jumpHops.count,
+                  zip(jumpHops, other.jumpHops).allSatisfy({
+                      $0.host.lowercased() == $1.host.lowercased() && $0.port == $1.port && $0.username == $1.username
+                  }) else { return false }
+            return !hostCandidates.isDisjoint(with: other.hostCandidates)
+        }
+
+        private var hostCandidates: Set<String> {
+            var set: Set<String> = [host.lowercased()]
+            if let cachedIP, !cachedIP.isEmpty { set.insert(cachedIP.lowercased()) }
+            return set
+        }
+    }
+}
+
+/// Who a connection serves. `key` names it exactly, for recovery records and save checks;
+/// `login` lets reuse treat a host and its cached IP as one account.
+nonisolated struct EditPrincipal: Equatable, Sendable {
+    let key: String
+    let login: FileEditRecoveryKey.Login?
+    let isSudo: Bool
+
+    static let local = EditPrincipal(key: "local")
+
+    init(login: FileEditRecoveryKey.Login, isSudo: Bool) {
+        key = login.key(isSudo: isSudo)
+        self.login = login
+        self.isSudo = isSudo
+    }
+
+    /// Storage, local, or unavailable endpoints: matched by `key` alone.
+    init(key: String) {
+        self.key = key
+        login = nil
+        isSudo = false
+    }
+
+    func reachesSameAccount(as other: EditPrincipal) -> Bool {
+        if key == other.key { return true }
+        guard isSudo == other.isSudo, let login, let otherLogin = other.login else { return false }
+        return login.reachesSameAccount(as: otherLogin)
+    }
 }
 
 /// Tracks an in-progress SFTP backup-and-swap commit so that if the connection
@@ -985,25 +1045,23 @@ nonisolated enum SFTPRecoveryPlanner {
     }
 }
 
-/// Serializes recovery and SFTP swap commits per `(endpointKey, targetPath)` so a concurrent
-/// reader or reconnect sweep can never race against an active save's staged temp file or journal.
+/// Serializes recovery and SFTP swap commits per path so a concurrent reader, reconnect sweep,
+/// or save under another login, sudo, or host alias can never race an active save's staged temp
+/// file, journal, or pre-commit revision check. Keyed on the path alone: host spellings can't be
+/// proven distinct, and serializing same-path saves on unrelated servers costs nothing.
 actor SFTPPathOperationGate {
     static let shared = SFTPPathOperationGate()
 
-    private nonisolated struct Key: Hashable, Sendable {
-        let endpointKey: String
-        let targetPath: String
-    }
+    private typealias Key = String
 
     private var locked: Set<Key> = []
     private var waiters: [Key: [CheckedContinuation<Void, Never>]] = [:]
 
     nonisolated func withLock<T>(
-        endpointKey: String,
         targetPath: String,
         _ body: () async throws -> T
     ) async rethrows -> T {
-        let key = Key(endpointKey: endpointKey, targetPath: targetPath)
+        let key = targetPath
         await acquire(key)
         do {
             let result = try await body()

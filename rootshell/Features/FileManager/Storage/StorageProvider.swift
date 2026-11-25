@@ -6,6 +6,7 @@
 //  included, lives in one iCloud Keychain item so it syncs across devices.
 //
 
+import CryptoKit
 import Foundation
 
 nonisolated struct StorageProvider: Codable, Identifiable, Hashable, Sendable {
@@ -417,6 +418,13 @@ nonisolated struct StorageProvider: Codable, Identifiable, Hashable, Sendable {
     /// is false.
     func mayShareNamespace(with other: StorageProvider) -> Bool {
         endpointIdentity == other.endpointIdentity
+    }
+
+    /// The server plus a digest of the signing principal, so a snapshot of it holds no secret.
+    var principalIdentity: String {
+        let principal = accessKeyID.trimmingCharacters(in: .whitespacesAndNewlines) + "\u{1F}" + sessionToken
+        let digest = SHA256.hash(data: Data(principal.utf8)).map { String(format: "%02x", $0) }.joined()
+        return "storage\u{1F}\(endpointIdentity)\u{1F}\(digest)"
     }
 
     /// True when both providers authenticate as the same principal (trimmed to match signing).

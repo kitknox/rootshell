@@ -13,6 +13,8 @@ import Foundation
 /// A live remote filesystem the pool can share and close.
 nonisolated protocol FileConnection: AnyObject, Sendable {
     var isActive: Bool { get }
+    /// Who the connection signed in as, for binding edits to the account that serves them.
+    var principal: EditPrincipal { get }
     /// For listings and small metadata calls.
     var browseFileSystem: FileSystemEndpoint { get }
     /// For bulk transfers; may be the browse filesystem.
@@ -38,14 +40,34 @@ final class FileConnectionPool {
 
     /// A filesystem for `endpoint`, connecting (and prompting) if needed.
     func fileSystem(for endpoint: FileEndpoint, purpose: Purpose, prompts: FileManagerPrompts) async throws -> FileSystemEndpoint {
+        try await fileSystemAndPrincipal(for: endpoint, purpose: purpose, prompts: prompts).fs
+    }
+
+    /// `fileSystem(for:)` plus who the serving connection signed in as. Edits bind to this,
+    /// not to `endpoint`, which a pane fallback or a cached connection can serve differently.
+    func fileSystemAndPrincipal(
+        for endpoint: FileEndpoint,
+        purpose: Purpose,
+        prompts: FileManagerPrompts
+    ) async throws -> (fs: FileSystemEndpoint, principal: EditPrincipal) {
         if endpoint.isLocal {
-            return FileSystemEndpoint(backend: .local(.current()))
+            return (FileSystemEndpoint(backend: .local(.current())), EditPrincipal.local)
         }
         let connection = try await connection(for: endpoint, prompts: prompts)
         switch purpose {
-        case .browse: return connection.browseFileSystem
-        case .transfer: return await connection.transferFileSystem()
+        case .browse: return (connection.browseFileSystem, connection.principal)
+        case .transfer: return (await connection.transferFileSystem(), connection.principal)
         }
+    }
+
+    /// The live connection's principal, else the one a connection opened now should have.
+    func expectedPrincipal(for endpoint: FileEndpoint) -> EditPrincipal {
+        if !endpoint.isLocal, let live = connections[endpoint], live.isActive { return live.principal }
+        // Sudo layers on the base connection, which may predate an edit to its profile.
+        if case .sudo(let base) = endpoint, let live = connections[base] as? SFTPConnection, live.isActive {
+            return EditPrincipal(login: live.login, isSudo: true)
+        }
+        return endpoint.predictedPrincipal
     }
 
     private func connection(for endpoint: FileEndpoint, prompts: FileManagerPrompts) async throws -> any FileConnection {
@@ -66,7 +88,11 @@ final class FileConnectionPool {
             }
             // Reconcile any interrupted SFTP swap on this endpoint inside the shared connection
             // task before publishing the connection so concurrent callers never list mid-recovery.
-            await RemoteFileEditCenter.recoverPendingSwaps(for: endpoint, on: connection.browseFileSystem)
+            await RemoteFileEditCenter.recoverPendingSwaps(
+                endpointKey: connection.principal.key,
+                displayName: endpoint.displayName,
+                on: connection.browseFileSystem
+            )
             if Task.isCancelled {
                 await connection.close()
                 throw CancellationError()

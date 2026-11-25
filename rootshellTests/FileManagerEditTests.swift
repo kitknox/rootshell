@@ -512,6 +512,26 @@ final class FileManagerEditTests: XCTestCase {
         XCTAssertEqual(viaBastionA, sameCaseInsensitive)
     }
 
+    func testEditPrincipalMatchesHostAliasesButNotOtherAccountsOrSudo() {
+        typealias Login = FileEditRecoveryKey.Login
+        let byName = Login(host: "Server.lan", port: 22, username: "deploy", jumpHops: [], cachedIP: "10.0.0.5")
+        let byIP = Login(host: "10.0.0.5", port: 22, username: "deploy", jumpHops: [])
+        let otherUser = Login(host: "10.0.0.5", port: 22, username: "admin", jumpHops: [])
+        let viaBastion = Login(
+            host: "10.0.0.5", port: 22, username: "deploy",
+            jumpHops: [.init(host: "bastion", port: 22, username: "ops")]
+        )
+
+        let user = EditPrincipal(login: byName, isSudo: false)
+        XCTAssertTrue(user.reachesSameAccount(as: EditPrincipal(login: byIP, isSudo: false)))
+        XCTAssertNotEqual(user.key, EditPrincipal(login: byIP, isSudo: false).key)
+        XCTAssertFalse(user.reachesSameAccount(as: EditPrincipal(login: byIP, isSudo: true)))
+        XCTAssertFalse(user.reachesSameAccount(as: EditPrincipal(login: otherUser, isSudo: false)))
+        XCTAssertFalse(user.reachesSameAccount(as: EditPrincipal(login: viaBastion, isSudo: false)))
+        XCTAssertFalse(EditPrincipal(key: "storage-a").reachesSameAccount(as: EditPrincipal(key: "storage-b")))
+        XCTAssertTrue(EditPrincipal.local.reachesSameAccount(as: .local))
+    }
+
     func testRecoveryStorePersistsAndClearsSwapRecords() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -591,13 +611,13 @@ final class FileManagerEditTests: XCTestCase {
         }
         let trace = Trace()
 
-        async let first: Void = gate.withLock(endpointKey: "ep", targetPath: "/a") {
+        async let first: Void = gate.withLock(targetPath: "/a") {
             await trace.append("enter-1")
             try? await Task.sleep(for: .milliseconds(40))
             await trace.append("exit-1")
         }
         try? await Task.sleep(for: .milliseconds(10))
-        async let second: Void = gate.withLock(endpointKey: "ep", targetPath: "/a") {
+        async let second: Void = gate.withLock(targetPath: "/a") {
             await trace.append("enter-2")
             await trace.append("exit-2")
         }

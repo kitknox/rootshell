@@ -169,6 +169,7 @@ enum SFTPConnectionFactory {
             return SFTPConnection(
                 browseClient: sftp,
                 label: label,
+                login: config.fileEditLogin,
                 openChannel: { try await client.openSFTP() },
                 openExec: citadelExecOpener(client),
                 teardown: teardown
@@ -199,6 +200,7 @@ enum SFTPConnectionFactory {
             return SFTPConnection(
                 browseClient: try await openChannel(),
                 label: label,
+                login: trzsz.sshConfig.fileEditLogin,
                 openChannel: openChannel,
                 openExec: tsshExecOpener { try await transport.openExecChannel($0) },
                 teardown: { await MainActor.run { transport.disconnect() } }
@@ -264,15 +266,25 @@ enum SFTPConnectionFactory {
     private static func borrowPane(_ source: FileEndpoint.PaneSource) async throws -> SFTPConnection? {
         guard let terminal = source.terminal else { return nil }
         let label = source.displayName
-        let host = source.fallbackConfig.underlyingSSHConfig?.host ?? label
+        // The pane's own login: `fallbackConfig` is its live connection's config.
+        guard let ssh = source.fallbackConfig.underlyingSSHConfig else { return nil }
+        let host = ssh.host
         guard let openChannel = paneChannelOpener(for: terminal, host: host) else { return nil }
         return SFTPConnection(
             browseClient: try await openChannel(),
             label: label,
+            login: ssh.fileEditLogin,
             openChannel: openChannel,
             openExec: paneExecOpener(for: terminal),
             teardown: {}
         )
+    }
+
+    /// Whether `open` would borrow the pane's own connection rather than fall back to its
+    /// profile (a Mosh pane, say, has none to lend).
+    static func canBorrowPane(_ source: FileEndpoint.PaneSource) -> Bool {
+        guard let terminal = source.terminal, let ssh = source.fallbackConfig.underlyingSSHConfig else { return false }
+        return paneChannelOpener(for: terminal, host: ssh.host) != nil
     }
 
     /// Exec channels on the same connection `paneChannelOpener` lends.

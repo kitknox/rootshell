@@ -17,8 +17,8 @@ struct RemoteFileEditorRequest: Identifiable {
     let entry: RFEntry
     let endpoint: FileEndpoint
     let prompts: FileManagerPrompts
-    /// Pre-fetched bytes and fingerprint when content sniffing already downloaded the file.
-    let preloaded: (data: Data, fingerprint: RemoteFileFingerprint)?
+    /// Bytes, fingerprint, and serving principal when content sniffing already downloaded the file.
+    let preloaded: FetchedRemoteFile?
 }
 
 // MARK: - SwiftUI Sheet
@@ -41,6 +41,8 @@ struct RemoteFileEditorView: View {
     @State private var language: FileEditorSyntax.Language = .plain
     @State private var indentation: EditableTextDocument.Indentation = .spaces(2)
     @State private var fingerprint: RemoteFileFingerprint?
+    /// The serving connection's principal when the shown text was fetched.
+    @State private var loadedPrincipal: EditPrincipal?
     @State private var loadState: LoadState = .loading
     @State private var saveState: SaveState = .idle
     @State private var cursorPosition = CursorPosition(line: 1, column: 1)
@@ -570,19 +572,22 @@ struct RemoteFileEditorView: View {
         do {
             let data: Data
             let loadedFingerprint: RemoteFileFingerprint
+            let principal: EditPrincipal
             if usePreloaded, let preloaded = request.preloaded {
                 data = preloaded.data
                 loadedFingerprint = preloaded.fingerprint
+                principal = preloaded.principal
             } else {
-                let fs = try await FileConnectionPool.shared.fileSystem(
+                let (fs, served) = try await FileConnectionPool.shared.fileSystemAndPrincipal(
                     for: request.endpoint, purpose: .transfer, prompts: request.prompts
                 )
                 (data, loadedFingerprint) = try await RemoteFileEditCenter.fetchRemoteFile(
                     path: request.entry.path,
                     fs: fs,
-                    endpointKey: request.endpoint.recoveryKey,
+                    endpointKey: served.key,
                     maxBytes: FileEditClassification.maxInAppEditBytes
                 )
+                principal = served
             }
 
             guard FileEditClassification.isTextData(data),
@@ -599,6 +604,7 @@ struct RemoteFileEditorView: View {
             byteCount = decoded.text.utf8.count
             externalTextRevision += 1
             fingerprint = loadedFingerprint
+            loadedPrincipal = principal
             language = FileEditorSyntax.detectLanguage(
                 fileName: request.entry.name,
                 contentPrefix: String(decoded.text.prefix(512))
@@ -621,19 +627,23 @@ struct RemoteFileEditorView: View {
         let snapshotText = text
         let encoded = document.encode(snapshotText)
         let expected = fingerprint
+        let principal = loadedPrincipal
         saveState = .saving
         inlineBanner = nil
 
         Task {
             do {
-                let fs = try await FileConnectionPool.shared.fileSystem(
+                let (fs, served) = try await FileConnectionPool.shared.fileSystemAndPrincipal(
                     for: request.endpoint, purpose: .transfer, prompts: request.prompts
                 )
+                guard served.key == principal?.key else {
+                    throw RemoteEditError.principalChanged(fileName: request.entry.name)
+                }
                 let updatedFingerprint = try await RemoteFileEditCenter.uploadData(
                     encoded,
                     to: request.entry.path,
                     on: fs,
-                    endpointKey: request.endpoint.recoveryKey,
+                    endpointKey: served.key,
                     expectedFingerprint: expected,
                     forceOverwrite: forceOverwrite
                 )
