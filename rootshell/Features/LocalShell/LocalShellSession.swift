@@ -354,6 +354,8 @@ final class LocalShellSession: TerminalSession, EmbeddedConnectionConfigProvidin
     /// starts (set by TerminalSessionController from the tab's pending
     /// file-open handoff, see FileOpenCoordinator). Consumed in start().
     var startupFileToEdit: String?
+    /// Optional explicit editor command (`vim`, `hx`) paired with `startupFileToEdit`.
+    var startupEditorCommand: String?
 
     /// Called when the embedded session config changes (SSH/Mosh/Trzsz start or end).
     /// Passes the new ConnectionConfig when an embedded session starts, or nil when returning to local shell.
@@ -558,8 +560,12 @@ final class LocalShellSession: TerminalSession, EmbeddedConnectionConfigProvidin
         // from ~/.rootshellrc — sourced above — is honored.
         if let fileToEdit = startupFileToEdit {
             startupFileToEdit = nil
+            let explicitEditor = startupEditorCommand
+            startupEditorCommand = nil
             let editor: String
-            if let envEditor = ios_getenv("EDITOR"),
+            if let explicitEditor, !explicitEditor.isEmpty {
+                editor = explicitEditor
+            } else if let envEditor = ios_getenv("EDITOR"),
                let editorStr = String(validatingCString: envEditor),
                !editorStr.isEmpty {
                 editor = editorStr

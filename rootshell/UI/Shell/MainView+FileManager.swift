@@ -156,8 +156,24 @@ extension MainView {
         model.openInTerminal = { endpoint, directory in
             openTerminal(at: directory, on: endpoint)
         }
+        #if !targetEnvironment(macCatalyst)
+        model.openInEmbeddedEditor = { filePath, editor in
+            openEmbeddedEditor(filePath: filePath, editor: editor)
+        }
+        #endif
         return model
     }
+
+    #if !targetEnvironment(macCatalyst)
+    private func openEmbeddedEditor(filePath: String, editor: FileManagerEmbeddedEditor) -> Bool {
+        guard ghosttyApp.app != nil else { return false }
+        createFileEditorTab(filePath: filePath, editor: editor.command)
+        if !fileManagerShowsSidebar {
+            closeFileManager()
+        }
+        return true
+    }
+    #endif
 
     /// "Open in Terminal": a new tab (or the user's last Open in Folder placement)
     /// in `directory` on the pane's connection.
@@ -237,7 +253,12 @@ extension MainView {
                 .padding(.bottom, 16)
                 .padding(.trailing, 16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .animation(.snappy, value: FileTransferCenter.shared.hasActiveJobs)
+                .animation(
+                    .snappy,
+                    value: FileTransferCenter.shared.hasActiveJobs
+                        || RemoteFileEditCenter.shared.hasActiveUploads
+                        || RemoteFileEditCenter.shared.hasAttentionItems
+                )
         }
     }
 

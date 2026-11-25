@@ -42,6 +42,8 @@ nonisolated enum HostKeyDNSVerification: String, CaseIterable, Sendable {
     }
 }
 
+extension FileManagerEditorPreference: SettingValue {}
+
 nonisolated extension Settings {
     enum Connections {
         static let hideNonPQKexWarning = SettingKey(
@@ -434,6 +436,21 @@ nonisolated extension Settings {
         static let fileManagerShortcutsTipShown = SettingKey(
             "fileManager.shortcutsTipShown", default: false, group: .transfer, policy: .deviceOnly,
             title: String(localized: "File Manager Shortcuts Tip Shown", comment: "Setting title"))
+        static let fileManagerEditorPreference = SettingKey(
+            "fileManager.editorPreference", default: FileManagerEditorPreference.inApp, group: .transfer,
+            configKey: "file-manager-editor",
+            title: String(localized: "Default Text File Editor", comment: "Setting title"))
+        static let fileManagerExternalEditorPath = SettingKey<String?>(
+            "fileManager.externalEditorPath", default: nil, group: .transfer, policy: .deviceOnly,
+            title: String(localized: "External Editor Application", comment: "Setting title"))
+        static let fileManagerEditorWrapLines = SettingKey(
+            "fileManager.editorWrapLines", default: true, group: .transfer,
+            configKey: "file-manager-editor-wrap-lines",
+            title: String(localized: "Wrap Editor Lines", comment: "Setting title"))
+        static let fileManagerEditorShowLineNumbers = SettingKey(
+            "fileManager.editorShowLineNumbers", default: true, group: .transfer,
+            configKey: "file-manager-editor-line-numbers",
+            title: String(localized: "Show Editor Line Numbers", comment: "Setting title"))
 
         static let attachmentUploadConfirm = SettingKey(
             "attachmentUpload.confirm", default: true, group: .transfer,
@@ -455,6 +472,8 @@ nonisolated extension Settings {
             fileManagerShowHidden.erased, fileManagerConcurrentJobs.erased,
             fileManagerPreserveAttributes.erased, fileManagerIdleDisconnectMinutes.erased,
             fileManagerPaneState.erased, fileManagerShortcutsTipShown.erased,
+            fileManagerEditorPreference.erased, fileManagerExternalEditorPath.erased,
+            fileManagerEditorWrapLines.erased, fileManagerEditorShowLineNumbers.erased,
             attachmentUploadConfirm.erased, attachmentUploadFormat.erased, attachmentUploadDirectory.erased,
         ]
     }

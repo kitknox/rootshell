@@ -18,6 +18,7 @@ final class FileManagerModel {
         case rename(RFEntry)
         case newFolder
         case info(RFEntry)
+        case edit(RemoteFileEditorRequest)
         case shareLink(RFEntry)
         case incompleteUploads(RFEntry)
         case confirmDelete([RFEntry])
@@ -30,6 +31,7 @@ final class FileManagerModel {
             case .rename(let entry): "rename-\(entry.path)"
             case .newFolder: "newFolder"
             case .info(let entry): "info-\(entry.path)"
+            case .edit(let request): "edit-\(request.id.uuidString)"
             case .shareLink(let entry): "share-\(entry.path)"
             case .incompleteUploads(let entry): "uploads-\(entry.path)"
             case .confirmDelete: "delete"
@@ -53,6 +55,23 @@ final class FileManagerModel {
     var focusRequestID = 0
     /// Quick Look request; the view presents it.
     var previewRequest: PreviewRequest?
+    /// iOS / iPadOS external-editor export picker request (`asCopy: false` move + watch).
+    var externalExportRequest: ExternalExportRequest?
+    /// Queued export requests waiting behind an already-presented document picker so
+    /// overlapping opens never displace a request and leak its open token.
+    @ObservationIgnored private var pendingExternalExports: [ExternalExportRequest] = []
+    /// Transition task waiting for UIKit to dismiss one export picker before presenting the next.
+    /// Requests stay in `pendingExternalExports` during the delay so teardown always sees and releases them.
+    @ObservationIgnored private var externalExportAdvanceTask: Task<Void, Never>?
+    /// In-flight remote download/staging tasks keyed by `openToken`, cancelled on teardown.
+    @ObservationIgnored private var inFlightExternalOpenTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var isTornDown = false
+    /// System share / Open-In sheet request for local or already-exported files.
+    var activityShareRequest: ActivityShareRequest?
+    #if targetEnvironment(macCatalyst)
+    /// macOS app picker request ("Choose App…").
+    var externalAppPickerRequest: ExternalAppPickerRequest?
+    #endif
     var errorMessage: String?
 
     struct PreviewRequest: Identifiable {
@@ -60,28 +79,75 @@ final class FileManagerModel {
         let url: URL
     }
 
+    struct ExternalExportRequest: Identifiable {
+        let id = UUID()
+        let entry: RFEntry
+        let endpoint: FileEndpoint
+        let stagedURL: URL
+        let hash: Data
+        let fingerprint: RemoteFileFingerprint
+        let prompts: FileManagerPrompts
+        let openToken: UUID
+    }
+
+    struct ActivityShareRequest: Identifiable {
+        let id = UUID()
+        let urls: [URL]
+
+        init(url: URL) { self.urls = [url] }
+        init(urls: [URL]) { self.urls = urls }
+    }
+
+    #if targetEnvironment(macCatalyst)
+    enum ExternalAppPickerRequest: Identifiable {
+        case openFile(RFEntry, FileEndpoint)
+        case setDefault
+
+        var id: String {
+            switch self {
+            case .openFile(let entry, let endpoint): "open-\(endpoint.hashValue)-\(entry.path)"
+            case .setDefault: "setDefault"
+            }
+        }
+    }
+    #endif
+
     /// Opens a pane directory in a terminal; wired by MainView.
     @ObservationIgnored var openInTerminal: ((FileEndpoint, String) -> Bool)?
+    /// Opens a local or staged file path in a bundled terminal editor (`vim` / `hx`); wired by MainView on iOS/iPadOS/visionOS.
+    @ObservationIgnored var openInEmbeddedEditor: ((String, FileManagerEmbeddedEditor) -> Bool)?
     /// The in-flight pane-to-pane drag, read by the drop target.
     @ObservationIgnored var dragPayload: DragPayload?
     /// The terminal pane the manager was last opened from, offered in the location picker.
     private(set) var originPane: FileEndpoint.PaneSource?
 
     @ObservationIgnored private var finishedObserver: Task<Void, Never>?
+    @ObservationIgnored private var uploadedObserver: Task<Void, Never>?
 
     init() {
         left = FilePaneModel(side: .left, prompts: prompts)
         right = FilePaneModel(side: .right, prompts: prompts)
+        RemoteFileEditCenter.shared.registerLivePrompts(prompts)
         restore()
         finishedObserver = Task { [weak self] in
             for await job in FileTransferCenter.shared.finishedJobs() {
                 self?.refreshPanes(affectedBy: job)
             }
         }
+        uploadedObserver = Task { [weak self] in
+            for await (endpoint, path) in RemoteFileEditCenter.shared.uploadedFiles() {
+                self?.refreshPanes(affectedByEndpoint: endpoint, path: path)
+            }
+        }
     }
 
     func pane(_ side: FilePaneModel.Side) -> FilePaneModel {
         side == .left ? left : right
+    }
+
+    func pane(matching endpoint: FileEndpoint) -> FilePaneModel? {
+        [activePane, otherPane].first { $0.endpoint == endpoint }
+            ?? [activePane, otherPane].first { $0.endpoint.sharesFileSystem(with: endpoint) }
     }
 
     var activePane: FilePaneModel { pane(activeSide) }
@@ -162,6 +228,10 @@ final class FileManagerModel {
             left.showHidden = show
             right.showHidden = show
             SettingsStore.shared.set(Settings.Transfer.fileManagerShowHidden, show)
+        case .edit:
+            if let entry = pane.cursorEntry, !entry.isDirectory { editInApp(entry, in: pane) }
+        case .editExternal:
+            if let entry = pane.cursorEntry, !entry.isDirectory { editExternally(entry, in: pane) }
         case .quickLook:
             if let entry = pane.cursorEntry, !entry.isDirectory { preview(entry, in: pane) }
         case .copyToOther:
@@ -201,11 +271,12 @@ final class FileManagerModel {
         }
     }
 
-    /// Enter on the cursor row: a folder opens, a file previews.
+    /// Enter on the cursor row: a folder navigates in, an editable file opens in the editor,
+    /// and binary or oversized files open in Quick Look.
     func openCursor() {
         let pane = activePane
         guard let entry = pane.cursorEntry else { return }
-        if !pane.open(entry) { preview(entry, in: pane) }
+        if !pane.open(entry) { open(entry, in: pane) }
     }
 
     func moveQueueCursor(by delta: Int) {
@@ -303,12 +374,448 @@ final class FileManagerModel {
         FileTransferCenter.shared.enqueue(job, prompts: prompts)
     }
 
-    // MARK: - Preview and terminal
+    // MARK: - Open, edit, preview and terminal
 
-    func preview(_ entry: RFEntry, in pane: FilePaneModel) {
+    /// Default action for opening a file: editable text/config/code files open in the editor
+    /// (sniffing extensionless files once); known binary or large files open in Quick Look.
+    func open(_ entry: RFEntry, in pane: FilePaneModel) {
+        guard !entry.isDirectory else {
+            _ = pane.open(entry)
+            return
+        }
+        let endpoint = pane.endpoint
+        switch FileEditClassification.decision(forName: entry.name, size: entry.size) {
+        case .quickLook:
+            preview(entry, on: endpoint)
+        case .edit:
+            openForPreferredEditor(entry, on: endpoint, preloaded: nil)
+        case .sniffThenDecide:
+            let prompts = prompts
+            Task {
+                do {
+                    let fs = try await FileConnectionPool.shared.fileSystem(for: endpoint, purpose: .browse, prompts: prompts)
+                    let (data, fingerprint) = try await RemoteFileEditCenter.fetchRemoteFile(
+                        path: entry.path,
+                        fs: fs,
+                        endpointKey: endpoint.recoveryKey,
+                        maxBytes: FileEditClassification.maxInAppEditBytes
+                    )
+                    // Abort if the window closed or the pane switched to another endpoint while downloading.
+                    guard !isTornDown, !Task.isCancelled, pane.endpoint == endpoint else { return }
+                    if FileEditClassification.isTextData(data) {
+                        openForPreferredEditor(entry, on: endpoint, preloaded: (data, fingerprint))
+                    } else if endpoint.isLocal {
+                        preview(entry, on: endpoint)
+                    } else {
+                        let url = try FileManagerPreviewCache.storePreviewData(data, named: entry.name)
+                        previewRequest = PreviewRequest(url: url)
+                    }
+                } catch RemoteEditError.tooLarge {
+                    guard !isTornDown, !Task.isCancelled, pane.endpoint == endpoint else { return }
+                    preview(entry, on: endpoint)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    guard !isTornDown, !Task.isCancelled, pane.endpoint == endpoint else { return }
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func openForPreferredEditor(
+        _ entry: RFEntry,
+        on endpoint: FileEndpoint,
+        preloaded: (data: Data, fingerprint: RemoteFileFingerprint)?
+    ) {
+        let rawPreference = SettingsStore.shared.value(Settings.Transfer.fileManagerEditorPreference)
+        #if targetEnvironment(macCatalyst)
+        let preference = rawPreference.resolved(isMacCatalyst: true)
+        if preference == .external {
+            editExternally(entry, on: endpoint, appURL: nil, preloaded: preloaded)
+            return
+        }
+        #else
+        let preference = rawPreference.resolved(isMacCatalyst: false)
+        if let embedded = preference.embeddedEditor, openInEmbeddedEditor != nil {
+            editInEmbeddedEditor(entry, on: endpoint, editor: embedded, preloaded: preloaded)
+            return
+        }
+        #endif
+        editInApp(entry, on: endpoint, preloaded: preloaded)
+    }
+
+    /// Opens `entry` in one of the bundled terminal editors (`vim` or `hx`) on iOS/iPadOS/visionOS.
+    /// Remote files are staged locally and watched for `:w` saves to auto-upload back to the server.
+    func editInEmbeddedEditor(
+        _ entry: RFEntry,
+        in pane: FilePaneModel,
+        editor: FileManagerEmbeddedEditor,
+        preloaded: (data: Data, fingerprint: RemoteFileFingerprint)? = nil
+    ) {
+        editInEmbeddedEditor(entry, on: pane.endpoint, editor: editor, preloaded: preloaded)
+    }
+
+    func editInEmbeddedEditor(
+        _ entry: RFEntry,
+        on endpoint: FileEndpoint,
+        editor: FileManagerEmbeddedEditor,
+        preloaded: (data: Data, fingerprint: RemoteFileFingerprint)? = nil
+    ) {
+        guard !entry.isDirectory else { return }
+        guard let launcher = openInEmbeddedEditor else {
+            editInApp(entry, on: endpoint, preloaded: preloaded)
+            return
+        }
+
+        if endpoint.isLocal {
+            let resolved = LocalPathResolver.current().resolve(entry.path)
+            if !launcher(resolved, editor) {
+                errorMessage = String(localized: "Couldn't launch \(editor.title).", comment: "File manager embedded editor error; argument is editor name")
+            }
+            return
+        }
+
+        if let existing = RemoteFileEditCenter.shared.existingSession(for: endpoint, remotePath: entry.path) {
+            existing.embeddedEditor = editor
+            existing.editorName = editor.shortTitle
+            if !launcher(existing.localURL.path, editor) {
+                errorMessage = String(localized: "Couldn't launch \(editor.title).", comment: "File manager embedded editor error; argument is editor name")
+            }
+            return
+        }
+
+        guard entry.size <= FileEditClassification.maxExternalEditBytes else {
+            errorMessage = RemoteEditError.tooLarge(limitBytes: FileEditClassification.maxExternalEditBytes).localizedDescription
+            return
+        }
+
+        guard !isTornDown else { return }
+
+        // Deduplicate overlapping opens before staging so two clicks never clobber each other.
+        guard let openToken = RemoteFileEditCenter.shared.beginOpen(for: endpoint, remotePath: entry.path) else {
+            return
+        }
+
+        let prompts = prompts
+        let task = Task {
+            defer {
+                inFlightExternalOpenTasks.removeValue(forKey: openToken)
+                RemoteFileEditCenter.shared.endOpen(token: openToken)
+            }
+            do {
+                let (stagedURL, hash, fingerprint) = try await RemoteFileEditCenter.shared.stageForExternalEdit(
+                    entry: entry,
+                    endpoint: endpoint,
+                    prompts: prompts,
+                    preloaded: preloaded
+                )
+                guard !isTornDown, !Task.isCancelled else {
+                    RemoteFileEditCenter.removeStagingDirectory(stagedURL.deletingLastPathComponent())
+                    return
+                }
+                guard launcher(stagedURL.path, editor) else {
+                    RemoteFileEditCenter.removeStagingDirectory(stagedURL.deletingLastPathComponent())
+                    errorMessage = String(localized: "Couldn't launch \(editor.title).", comment: "File manager embedded editor error; argument is editor name")
+                    return
+                }
+                RemoteFileEditCenter.shared.registerSession(
+                    endpoint: endpoint,
+                    remotePath: entry.path,
+                    fileName: entry.name,
+                    localURL: stagedURL,
+                    initialHash: hash,
+                    remoteFingerprint: fingerprint,
+                    holdsSecurityScope: false,
+                    ownsLocalDirectory: true,
+                    editorName: editor.shortTitle,
+                    embeddedEditor: editor,
+                    prompts: prompts
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                if !isTornDown {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+        inFlightExternalOpenTasks[openToken] = task
+    }
+
+    func editInApp(
+        _ entry: RFEntry,
+        in pane: FilePaneModel,
+        preloaded: (data: Data, fingerprint: RemoteFileFingerprint)? = nil
+    ) {
+        editInApp(entry, on: pane.endpoint, preloaded: preloaded)
+    }
+
+    func editInApp(
+        _ entry: RFEntry,
+        on endpoint: FileEndpoint,
+        preloaded: (data: Data, fingerprint: RemoteFileFingerprint)? = nil
+    ) {
+        guard !entry.isDirectory else { return }
+        guard entry.size <= FileEditClassification.maxInAppEditBytes else {
+            errorMessage = RemoteEditError.tooLarge(limitBytes: FileEditClassification.maxInAppEditBytes).localizedDescription
+            return
+        }
+        sheet = .edit(RemoteFileEditorRequest(
+            entry: entry,
+            endpoint: endpoint,
+            prompts: prompts,
+            preloaded: preloaded
+        ))
+    }
+
+    /// Opens `entry` in an external editor. For remote files, stages a local working copy and
+    /// watches it for saves to automatically upload changes back to the remote endpoint.
+    func editExternally(
+        _ entry: RFEntry,
+        in pane: FilePaneModel,
+        appURL: URL? = nil,
+        preloaded: (data: Data, fingerprint: RemoteFileFingerprint)? = nil
+    ) {
+        editExternally(entry, on: pane.endpoint, appURL: appURL, preloaded: preloaded)
+    }
+
+    func editExternally(
+        _ entry: RFEntry,
+        on endpoint: FileEndpoint,
+        appURL: URL? = nil,
+        preloaded: (data: Data, fingerprint: RemoteFileFingerprint)? = nil
+    ) {
+        guard !entry.isDirectory else { return }
+
+        if endpoint.isLocal {
+            let resolved = LocalPathResolver.current().resolve(entry.path)
+            let url = URL(fileURLWithPath: resolved)
+            #if targetEnvironment(macCatalyst)
+            Task {
+                do {
+                    _ = try await ExternalEditorBridge.open(url, withApplication: appURL, fallbackToPlainText: true)
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+            #else
+            activityShareRequest = ActivityShareRequest(url: url)
+            #endif
+            return
+        }
+
+        if let existing = RemoteFileEditCenter.shared.existingSession(for: endpoint, remotePath: entry.path) {
+            reopenExternalEdit(existing, withApp: appURL)
+            return
+        }
+
+        guard entry.size <= FileEditClassification.maxExternalEditBytes else {
+            errorMessage = RemoteEditError.tooLarge(limitBytes: FileEditClassification.maxExternalEditBytes).localizedDescription
+            return
+        }
+
+        guard !isTornDown else { return }
+
+        // Deduplicate overlapping opens before staging so two clicks never clobber each other.
+        guard let openToken = RemoteFileEditCenter.shared.beginOpen(for: endpoint, remotePath: entry.path) else {
+            return
+        }
+
+        let prompts = prompts
+        let task = Task {
+            var tokenHandedOff = false
+            defer {
+                inFlightExternalOpenTasks.removeValue(forKey: openToken)
+                if !tokenHandedOff {
+                    RemoteFileEditCenter.shared.endOpen(token: openToken)
+                }
+            }
+            do {
+                let (stagedURL, hash, fingerprint) = try await RemoteFileEditCenter.shared.stageForExternalEdit(
+                    entry: entry,
+                    endpoint: endpoint,
+                    prompts: prompts,
+                    preloaded: preloaded
+                )
+                guard !isTornDown, !Task.isCancelled else {
+                    RemoteFileEditCenter.removeStagingDirectory(stagedURL.deletingLastPathComponent())
+                    return
+                }
+                #if targetEnvironment(macCatalyst)
+                // Transfer ownership of `openToken` and `stagedURL` from this window's teardown
+                // map to the app-wide launch BEFORE handing the file to macOS, so closing this
+                // window mid-launch never lets a second window open a competing copy.
+                tokenHandedOff = true
+                inFlightExternalOpenTasks.removeValue(forKey: openToken)
+                startAppWideExternalLaunch(
+                    openToken: openToken,
+                    entry: entry,
+                    endpoint: endpoint,
+                    stagedURL: stagedURL,
+                    hash: hash,
+                    fingerprint: fingerprint,
+                    appURL: appURL,
+                    prompts: prompts
+                )
+                #else
+                tokenHandedOff = true
+                enqueueExternalExport(ExternalExportRequest(
+                    entry: entry,
+                    endpoint: endpoint,
+                    stagedURL: stagedURL,
+                    hash: hash,
+                    fingerprint: fingerprint,
+                    prompts: prompts,
+                    openToken: openToken
+                ))
+                #endif
+            } catch is CancellationError {
+                return
+            } catch {
+                if !isTornDown {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+        inFlightExternalOpenTasks[openToken] = task
+    }
+
+    #if targetEnvironment(macCatalyst)
+    private func startAppWideExternalLaunch(
+        openToken: UUID,
+        entry: RFEntry,
+        endpoint: FileEndpoint,
+        stagedURL: URL,
+        hash: Data,
+        fingerprint: RemoteFileFingerprint,
+        appURL: URL?,
+        prompts: FileManagerPrompts
+    ) {
+        Task { @MainActor [weak self] in
+            do {
+                try await RemoteFileEditCenter.shared.launchAndRegisterExternalEdit(
+                    openToken: openToken,
+                    entry: entry,
+                    endpoint: endpoint,
+                    stagedURL: stagedURL,
+                    hash: hash,
+                    fingerprint: fingerprint,
+                    appURL: appURL,
+                    prompts: prompts
+                )
+            } catch {
+                if let self, !self.isTornDown {
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+    #endif
+
+    private func enqueueExternalExport(_ request: ExternalExportRequest) {
+        guard !isTornDown else {
+            cleanupExternalExport(request)
+            return
+        }
+        if externalExportRequest == nil && externalExportAdvanceTask == nil {
+            externalExportRequest = request
+        } else {
+            pendingExternalExports.append(request)
+        }
+    }
+
+    private func advanceExternalExportQueue() {
+        guard !isTornDown,
+              externalExportRequest == nil,
+              externalExportAdvanceTask == nil,
+              !pendingExternalExports.isEmpty else { return }
+        externalExportAdvanceTask = Task { @MainActor [weak self] in
+            // Let UIKit finish dismissing the previous document picker before presenting the next.
+            // Keep the next request owned by `pendingExternalExports` during the delay so teardown
+            // always finds and releases its staged folder and open token.
+            try? await Task.sleep(for: .milliseconds(250))
+            guard let self else { return }
+            self.externalExportAdvanceTask = nil
+            guard !Task.isCancelled,
+                  !self.isTornDown,
+                  self.externalExportRequest == nil,
+                  !self.pendingExternalExports.isEmpty else { return }
+            self.externalExportRequest = self.pendingExternalExports.removeFirst()
+        }
+    }
+
+    private func cleanupExternalExport(_ request: ExternalExportRequest) {
+        RemoteFileEditCenter.shared.endOpen(token: request.openToken)
+        RemoteFileEditCenter.removeStagingDirectory(request.stagedURL.deletingLastPathComponent())
+    }
+
+    func completeExternalExport(_ request: ExternalExportRequest, destinationURL: URL) {
+        if externalExportRequest?.id == request.id {
+            externalExportRequest = nil
+        }
+        defer {
+            RemoteFileEditCenter.shared.endOpen(token: request.openToken)
+            advanceExternalExportQueue()
+        }
+        let scoped = destinationURL.startAccessingSecurityScopedResource()
+        // The file was moved out of the temporary staging folder; remove the leftover directory & manifest.
+        RemoteFileEditCenter.removeStagingDirectory(request.stagedURL.deletingLastPathComponent())
+
+        let folderLabel = destinationURL.deletingLastPathComponent().lastPathComponent
+        RemoteFileEditCenter.shared.registerSession(
+            endpoint: request.endpoint,
+            remotePath: request.entry.path,
+            fileName: request.entry.name,
+            localURL: destinationURL,
+            initialHash: request.hash,
+            remoteFingerprint: request.fingerprint,
+            holdsSecurityScope: scoped,
+            ownsLocalDirectory: false,
+            editorName: folderLabel.isEmpty ? nil : folderLabel,
+            prompts: request.prompts
+        )
+    }
+
+    func cancelExternalExport(_ request: ExternalExportRequest) {
+        if externalExportRequest?.id == request.id {
+            externalExportRequest = nil
+        }
+        cleanupExternalExport(request)
+        advanceExternalExportQueue()
+    }
+
+    func reopenExternalEdit(_ session: RemoteEditSession, withApp appURL: URL? = nil) {
+        #if targetEnvironment(macCatalyst)
         Task {
             do {
-                let url = try await FileManagerPreviewCache.localURL(for: entry, fs: try await pane.fileSystem())
+                let appName = try await ExternalEditorBridge.open(session.localURL, withApplication: appURL, fallbackToPlainText: true)
+                session.editorName = appName
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+        #else
+        if let embedded = session.embeddedEditor, let launcher = openInEmbeddedEditor {
+            if !launcher(session.localURL.path, embedded) {
+                errorMessage = String(localized: "Couldn't launch \(embedded.title).", comment: "File manager embedded editor error; argument is editor name")
+            }
+            return
+        }
+        activityShareRequest = ActivityShareRequest(url: session.localURL)
+        #endif
+    }
+
+    func preview(_ entry: RFEntry, in pane: FilePaneModel) {
+        preview(entry, on: pane.endpoint)
+    }
+
+    func preview(_ entry: RFEntry, on endpoint: FileEndpoint) {
+        let prompts = prompts
+        Task {
+            do {
+                let fs = try await FileConnectionPool.shared.fileSystem(for: endpoint, purpose: .browse, prompts: prompts)
+                let url = try await FileManagerPreviewCache.localURL(for: entry, fs: fs)
                 previewRequest = PreviewRequest(url: url)
             } catch {
                 errorMessage = error.localizedDescription
@@ -339,6 +846,15 @@ final class FileManagerModel {
             let touchesDestination = job.destination.map(pane.endpoint.mayShareFiles) == true
                 && job.destinationDirectory == pane.path
             if touchesSource || touchesDestination { pane.refresh() }
+        }
+    }
+
+    private func refreshPanes(affectedByEndpoint endpoint: FileEndpoint, path: String) {
+        let parent = FileTransferLogic.parent(of: path)
+        for pane in [left, right] where !pane.path.isEmpty {
+            if pane.endpoint.mayShareFiles(with: endpoint), pane.path == parent {
+                pane.refresh()
+            }
         }
     }
 
@@ -390,8 +906,34 @@ final class FileManagerModel {
     }
 
     func tearDown() {
+        isTornDown = true
         save()
+        // Resolve any auth/sudo/host-key prompts owned by this closing window so shared
+        // connection tasks awaiting them unblock immediately instead of stranding other windows,
+        // and unregister from app-wide live prompt fallback so surviving sessions switch windows.
+        RemoteFileEditCenter.shared.unregisterLivePrompts(prompts)
+        prompts.cancelAll()
         finishedObserver?.cancel()
+        uploadedObserver?.cancel()
+        externalExportAdvanceTask?.cancel()
+        externalExportAdvanceTask = nil
+        let runningOpens = inFlightExternalOpenTasks
+        inFlightExternalOpenTasks.removeAll()
+        for (token, task) in runningOpens {
+            // Release app-wide open tokens synchronously in teardown so another window is never
+            // blocked even while a cancelled waiter unwinds from a shared connection task.
+            RemoteFileEditCenter.shared.endOpen(token: token)
+            task.cancel()
+        }
+        if let active = externalExportRequest {
+            externalExportRequest = nil
+            cleanupExternalExport(active)
+        }
+        let queued = pendingExternalExports
+        pendingExternalExports = []
+        for req in queued {
+            cleanupExternalExport(req)
+        }
         left.detach()
         right.detach()
     }

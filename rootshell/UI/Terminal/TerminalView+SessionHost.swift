@@ -235,6 +235,10 @@ extension Ghostty.TerminalView {
         get { pendingFileToOpen }
         set { pendingFileToOpen = newValue }
     }
+    var terminalPendingEditorCommand: String? {
+        get { pendingEditorCommand }
+        set { pendingEditorCommand = newValue }
+    }
     var terminalPendingStartupCommand: String? {
         get { pendingStartupCommand }
         set { pendingStartupCommand = newValue }

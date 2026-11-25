@@ -255,6 +255,8 @@
 		47F11E0000000000000000B4 /* rootshell/Features/FileManager/Storage/StorageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F11E0000000000000000A4 /* rootshell/Features/FileManager/Storage/StorageProvider.swift */; };
 		47F11E0000000000000000B5 /* rootshell/Features/FileManager/Storage/StorageProviderPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F11E0000000000000000A5 /* rootshell/Features/FileManager/Storage/StorageProviderPreset.swift */; };
 		47F11E0000000000000000B6 /* rootshell/Features/FileManager/Storage/S3KeyLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F11E0000000000000000A6 /* rootshell/Features/FileManager/Storage/S3KeyLogic.swift */; };
+		47F11E0000000000000000B7 /* rootshell/Features/FileManager/Editor/FileEditLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F11E0000000000000000A7 /* rootshell/Features/FileManager/Editor/FileEditLogic.swift */; };
+		47F11E0000000000000000B8 /* rootshell/Features/FileManager/Editor/FileEditorSyntax.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F11E0000000000000000A8 /* rootshell/Features/FileManager/Editor/FileEditorSyntax.swift */; };
 		47FF768D2F33DD6900DFD408 /* TrzszSSH in Frameworks */ = {isa = PBXBuildFile; platformFilter = maccatalyst; productRef = 47TSSH0112FC00000AABB0001 /* TrzszSSH */; };
 		47FLA0032FFA0000AABB0003 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; platformFilters = (ios, maccatalyst, ); productRef = 47FLA0012FFA0000AABB0001 /* FluidAudio */; };
 		47FLA0042FFA0000AABB0004 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; platformFilter = maccatalyst; productRef = 47FLA0022FFA0000AABB0002 /* FluidAudio */; };
@@ -760,6 +762,8 @@
 		47F11E0000000000000000A4 /* rootshell/Features/FileManager/Storage/StorageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/FileManager/Storage/StorageProvider.swift; sourceTree = SOURCE_ROOT; };
 		47F11E0000000000000000A5 /* rootshell/Features/FileManager/Storage/StorageProviderPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/FileManager/Storage/StorageProviderPreset.swift; sourceTree = SOURCE_ROOT; };
 		47F11E0000000000000000A6 /* rootshell/Features/FileManager/Storage/S3KeyLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/FileManager/Storage/S3KeyLogic.swift; sourceTree = SOURCE_ROOT; };
+		47F11E0000000000000000A7 /* rootshell/Features/FileManager/Editor/FileEditLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/FileManager/Editor/FileEditLogic.swift; sourceTree = SOURCE_ROOT; };
+		47F11E0000000000000000A8 /* rootshell/Features/FileManager/Editor/FileEditorSyntax.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/FileManager/Editor/FileEditorSyntax.swift; sourceTree = SOURCE_ROOT; };
 		47FONT012ED92ABC009B57F8 /* fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = fonts; path = Resources/fonts; sourceTree = "<group>"; };
 		47IDCFG012F000000AABB0001 /* Identity.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Identity.xcconfig; sourceTree = "<group>"; };
 		47LA00022F360000AABB0002 /* SessionActivityWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SessionActivityWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1439,6 +1443,8 @@
 				47F11E0000000000000000A4 /* rootshell/Features/FileManager/Storage/StorageProvider.swift */,
 				47F11E0000000000000000A5 /* rootshell/Features/FileManager/Storage/StorageProviderPreset.swift */,
 				47F11E0000000000000000A6 /* rootshell/Features/FileManager/Storage/S3KeyLogic.swift */,
+				47F11E0000000000000000A7 /* rootshell/Features/FileManager/Editor/FileEditLogic.swift */,
+				47F11E0000000000000000A8 /* rootshell/Features/FileManager/Editor/FileEditorSyntax.swift */,
 				47AF0F1D0000000000000A02 /* rootshell/Core/Terminal/TerminalTargetKey.swift */,
 				47AF0F1D0000000000000A03 /* rootshell/Features/Tmux/TmuxCommandQuoting.swift */,
 				47AF04750000000000000B02 /* rootshell/Features/Tmux/TmuxSplitEqualizer.swift */,
@@ -2511,6 +2517,8 @@
 				47F11E0000000000000000B4 /* rootshell/Features/FileManager/Storage/StorageProvider.swift in Sources */,
 				47F11E0000000000000000B5 /* rootshell/Features/FileManager/Storage/StorageProviderPreset.swift in Sources */,
 				47F11E0000000000000000B6 /* rootshell/Features/FileManager/Storage/S3KeyLogic.swift in Sources */,
+				47F11E0000000000000000B7 /* rootshell/Features/FileManager/Editor/FileEditLogic.swift in Sources */,
+				47F11E0000000000000000B8 /* rootshell/Features/FileManager/Editor/FileEditorSyntax.swift in Sources */,
 				47AF0F1D0000000000000B02 /* rootshell/Core/Terminal/TerminalTargetKey.swift in Sources */,
 				47AF0F1D0000000000000B03 /* rootshell/Features/Tmux/TmuxCommandQuoting.swift in Sources */,
 				47AF0F1D0000000000000B04 /* rootshell/Features/OpenInFolder/DirectoryListingProbe.swift in Sources */,

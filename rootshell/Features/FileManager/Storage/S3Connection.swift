@@ -43,6 +43,17 @@ nonisolated final class S3Connection: FileConnection {
     }
 }
 
+/// Jittered retries, except for 501: servers without tagging or ACLs answer it
+/// permanently, and backing off four times stalls every rewrite for seconds.
+nonisolated struct S3RetryPolicy: RetryPolicy {
+    private let standard = RetryPolicyFactory.jitter().retryPolicy
+
+    func getRetryWaitTime(error: Error, attempt: Int) -> RetryStatus? {
+        if (error as? AWSErrorType)?.context?.responseCode == .notImplemented { return .dontRetry }
+        return standard.getRetryWaitTime(error: error, attempt: attempt)
+    }
+}
+
 /// The AWSClient plus one S3 service per region. AWS rejects requests sent to
 /// the wrong region, so each bucket's region is looked up once and cached;
 /// every other provider has a single endpoint.
@@ -52,6 +63,12 @@ actor S3Session {
     nonisolated let defaultService: S3
     private var servicesByBucket: [String: S3] = [:]
     private var servicesByRegion: [String: S3] = [:]
+    /// Learned on the first edit save, so later saves send the spelling that works.
+    private(set) var conditionalPut = S3KeyLogic.ConditionalPut.quoted
+
+    func noteConditionalPut(_ style: S3KeyLogic.ConditionalPut) {
+        conditionalPut = style
+    }
 
     init(provider: StorageProvider) {
         self.provider = provider
@@ -63,7 +80,7 @@ actor S3Session {
                 secretAccessKey: provider.secretAccessKey.trimmingCharacters(in: .whitespacesAndNewlines),
                 sessionToken: provider.sessionToken.isEmpty ? nil : provider.sessionToken
             )
-        client = AWSClient(credentialProvider: credentials, retryPolicy: .jitter())
+        client = AWSClient(credentialProvider: credentials, retryPolicy: .init(retryPolicy: S3RetryPolicy()))
         defaultService = Self.makeService(client: client, provider: provider, region: provider.effectiveRegion)
     }
 

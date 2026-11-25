@@ -144,6 +144,7 @@ extension MainView {
         sourceProfileID: UUID? = nil,
         suppressesTabBarAnimation: Bool = false,
         pendingFileToOpen: String? = nil,
+        pendingEditorCommand: String? = nil,
         startupCommand: String? = nil
     ) {
         guard let app = ghosttyApp.app else {
@@ -157,6 +158,7 @@ extension MainView {
             sourceProfileID: sourceProfileID
         )
         terminalView.pendingFileToOpen = pendingFileToOpen
+        terminalView.pendingEditorCommand = pendingEditorCommand
         terminalView.pendingStartupCommand = startupCommand
 
         insertPaneAsTab(
@@ -628,12 +630,13 @@ extension MainView {
     /// Opens a local-shell tab that launches $EDITOR on a shared file that
     /// was imported into ~/incoming (see FileOpenCoordinator). iOS/iPadOS/
     /// visionOS only — macOS file-open requests become an alert upstream.
-    func createFileEditorTab(filePath: String) {
+    func createFileEditorTab(filePath: String, editor: String? = nil) {
         openTerminalTab(
             config: .local(workingDirectory: (filePath as NSString).deletingLastPathComponent),
             title: (filePath as NSString).lastPathComponent,
             suppressesTabBarAnimation: true,
-            pendingFileToOpen: filePath
+            pendingFileToOpen: filePath,
+            pendingEditorCommand: editor
         )
     }
 

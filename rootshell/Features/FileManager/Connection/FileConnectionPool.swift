@@ -58,12 +58,32 @@ final class FileConnectionPool {
             return try await task.value
         }
         let task = Task<any FileConnection, Error> {
-            if case .sudo(let base) = endpoint { return try await self.openSudo(on: base, prompts: prompts) }
-            return try await Self.open(endpoint, prompts: prompts)
+            let connection: any FileConnection
+            if case .sudo(let base) = endpoint {
+                connection = try await self.openSudo(on: base, prompts: prompts)
+            } else {
+                connection = try await Self.open(endpoint, prompts: prompts)
+            }
+            // Reconcile any interrupted SFTP swap on this endpoint inside the shared connection
+            // task before publishing the connection so concurrent callers never list mid-recovery.
+            await RemoteFileEditCenter.recoverPendingSwaps(for: endpoint, on: connection.browseFileSystem)
+            if Task.isCancelled {
+                await connection.close()
+                throw CancellationError()
+            }
+            return connection
         }
         pending[endpoint] = task
-        defer { pending[endpoint] = nil }
+        defer {
+            if pending[endpoint] == task {
+                pending[endpoint] = nil
+            }
+        }
         let connection = try await task.value
+        guard pending[endpoint] == task else {
+            await connection.close()
+            throw CancellationError()
+        }
         connections[endpoint] = connection
         scheduleIdleCloseIfUnused(endpoint)
         return connection

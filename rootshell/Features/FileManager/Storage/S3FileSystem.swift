@@ -11,6 +11,7 @@
 import Foundation
 import NIOHTTP1
 import SotoS3
+import UniformTypeIdentifiers
 
 nonisolated struct S3FileSystem: Sendable {
     let session: S3Session
@@ -189,6 +190,214 @@ nonisolated struct S3FileSystem: Sendable {
     func openWriter(_ path: String) async throws -> any ChunkWriter {
         let (service, location) = try await object(path)
         return S3ObjectWriter(service: service, bucket: location.bucket, key: location.key)
+    }
+
+    /// Reads an S3 object's bytes pinned to a single verified ETag so subsequent
+    /// saves compare against the exact revision that supplied the edited contents.
+    func readObjectForEdit(_ path: String, maxBytes: Int64) async throws -> (data: Data, fingerprint: RemoteFileFingerprint) {
+        let (service, location) = try await object(path)
+        let head: S3.HeadObjectOutput
+        do {
+            head = try await service.headObject(.init(bucket: location.bucket, key: location.key))
+        } catch where StorageError.isNotFound(error) {
+            let page = try? await service.listObjectsV2(.init(bucket: location.bucket, maxKeys: 1, prefix: location.key + "/"))
+            if page?.contents?.isEmpty == false || page?.commonPrefixes?.isEmpty == false {
+                throw RemoteEditError.isDirectory
+            }
+            throw StorageError.notFound(path)
+        } catch {
+            throw StorageError.from(error, path: path)
+        }
+
+        let size = UInt64(max(0, head.contentLength ?? 0))
+        guard Int64(clamping: size) <= maxBytes else {
+            throw RemoteEditError.tooLarge(limitBytes: maxBytes)
+        }
+        try StorageError.requireETag(head.eTag)
+        let rawETag = head.eTag!
+        let normalizedETag = rawETag.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+
+        let reader = S3ObjectReader(
+            service: service,
+            bucket: location.bucket,
+            key: location.key,
+            size: size,
+            eTag: rawETag
+        )
+        var data = Data()
+        if size > 0 && size <= UInt64(maxBytes) {
+            data.reserveCapacity(Int(size))
+        }
+        var offset: UInt64 = 0
+        let chunkSize: UInt32 = 262_144
+        do {
+            while offset < size {
+                try Task.checkCancellation()
+                let chunk = try await reader.read(at: offset, length: chunkSize)
+                if chunk.isEmpty { break }
+                if Int64(data.count) + Int64(chunk.count) > maxBytes {
+                    throw RemoteEditError.tooLarge(limitBytes: maxBytes)
+                }
+                data.append(chunk)
+                offset += UInt64(chunk.count)
+            }
+            try? await reader.close()
+        } catch {
+            try? await reader.close()
+            throw error
+        }
+
+        let fingerprint = RemoteFileFingerprint(
+            size: UInt64(data.count),
+            modified: head.lastModified,
+            eTag: normalizedETag
+        )
+        return (data, fingerprint)
+    }
+
+    /// Replaces an edited object's bytes while preserving its existing HTTP headers,
+    /// custom metadata, storage class, encryption, tags, and ACL grants. Uses `If-Match`
+    /// on the write itself so a concurrent update during upload raises a conflict, and
+    /// derives the returned revision directly from the PUT response's ETag.
+    func replaceObjectContents(
+        _ path: String,
+        data: Data,
+        expectedETag: String?,
+        forceOverwrite: Bool
+    ) async throws -> RemoteFileFingerprint {
+        let (service, location) = try await object(path)
+
+        if !forceOverwrite && expectedETag == nil {
+            throw RemoteEditError.remoteModified(nil)
+        }
+
+        let existingHead: S3.HeadObjectOutput?
+        do {
+            existingHead = try await service.headObject(.init(bucket: location.bucket, key: location.key))
+        } catch where StorageError.isNotFound(error) {
+            if !forceOverwrite {
+                throw RemoteEditError.remoteDeleted
+            }
+            existingHead = nil
+        } catch {
+            throw StorageError.from(error, path: path)
+        }
+
+        if let head = existingHead {
+            let currentNormalizedETag = head.eTag.map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "\"")) }
+            let currentFingerprint = RemoteFileFingerprint(
+                size: UInt64(max(0, head.contentLength ?? 0)),
+                modified: head.lastModified,
+                eTag: currentNormalizedETag
+            )
+            if !forceOverwrite {
+                guard let expectedETag, let currentNormalizedETag, currentNormalizedETag == expectedETag else {
+                    throw RemoteEditError.remoteModified(currentFingerprint)
+                }
+            }
+
+            let fields = S3ObjectHeaders(head)
+            let versionID = head.versionId == "null" ? nil : head.versionId
+            let storageClass = head.storageClass != .standard ? head.storageClass : nil
+            async let tagsLookup = tagging(of: location, versionID: versionID, service: service, path: path)
+            async let grantsLookup = grantHeaders(of: location, versionID: versionID, service: service, path: path)
+            let (tags, grants) = try await (tagsLookup, grantsLookup)
+
+            let put = { (ifMatch: String?) async throws -> S3.PutObjectOutput in
+                try await service.putObject(.init(
+                    body: .init(bytes: data),
+                    bucket: location.bucket,
+                    bucketKeyEnabled: head.bucketKeyEnabled,
+                    cacheControl: fields.cacheControl.nonEmpty,
+                    contentDisposition: fields.contentDisposition.nonEmpty,
+                    contentEncoding: fields.contentEncoding.nonEmpty,
+                    contentLanguage: fields.contentLanguage.nonEmpty,
+                    contentLength: Int64(data.count),
+                    contentType: fields.contentType.nonEmpty,
+                    expires: head.expires,
+                    grantFullControl: grants?["FULL_CONTROL"],
+                    grantRead: grants?["READ"],
+                    grantReadACP: grants?["READ_ACP"],
+                    grantWriteACP: grants?["WRITE_ACP"],
+                    ifMatch: ifMatch,
+                    key: location.key,
+                    metadata: fields.metadata.isEmpty ? nil : fields.metadata,
+                    serverSideEncryption: head.serverSideEncryption,
+                    ssekmsKeyId: head.ssekmsKeyId,
+                    storageClass: storageClass,
+                    tagging: tags,
+                    websiteRedirectLocation: head.websiteRedirectLocation
+                ))
+            }
+            let output: S3.PutObjectOutput
+            if !forceOverwrite, let expectedETag {
+                output = try await putIfUnchanged(eTag: expectedETag, location: location, service: service, path: path, put: put)
+            } else {
+                output = try await mapped(path) { try await put(nil) }
+            }
+            try StorageError.requireETag(output.eTag)
+            // Use the ETag returned directly by our PUT rather than issuing a fresh HEAD,
+            // which could observe a concurrent writer's ETag and mask their edit.
+            let normalized = output.eTag!.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            return RemoteFileFingerprint(size: UInt64(data.count), modified: Date(), eTag: normalized)
+        } else {
+            // Recreating an object after the user explicitly confirmed overwriting a deleted file.
+            let ext = (location.key as NSString).pathExtension
+            let contentType = ext.isEmpty ? "text/plain; charset=utf-8" : UTType(filenameExtension: ext)?.preferredMIMEType
+            let output = try await mapped(path) {
+                try await service.putObject(.init(
+                    body: .init(bytes: data),
+                    bucket: location.bucket,
+                    contentLength: Int64(data.count),
+                    contentType: contentType,
+                    key: location.key
+                ))
+            }
+            try StorageError.requireETag(output.eTag)
+            let normalized = output.eTag!.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            return RemoteFileFingerprint(size: UInt64(data.count), modified: Date(), eTag: normalized)
+        }
+    }
+
+    /// A PutObject guarded by `If-Match`. A 412 while the object still carries
+    /// `eTag` means the server misreads that spelling of the header, not that the
+    /// object changed, so the next spelling is tried and remembered for the session.
+    private func putIfUnchanged(
+        eTag: String,
+        location: Location,
+        service: S3,
+        path: String,
+        put: (_ ifMatch: String?) async throws -> S3.PutObjectOutput
+    ) async throws -> S3.PutObjectOutput {
+        let known = await session.conditionalPut
+        var style = known
+        while true {
+            do {
+                let output = try await put(style.ifMatch(eTag))
+                if style != known { await session.noteConditionalPut(style) }
+                return output
+            } catch let error as AWSErrorType where error.context?.responseCode == .preconditionFailed {
+                let head: S3.HeadObjectOutput
+                do {
+                    head = try await service.headObject(.init(bucket: location.bucket, key: location.key))
+                } catch where StorageError.isNotFound(error) {
+                    throw RemoteEditError.remoteDeleted
+                } catch {
+                    throw StorageError.from(error, path: path)
+                }
+                let current = head.eTag.map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "\"")) }
+                guard current == eTag, let next = style.fallback else {
+                    throw RemoteEditError.remoteModified(RemoteFileFingerprint(
+                        size: UInt64(max(0, head.contentLength ?? 0)),
+                        modified: head.lastModified,
+                        eTag: current
+                    ))
+                }
+                style = next
+            } catch {
+                throw StorageError.from(error, path: path)
+            }
+        }
     }
 
     // MARK: - Server-side copy

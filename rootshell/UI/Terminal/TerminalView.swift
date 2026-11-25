@@ -736,6 +736,8 @@ extension Ghostty {
         /// by TerminalSessionController when the session is built, so session
         /// restores/reconnects never re-launch the editor.
         var pendingFileToOpen: String?
+        /// Optional explicit editor command (`vim`, `hx`) paired with `pendingFileToOpen`.
+        var pendingEditorCommand: String?
 
         /// One-shot: a command (AppleScript `with command`) typed into the
         /// local shell once it starts. Consumed by TerminalSessionController.

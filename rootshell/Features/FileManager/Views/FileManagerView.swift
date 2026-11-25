@@ -59,6 +59,7 @@ struct FileManagerView: View {
                     Divider()
                     paneView(manager.activeSide, width: paneWidth)
                 }
+                ActiveEditsBarView(manager: manager)
                 TransferQueueView(manager: manager)
                 hintBar
             }
@@ -88,6 +89,35 @@ struct FileManagerView: View {
                     TransferConflictSheet(question: question)
                         .themedSubSheet(sheetThemeColors)
                 }
+            Color.clear
+                .sheet(item: externalExportBinding) { request in
+                    ExternalEditExportPicker(
+                        stagedURL: request.stagedURL,
+                        onPicked: { url in manager.completeExternalExport(request, destinationURL: url) },
+                        onCancel: { manager.cancelExternalExport(request) }
+                    )
+                }
+            Color.clear
+                .sheet(item: activityShareBinding) { request in
+                    ExternalFileActivitySheet(urls: request.urls)
+                }
+            #if targetEnvironment(macCatalyst)
+            Color.clear
+                .sheet(item: externalAppPickerBinding) { request in
+                    ExternalAppPickerSheet(
+                        onPicked: { appURL in
+                            manager.externalAppPickerRequest = nil
+                            switch request {
+                            case .openFile(let entry, let endpoint):
+                                manager.editExternally(entry, on: endpoint, appURL: appURL)
+                            case .setDefault:
+                                ExternalEditorBridge.setPreferredEditorApp(appURL)
+                            }
+                        },
+                        onCancel: { manager.externalAppPickerRequest = nil }
+                    )
+                }
+            #endif
         }
         .hostKeyPromptAlerts(manager.prompts.hostKey)
         .quickLookPreview(previewBinding)
@@ -103,12 +133,21 @@ struct FileManagerView: View {
         }
     }
 
+    private var hasPresentedSheet: Bool {
+        #if targetEnvironment(macCatalyst)
+        if manager.externalAppPickerRequest != nil { return true }
+        #endif
+        return manager.sheet != nil
+            || manager.externalExportRequest != nil
+            || manager.activityShareRequest != nil
+    }
+
     private func paneView(_ side: FilePaneModel.Side, width: CGFloat) -> some View {
         FilePaneView(
             pane: manager.pane(side),
             manager: manager,
             isActive: manager.activeSide == side,
-            canFocus: canFocus && manager.sheet == nil,
+            canFocus: canFocus && !hasPresentedSheet,
             columns: width >= Self.detailedColumnsMinPaneWidth ? .detailed : .compact,
             otherPaneName: manager.pane(side.other).endpoint.displayName,
             onClose: onClose
@@ -250,6 +289,27 @@ struct FileManagerView: View {
         Binding(get: { FileTransferCenter.shared.pendingConflict }, set: { if $0 == nil { FileTransferCenter.shared.cancelConflict() } })
     }
 
+    private var externalExportBinding: Binding<FileManagerModel.ExternalExportRequest?> {
+        Binding(
+            get: { manager.externalExportRequest },
+            set: { newValue in
+                if newValue == nil, let existing = manager.externalExportRequest {
+                    manager.cancelExternalExport(existing)
+                }
+            }
+        )
+    }
+
+    private var activityShareBinding: Binding<FileManagerModel.ActivityShareRequest?> {
+        Binding(get: { manager.activityShareRequest }, set: { manager.activityShareRequest = $0 })
+    }
+
+    #if targetEnvironment(macCatalyst)
+    private var externalAppPickerBinding: Binding<FileManagerModel.ExternalAppPickerRequest?> {
+        Binding(get: { manager.externalAppPickerRequest }, set: { manager.externalAppPickerRequest = $0 })
+    }
+    #endif
+
     private var previewBinding: Binding<URL?> {
         Binding(get: { manager.previewRequest?.url }, set: { if $0 == nil { manager.previewRequest = nil } })
     }
@@ -315,6 +375,20 @@ struct FileManagerView: View {
                     onDismiss: dismiss
                 )
             }
+        case .edit(let request):
+            RemoteFileEditorView(
+                request: request,
+                onOpenExternal: { appURL in
+                    manager.editExternally(request.entry, on: request.endpoint, appURL: appURL)
+                },
+                onOpenEmbedded: manager.openInEmbeddedEditor != nil ? { editor in
+                    manager.editInEmbeddedEditor(request.entry, on: request.endpoint, editor: editor)
+                } : nil,
+                onQuickLook: {
+                    manager.preview(request.entry, on: request.endpoint)
+                },
+                onDismiss: dismiss
+            )
         case .shareLink(let entry):
             StorageShareLinkSheet(entry: entry, pane: manager.activePane, onDismiss: dismiss)
         case .incompleteUploads(let entry):
@@ -396,6 +470,45 @@ struct FileManagerMoreMenuItems: View {
             Text("Kind").tag(RFSortOrder.typeAsc)
         } label: {
             Label(String(localized: "Sort By", comment: "File manager sort menu"), systemImage: "arrow.up.arrow.down")
+        }
+        Menu {
+            Picker(selection: Binding(
+                get: {
+                    let stored = SettingsStore.shared.value(Settings.Transfer.fileManagerEditorPreference)
+                    #if targetEnvironment(macCatalyst)
+                    return stored.resolved(isMacCatalyst: true)
+                    #else
+                    return stored.resolved(isMacCatalyst: false)
+                    #endif
+                },
+                set: { SettingsStore.shared.set(Settings.Transfer.fileManagerEditorPreference, $0) }
+            )) {
+                ForEach(FileManagerEditorPreference.platformCases, id: \.self) { pref in
+                    Text(pref.title).tag(pref)
+                }
+            } label: {
+                Text("Open Text Files In", comment: "File manager editor preference menu")
+            }
+            #if targetEnvironment(macCatalyst)
+            Divider()
+            let currentApp = ExternalEditorBridge.preferredEditorApp
+            Button {
+                manager.externalAppPickerRequest = .setDefault
+            } label: {
+                if let currentApp {
+                    Label(String(localized: "External Editor: \(currentApp.name)…", comment: "File manager choose external editor"), systemImage: "app.badge")
+                } else {
+                    Label(String(localized: "Choose External Editor…", comment: "File manager choose external editor"), systemImage: "app.badge")
+                }
+            }
+            if currentApp != nil {
+                Button(String(localized: "Use System Default Editor", comment: "File manager reset external editor")) {
+                    ExternalEditorBridge.setPreferredEditorApp(nil)
+                }
+            }
+            #endif
+        } label: {
+            Label(String(localized: "Editor", comment: "File manager editor settings submenu"), systemImage: "square.and.pencil")
         }
         Divider()
         if pane.endpoint.canUseSudo {
