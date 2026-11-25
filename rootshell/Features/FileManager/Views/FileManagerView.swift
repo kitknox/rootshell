@@ -610,7 +610,7 @@ struct FileManagerMoreMenuItems: View {
                 }
             }
             if currentApp != nil {
-                Button(String(localized: "Use System Default Editor", comment: "File manager reset external editor")) {
+                Button(String(localized: "Use Default Text Editor", comment: "File manager reset external editor")) {
                     ExternalEditorBridge.setPreferredEditorApp(nil)
                 }
             }

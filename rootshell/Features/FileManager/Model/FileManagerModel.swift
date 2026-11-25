@@ -619,7 +619,7 @@ final class FileManagerModel {
             #if targetEnvironment(macCatalyst)
             Task {
                 do {
-                    _ = try await ExternalEditorBridge.open(url, withApplication: appURL, fallbackToPlainText: true)
+                    _ = try await ExternalEditorBridge.open(url, withApplication: appURL)
                 } catch {
                     errorMessage = error.localizedDescription
                 }
@@ -810,12 +810,18 @@ final class FileManagerModel {
         advanceExternalExportQueue()
     }
 
-    func reopenExternalEdit(_ session: RemoteEditSession, withApp appURL: URL? = nil) {
+    /// `reuseRememberedApp` is for Active Edits → Reopen only; a fresh Edit must resolve the
+    /// current editor preference, never a remembered Open With app that may run the file.
+    func reopenExternalEdit(_ session: RemoteEditSession, withApp appURL: URL? = nil, reuseRememberedApp: Bool = false) {
         #if targetEnvironment(macCatalyst)
         Task {
             do {
-                let appName = try await ExternalEditorBridge.open(session.localURL, withApplication: appURL, fallbackToPlainText: true)
+                let remembered = reuseRememberedApp
+                    ? session.editorAppURL.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
+                    : nil
+                let appName = try await ExternalEditorBridge.open(session.localURL, withApplication: appURL ?? remembered)
                 session.editorName = appName
+                session.editorAppURL = appURL ?? remembered
             } catch {
                 errorMessage = error.localizedDescription
             }

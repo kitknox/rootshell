@@ -423,7 +423,7 @@ private struct ActiveEditSessionRow: View {
                 .accessibilityLabel(String(localized: "Upload Now", comment: "Active edit action"))
 
                 Button {
-                    manager.reopenExternalEdit(session)
+                    manager.reopenExternalEdit(session, reuseRememberedApp: true)
                 } label: {
                     Image(systemName: session.embeddedEditor != nil ? "terminal" : "arrow.up.forward.app")
                 }

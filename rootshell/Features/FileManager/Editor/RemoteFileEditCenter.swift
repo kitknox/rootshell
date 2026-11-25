@@ -161,6 +161,8 @@ final class RemoteEditSession: Identifiable {
     /// stored immutably so moving `localURL` elsewhere can never cause cleanup to delete a user folder.
     private let ownedStagingDirectory: URL?
     var editorName: String?
+    /// App explicitly chosen through Open With on macOS, reused when the edit is reopened.
+    var editorAppURL: URL?
     /// Set when the file is being edited in a bundled terminal editor (`vim` / `hx`) on iOS/iPadOS/visionOS.
     var embeddedEditor: FileManagerEmbeddedEditor?
 
@@ -985,9 +987,9 @@ final class RemoteFileEditCenter {
     ) async throws {
         defer { endOpen(token: openToken) }
         do {
-            let appName = try await ExternalEditorBridge.open(stagedURL, withApplication: appURL, fallbackToPlainText: true)
+            let appName = try await ExternalEditorBridge.open(stagedURL, withApplication: appURL)
             let activePrompts = resolveLivePrompts(preferring: prompts)
-            registerSession(
+            let session = registerSession(
                 endpoint: endpoint,
                 remotePath: entry.path,
                 fileName: entry.name,
@@ -999,6 +1001,7 @@ final class RemoteFileEditCenter {
                 editorName: appName,
                 prompts: activePrompts
             )
+            if let appURL { session.editorAppURL = appURL }
         } catch {
             Self.removeStagingDirectory(stagedURL.deletingLastPathComponent())
             throw error

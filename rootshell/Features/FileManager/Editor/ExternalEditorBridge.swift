@@ -4,8 +4,8 @@
 //
 //  Platform handoff for editing files in external applications:
 //  - Mac Catalyst: NSWorkspace app discovery, "Open With" listing, and
-//    launching files with an explicit editor (falling back to the plain-text
-//    handler for extensionless server configs like .env or Dockerfile).
+//    launching files in an explicit editor, the preferred editor, or the
+//    plain-text handler. Edit never uses the file's own type handler.
 //  - iOS / iPadOS / visionOS: UIDocumentPickerViewController(forExporting:asCopy:false)
 //    so external editors can edit the moved file in place while Rootshell holds
 //    its security-scoped URL and auto-uploads every save.
@@ -95,22 +95,10 @@ enum ExternalEditorBridge {
         return apps
     }
 
-    /// Default external app for `fileURL`, honoring the user's preferred editor when set
-    /// and falling back to the plain-text handler for extensionless configs (.env, Dockerfile).
-    static func defaultApp(for fileURL: URL, fallbackToPlainText: Bool = true) -> ExternalApp? {
-        if let preferred = preferredEditorApp, !isSelfApp(preferred.url) {
-            return preferred
-        }
-        guard let workspace = sharedWorkspace(),
-              let url = resolvedDefaultAppURL(for: fileURL, workspace: workspace, fallbackToPlainText: fallbackToPlainText) else {
-            return nil
-        }
-        return makeApp(from: url)
-    }
-
-    /// Opens `fileURL` in `appURL` (or the resolved default editor) and returns the app's display name.
+    /// Opens `fileURL` in `appURL`, else the preferred editor, else the plain-text editor,
+    /// and returns the app's display name.
     @discardableResult
-    static func open(_ fileURL: URL, withApplication appURL: URL? = nil, fallbackToPlainText: Bool = true) async throws -> String {
+    static func open(_ fileURL: URL, withApplication appURL: URL? = nil) async throws -> String {
         guard let workspace = sharedWorkspace() else { throw BridgeError.workspaceUnavailable }
 
         let targetAppURL: URL?
@@ -119,7 +107,9 @@ enum ExternalEditorBridge {
         } else if let preferred = preferredEditorApp, !isSelfApp(preferred.url) {
             targetAppURL = preferred.url
         } else {
-            targetAppURL = resolvedDefaultAppURL(for: fileURL, workspace: workspace, fallbackToPlainText: fallbackToPlainText)
+            // Never the file's type handler: for a .py that can be Python Launcher, which runs it.
+            // Type handlers are reachable only through an explicit Open With choice.
+            targetAppURL = plainTextEditorURL(workspace: workspace)
         }
 
         guard let targetAppURL else {
@@ -151,14 +141,15 @@ enum ExternalEditorBridge {
             return direct
         }
         guard fallbackToPlainText else { return nil }
+        return plainTextEditorURL(workspace: workspace)
+    }
+
+    private static func plainTextEditorURL(workspace: NSObject) -> URL? {
         if let plain = performURL(workspace, selector: "URLForApplicationToOpenContentType:", arg: UTType.plainText as AnyObject),
            !isSelfApp(plain) {
             return plain
         }
-        if let textEdit = performURL(workspace, selector: "URLForApplicationWithBundleIdentifier:", arg: "com.apple.TextEdit" as NSString) {
-            return textEdit
-        }
-        return nil
+        return performURL(workspace, selector: "URLForApplicationWithBundleIdentifier:", arg: "com.apple.TextEdit" as NSString)
     }
 
     private static func openURLs(_ urls: [URL], withApplication appURL: URL, workspace: NSObject) async throws {
@@ -166,12 +157,7 @@ enum ExternalEditorBridge {
         guard workspace.responds(to: selector),
               let configClass = NSClassFromString("NSWorkspaceOpenConfiguration") as? NSObject.Type,
               let config = configClass.perform(NSSelectorFromString("configuration"))?.takeUnretainedValue() as? NSObject else {
-            // Fallback to simple single-URL open if the newer selector isn't reachable.
-            let legacy = NSSelectorFromString("openURL:")
-            if workspace.responds(to: legacy) {
-                _ = workspace.perform(legacy, with: urls.first as NSURL?)
-                return
-            }
+            // No `openURL:` fallback: it ignores `appURL` and hands the file to its type handler.
             throw BridgeError.workspaceUnavailable
         }
 
