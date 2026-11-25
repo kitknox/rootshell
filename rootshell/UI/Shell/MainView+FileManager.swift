@@ -19,9 +19,10 @@ extension MainView {
         showFileManager && !isPhone && fileManagerPresentation != .sidebar && fileManagerModel != nil
     }
 
-    /// The HUD and the iPhone sheet own the keyboard; the sidebar shares the window with the terminal.
+    /// Full size and the iPhone sheet cover the terminal and own the keyboard. The
+    /// sidebar and the floating HUD share it: a click or tap picks the terminal or the panel.
     var fileManagerOwnsKeyboard: Bool {
-        showFileManager && (isPhone || fileManagerPresentation.ownsKeyboard)
+        showFileManager && (isPhone || fileManagerPresentation == .full)
     }
 
     /// The window's side rail carries the open panel's touch actions (Duo's inner display).
@@ -35,11 +36,12 @@ extension MainView {
 
     // MARK: - Toggle
 
-    /// First press opens; with the sidebar open but the terminal typing, a press
-    /// moves focus into the manager; otherwise it closes.
+    /// First press opens; with the sidebar or floating HUD open but the terminal
+    /// typing, a press moves focus into the manager; otherwise it closes.
     func toggleFileManager() {
         if showFileManager {
-            if fileManagerShowsSidebar, KeyboardTracker.shared.isHardwareKeyboard, !fileManagerFieldFocused {
+            if !fileManagerOwnsKeyboard, KeyboardTracker.shared.isHardwareKeyboard, !fileManagerFieldFocused,
+               fileManagerModel?.hasKeyboardTarget == true {
                 focusedTerminalForFileManager?.resignFirstResponder()
                 fileManagerModel?.requestFocus()
             } else {
@@ -75,6 +77,8 @@ extension MainView {
     func openFileManager(at endpoint: FileEndpoint, presentation: PanelPresentation?) {
         let model = fileManagerModel ?? makeFileManagerModel()
         fileManagerModel = model
+        // Asked to browse somewhere: show the list, not whichever editor tab was last up.
+        model.showFiles()
         if let existing = [model.left, model.right].first(where: { $0.endpoint.sharesFileSystem(with: endpoint) }) {
             model.activeSide = existing.id
         } else {
@@ -113,9 +117,10 @@ extension MainView {
 
         if isPhone {
             resignFirstResponderForSheetPresentation()
-        } else if fileManagerPresentation == .sidebar {
+        } else if fileManagerPresentation != .full {
+            // Shared keyboard: the panel takes it now, as the gate does for full size.
             if KeyboardTracker.shared.isHardwareKeyboard { focusedTerminalForFileManager?.resignFirstResponder() }
-            scheduleTerminalRelayout()
+            if fileManagerPresentation == .sidebar { scheduleTerminalRelayout() }
         }
         showFileManager = true
         if fileManagerOwnsKeyboard { setOverlayOwnsKeyboardForAllTerminals(true) }
@@ -125,12 +130,13 @@ extension MainView {
     func closeFileManager() {
         guard showFileManager else { return }
         let wasSidebar = fileManagerShowsSidebar
+        let ownedKeyboard = fileManagerOwnsKeyboard
         showFileManager = false
         fileManagerModel?.save()
         setOverlayOwnsKeyboardForAllTerminals(isAnySheetPresented)
-        if wasSidebar {
+        if !ownedKeyboard {
             _ = focusedTerminalForFileManager?.becomeFirstResponder()
-            scheduleTerminalRelayout()
+            if wasSidebar { scheduleTerminalRelayout() }
         } else {
             restoreFirstResponderAfterSheetDismissal()
         }
@@ -138,6 +144,8 @@ extension MainView {
 
     func switchFileManagerPresentation(_ presentation: PanelPresentation) {
         guard presentation != fileManagerPresentation else { return }
+        // Every way into full size (menu, rail, zoom button) records where to return.
+        if presentation == .full { fileManagerModel?.presentationBeforeZoom = fileManagerPresentation }
         #if !CHINA_BUILD
         yieldSlotToFileManager(presentation)
         #endif
@@ -257,8 +265,8 @@ extension MainView {
             .id(fileManagerPresentation)
         }
         if !fullSize, !showFileManager {
-            TransferPill(onOpen: { openFileManager() })
-                .padding(.bottom, 16)
+            TransferPill(manager: fileManagerModel, onOpen: { openFileManager() })
+                .padding(.bottom, 16 + pillKeyboardLift(above: focusedTerminalForFileManager))
                 .padding(.trailing, 16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .animation(

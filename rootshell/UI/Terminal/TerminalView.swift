@@ -2812,7 +2812,9 @@ extension Ghostty {
                 }
                 return
             }
-            if isFirstResponder {
+            // A panel input already took the keyboard (the file manager's editor
+            // when it leaves full size); don't take it back.
+            if isFirstResponder || isHUDFieldFocused() {
                 clearOverlayLatchedToolbarReserve()
                 return
             }

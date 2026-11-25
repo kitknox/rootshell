@@ -852,6 +852,73 @@ final class RemoteFileEditCenter {
         !recoveryConflicts.isEmpty || !preservedEdits.isEmpty || sessions.contains { $0.state.needsAttention }
     }
 
+    /// Writes an in-app editor's unsaved text to its own staging folder, with a manifest
+    /// marking it unsynced so relaunch cleanup keeps it. Returns the folder, or nil if
+    /// nothing was written. Not listed in `preservedEdits` until adopted.
+    func writeEditorRecoveryCopy(_ data: Data, fileName: String, endpoint: FileEndpoint, remotePath: String) -> URL? {
+        do {
+            return try Self.writeStagedFile(
+                data, named: Self.recoveryFileName(for: fileName), endpoint: endpoint,
+                remotePath: remotePath, syncedDigest: nil
+            ).deletingLastPathComponent()
+        } catch {
+            Self.logger.error("Couldn't write a recovery copy of \(fileName, privacy: .private): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Writes `data` into a fresh staging folder with its manifest and returns the file.
+    /// A nil `syncedDigest` marks it unsynced, so relaunch cleanup always keeps it.
+    private static func writeStagedFile(
+        _ data: Data, named fileName: String, endpoint: FileEndpoint, remotePath: String, syncedDigest: Data?
+    ) throws -> URL {
+        let folder = stagingRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let destination = folder.appendingPathComponent(fileName)
+        do {
+            try data.write(to: destination, options: .atomic)
+        } catch {
+            removeStagingDirectory(folder)
+            throw error
+        }
+        FileEditStagingCleanup.writeManifest(
+            StagingFolderManifest(
+                folderName: folder.lastPathComponent,
+                fileName: fileName,
+                lastSyncedHashHex: syncedDigest.map { FileEditStagingCleanup.hexDigest($0) } ?? "",
+                hasPendingUpload: syncedDigest == nil,
+                endpointDisplayName: endpoint.displayName,
+                remotePath: remotePath
+            ),
+            in: stagingRoot
+        )
+        return destination
+    }
+
+    /// A local name for a recovery copy. Object keys can outgrow a file name (255 bytes)
+    /// or hold a slash; the manifest's remotePath keeps the original.
+    nonisolated static func recoveryFileName(for name: String) -> String {
+        let cleaned = name.replacingOccurrences(of: "/", with: "_")
+        if cleaned.isEmpty || cleaned == "." || cleaned == ".." { return "recovered.txt" }
+        guard cleaned.utf8.count > 200 else { return cleaned }
+        let ext = (cleaned as NSString).pathExtension
+        let keepsExtension = !ext.isEmpty && ext.utf8.count <= 16
+        var stem = keepsExtension ? (cleaned as NSString).deletingPathExtension : cleaned
+        while stem.utf8.count > 180 { stem.removeLast() }
+        return keepsExtension ? "\(stem)….\(ext)" : "\(stem)…"
+    }
+
+    /// Offers a recovery copy in the edits bar of every window, for export or discard.
+    func adoptEditorRecoveryCopy(_ folder: URL, fileName: String, endpoint: FileEndpoint, remotePath: String) {
+        preservedEdits.append(PreservedUnsyncedEdit(
+            folderURL: folder,
+            files: [folder.appendingPathComponent(Self.recoveryFileName(for: fileName))],
+            fileName: fileName,
+            endpointDisplayName: endpoint.displayName,
+            remotePath: remotePath
+        ))
+    }
+
     func discardPreservedEdit(_ edit: PreservedUnsyncedEdit) {
         Self.removeStagingDirectory(edit.folderURL)
         preservedEdits.removeAll { $0.id == edit.id }
@@ -993,26 +1060,9 @@ final class RemoteFileEditCenter {
             )
             principal = served
         }
-        let folder = Self.stagingRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let destination = folder.appendingPathComponent(entry.name)
         let digest = EditableTextDocument.contentDigest(data)
-        do {
-            try data.write(to: destination, options: .atomic)
-        } catch {
-            Self.removeStagingDirectory(folder)
-            throw error
-        }
-        FileEditStagingCleanup.writeManifest(
-            StagingFolderManifest(
-                folderName: folder.lastPathComponent,
-                fileName: entry.name,
-                lastSyncedHashHex: FileEditStagingCleanup.hexDigest(digest),
-                hasPendingUpload: false,
-                endpointDisplayName: endpoint.displayName,
-                remotePath: entry.path
-            ),
-            in: Self.stagingRoot
+        let destination = try Self.writeStagedFile(
+            data, named: entry.name, endpoint: endpoint, remotePath: entry.path, syncedDigest: digest
         )
         return (destination, digest, fingerprint, principal)
     }

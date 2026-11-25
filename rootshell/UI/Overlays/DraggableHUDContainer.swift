@@ -185,6 +185,12 @@ struct DraggableHUDContainer<Content: View>: UIViewRepresentable {
     }
 }
 
+/// A text input in a docked panel that keeps first responder against the
+/// terminal's passive focus recovery while it holds it.
+protocol PanelKeyboardClaiming: UIView {
+    var claimsKeyboard: Bool { get }
+}
+
 /// Non-generic so its `@objc` handlers and `keyCommands` are valid (a generic UIView
 /// can't expose `@objc` members to the Obj-C runtime).
 final class DraggableHUDHostView: UIView, UIGestureRecognizerDelegate {
@@ -194,12 +200,12 @@ final class DraggableHUDHostView: UIView, UIGestureRecognizerDelegate {
     /// Inspect only this window, and use live UIKit state rather than a flag
     /// that can lag SwiftUI field focus or HUD removal.
     /// Also true for a docked panel field that opts in via `claimsKeyboard`
-    /// (the file manager sidebar), which lives outside any HUD host.
+    /// (the file manager sidebar's list and editor), which lives outside any HUD host.
     static func ownsFirstResponder(in window: UIWindow) -> Bool {
         func containsFocusedHUD(_ view: UIView, insideHUD: Bool) -> Bool {
             let insideHUD = insideHUD || view is DraggableHUDHostView
             if view.isFirstResponder,
-               insideHUD || (view as? SidebarSearchTextField)?.claimsKeyboard == true { return true }
+               insideHUD || (view as? PanelKeyboardClaiming)?.claimsKeyboard == true { return true }
             return view.subviews.contains { containsFocusedHUD($0, insideHUD: insideHUD) }
         }
         return containsFocusedHUD(window, insideHUD: false)
@@ -260,7 +266,21 @@ final class DraggableHUDHostView: UIView, UIGestureRecognizerDelegate {
         if action == #selector(menuToggleHTTPCapture(_:)) { return forwardsHTTPCaptureToggle }
         if action == #selector(menuToggleAgentInbox(_:)) { return forwardsAgentInboxToggle }
         if action == #selector(menuToggleGitDiff(_:)) { return forwardsGitDiffToggle }
+        if action == #selector(handleDismissCommand(_:)) { return !contentAnswersEscape }
         return super.canPerformAction(action, withSender: sender)
+    }
+
+    /// A find bar or an input method mid-composition handles Escape itself;
+    /// dismissing the whole HUD there would throw the user's context away.
+    private var contentAnswersEscape: Bool {
+        func answers(_ view: UIView) -> Bool {
+            // Tabs kept mounted out of sight don't count.
+            guard !view.isHidden else { return false }
+            if let textView = view as? UITextView, textView.findInteraction?.isFindNavigatorVisible == true { return true }
+            if view.isFirstResponder, let input = view as? UITextInput, input.markedTextRange != nil { return true }
+            return view.subviews.contains(where: answers)
+        }
+        return answers(self)
     }
 
     @objc func menuToggleHTTPCapture(_ sender: Any?) {

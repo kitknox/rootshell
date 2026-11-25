@@ -48,35 +48,55 @@ struct FileManagerView: View {
             let dual = geometry.size.width >= Self.dualPaneMinWidth
             let paneWidth = dual ? geometry.size.width / 2 : geometry.size.width
             let chrome = self.chrome
+            let editor = manager.focusedEditor
             VStack(spacing: 0) {
                 if chrome == .pointer {
                     header
                     Divider()
-                } else if !(dual && chrome == .rail) {
+                } else if editor != nil ? chrome == .touch : !(dual && chrome == .rail) {
                     // The rail holds every header action; one pane still needs its switcher.
-                    touchHeader(dual: dual, chrome: chrome)
+                    touchHeader(dual: dual || editor != nil, chrome: chrome)
                     Divider()
                 }
-                if dual {
-                    HStack(spacing: 0) {
-                        paneView(.left, width: paneWidth, chrome: chrome, dual: true)
-                        Divider()
-                        paneView(.right, width: paneWidth, chrome: chrome, dual: true)
-                    }
-                } else {
-                    if chrome == .pointer {
-                        paneSwitcher
-                        Divider()
-                    }
-                    paneView(manager.activeSide, width: paneWidth, chrome: chrome, dual: false)
-                }
-                ActiveEditsBarView(manager: manager)
-                TransferQueueView(manager: manager)
-                if chrome == .touch && !dual {
+                if !manager.editors.isEmpty {
+                    RemoteFileEditorTabStrip(manager: manager, touchSized: chrome != .pointer)
                     Divider()
-                    FileManagerTouchBar(manager: manager)
-                } else if chrome == .pointer || KeyboardTracker.shared.isHardwareKeyboard {
-                    hintBar
+                }
+                ZStack {
+                    // Every open file stays mounted, so its undo history and scroll
+                    // survive switching tabs or visiting the file list.
+                    ForEach(manager.editors) { document in
+                        let shown = document.id == editor?.id
+                        editorView(document, chrome: chrome, isActive: shown)
+                            .opacity(shown ? 1 : 0)
+                            .allowsHitTesting(shown)
+                            .accessibilityHidden(!shown)
+                    }
+                    if editor == nil {
+                        VStack(spacing: 0) {
+                            if dual {
+                                HStack(spacing: 0) {
+                                    paneView(.left, width: paneWidth, chrome: chrome, dual: true)
+                                    Divider()
+                                    paneView(.right, width: paneWidth, chrome: chrome, dual: true)
+                                }
+                            } else {
+                                if chrome == .pointer {
+                                    paneSwitcher
+                                    Divider()
+                                }
+                                paneView(manager.activeSide, width: paneWidth, chrome: chrome, dual: false)
+                            }
+                            ActiveEditsBarView(manager: manager)
+                            TransferQueueView(manager: manager)
+                            if chrome == .touch && !dual {
+                                Divider()
+                                FileManagerTouchBar(manager: manager)
+                            } else if chrome == .pointer || KeyboardTracker.shared.isHardwareKeyboard {
+                                hintBar
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -189,6 +209,41 @@ struct FileManagerView: View {
         .simultaneousGesture(TapGesture().onEnded { manager.activeSide = side })
     }
 
+    // MARK: - Editor
+
+    private func editorView(_ document: RemoteFileEditorDocument, chrome: FileManagerChrome, isActive: Bool) -> some View {
+        RemoteFileEditorView(
+            document: document,
+            zoom: editorZoom,
+            focusRequestID: isActive && canFocus && !hasPresentedSheet ? manager.focusRequestID : 0,
+            isActive: isActive,
+            touchSized: chrome != .pointer,
+            onOpenExternal: { appURL in
+                manager.editExternally(document.entry, on: document.endpoint, appURL: appURL)
+            },
+            onOpenEmbedded: manager.openInEmbeddedEditor != nil ? { editor in
+                manager.editInEmbeddedEditor(document.entry, on: document.endpoint, editor: editor)
+            } : nil,
+            onQuickLook: {
+                manager.preview(document.entry, on: document.endpoint)
+            },
+            onClose: { manager.closeEditor(document) },
+            onRequestClose: { manager.requestCloseEditor(document) },
+            confirmsClose: manager.pendingEditorClose === document,
+            onCancelClose: { manager.pendingEditorClose = nil }
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Full size and back for the editor; the sheet has nowhere else to go.
+    private var editorZoom: RemoteFileEditorView.Zoom? {
+        guard let onSwitchPresentation, let current = style.presentation else { return nil }
+        let zoomed = current == .full
+        return RemoteFileEditorView.Zoom(isZoomed: zoomed) {
+            onSwitchPresentation(zoomed ? manager.presentationBeforeZoom ?? .sidebar : .full)
+        }
+    }
+
     // MARK: - Header
 
     private var header: some View {
@@ -218,6 +273,7 @@ struct FileManagerView: View {
         HStack(spacing: 2) {
             if dual {
                 Image(systemName: "folder.badge.gearshape").foregroundStyle(Color.accentColor)
+                    .padding(.trailing, 6)
                 Text("Files").font(.headline)
                 Spacer(minLength: 4)
             } else {
@@ -479,20 +535,6 @@ struct FileManagerView: View {
                     onDismiss: dismiss
                 )
             }
-        case .edit(let request):
-            RemoteFileEditorView(
-                request: request,
-                onOpenExternal: { appURL in
-                    manager.editExternally(request.entry, on: request.endpoint, appURL: appURL)
-                },
-                onOpenEmbedded: manager.openInEmbeddedEditor != nil ? { editor in
-                    manager.editInEmbeddedEditor(request.entry, on: request.endpoint, editor: editor)
-                } : nil,
-                onQuickLook: {
-                    manager.preview(request.entry, on: request.endpoint)
-                },
-                onDismiss: dismiss
-            )
         case .shareLink(let entry):
             StorageShareLinkSheet(entry: entry, pane: manager.activePane, onDismiss: dismiss)
         case .incompleteUploads(let entry):

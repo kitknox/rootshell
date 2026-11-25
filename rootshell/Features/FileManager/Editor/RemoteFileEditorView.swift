@@ -2,10 +2,11 @@
 //  RemoteFileEditorView.swift
 //  rootshell
 //
-//  In-app code, JSON and config editor for local and remote files.
-//  Features syntax highlighting, aligned line numbers, smart indentation,
-//  native Find & Replace, JSON formatting, conflict protection, and automatic
-//  upload back to SFTP / S3 / local endpoints on save.
+//  In-app code, JSON and config editor for local and remote files, shown as a
+//  tab inside the file manager panel. Features syntax highlighting, aligned
+//  line numbers, smart indentation, native Find & Replace, JSON formatting,
+//  conflict protection, and automatic upload back to SFTP / S3 / local
+//  endpoints on save. Document state lives in RemoteFileEditorDocument.
 //
 
 import SwiftUI
@@ -21,43 +22,53 @@ struct RemoteFileEditorRequest: Identifiable {
     let preloaded: FetchedRemoteFile?
 }
 
-// MARK: - SwiftUI Sheet
+// MARK: - Editor
 
 struct RemoteFileEditorView: View {
-    let request: RemoteFileEditorRequest
+    typealias CursorPosition = RemoteFileEditorDocument.CursorPosition
+
+    /// Toggles the panel between full size and the presentation it came from.
+    struct Zoom {
+        let isZoomed: Bool
+        let toggle: () -> Void
+
+        var title: String {
+            isZoomed
+                ? String(localized: "Exit Full Size", comment: "File editor zoom button: leave full size")
+                : String(localized: "Full Size", comment: "File editor zoom button: cover the terminal area")
+        }
+
+        var systemImage: String {
+            isZoomed ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
+        }
+    }
+
+    @Bindable var document: RemoteFileEditorDocument
+    var zoom: Zoom?
+    /// The panel's focus request; a new value moves the keyboard into the text.
+    let focusRequestID: Int
+    /// False while another tab (or the file list) is on show over this one.
+    var isActive = true
+    var touchSized = false
     let onOpenExternal: (URL?) -> Void
     var onOpenEmbedded: ((FileManagerEmbeddedEditor) -> Void)? = nil
     let onQuickLook: () -> Void
-    let onDismiss: () -> Void
+    /// Closes this document without asking; callers settle unsaved changes first.
+    let onClose: () -> Void
+    /// Closes the tab, asking first when it holds unsaved changes.
+    let onRequestClose: () -> Void
+    /// The tab's close is waiting on Save or Discard.
+    var confirmsClose = false
+    var onCancelClose: () -> Void = {}
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.sheetThemeColors) private var sheetThemeColors
     @Setting(Settings.Transfer.fileManagerEditorWrapLines) private var wrapLines
     @Setting(Settings.Transfer.fileManagerEditorShowLineNumbers) private var showLineNumbers
 
-    @State private var text = ""
-    @State private var originalText = ""
-    @State private var document = EditableTextDocument(text: "", encoding: .utf8, lineEnding: .lf)
-    @State private var language: FileEditorSyntax.Language = .plain
-    @State private var indentation: EditableTextDocument.Indentation = .spaces(2)
-    @State private var fingerprint: RemoteFileFingerprint?
-    /// The serving connection's principal when the shown text was fetched.
-    @State private var loadedPrincipal: EditPrincipal?
-    @State private var loadState: LoadState = .loading
-    @State private var saveState: SaveState = .idle
-    @State private var cursorPosition = CursorPosition(line: 1, column: 1)
-    @State private var lineCount = 1
-    @State private var byteCount = 0
-    @State private var externalTextRevision = 0
-    @State private var fontSize: CGFloat = 13
     @State private var findTrigger = 0
-    @State private var inlineBanner: String?
-
-    @State private var confirmsDiscard = false
     @State private var confirmsReload = false
-    @State private var activeConflict: ConflictReason?
     @State private var pendingHandoff: PendingHandoff?
-    @State private var confirmsSaveBeforeHandoff = false
 
     private enum PendingHandoff {
         case external(URL?)
@@ -65,41 +76,31 @@ struct RemoteFileEditorView: View {
         case quickLook
     }
 
-    private enum ConflictReason {
-        case modified
-        case deleted
+    /// A question the editor needs answered. Asked in a bar inside the editor rather
+    /// than a system dialog, which would float over the terminal in the window's
+    /// appearance instead of the panel's theme.
+    private enum Decision {
+        case conflict(RemoteFileEditorDocument.Conflict)
+        case close
+        case handoff(PendingHandoff)
+        case reload
+    }
+
+    private var decision: Decision? {
+        if let conflict = document.conflict { return .conflict(conflict) }
+        if confirmsClose { return .close }
+        if let pendingHandoff { return .handoff(pendingHandoff) }
+        if confirmsReload { return .reload }
+        return nil
     }
 
     #if targetEnvironment(macCatalyst)
     @State private var externalApps: [ExternalEditorBridge.ExternalApp] = []
     #endif
 
-    private enum LoadState: Equatable {
-        case loading
-        case ready
-        case binary
-        case failed(String)
-    }
-
-    private enum SaveState: Equatable {
-        case idle
-        case saving
-        case saved
-        case failed(String)
-    }
-
-    struct CursorPosition: Equatable {
-        var line: Int
-        var column: Int
-    }
-
-    private var isDirty: Bool {
-        loadState == .ready && text != originalText
-    }
-
-    private var isRemote: Bool {
-        !request.endpoint.isLocal
-    }
+    private var request: RemoteFileEditorRequest { document.request }
+    private var isRemote: Bool { document.isRemote }
+    private var isReady: Bool { document.loadState == .ready }
 
     private var surfaceScheme: ColorScheme {
         guard let theme = sheetThemeColors else { return colorScheme }
@@ -118,191 +119,105 @@ struct RemoteFileEditorView: View {
         return UIColor.systemBackground.resolvedColor(with: traits)
     }
 
+    /// A tab that isn't on show keeps only its text view mounted (for undo and
+    /// scroll); its chrome comes back when selected. Each `if` keeps a fixed slot,
+    /// so the text view is never rebuilt by the switch.
+    var body: some View {
+        VStack(spacing: 0) {
+            if isActive {
+                toolbar
+                Divider()
+            }
+            if isActive, let decision {
+                decisionBar(decision)
+                Divider()
+            }
+            if isActive, let banner = activeBannerMessage {
+                errorBanner(banner)
+                Divider()
+            }
+            mainContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if isActive, isReady {
+                Divider()
+                RemoteFileEditorStatusBar(document: document, chromeBackground: chromeBackground)
+            }
+        }
+        .background(editorBackground)
+        .environment(\.colorScheme, surfaceScheme)
+        .accessibilityHidden(!isActive)
+        #if targetEnvironment(macCatalyst)
+        .task { loadExternalApps() }
+        #endif
+    }
+
     private var chromeBackground: Color {
         sheetThemeColors?.rowBackground ?? Color(uiColor: .secondarySystemBackground)
     }
 
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                if let banner = activeBannerMessage {
-                    errorBanner(banner)
-                    Divider()
-                }
-                mainContent
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if loadState == .ready {
-                    Divider()
-                    statusBar
-                }
-            }
-            .background(editorBackground)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(isDirty
-                           ? String(localized: "Close", comment: "File editor close button")
-                           : String(localized: "Done", comment: "File editor done button")) {
-                        attemptClose()
-                    }
-                    .keyboardShortcut("w", modifiers: .command)
-                }
-                ToolbarItem(placement: .principal) {
-                    titleView
-                }
-                ToolbarItemGroup(placement: .primaryAction) {
-                    if loadState == .ready {
-                        statusIndicator
-                        Button {
-                            findTrigger += 1
-                        } label: {
-                            Image(systemName: "magnifyingglass")
-                        }
-                        .keyboardShortcut("f", modifiers: .command)
-                        .help(String(localized: "Find & Replace (⌘F)", comment: "File editor find tooltip"))
-                        .accessibilityLabel(String(localized: "Find", comment: "File editor find button"))
+    // MARK: - Toolbar
 
-                        Button {
-                            save(forceOverwrite: false)
-                        } label: {
-                            Text(isRemote
-                                 ? String(localized: "Save", comment: "File editor save and upload button")
-                                 : String(localized: "Save", comment: "File editor save button"))
-                                .fontWeight(.semibold)
-                        }
-                        .keyboardShortcut("s", modifiers: .command)
-                        .disabled(!isDirty || saveState == .saving)
-                        .help(isRemote
-                              ? String(localized: "Save and Upload (⌘S)", comment: "File editor save tooltip")
-                              : String(localized: "Save (⌘S)", comment: "File editor save tooltip"))
-                    }
-                    moreMenu
-                }
-            }
-        }
-        .environment(\.colorScheme, surfaceScheme)
-        .presentationSizing(.page)
-        .frame(minWidth: 320, idealWidth: 820, minHeight: 420, idealHeight: 620)
-        .interactiveDismissDisabled(isDirty || saveState == .saving)
-        .confirmationDialog(
-            String(localized: "You have unsaved changes to “\(request.entry.name)”.", comment: "File editor unsaved changes title; argument is a file name"),
-            isPresented: $confirmsDiscard,
-            titleVisibility: .visible
-        ) {
-            Button(isRemote
-                   ? String(localized: "Save & Upload", comment: "File editor save and close button")
-                   : String(localized: "Save", comment: "File editor save and close button")) {
-                save(forceOverwrite: false, dismissOnSuccess: true)
-            }
-            Button(String(localized: "Discard Changes", comment: "File editor discard button"), role: .destructive) {
-                onDismiss()
-            }
-            Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {}
-        }
-        .confirmationDialog(
-            handoffConfirmationTitle,
-            isPresented: $confirmsSaveBeforeHandoff,
-            titleVisibility: .visible
-        ) {
-            Button(isRemote
-                   ? String(localized: "Save & Continue", comment: "File editor save then continue handoff")
-                   : String(localized: "Save & Continue", comment: "File editor save then continue handoff")) {
-                let handoff = pendingHandoff
-                pendingHandoff = nil
-                save(forceOverwrite: false) {
-                    onDismiss()
-                    performHandoff(handoff)
-                }
-            }
-            Button(String(localized: "Discard Changes", comment: "File editor discard then continue handoff"), role: .destructive) {
-                let handoff = pendingHandoff
-                pendingHandoff = nil
-                onDismiss()
-                performHandoff(handoff)
-            }
-            Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {
-                pendingHandoff = nil
-            }
-        }
-        .confirmationDialog(
-            String(localized: "Reload “\(request.entry.name)”?", comment: "File editor reload confirmation; argument is a file name"),
-            isPresented: $confirmsReload,
-            titleVisibility: .visible
-        ) {
-            Button(String(localized: "Discard Changes & Reload", comment: "File editor confirm reload"), role: .destructive) {
-                Task { await load(usePreloaded: false) }
-            }
-            Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {}
-        } message: {
-            Text("Your unsaved edits will be replaced with the current file from the server.")
-        }
-        .alert(
-            conflictAlertTitle,
-            isPresented: Binding(
-                get: { activeConflict != nil },
-                set: { if !$0 { activeConflict = nil } }
-            )
-        ) {
-            if activeConflict == .deleted {
-                Button(String(localized: "Recreate File", comment: "File editor conflict: recreate deleted remote file"), role: .destructive) {
-                    activeConflict = nil
-                    save(forceOverwrite: true)
-                }
-            } else {
-                Button(String(localized: "Overwrite Remote", comment: "File editor conflict: overwrite"), role: .destructive) {
-                    activeConflict = nil
-                    save(forceOverwrite: true)
-                }
-                Button(String(localized: "Reload Remote", comment: "File editor conflict: reload")) {
-                    activeConflict = nil
-                    Task { await load(usePreloaded: false) }
-                }
-            }
-            Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {
-                activeConflict = nil
-            }
-        } message: {
-            Text(conflictAlertMessage)
-        }
-        .task {
-            FileConnectionPool.shared.retain(request.endpoint)
-            #if targetEnvironment(macCatalyst)
-            loadExternalApps()
-            #endif
-            await load(usePreloaded: true)
-        }
-        .onDisappear {
-            FileConnectionPool.shared.release(request.endpoint)
-        }
-    }
-
-    // MARK: - Subviews
-
-    private var titleView: some View {
-        VStack(spacing: 1) {
-            HStack(spacing: 4) {
-                if isDirty {
-                    Circle()
-                        .fill(Color.accentColor)
-                        .frame(width: 7, height: 7)
-                        .accessibilityLabel(String(localized: "Unsaved changes", comment: "File editor dirty indicator"))
-                }
-                Text(request.entry.name)
-                    .font(.headline)
+    private var toolbar: some View {
+        HStack(spacing: touchSized ? 0 : 12) {
+            // The host stays readable; a long path gives up its start instead.
+            HStack(spacing: 6) {
+                Text(request.endpoint.displayName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .truncationMode(.middle)
+                    .fixedSize()
+                Text(verbatim: request.entry.path)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
             }
-            Text("\(request.endpoint.displayName):\(FileTransferLogic.parent(of: request.entry.path))")
-                .font(.caption2.monospaced())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.head)
+            .help(Text(verbatim: "\(request.endpoint.displayName):\(request.entry.path)"))
+            .accessibilityElement(children: .combine)
+            .layoutPriority(-1)
+            Spacer(minLength: 4)
+            statusIndicator
+            if isReady {
+                Button {
+                    findTrigger += 1
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                        .panelTouchTarget(touchSized)
+                }
+                .help(String(localized: "Find & Replace (⌘F)", comment: "File editor find tooltip"))
+                .accessibilityLabel(String(localized: "Find", comment: "File editor find button"))
+
+                Button {
+                    document.save()
+                } label: {
+                    Text(String(localized: "Save", comment: "File editor save button"))
+                        .fontWeight(.semibold)
+                        .panelTouchTarget(touchSized)
+                }
+                .disabled(!document.isDirty || document.saveState == .saving)
+                .help(isRemote
+                      ? String(localized: "Save and Upload (⌘S)", comment: "File editor save tooltip")
+                      : String(localized: "Save (⌘S)", comment: "File editor save tooltip"))
+            }
+            if let zoom {
+                Button(action: zoom.toggle) {
+                    Label(zoom.title, systemImage: zoom.systemImage)
+                        .labelStyle(.iconOnly)
+                        .panelTouchTarget(touchSized)
+                }
+                .help(zoom.title)
+            }
+            moreMenu
         }
+        .buttonStyle(.borderless)
+        .padding(.leading, 12)
+        .padding(.trailing, touchSized ? 4 : 12)
+        .padding(.vertical, touchSized ? 0 : 6)
     }
 
     @ViewBuilder
     private var statusIndicator: some View {
-        switch saveState {
+        switch document.saveState {
         case .saving:
             HStack(spacing: 4) {
                 ProgressView().controlSize(.mini)
@@ -329,7 +244,7 @@ struct RemoteFileEditorView: View {
         Menu {
             #if targetEnvironment(macCatalyst)
             Button {
-                requestExternalOpen(appURL: nil)
+                requestHandoff(.external(nil))
             } label: {
                 Label(String(localized: "Edit in External Editor", comment: "File editor menu"), systemImage: "arrow.up.forward.app")
             }
@@ -337,7 +252,7 @@ struct RemoteFileEditorView: View {
                 Menu {
                     ForEach(externalApps) { app in
                         Button(app.name) {
-                            requestExternalOpen(appURL: app.url)
+                            requestHandoff(.external(app.url))
                         }
                     }
                 } label: {
@@ -347,34 +262,34 @@ struct RemoteFileEditorView: View {
             #else
             if onOpenEmbedded != nil {
                 Button {
-                    requestEmbeddedOpen(.vim)
+                    requestHandoff(.embedded(.vim))
                 } label: {
                     Label(String(localized: "Edit in Vim", comment: "File editor menu"), systemImage: "terminal")
                 }
                 Button {
-                    requestEmbeddedOpen(.hx)
+                    requestHandoff(.embedded(.hx))
                 } label: {
                     Label(String(localized: "Edit in Helix (hx)", comment: "File editor menu"), systemImage: "terminal")
                 }
             }
             Button {
-                requestExternalOpen(appURL: nil)
+                requestHandoff(.external(nil))
             } label: {
                 Label(String(localized: "Edit in External App…", comment: "File editor menu"), systemImage: "arrow.up.forward.app")
             }
             #endif
 
             Button {
-                requestQuickLook()
+                requestHandoff(.quickLook)
             } label: {
                 Label(String(localized: "Quick Look", comment: "File editor menu"), systemImage: "eye")
             }
 
-            if loadState == .ready {
+            if isReady {
                 Divider()
-                if language == .json {
+                if document.language == .json {
                     Button {
-                        formatJSON()
+                        document.formatJSON()
                     } label: {
                         Label(String(localized: "Format JSON", comment: "File editor menu"), systemImage: "curlybraces")
                     }
@@ -393,20 +308,20 @@ struct RemoteFileEditorView: View {
                 }
                 Menu {
                     Button(String(localized: "Larger Text", comment: "File editor font size")) {
-                        fontSize = min(24, fontSize + 1)
+                        document.fontSize = min(24, document.fontSize + 1)
                     }
                     Button(String(localized: "Smaller Text", comment: "File editor font size")) {
-                        fontSize = max(10, fontSize - 1)
+                        document.fontSize = max(10, document.fontSize - 1)
                     }
                     Button(String(localized: "Default Size", comment: "File editor font size")) {
-                        fontSize = 13
+                        document.fontSize = 13
                     }
                 } label: {
                     Label(String(localized: "Font Size", comment: "File editor menu"), systemImage: "textformat.size")
                 }
                 Divider()
                 Button {
-                    if isDirty { confirmsReload = true } else { Task { await load(usePreloaded: false) } }
+                    if document.isDirty { confirmsReload = true } else { document.reload() }
                 } label: {
                     Label(isRemote
                           ? String(localized: "Reload from Server", comment: "File editor menu")
@@ -416,15 +331,16 @@ struct RemoteFileEditorView: View {
             }
         } label: {
             Image(systemName: "ellipsis.circle")
+                .panelTouchTarget(touchSized)
         }
         // A save that ends in a conflict presents an alert; under an open menu that locked up the app.
-        .disabled(saveState == .saving)
+        .disabled(document.saveState == .saving)
         .accessibilityLabel(String(localized: "Editor Options", comment: "File editor overflow menu"))
     }
 
     private var activeBannerMessage: String? {
-        if case .failed(let message) = saveState { return message }
-        return inlineBanner
+        if case .failed(let message) = document.saveState { return message }
+        return document.inlineBanner
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -436,16 +352,16 @@ struct RemoteFileEditorView: View {
                 .lineLimit(3)
                 .textSelection(.enabled)
             Spacer(minLength: 4)
-            if case .failed = saveState {
+            if case .failed = document.saveState {
                 Button(String(localized: "Retry", comment: "Retry button")) {
-                    save(forceOverwrite: false)
+                    document.save()
                 }
                 .font(.caption.weight(.semibold))
                 .buttonStyle(.borderless)
             }
             Button {
-                inlineBanner = nil
-                if case .failed = saveState { saveState = .idle }
+                document.inlineBanner = nil
+                if case .failed = document.saveState { document.saveState = .idle }
             } label: {
                 Image(systemName: "xmark")
                     .font(.caption2)
@@ -460,7 +376,7 @@ struct RemoteFileEditorView: View {
 
     @ViewBuilder
     private var mainContent: some View {
-        switch loadState {
+        switch document.loadState {
         case .loading:
             VStack(spacing: 10) {
                 ProgressView()
@@ -486,12 +402,12 @@ struct RemoteFileEditorView: View {
                     .frame(maxWidth: 360)
                 HStack(spacing: 10) {
                     Button(String(localized: "Quick Look", comment: "File editor binary fallback")) {
-                        onDismiss()
+                        onClose()
                         onQuickLook()
                     }
                     .buttonStyle(.borderedProminent)
                     Button(String(localized: "Open in External App", comment: "File editor binary external fallback")) {
-                        onDismiss()
+                        onClose()
                         onOpenExternal(nil)
                     }
                     .buttonStyle(.bordered)
@@ -512,7 +428,7 @@ struct RemoteFileEditorView: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: 380)
                 Button(String(localized: "Retry", comment: "Retry button")) {
-                    Task { await load(usePreloaded: false) }
+                    document.reload()
                 }
                 .buttonStyle(.bordered)
             }
@@ -521,227 +437,209 @@ struct RemoteFileEditorView: View {
 
         case .ready:
             RemoteCodeTextView(
-                text: $text,
-                externalTextRevision: externalTextRevision,
-                language: language,
-                indentation: indentation,
-                fontSize: fontSize,
+                text: $document.text,
+                externalTextRevision: document.externalTextRevision,
+                language: document.language,
+                indentation: document.indentation,
+                fontSize: document.fontSize,
                 wrapLines: wrapLines,
                 showLineNumbers: showLineNumbers,
                 isDark: surfaceScheme == .dark,
                 backgroundColor: editorBackgroundUIColor,
                 findTrigger: findTrigger,
-                onCursorChange: { cursorPosition = $0 },
+                focusRequestID: focusRequestID,
+                isActive: isActive,
+                document: document,
+                onCursorChange: { document.cursorPosition = $0 },
                 onStatsChange: { lines, bytes in
-                    if lineCount != lines { lineCount = lines }
-                    if byteCount != bytes { byteCount = bytes }
+                    if document.lineCount != lines { document.lineCount = lines }
+                    if document.byteCount != bytes { document.byteCount = bytes }
                 },
-                onSaveShortcut: { if isDirty && saveState != .saving { save(forceOverwrite: false) } }
+                onSaveShortcut: {
+                    if document.isDirty { document.save() }
+                },
+                onCloseShortcut: onRequestClose,
+                onToggleZoom: zoom?.toggle,
+                onEscape: { cancelDecision() }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    private var statusBar: some View {
-        HStack(spacing: 12) {
-            Text(language.displayName)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-            Text("Ln \(cursorPosition.line), Col \(cursorPosition.column)")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 4)
-            Text("\(lineCount) \(lineCount == 1 ? String(localized: "line", comment: "Singular line count") : String(localized: "lines", comment: "Plural line count")) · \(FileRowView.sizeText(Int64(byteCount)))")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-            Text("\(document.encoding.rawValue) · \(document.lineEnding.rawValue)")
-                .font(.caption.monospaced())
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(chromeBackground.opacity(0.6))
+    // MARK: - Decisions
+
+    private struct DecisionAction: Identifiable {
+        enum Kind { case primary, destructive, cancel }
+        var id: String { title }
+        let title: String
+        let kind: Kind
+        let perform: () -> Void
     }
 
-    // MARK: - Actions
-
-    private func load(usePreloaded: Bool) async {
-        loadState = .loading
-        saveState = .idle
-        inlineBanner = nil
-        do {
-            let data: Data
-            let loadedFingerprint: RemoteFileFingerprint
-            let principal: EditPrincipal
-            if usePreloaded, let preloaded = request.preloaded {
-                data = preloaded.data
-                loadedFingerprint = preloaded.fingerprint
-                principal = preloaded.principal
-            } else {
-                let (fs, served) = try await FileConnectionPool.shared.fileSystemAndPrincipal(
-                    for: request.endpoint, purpose: .transfer, prompts: request.prompts
-                )
-                (data, loadedFingerprint) = try await RemoteFileEditCenter.fetchRemoteFile(
-                    path: request.entry.path,
-                    fs: fs,
-                    endpointKey: served.key,
-                    maxBytes: FileEditClassification.maxInAppEditBytes
-                )
-                principal = served
-            }
-
-            guard FileEditClassification.isTextData(data),
-                  let decoded = EditableTextDocument.decode(data) else {
-                loadState = .binary
-                return
-            }
-
-            document = decoded
-            text = decoded.text
-            originalText = decoded.text
-            cursorPosition = CursorPosition(line: 1, column: 1)
-            lineCount = EditorLineIndex(text: decoded.text).lineCount
-            byteCount = decoded.text.utf8.count
-            externalTextRevision += 1
-            fingerprint = loadedFingerprint
-            loadedPrincipal = principal
-            language = FileEditorSyntax.detectLanguage(
-                fileName: request.entry.name,
-                contentPrefix: String(decoded.text.prefix(512))
-            )
-            indentation = EditableTextDocument.detectIndentation(in: decoded.text, filename: request.entry.name)
-            loadState = .ready
-        } catch is CancellationError {
-            return
-        } catch {
-            loadState = .failed(error.localizedDescription)
-        }
-    }
-
-    private func save(
-        forceOverwrite: Bool,
-        dismissOnSuccess: Bool = false,
-        afterSuccess: (() -> Void)? = nil
-    ) {
-        guard loadState == .ready, saveState != .saving else { return }
-        let snapshotText = text
-        let encoded = document.encode(snapshotText)
-        let expected = fingerprint
-        let principal = loadedPrincipal
-        saveState = .saving
-        inlineBanner = nil
-
-        Task {
-            do {
-                let (fs, served) = try await FileConnectionPool.shared.fileSystemAndPrincipal(
-                    for: request.endpoint, purpose: .transfer, prompts: request.prompts
-                )
-                guard served.key == principal?.key else {
-                    throw RemoteEditError.principalChanged(fileName: request.entry.name)
-                }
-                let updatedFingerprint = try await RemoteFileEditCenter.uploadData(
-                    encoded,
-                    to: request.entry.path,
-                    on: fs,
-                    endpointKey: served.key,
-                    expectedFingerprint: expected,
-                    forceOverwrite: forceOverwrite
-                )
-                fingerprint = updatedFingerprint
-                originalText = snapshotText
-                saveState = .saved
-                RemoteFileEditCenter.shared.notifyUploaded(endpoint: request.endpoint, remotePath: request.entry.path)
-
-                // Keep the editor open if the user typed newer changes while the snapshot was uploading.
-                if text != snapshotText {
-                    inlineBanner = String(
-                        localized: "Uploaded earlier changes. Save again to upload your newer edits.",
-                        comment: "File editor notice when edits were typed during an in-flight save"
-                    )
-                } else if let afterSuccess {
-                    afterSuccess()
-                } else if dismissOnSuccess {
-                    onDismiss()
-                } else {
-                    Task {
-                        try? await Task.sleep(for: .seconds(2.5))
-                        if saveState == .saved { saveState = .idle }
+    private func decisionBar(_ decision: Decision) -> some View {
+        let (title, message, actions) = decisionContent(decision)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: isConflict(decision) ? "exclamationmark.triangle.fill" : "questionmark.circle.fill")
+                    .foregroundStyle(isConflict(decision) ? Color.orange : Color.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.callout.weight(.semibold))
+                    if let message {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
-            } catch RemoteEditError.remoteModified {
-                saveState = .idle
-                activeConflict = .modified
-            } catch RemoteEditError.remoteDeleted {
-                saveState = .idle
-                activeConflict = .deleted
-            } catch {
-                saveState = .failed(error.localizedDescription)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            // One row when it fits; a narrow sidebar stacks the buttons.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { decisionButtons(actions) }
+                VStack(alignment: .leading, spacing: 6) { decisionButtons(actions) }
+            }
+            .controlSize(touchSized ? .regular : .small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.accentColor.opacity(0.10))
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private func decisionButtons(_ actions: [DecisionAction]) -> some View {
+        ForEach(actions) { action in
+            switch action.kind {
+            case .primary:
+                // Tinted text on a tinted fill reads on any theme accent; white on a light accent did not.
+                Button(action: action.perform) {
+                    Text(action.title).fontWeight(.semibold)
+                }
+                .buttonStyle(.bordered)
+                .tint(.accentColor)
+            case .destructive:
+                Button(action.title, role: .destructive, action: action.perform)
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+            case .cancel:
+                Button(action.title, role: .cancel, action: action.perform)
+                    .buttonStyle(.bordered)
             }
         }
     }
 
-    private var handoffConfirmationTitle: String {
-        switch pendingHandoff {
-        case .quickLook:
-            String(localized: "Save changes before opening Quick Look?", comment: "File editor Quick Look handoff confirmation")
-        case .external, .embedded, .none:
-            String(localized: "Save changes before switching editors?", comment: "File editor handoff confirmation")
+    /// Escape answers the bar with Cancel.
+    private func cancelDecision() -> Bool {
+        switch decision {
+        case .conflict: document.conflict = nil
+        case .close: onCancelClose()
+        case .handoff: pendingHandoff = nil
+        case .reload: confirmsReload = false
+        case nil: return false
+        }
+        return true
+    }
+
+    private func isConflict(_ decision: Decision) -> Bool {
+        if case .conflict = decision { true } else { false }
+    }
+
+    private func decisionContent(_ decision: Decision) -> (String, String?, [DecisionAction]) {
+        let name = request.entry.name
+        let cancelTitle = String(localized: "Cancel", comment: "Cancel button")
+        let discardTitle = String(localized: "Discard Changes", comment: "File editor discard button")
+        let saveTitle = isRemote
+            ? String(localized: "Save & Upload", comment: "File editor save and close button")
+            : String(localized: "Save", comment: "File editor save and close button")
+        switch decision {
+        case .close:
+            return (
+                String(localized: "You have unsaved changes to “\(name)”.", comment: "File editor unsaved changes title; argument is a file name"),
+                nil,
+                [
+                    DecisionAction(title: saveTitle, kind: .primary) {
+                        onCancelClose()
+                        document.save { onClose() }
+                    },
+                    DecisionAction(title: discardTitle, kind: .destructive) {
+                        onClose()
+                    },
+                    DecisionAction(title: cancelTitle, kind: .cancel) { onCancelClose() },
+                ]
+            )
+        case .handoff(let handoff):
+            let title = if case .quickLook = handoff {
+                String(localized: "Save changes before opening Quick Look?", comment: "File editor Quick Look handoff confirmation")
+            } else {
+                String(localized: "Save changes before switching editors?", comment: "File editor handoff confirmation")
+            }
+            return (title, nil, [
+                DecisionAction(title: String(localized: "Save & Continue", comment: "File editor save then continue handoff"), kind: .primary) {
+                    pendingHandoff = nil
+                    document.save {
+                        onClose()
+                        performHandoff(handoff)
+                    }
+                },
+                DecisionAction(title: discardTitle, kind: .destructive) {
+                    pendingHandoff = nil
+                    onClose()
+                    performHandoff(handoff)
+                },
+                DecisionAction(title: cancelTitle, kind: .cancel) { pendingHandoff = nil },
+            ])
+        case .reload:
+            return (
+                String(localized: "Reload “\(name)”?", comment: "File editor reload confirmation; argument is a file name"),
+                isRemote
+                    ? String(localized: "Your unsaved edits will be replaced with the current file from the server.", comment: "File editor reload confirmation message")
+                    : String(localized: "Your unsaved edits will be replaced with the file as it is on disk.", comment: "File editor reload confirmation message for a local file"),
+                [
+                    DecisionAction(title: String(localized: "Discard Changes & Reload", comment: "File editor confirm reload"), kind: .destructive) {
+                        confirmsReload = false
+                        document.reload()
+                    },
+                    DecisionAction(title: cancelTitle, kind: .cancel) { confirmsReload = false },
+                ]
+            )
+        case .conflict(.deleted):
+            return (
+                String(localized: "File Deleted on Server", comment: "File editor conflict alert title"),
+                String(localized: "“\(name)” was deleted or renamed on \(request.endpoint.displayName) after you opened it. Recreating will write a new file at the original path.", comment: "File editor deleted conflict message"),
+                [
+                    DecisionAction(title: String(localized: "Recreate File", comment: "File editor conflict: recreate deleted remote file"), kind: .destructive) {
+                        document.conflict = nil
+                        document.save(forceOverwrite: true)
+                    },
+                    DecisionAction(title: cancelTitle, kind: .cancel) { document.conflict = nil },
+                ]
+            )
+        case .conflict(.modified):
+            return (
+                String(localized: "File Changed on Server", comment: "File editor conflict alert title"),
+                String(localized: "“\(name)” was modified on \(request.endpoint.displayName) after you opened it. Overwriting will replace those changes.", comment: "File editor modified conflict message"),
+                [
+                    DecisionAction(title: String(localized: "Reload Remote", comment: "File editor conflict: reload"), kind: .primary) {
+                        document.conflict = nil
+                        document.reload()
+                    },
+                    DecisionAction(title: String(localized: "Overwrite Remote", comment: "File editor conflict: overwrite"), kind: .destructive) {
+                        document.conflict = nil
+                        document.save(forceOverwrite: true)
+                    },
+                    DecisionAction(title: cancelTitle, kind: .cancel) { document.conflict = nil },
+                ]
+            )
         }
     }
 
-    private var conflictAlertTitle: String {
-        switch activeConflict {
-        case .deleted:
-            String(localized: "File Deleted on Server", comment: "File editor conflict alert title")
-        case .modified, .none:
-            String(localized: "File Changed on Server", comment: "File editor conflict alert title")
-        }
-    }
-
-    private var conflictAlertMessage: String {
-        switch activeConflict {
-        case .deleted:
-            String(localized: "“\(request.entry.name)” was deleted or renamed on \(request.endpoint.displayName) after you opened it. Recreating will write a new file at the original path.", comment: "File editor deleted conflict message")
-        case .modified, .none:
-            String(localized: "“\(request.entry.name)” was modified on \(request.endpoint.displayName) after you opened it. Overwriting will replace those changes.", comment: "File editor modified conflict message")
-        }
-    }
-
-    private func attemptClose() {
-        if isDirty {
-            confirmsDiscard = true
+    private func requestHandoff(_ handoff: PendingHandoff) {
+        if document.isDirty {
+            pendingHandoff = handoff
         } else {
-            onDismiss()
-        }
-    }
-
-    private func requestExternalOpen(appURL: URL?) {
-        if isDirty {
-            pendingHandoff = .external(appURL)
-            confirmsSaveBeforeHandoff = true
-        } else {
-            onDismiss()
-            onOpenExternal(appURL)
-        }
-    }
-
-    private func requestEmbeddedOpen(_ editor: FileManagerEmbeddedEditor) {
-        if isDirty {
-            pendingHandoff = .embedded(editor)
-            confirmsSaveBeforeHandoff = true
-        } else {
-            onDismiss()
-            onOpenEmbedded?(editor)
-        }
-    }
-
-    private func requestQuickLook() {
-        if isDirty {
-            pendingHandoff = .quickLook
-            confirmsSaveBeforeHandoff = true
-        } else {
-            onDismiss()
-            onQuickLook()
+            onClose()
+            performHandoff(handoff)
         }
     }
 
@@ -758,25 +656,156 @@ struct RemoteFileEditorView: View {
         }
     }
 
-    private func formatJSON() {
-        do {
-            let formatted = try FileEditJSONFormatter.prettyPrint(text)
-            text = formatted
-            lineCount = EditorLineIndex(text: formatted).lineCount
-            byteCount = formatted.utf8.count
-            externalTextRevision += 1
-            inlineBanner = nil
-        } catch {
-            inlineBanner = error.localizedDescription
-        }
-    }
-
     #if targetEnvironment(macCatalyst)
     private func loadExternalApps() {
         let probeURL = FileManager.default.temporaryDirectory.appendingPathComponent(request.entry.name)
         externalApps = ExternalEditorBridge.availableApps(for: probeURL, includePlainText: true)
     }
     #endif
+}
+
+/// Its own view so per-keystroke cursor and size updates redraw only this row.
+private struct RemoteFileEditorStatusBar: View {
+    let document: RemoteFileEditorDocument
+    let chromeBackground: Color
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(document.language.displayName)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+            Text("Ln \(document.cursorPosition.line), Col \(document.cursorPosition.column)")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 4)
+            Text("\(document.lineCount) \(document.lineCount == 1 ? String(localized: "line", comment: "Singular line count") : String(localized: "lines", comment: "Plural line count")) · \(FileRowView.sizeText(Int64(document.byteCount)))")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text("\(document.document.encoding.rawValue) · \(document.document.lineEnding.rawValue)")
+                .font(.caption.monospaced())
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(chromeBackground.opacity(0.6))
+    }
+}
+
+/// The editor's tab row: the file list, then one tab per open document.
+struct RemoteFileEditorTabStrip: View {
+    let manager: FileManagerModel
+    var touchSized = false
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    filesTab
+                    ForEach(manager.editors) { document in
+                        RemoteFileEditorTab(
+                            document: document,
+                            isSelected: manager.focusedEditorID == document.id,
+                            touchSized: touchSized,
+                            onSelect: { manager.showEditor(document) },
+                            onClose: { manager.requestCloseEditor(document) }
+                        )
+                        .id(document.id)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+            }
+            .onChange(of: manager.focusedEditorID, initial: true) { _, id in
+                guard let id else { return }
+                withAnimation(.snappy) { proxy.scrollTo(id) }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(String(localized: "Open Files", comment: "File manager editor tab row"))
+    }
+
+    private var filesTab: some View {
+        let isSelected = manager.focusedEditorID == nil
+        return Button {
+            manager.showFiles()
+        } label: {
+            // Icon only: the panel header above already says Files.
+            Image(systemName: isSelected ? "folder.fill" : "folder")
+                .font(.callout.weight(isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                .frame(minWidth: touchSized ? 44 : 32, minHeight: editorTabHeight(touchSized))
+                .editorTabBackground(selected: isSelected)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(String(localized: "Show Files", comment: "File manager editor tab row: back to the file list"))
+        .accessibilityLabel(String(localized: "Files", comment: "File manager editor tab row: back to the file list"))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+/// Its own view so a document's dirty dot redraws only its tab.
+private struct RemoteFileEditorTab: View {
+    let document: RemoteFileEditorDocument
+    let isSelected: Bool
+    let touchSized: Bool
+    let onSelect: () -> Void
+    let onClose: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button(action: onSelect) {
+                HStack(spacing: 5) {
+                    if document.loadState == .loading || document.saveState == .saving {
+                        ProgressView().controlSize(.mini)
+                    }
+                    Text(document.entry.name)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: 180)
+                }
+                .font(.callout.weight(isSelected ? .semibold : .regular))
+                .frame(minHeight: editorTabHeight(touchSized))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(Text(verbatim: "\(document.endpoint.displayName):\(document.entry.path)"))
+
+            // Unsaved files show a dot that turns into the close button on hover.
+            Button(action: onClose) {
+                ZStack {
+                    if document.isDirty && !isHovering {
+                        Circle()
+                            .fill(Color.accentColor)
+                            .frame(width: 7, height: 7)
+                    } else {
+                        Image(systemName: "xmark")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: touchSized ? 28 : 16, height: editorTabHeight(touchSized))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(document.isDirty
+                ? String(localized: "Close \(document.entry.name), unsaved changes", comment: "File editor tab close button with unsaved changes; argument is a file name")
+                : String(localized: "Close \(document.entry.name)", comment: "File editor tab close button; argument is a file name"))
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 4)
+        .editorTabBackground(selected: isSelected)
+        .onHover { isHovering = $0 }
+        .contextMenu {
+            Button(String(localized: "Close", comment: "File editor tab context menu"), action: onClose)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
 }
 
 // MARK: - UIKit Code Editor (Pre-Laid-Out TextKit 1 UITextView + GPU-Composited Line-Number Gutter)
@@ -808,16 +837,23 @@ private struct RemoteCodeTextView: UIViewRepresentable {
     let isDark: Bool
     let backgroundColor: UIColor
     let findTrigger: Int
+    let focusRequestID: Int
+    /// False for an open tab that isn't on show; it keeps its view but not the keyboard.
+    let isActive: Bool
+    /// Records the caret and which focus request the text view already acted on.
+    let document: RemoteFileEditorDocument
     let onCursorChange: (RemoteFileEditorView.CursorPosition) -> Void
     let onStatsChange: (Int, Int) -> Void
     let onSaveShortcut: () -> Void
+    let onCloseShortcut: () -> Void
+    let onToggleZoom: (() -> Void)?
+    let onEscape: () -> Bool
 
     func makeUIView(context: Context) -> CodeEditorContainerView {
         let container = CodeEditorContainerView()
         let textView = container.textView
         let coordinator = context.coordinator
         textView.delegate = coordinator
-        textView.onSaveShortcut = onSaveShortcut
         textView.onIndent = { [weak textView, weak coordinator] in
             guard let textView else { return }
             coordinator?.insertIndentation(in: textView)
@@ -834,9 +870,13 @@ private struct RemoteCodeTextView: UIViewRepresentable {
     static func dismantleUIView(_ container: CodeEditorContainerView, coordinator: Coordinator) {
         coordinator.tearDown()
         let textView = container.textView
+        MenuShortcutState.shared.setSaveChordOwner(textView, active: false)
         textView.delegate = nil
         textView.layoutManager.delegate = nil
         textView.onSaveShortcut = nil
+        textView.onCloseShortcut = nil
+        textView.onToggleZoom = nil
+        textView.onEscape = nil
         textView.onIndent = nil
         textView.onOutdent = nil
         textView.onDidLayoutNonContiguousViewport = nil
@@ -850,6 +890,20 @@ private struct RemoteCodeTextView: UIViewRepresentable {
         coordinator.parent = self
         let textView = container.textView
         textView.onSaveShortcut = onSaveShortcut
+        textView.onCloseShortcut = onCloseShortcut
+        textView.onToggleZoom = onToggleZoom
+        textView.onEscape = onEscape
+        if !isActive {
+            // Its find bar holds the keyboard while open, so close that too.
+            if textView.findInteraction?.isFindNavigatorVisible == true {
+                textView.findInteraction?.dismissFindNavigator()
+            }
+            if textView.isFirstResponder { textView.resignFirstResponder() }
+        }
+        // SwiftUI's accessibilityHidden doesn't reach into a representable, so an
+        // inactive tab hides its text view and reports no accessibility children.
+        textView.isHidden = !isActive
+        container.accessibilityElements = isActive ? nil : []
 
         let bgKey = ResolvedColorKey(backgroundColor)
         let fontChanged = coordinator.lastFontSize != fontSize
@@ -860,6 +914,7 @@ private struct RemoteCodeTextView: UIViewRepresentable {
         let layoutChanged = coordinator.lastWrapLines != wrapLines
             || coordinator.lastShowLineNumbers != showLineNumbers
             || fontChanged
+        let isFirstText = coordinator.lastExternalTextRevision == -1
         let textReplacedExternally = coordinator.lastExternalTextRevision != externalTextRevision
 
         coordinator.lastFontSize = fontSize
@@ -883,7 +938,8 @@ private struct RemoteCodeTextView: UIViewRepresentable {
         }
 
         if textReplacedExternally {
-            let previousSelection = textView.selectedRange
+            // A rebuilt view (presentation switch) picks up the caret where the last one left it.
+            let previousSelection = isFirstText ? document.savedSelection : textView.selectedRange
             coordinator.isApplyingExternalText = true
             coordinator.clearHighlightSpans()
             let baseAttrs = coordinator.baseTextAttributes(fontSize: fontSize, isDark: isDark)
@@ -891,13 +947,20 @@ private struct RemoteCodeTextView: UIViewRepresentable {
             textView.typingAttributes = baseAttrs
             let newUTF16Length = textView.textStorage.length
             let clampedLocation = min(previousSelection.location, newUTF16Length)
-            textView.selectedRange = NSRange(location: clampedLocation, length: 0)
+            let clampedLength = isFirstText ? min(previousSelection.length, newUTF16Length - clampedLocation) : 0
+            textView.selectedRange = NSRange(location: clampedLocation, length: clampedLength)
             coordinator.isApplyingExternalText = false
 
             coordinator.rebuildLineIndex(from: text)
             container.updateLineIndex(coordinator.lineIndex, activeLine: coordinator.currentCursorLine, needsFullLayout: true)
             coordinator.scheduleHighlight(immediate: true)
             coordinator.reportCursor(for: textView, deferParentNotification: true)
+            if isFirstText, clampedLocation > 0 {
+                DispatchQueue.main.async { [weak textView] in
+                    guard let textView else { return }
+                    textView.scrollRangeToVisible(textView.selectedRange)
+                }
+            }
         } else if styleChanged {
             if fontChanged {
                 let baseAttrs = coordinator.baseTextAttributes(fontSize: fontSize, isDark: isDark)
@@ -930,6 +993,16 @@ private struct RemoteCodeTextView: UIViewRepresentable {
             coordinator.lastFindTrigger = findTrigger
             if findTrigger > 0 {
                 textView.findInteraction?.presentFindNavigator(showingReplace: false)
+            }
+        }
+
+        // Only with a hardware keyboard, as for the file list: a software one would cover the text.
+        if isActive, focusRequestID > 0, document.consumedFocusRequestID != focusRequestID,
+           KeyboardTracker.shared.isHardwareKeyboard {
+            document.consumedFocusRequestID = focusRequestID
+            DispatchQueue.main.async { [weak textView] in
+                guard let textView, textView.window != nil, !textView.isFirstResponder else { return }
+                textView.becomeFirstResponder()
             }
         }
     }
@@ -1038,6 +1111,7 @@ private struct RemoteCodeTextView: UIViewRepresentable {
 
         func textViewDidChangeSelection(_ textView: UITextView) {
             guard !isApplyingExternalText else { return }
+            parent.document.savedSelection = textView.selectedRange
             reportCursor(for: textView)
         }
 
@@ -1299,11 +1373,32 @@ private struct EditorSyntaxPalette {
 
 // MARK: - Custom TextKit 1 UITextView & Container with GPU-Composited Line-Number Gutter
 
-private final class CodeEditorUITextView: UITextView {
+private final class CodeEditorUITextView: UITextView, PanelKeyboardClaiming {
     var onSaveShortcut: (() -> Void)?
+    var onCloseShortcut: (() -> Void)?
+    var onToggleZoom: (() -> Void)?
+    /// Returns true when Escape answered a question the editor was asking.
+    var onEscape: (() -> Bool)?
     var onIndent: (() -> Void)?
     var onOutdent: (() -> Void)?
     var onDidLayoutNonContiguousViewport: (() -> Void)?
+
+    /// Docked beside the terminal, the editor still keeps the keyboard it was given.
+    var claimsKeyboard: Bool { true }
+
+    @discardableResult
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { MenuShortcutState.shared.setSaveChordOwner(self, active: true) }
+        return became
+    }
+
+    @discardableResult
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { MenuShortcutState.shared.setSaveChordOwner(self, active: false) }
+        return resigned
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -1314,11 +1409,63 @@ private final class CodeEditorUITextView: UITextView {
         }
     }
 
+    // The menu rail dispatches its key equivalents before any responder UIKeyCommand,
+    // and its items send to the first responder. While the editor is focused, Find,
+    // Close and Toggle Split Zoom act on the editor; the menu gives up ⌘S instead
+    // (MenuShortcutState.setSaveChordOwner), so a clicked menu item keeps its action.
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(findInTerminal(_:)) { return isFindInteractionEnabled }
+        if action == #selector(closeSplit(_:)) { return onCloseShortcut != nil }
+        if action == #selector(menuToggleSplitZoom(_:)) { return onToggleZoom != nil }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
+    @objc func findInTerminal(_ sender: Any?) {
+        findInteraction?.presentFindNavigator(showingReplace: false)
+    }
+
+    @objc func closeSplit(_ sender: Any?) {
+        onCloseShortcut?()
+    }
+
+    @objc func menuToggleSplitZoom(_ sender: Any?) {
+        onToggleZoom?()
+    }
+
+    /// Without a menu rail (or with no menu item on these chords) they arrive here.
     override var keyCommands: [UIKeyCommand]? {
         var commands = super.keyCommands ?? []
-        commands.append(UIKeyCommand(input: "s", modifierFlags: .command, action: #selector(handleSaveKey)))
+        commands.append(UIKeyCommand(input: MenuShortcutState.saveChordInput,
+                                     modifierFlags: MenuShortcutState.saveChordModifiers,
+                                     action: #selector(handleSaveKey)))
         commands.append(UIKeyCommand(input: "\t", modifierFlags: .shift, action: #selector(handleOutdentKey)))
+        // Close goes ahead of the system's Close Window on the same chord.
+        if onCloseShortcut != nil,
+           let command = Self.keyCommand(for: .close_tab, selector: #selector(closeSplit(_:)), wantsPriority: true) {
+            commands.append(command)
+        }
+        if onToggleZoom != nil,
+           let command = Self.keyCommand(for: .toggle_split_zoom, selector: #selector(menuToggleSplitZoom(_:))) {
+            commands.append(command)
+        }
+        // The panel HUD closes on Escape; a reflexive Escape while typing shouldn't.
+        // Composition keeps Escape so the input method can cancel it.
+        if markedTextRange == nil {
+            commands.append(UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(handleEscapeKey)))
+        }
         return commands
+    }
+
+    /// The user's binding for `action`, unless it was remapped onto Save's chord, which the editor keeps.
+    private static func keyCommand(for action: KeybindAction, selector: Selector, wantsPriority: Bool = false) -> UIKeyCommand? {
+        guard let command = KeybindManager.shared.keyCommand(for: action, selector: selector, wantsPriority: wantsPriority),
+              let input = command.input,
+              !MenuShortcutState.isSaveChord(input: input, modifiers: command.modifierFlags) else { return nil }
+        return command
+    }
+
+    @objc private func handleEscapeKey() {
+        _ = onEscape?()
     }
 
     @objc private func handleSaveKey() {
@@ -1970,3 +2117,17 @@ private final class CodeEditorAccessoryBar: UIInputView {
     }
 }
 #endif
+
+private extension View {
+    /// Selected: an accent fill with a hairline edge, so it reads on any theme.
+    func editorTabBackground(selected: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+        return background(selected ? Color.accentColor.opacity(0.22) : Color.primary.opacity(0.05), in: shape)
+            .overlay(shape.strokeBorder(selected ? Color.accentColor.opacity(0.55) : .clear, lineWidth: 1))
+    }
+}
+
+/// Tab row height: a finger needs more than a pointer.
+private func editorTabHeight(_ touchSized: Bool) -> CGFloat {
+    touchSized ? 34 : 26
+}

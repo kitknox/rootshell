@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import UIKit
 
 @MainActor
 @Observable
@@ -18,7 +19,6 @@ final class FileManagerModel {
         case rename(RFEntry)
         case newFolder
         case info(RFEntry)
-        case edit(RemoteFileEditorRequest)
         case shareLink(RFEntry)
         case incompleteUploads(RFEntry)
         case confirmDelete([RFEntry])
@@ -31,7 +31,6 @@ final class FileManagerModel {
             case .rename(let entry): "rename-\(entry.path)"
             case .newFolder: "newFolder"
             case .info(let entry): "info-\(entry.path)"
-            case .edit(let request): "edit-\(request.id.uuidString)"
             case .shareLink(let entry): "share-\(entry.path)"
             case .incompleteUploads(let entry): "uploads-\(entry.path)"
             case .confirmDelete: "delete"
@@ -73,6 +72,24 @@ final class FileManagerModel {
     var externalAppPickerRequest: ExternalAppPickerRequest?
     #endif
     var errorMessage: String?
+
+    /// Files open in the editor, in tab order. Kept while the panel is hidden.
+    private(set) var editors: [RemoteFileEditorDocument] = []
+    /// The editor tab on show; nil shows the panes.
+    private(set) var focusedEditorID: UUID?
+    /// An unsaved editor waiting on Save or Discard before its tab closes.
+    var pendingEditorClose: RemoteFileEditorDocument?
+    /// Where the editor's zoom button returns the panel from full size.
+    var presentationBeforeZoom: PanelPresentation?
+
+    var focusedEditor: RemoteFileEditorDocument? {
+        focusedEditorID.flatMap { id in editors.first { $0.id == id } }
+    }
+
+    /// Something on show can take the keyboard: the file list, or an editor with text.
+    var hasKeyboardTarget: Bool {
+        focusedEditor.map { $0.loadState == .ready } ?? true
+    }
 
     struct PreviewRequest: Identifiable {
         let id = UUID()
@@ -124,6 +141,9 @@ final class FileManagerModel {
 
     @ObservationIgnored private var finishedObserver: Task<Void, Never>?
     @ObservationIgnored private var uploadedObserver: Task<Void, Never>?
+    /// App lifecycle hooks that keep unsaved tabs recoverable: a checkpoint while in the
+    /// background (iOS may end a suspended app without notice) and a hand-off on quit.
+    @ObservationIgnored private var lifecycleObservers: [NSObjectProtocol] = []
 
     init() {
         left = FilePaneModel(side: .left, prompts: prompts)
@@ -140,6 +160,18 @@ final class FileManagerModel {
                 self?.refreshPanes(affectedByEndpoint: endpoint, path: path)
             }
         }
+        let center = NotificationCenter.default
+        lifecycleObservers = [
+            center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.checkpointUnsavedEditors() }
+            },
+            center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.discardCheckpoints() }
+            },
+            center.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.preserveUnsavedEditors() }
+            },
+        ]
     }
 
     func pane(_ side: FilePaneModel.Side) -> FilePaneModel {
@@ -613,12 +645,113 @@ final class FileManagerModel {
             errorMessage = RemoteEditError.tooLarge(limitBytes: FileEditClassification.maxInAppEditBytes).localizedDescription
             return
         }
-        sheet = .edit(RemoteFileEditorRequest(
+        if let open = editors.first(where: { $0.matches(entry, on: endpoint, servedBy: preloaded?.principal) }) {
+            switch open.loadState {
+            case .loading, .ready:
+                showEditor(open)
+                return
+            case .binary, .failed:
+                // The file may read as text now; a fresh tab takes this open's result.
+                closeEditor(open)
+            }
+        }
+        let document = RemoteFileEditorDocument(request: RemoteFileEditorRequest(
             entry: entry,
             endpoint: endpoint,
             prompts: prompts,
             preloaded: preloaded
         ))
+        editors.append(document)
+        showEditor(document)
+    }
+
+    // MARK: - Editor tabs
+
+    func showEditor(_ document: RemoteFileEditorDocument) {
+        focusedEditorID = document.id
+        requestFocus()
+    }
+
+    func showFiles() {
+        focusedEditorID = nil
+        requestFocus()
+    }
+
+    /// Closes the tab, asking first when it holds unsaved changes.
+    func requestCloseEditor(_ document: RemoteFileEditorDocument) {
+        if document.isDirty {
+            showEditor(document)
+            pendingEditorClose = document
+        } else {
+            closeEditor(document)
+        }
+    }
+
+    /// Window close and quit can't wait on a prompt, so unsaved tabs go to the edit
+    /// center's recovery list, which offers each for export in any window and after
+    /// relaunch. A tab counts as preserved only once a copy is on disk.
+    func preserveUnsavedEditors() {
+        for document in editors {
+            guard document.isDirty else {
+                document.discardCheckpoint()
+                continue
+            }
+            let folder: URL
+            if let fresh = writeRecoveryCopy(of: document) {
+                document.discardCheckpoint()
+                folder = fresh
+            } else if let checkpoint = document.checkpointFolder {
+                // The background copy is the newest one that made it to disk.
+                document.checkpointFolder = nil
+                folder = checkpoint
+            } else {
+                continue
+            }
+            RemoteFileEditCenter.shared.adoptEditorRecoveryCopy(
+                folder, fileName: document.entry.name, endpoint: document.endpoint, remotePath: document.entry.path
+            )
+            document.markPreserved()
+        }
+    }
+
+    /// iOS may end a suspended app without telling it, so each unsaved tab leaves a copy
+    /// that relaunch lists as an unsynced edit. Tabs stay dirty; the copies go on return.
+    private func checkpointUnsavedEditors() {
+        for document in editors {
+            guard document.isDirty else {
+                document.discardCheckpoint()
+                continue
+            }
+            if let folder = writeRecoveryCopy(of: document) {
+                document.discardCheckpoint()
+                document.checkpointFolder = folder
+            }
+        }
+    }
+
+    private func discardCheckpoints() {
+        for document in editors { document.discardCheckpoint() }
+    }
+
+    private func writeRecoveryCopy(of document: RemoteFileEditorDocument) -> URL? {
+        RemoteFileEditCenter.shared.writeEditorRecoveryCopy(
+            document.encodedText,
+            fileName: document.entry.name,
+            endpoint: document.endpoint,
+            remotePath: document.entry.path
+        )
+    }
+
+    /// Closes the tab without asking; the neighbor tab, or the panes, take its place.
+    func closeEditor(_ document: RemoteFileEditorDocument) {
+        guard let index = editors.firstIndex(where: { $0 === document }) else { return }
+        editors.remove(at: index)
+        document.discardCheckpoint()
+        document.close()
+        if pendingEditorClose === document { pendingEditorClose = nil }
+        guard focusedEditorID == document.id else { return }
+        focusedEditorID = editors.isEmpty ? nil : editors[min(index, editors.count - 1)].id
+        requestFocus()
     }
 
     /// Opens `entry` in an external editor. For remote files, stages a local working copy and
@@ -985,6 +1118,11 @@ final class FileManagerModel {
     func tearDown() {
         isTornDown = true
         save()
+        preserveUnsavedEditors()
+        for document in editors { document.close() }
+        editors.removeAll()
+        focusedEditorID = nil
+        pendingEditorClose = nil
         // Resolve any auth/sudo/host-key prompts owned by this closing window so shared
         // connection tasks awaiting them unblock immediately instead of stranding other windows,
         // and unregister from app-wide live prompt fallback so surviving sessions switch windows.
@@ -992,6 +1130,8 @@ final class FileManagerModel {
         prompts.cancelAll()
         finishedObserver?.cancel()
         uploadedObserver?.cancel()
+        for observer in lifecycleObservers { NotificationCenter.default.removeObserver(observer) }
+        lifecycleObservers.removeAll()
         externalExportAdvanceTask?.cancel()
         externalExportAdvanceTask = nil
         let runningOpens = inFlightExternalOpenTasks

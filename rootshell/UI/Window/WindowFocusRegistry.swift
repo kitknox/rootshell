@@ -20,6 +20,8 @@ final class WindowFocusRegistry {
 
     func update(sceneSessionId: String, isKey: Bool) {
         guard !sceneSessionId.isEmpty else { return }
+        let previous = activeSceneSessionId()
+        defer { notifyIfActiveSceneChanged(from: previous) }
         keyStateBySceneId[sceneSessionId] = isKey
         if isKey {
             lastKeySceneId = sceneSessionId
@@ -31,6 +33,8 @@ final class WindowFocusRegistry {
 
     func remove(sceneSessionId: String) {
         guard !sceneSessionId.isEmpty else { return }
+        let previous = activeSceneSessionId()
+        defer { notifyIfActiveSceneChanged(from: previous) }
         keyStateBySceneId.removeValue(forKey: sceneSessionId)
         if mostRecentKeySceneId == sceneSessionId {
             mostRecentKeySceneId = nil
@@ -45,6 +49,12 @@ final class WindowFocusRegistry {
             return lastKeySceneId
         }
         return keyStateBySceneId.first(where: { $0.value })?.key
+    }
+
+    /// Menu shortcuts that follow the focused scene (the file editor's ⌘S) re-check.
+    private func notifyIfActiveSceneChanged(from previous: String?) {
+        guard activeSceneSessionId() != previous else { return }
+        MenuShortcutState.shared.refreshSaveChordRelease()
     }
 
     /// The key scene, or the last one that was key while another app is active.

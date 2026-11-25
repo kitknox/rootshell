@@ -259,7 +259,7 @@ struct SidebarSearchExtraCommand {
 
 /// UITextField that routes list-navigation keys (Up/Down/Escape) to closures
 /// while letting everything else — typing, Return — behave normally.
-final class SidebarSearchTextField: UITextField {
+final class SidebarSearchTextField: UITextField, PanelKeyboardClaiming {
     struct Handlers {
         var onMoveUpBegan: () -> Void
         var onMoveUpEnded: () -> Void

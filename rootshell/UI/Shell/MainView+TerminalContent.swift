@@ -1506,6 +1506,13 @@ extension MainView {
 
     /// Column widths for a content row `width` wide, after Rounded Panes' outer
     /// gaps. Shared with the header so it can find the terminal card.
+    /// How far a pill at the foot of the terminal area rises: that area ignores the
+    /// keyboard, so it clears the keyboard or the terminal's toolbar. A bottom tab bar
+    /// already lifts the whole column.
+    func pillKeyboardLift(above terminal: Ghostty.TerminalView?) -> CGFloat {
+        showsBottomTabBar ? 0 : max(effectManager.keyboardHeight, terminal?.reservedKeyboardToolbarHeightAtBottom ?? 0)
+    }
+
     func terminalRowColumns(width: CGFloat) -> TerminalRowColumns {
         let cardGap: CGFloat = roundedPanes ? PaneCardStyle.gap : 0
         let rowWidth = width - cardGap * 2
@@ -1598,14 +1605,8 @@ extension MainView {
         let portsTerminal = showRemotePorts && terminals.indices.contains(selectedTabIndex)
             ? terminals[selectedTabIndex].focusedPane?.asTerminal
             : nil
-        // The terminal column ignores the keyboard, so the pill must lift
-        // itself above it; otherwise the globe sits under the software
-        // keyboard on iPhone and cannot be tapped. A bottom tab bar already
-        // lifts the whole column.
-        let portPillKeyboardLift = showsBottomTabBar ? 0 : max(
-            effectManager.keyboardHeight,
-            portsTerminal?.reservedKeyboardToolbarHeightAtBottom ?? 0
-        )
+        // Otherwise the globe sits under the software keyboard on iPhone and cannot be tapped.
+        let portPillKeyboardLift = pillKeyboardLift(above: portsTerminal)
 
         HStack(spacing: 0) {
             if let dockedSidebarTheme {

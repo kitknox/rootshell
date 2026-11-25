@@ -1251,12 +1251,16 @@ class CatalystAppDelegate: AppDelegate {
             modifierFlags: [.command]
         )
 
-        let newTab = UIKeyCommand(
-            title: String(localized: "Open Connections"),
-            action: #selector(UIApplication.ghostty_newTab(_:)),
-            input: "s",
-            modifierFlags: [.command]
-        )
+        // A focused file editor in the key window saves on ⌘S instead.
+        let newTab: UICommand = MenuShortcutState.shared.reservesForEditorSave(
+            input: MenuShortcutState.saveChordInput, modifiers: MenuShortcutState.saveChordModifiers)
+            ? UICommand(title: String(localized: "Open Connections"), action: #selector(UIApplication.ghostty_newTab(_:)))
+            : UIKeyCommand(
+                title: String(localized: "Open Connections"),
+                action: #selector(UIApplication.ghostty_newTab(_:)),
+                input: "s",
+                modifierFlags: [.command]
+            )
 
         let newWindow = UIKeyCommand(
             title: String(localized: "New Window"),
@@ -1309,7 +1313,8 @@ class CatalystAppDelegate: AppDelegate {
     private func keybindMenuCommand(title: String, action: Selector, keybind: KeybindAction) -> UICommand {
         if let sequence = KeybindManager.shared.sequence(for: keybind),
            !sequence.isSequence, let trigger = sequence.first,
-           !KeybindManager.shared.isSequencePrefix(trigger) {
+           !KeybindManager.shared.isSequencePrefix(trigger),
+           !MenuShortcutState.shared.reservesForEditorSave(input: trigger.uiKeyInput, modifiers: trigger.uiModifierFlags) {
             return UIKeyCommand(title: title, action: action, input: trigger.uiKeyInput, modifierFlags: trigger.uiModifierFlags)
         }
         return UICommand(title: title, action: action)

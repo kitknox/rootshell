@@ -88,14 +88,61 @@ final class MenuShortcutState: ObservableObject {
                 }
                 .store(in: &cancellables)
         }
-        #if targetEnvironment(macCatalyst)
         // Block observers: the async notifications sequence over-released
         // UIWindow key notifications here and crashed.
         for name in [UIWindow.didBecomeKeyNotification, UIWindow.didResignKeyNotification] {
             _ = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.refreshRemoteScreenForwarding() }
+                MainActor.assumeIsolated {
+                    #if targetEnvironment(macCatalyst)
+                    self?.refreshRemoteScreenForwarding()
+                    #endif
+                    self?.refreshSaveChordRelease()
+                }
             }
         }
+    }
+
+    /// Focused in-app file editors, one per window at most. Weak, so a torn-down editor never pins one.
+    private var saveChordOwners: [ObjectIdentifier: WeakPane] = [:]
+
+    /// Whether the key window's focused editor takes ⌘S from the menu: the keystroke
+    /// saves the file, and a click on the menu item still does what the item says.
+    private(set) var releasesSaveChord = false
+
+    func setSaveChordOwner(_ view: UIView, active: Bool) {
+        saveChordOwners[ObjectIdentifier(view)] = active ? WeakPane(view: view) : nil
+        refreshSaveChordRelease()
+    }
+
+    /// Whether a menu item on this chord gives it up to the focused editor's Save.
+    func reservesForEditorSave(input: String, modifiers: UIKeyModifierFlags) -> Bool {
+        releasesSaveChord && Self.isSaveChord(input: input, modifiers: modifiers)
+    }
+
+    /// ⌘S: the in-app file editor's Save.
+    nonisolated static let saveChordInput = "s"
+    nonisolated static let saveChordModifiers: UIKeyModifierFlags = .command
+
+    nonisolated static func isSaveChord(input: String, modifiers: UIKeyModifierFlags) -> Bool {
+        input == saveChordInput && modifiers == saveChordModifiers
+    }
+
+    /// Re-run when the focused scene changes. iPadOS keeps a key window per scene, so
+    /// the focused scene comes from WindowFocusRegistry, as command routing does.
+    func refreshSaveChordRelease() {
+        saveChordOwners = saveChordOwners.filter { $0.value.view != nil }
+        let activeScene = WindowFocusRegistry.shared.activeSceneSessionId()
+        let releases = saveChordOwners.values.contains { owner in
+            guard let window = owner.view?.window else { return false }
+            guard let activeScene else { return window.isKeyWindow }
+            return window.windowScene?.session.persistentIdentifier == activeScene
+        }
+        guard releases != releasesSaveChord else { return }
+        releasesSaveChord = releases
+        rebuildShortcuts()
+        #if targetEnvironment(macCatalyst)
+        // The pre-26 menus carry a fixed ⌘S on Open Connections.
+        UIMenuSystem.main.setNeedsRebuild()
         #endif
     }
 
@@ -220,6 +267,9 @@ final class MenuShortcutState: ObservableObject {
                 continue
             }
             if forwardsShortcutsToRemoteScreen, binding.action != .toggle_mouse_capture {
+                continue
+            }
+            if reservesForEditorSave(input: firstTrigger.uiKeyInput, modifiers: firstTrigger.uiModifierFlags) {
                 continue
             }
 
