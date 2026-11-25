@@ -30,6 +30,8 @@ enum RemoteEditError: LocalizedError {
     case remoteDeleted
     case stagingUnavailable(directory: String, fileName: String)
     case recoveryConflict(targetPath: String, backupPath: String, stagedPath: String?)
+    case targetChanged(fileName: String)
+    case unpinnedPrivilegedTarget(directory: String, fileName: String)
 
     var errorDescription: String? {
         switch self {
@@ -54,6 +56,10 @@ enum RemoteEditError: LocalizedError {
                 return String(localized: "A previous save of “\(fileName)” was interrupted and another file now exists at that path. Both the backup (“\(backupName)”) and your staged edit (“\(stagedName)”) were preserved in the same folder. Inspect or remove the backup before editing again.", comment: "File editor recovery conflict error with both backup and staged file")
             }
             return String(localized: "A previous save of “\(fileName)” was interrupted and the file at that path no longer matches the staged edit. The original backup (“\(backupName)”) was preserved in the same folder. Inspect or remove the backup before editing again.", comment: "File editor recovery conflict error with preserved backup")
+        case .targetChanged(let fileName):
+            return String(localized: "“\(fileName)” now points to a different file, or its owner changed, since it was opened, so it wasn't saved. Reopen it to edit the current file.", comment: "File editor error when the path was redirected or replaced; argument is file name")
+        case .unpinnedPrivilegedTarget(let directory, let fileName):
+            return String(localized: "“\(fileName)” wasn't saved as root because other users can rename entries in “\(directory)”, which could redirect the save to another file. Close this edit, then open the file again as its owner.", comment: "File editor error refusing a root save in a directory other users can modify; arguments are folder path and file name")
         }
     }
 }
@@ -1065,12 +1071,8 @@ final class RemoteFileEditCenter {
             return try await s3.readObjectForEdit(path, maxBytes: maxBytes)
         }
 
-        // Heal any interrupted SFTP swap on this path before reading (serialized with any active commit).
         if case .sftp(let sftp) = fs.backend {
-            let resolved = try await resolveSFTPTargetPath(path, sftp: sftp, requireConfirmedRegularType: false)
-            try await SFTPPathOperationGate.shared.withLock(endpointKey: endpointKey, targetPath: resolved) {
-                try await recoverInterruptedSFTPSwapLocked(endpointKey: endpointKey, targetPath: resolved, sftp: sftp)
-            }
+            return try await fetchSFTPFile(path: path, sftp: sftp, endpointKey: endpointKey, maxBytes: maxBytes)
         }
 
         let info = try await fs.info(path)
@@ -1108,6 +1110,61 @@ final class RemoteFileEditCenter {
             modified: info.modified
         )
         return (data, fingerprint)
+    }
+
+    /// Heals any interrupted swap on the resolved path (serialized with any active commit), then
+    /// reads it through one handle. Type, size, mtime and owner come from that handle's FSTAT,
+    /// so the owner the edit is bound to belongs to the file the bytes came from.
+    private static func fetchSFTPFile(
+        path: String,
+        sftp: SFTPClient,
+        endpointKey: String,
+        maxBytes: Int64
+    ) async throws -> (data: Data, fingerprint: RemoteFileFingerprint) {
+        let resolved = try await resolveSFTPTargetPath(path, sftp: sftp, requireConfirmedRegularType: false)
+        try await SFTPPathOperationGate.shared.withLock(endpointKey: endpointKey, targetPath: resolved) {
+            try await recoverInterruptedSFTPSwapLocked(endpointKey: endpointKey, targetPath: resolved, sftp: sftp)
+        }
+
+        let file: SFTPFile
+        do {
+            file = try await sftp.openFile(filePath: resolved, flags: .read)
+        } catch {
+            throw SFTPError.from(sftpError: error, path: path)
+        }
+        do {
+            let attrs = try await file.readHandleAttributes()
+            if SFTPFileType(permissions: attrs.permissions) == .directory {
+                throw RemoteEditError.isDirectory
+            }
+            if let size = attrs.size, size > UInt64(maxBytes) {
+                throw RemoteEditError.tooLarge(limitBytes: maxBytes)
+            }
+            var data = Data()
+            if let size = attrs.size, size > 0 { data.reserveCapacity(Int(size)) }
+            var offset: UInt64 = 0
+            while true {
+                try Task.checkCancellation()
+                var chunk = try await file.read(from: offset, length: 262_144)
+                guard chunk.readableBytes > 0 else { break }
+                if Int64(data.count) + Int64(chunk.readableBytes) > maxBytes {
+                    throw RemoteEditError.tooLarge(limitBytes: maxBytes)
+                }
+                offset += UInt64(chunk.readableBytes)
+                data.append(chunk.readData(length: chunk.readableBytes) ?? Data())
+            }
+            try? await file.close()
+            let fingerprint = RemoteFileFingerprint(
+                size: UInt64(data.count),
+                modified: attrs.accessModificationTime?.modificationTime,
+                identity: RemoteFileIdentity(resolvedPath: resolved, ownership: sftpOwnership(of: attrs))
+            )
+            return (data, fingerprint)
+        } catch {
+            try? await file.close()
+            if error is CancellationError || error is RemoteEditError { throw error }
+            throw SFTPError.from(sftpError: error, path: path)
+        }
     }
 
     /// Uploads `data` back to `remotePath` safely:
@@ -1192,8 +1249,9 @@ final class RemoteFileEditCenter {
 
     // MARK: - Crash-Safe SFTP Commit & Recovery
 
-    /// Resolves `remotePath` to its final destination path when it is a symlink so saves
-    /// replace the target file instead of overwriting the symlink itself.
+    /// Resolves `remotePath` to its canonical path (following a final symlink and any symlinked
+    /// ancestors) so saves replace the target file instead of the symlink, and so open and save
+    /// can compare the file they bind to.
     /// Only treats a confirmed `SFTPStatusCode.noSuchFile` as a missing path; all other `lstat`
     /// and `realpath` errors propagate. When `requireConfirmedRegularType` is true (all saves),
     /// an existing entry with missing permissions or zero type bits is rejected rather than assumed
@@ -1208,23 +1266,38 @@ final class RemoteFileEditCenter {
             linkAttrs = try await sftp.getLinkAttributes(at: remotePath)
         } catch {
             if SFTPError.sftpStatus(from: error)?.errorCode == .noSuchFile {
-                return remotePath
+                // Canonicalize the parent too; fall back only when the parent is confirmed missing.
+                let parent = FileTransferLogic.parent(of: remotePath)
+                let canonicalParent: String
+                do {
+                    canonicalParent = try await sftp.getRealPath(atPath: parent)
+                } catch {
+                    if SFTPError.sftpStatus(from: error)?.errorCode == .noSuchFile {
+                        return remotePath
+                    }
+                    throw SFTPError.from(sftpError: error, path: parent)
+                }
+                guard !canonicalParent.isEmpty else {
+                    throw SFTPError.transferFailed(
+                        file: remotePath,
+                        reason: String(localized: "Couldn't resolve the file's full path on the server.", comment: "File editor path resolution error")
+                    )
+                }
+                return FileTransferLogic.join(canonicalParent, FileTransferLogic.lastComponent(of: remotePath))
             }
             throw SFTPError.from(sftpError: error, path: remotePath)
         }
 
         switch SFTPFileType(permissions: linkAttrs.permissions) {
-        case .regularFile:
-            return remotePath
         case .directory:
             throw RemoteEditError.isDirectory
-        case .symlink:
+        case .regularFile, .symlink:
             do {
                 let resolved = try await sftp.getRealPath(atPath: remotePath)
                 guard !resolved.isEmpty else {
                     throw SFTPError.transferFailed(
                         file: remotePath,
-                        reason: String(localized: "Couldn't resolve the symlink target before saving.", comment: "File editor symlink resolution error")
+                        reason: String(localized: "Couldn't resolve the file's full path on the server.", comment: "File editor path resolution error")
                     )
                 }
                 return resolved
@@ -1264,6 +1337,42 @@ final class RemoteFileEditCenter {
             size: size,
             modified: attrs.accessModificationTime?.modificationTime
         ))
+    }
+
+    private static func sftpOwnership(of attrs: SFTPFileAttributes) -> SFTPOwnership? {
+        attrs.uidgid.map { SFTPOwnership(uid: $0.userId, gid: $0.groupId) }
+    }
+
+    /// Refuses a root save unless only root can rename entries in every directory above the
+    /// target's parent, so the parent can't be swapped for a symlink between checks and commit.
+    private static func verifySFTPParentPinnedForRoot(_ targetPath: String, sftp: SFTPClient) async throws {
+        let fileName = FileTransferLogic.lastComponent(of: targetPath)
+        guard let chain = SFTPPrivilegedTarget.directoryChain(for: targetPath) else {
+            throw RemoteEditError.unpinnedPrivilegedTarget(directory: targetPath, fileName: fileName)
+        }
+        var attrs: [SFTPFileAttributes] = []
+        for directory in chain {
+            let directoryAttrs: SFTPFileAttributes
+            do {
+                directoryAttrs = try await sftp.getLinkAttributes(at: directory)
+            } catch {
+                throw SFTPError.from(sftpError: error, path: directory)
+            }
+            guard SFTPFileType(permissions: directoryAttrs.permissions) == .directory else {
+                throw RemoteEditError.unpinnedPrivilegedTarget(directory: directory, fileName: fileName)
+            }
+            attrs.append(directoryAttrs)
+        }
+        for index in attrs.indices.dropLast() {
+            let pinned = SFTPPrivilegedTarget.pinsEntry(
+                directoryMode: attrs[index].permissions,
+                directoryUID: attrs[index].uidgid?.userId,
+                childUID: attrs[index + 1].uidgid?.userId
+            )
+            guard pinned else {
+                throw RemoteEditError.unpinnedPrivilegedTarget(directory: chain[index], fileName: fileName)
+            }
+        }
     }
 
     /// Probes `path` without following symlinks, classifying missing files strictly from Citadel's
@@ -1446,6 +1555,8 @@ final class RemoteFileEditCenter {
     /// Inspects `targetPath` via `lstat`, refusing directories (even when `forceOverwrite == true`),
     /// refusing unexpected symlinks (so a rename never replaces a symlink with a regular file),
     /// and enforcing `expectedFingerprint` when `!forceOverwrite`.
+    /// An owner that differs from the one seen at open is refused even when `forceOverwrite`
+    /// is set: it means another file now sits at the path, not a newer revision of this one.
     private static func validateSFTPTarget(
         _ targetPath: String,
         on sftp: SFTPClient,
@@ -1486,6 +1597,10 @@ final class RemoteFileEditCenter {
                     reason: String(localized: "Couldn't confirm that the remote path is a regular file before saving; the existing entry was left untouched.", comment: "File editor unconfirmed file type error")
                 )
             }
+            if let identity = expectedFingerprint?.identity,
+               !identity.matches(path: targetPath, currentOwnership: sftpOwnership(of: attrs)) {
+                throw RemoteEditError.targetChanged(fileName: FileTransferLogic.lastComponent(of: targetPath))
+            }
             if !forceOverwrite, let expectedFingerprint {
                 let current = RemoteFileFingerprint(
                     size: attrs.size ?? 0,
@@ -1509,6 +1624,12 @@ final class RemoteFileEditCenter {
         forceOverwrite: Bool
     ) async throws -> RemoteFileFingerprint {
         let targetPath = try await resolveSFTPTargetPath(remotePath, sftp: sftp, requireConfirmedRegularType: true)
+
+        // Save only to the file bound at open, even when overwriting a conflict.
+        let identity = expectedFingerprint?.identity
+        if let identity, !RemoteEditPathIdentity.matches(identity.resolvedPath, targetPath) {
+            throw RemoteEditError.targetChanged(fileName: FileTransferLogic.lastComponent(of: remotePath))
+        }
 
         // 1. Recover any previously interrupted swap and run fast pre-upload validation under the path gate.
         let initialAttrs: SFTPFileAttributes? = try await SFTPPathOperationGate.shared.withLock(
@@ -1603,6 +1724,16 @@ final class RemoteFileEditCenter {
             privateMode.permissions = 0o600
             try await tempFile.setAttributes(privateMode)
 
+            // The new file's owner is the account this save runs as. Read it from our handle,
+            // before any chown, so no one can spoof it by swapping the temp path.
+            let createdAttrs = try await tempFile.readHandleAttributes()
+            if createdAttrs.uidgid?.userId == 0 {
+                if identity == nil, !RemoteEditPathIdentity.matches(remotePath, targetPath) {
+                    throw RemoteEditError.targetChanged(fileName: FileTransferLogic.lastComponent(of: remotePath))
+                }
+                try await verifySFTPParentPinnedForRoot(targetPath, sftp: sftp)
+            }
+
             if replacingInitial, let uidgid = initialAttrs?.uidgid {
                 var ownerAttrs = SFTPFileAttributes()
                 ownerAttrs.uidgid = uidgid
@@ -1658,7 +1789,7 @@ final class RemoteFileEditCenter {
         } catch {
             try? await tempFile.close()
             await cleanupUncommittedTempPath(endpointKey: endpointKey, tempPath: tempPath, on: sftp)
-            if error is CancellationError { throw error }
+            if error is CancellationError || error is RemoteEditError { throw error }
             throw SFTPError.from(sftpError: error, path: targetPath)
         }
 
@@ -1784,7 +1915,8 @@ final class RemoteFileEditCenter {
                 }
                 stagedFingerprint = RemoteFileFingerprint(
                     size: verifiedAttrs.size ?? UInt64(data.count),
-                    modified: verifiedAttrs.accessModificationTime?.modificationTime
+                    modified: verifiedAttrs.accessModificationTime?.modificationTime,
+                    identity: RemoteFileIdentity(resolvedPath: targetPath, ownership: verifiedOwnership)
                 )
             } catch {
                 try? await tempFile.close()

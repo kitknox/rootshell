@@ -494,17 +494,21 @@ nonisolated struct RemoteFileFingerprint: Codable, Equatable, Sendable {
     let modified: Date?
     let eTag: String?
     let precision: TimestampPrecision
+    /// SFTP only: which file the edit is bound to. Not part of `differs(from:)`.
+    let identity: RemoteFileIdentity?
 
     init(
         size: UInt64,
         modified: Date?,
         eTag: String? = nil,
-        precision: TimestampPrecision = .wholeSecond
+        precision: TimestampPrecision = .wholeSecond,
+        identity: RemoteFileIdentity? = nil
     ) {
         self.size = size
         self.modified = modified
         self.eTag = eTag
         self.precision = precision
+        self.identity = identity
     }
 
     /// True when `other` represents a different server-side revision than `self`.
@@ -529,6 +533,51 @@ nonisolated struct RemoteFileFingerprint: Codable, Equatable, Sendable {
         default:
             return true
         }
+    }
+}
+
+/// The SFTP file an edit was opened from: its canonical path and owner. Saves refuse to
+/// write anywhere else, so a symlink or rename swapped in after opening can't redirect them.
+nonisolated struct RemoteFileIdentity: Codable, Equatable, Sendable {
+    let resolvedPath: String
+    let ownership: SFTPOwnership?
+
+    /// True when a save that resolved to `path` with `currentOwnership` still targets this file.
+    /// Paths compare byte for byte; an owner reported at open must be reported unchanged at save.
+    func matches(path: String, currentOwnership: SFTPOwnership?) -> Bool {
+        guard RemoteEditPathIdentity.matches(path, resolvedPath) else { return false }
+        guard let ownership else { return true }
+        return currentOwnership == ownership
+    }
+}
+
+/// Whether a save running as root can pin the target's parent directory. Rename-based commits
+/// already ignore a swapped final component, so only the directories above the parent matter:
+/// if another user can rename an entry there, the parent itself can become a symlink mid-save.
+nonisolated enum SFTPPrivilegedTarget {
+    /// The directories from `/` down to the parent of `canonicalPath`, or nil when the path
+    /// isn't absolute, has no parent to pin, or has a `.`, `..` or NUL component. Splits on
+    /// slash bytes: a combining mark after `/` would otherwise merge into one Character.
+    static func directoryChain(for canonicalPath: String) -> [String]? {
+        guard canonicalPath.utf8.first == UInt8(ascii: "/") else { return nil }
+        let components = FileTransferLogic.pathComponents(of: canonicalPath)
+        guard !components.isEmpty, components.allSatisfy(FileTransferLogic.isSingleComponent) else { return nil }
+        var chain = ["/"]
+        var current = ""
+        for component in components.dropLast() {
+            current += "/" + component
+            chain.append(current)
+        }
+        return chain
+    }
+
+    /// True when only root can rename or replace an entry owned by `childUID` in a directory with
+    /// `directoryMode` owned by `directoryUID`. A sticky group/other-writable directory still pins
+    /// root-owned entries. Missing attributes never count as pinned.
+    static func pinsEntry(directoryMode: UInt32?, directoryUID: UInt32?, childUID: UInt32?) -> Bool {
+        guard let directoryMode, directoryUID == 0 else { return false }
+        if directoryMode & 0o022 == 0 { return true }
+        return directoryMode & 0o1000 != 0 && childUID == 0
     }
 }
 
@@ -774,7 +823,7 @@ nonisolated enum SFTPFileType: Equatable, Sendable {
 
 /// POSIX UID/GID pair verified before committing an SFTP staged replacement so a save
 /// never silently changes file ownership (including when the server omits UID/GID on an existing file).
-nonisolated struct SFTPOwnership: Equatable, Sendable {
+nonisolated struct SFTPOwnership: Codable, Equatable, Sendable {
     let uid: UInt32
     let gid: UInt32
 
