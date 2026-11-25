@@ -81,6 +81,14 @@ nonisolated struct FileSystemEndpoint: Sendable {
         let modified: Date?
     }
 
+    struct ListingPage: Sendable, Equatable {
+        let entries: [RFEntry]
+        /// Continuation cursor for the next page, or nil when the listing is complete.
+        let nextCursor: String?
+
+        var hasMore: Bool { nextCursor != nil }
+    }
+
     let backend: Backend
 
     var isRemote: Bool {
@@ -107,7 +115,35 @@ nonisolated struct FileSystemEndpoint: Sendable {
         return false
     }
 
+    /// Whether `path` supports server-side child-prefix queries when paginated.
+    /// Inside any S3 bucket, `ListObjectsV2` jumps straight to matching keys; at `/`
+    /// only native AWS endpoints support `ListBuckets` `prefix` while Ceph/S3-compatible
+    /// servers retain plain `GET /`.
+    func supportsServerPrefixSearch(at path: String) -> Bool {
+        guard case .s3(let s3) = backend else { return false }
+        if s3.location(of: path) != nil { return true }
+        return s3.provider.supportsPaginatedBucketListing
+    }
+
     // MARK: - Listing and metadata
+
+    /// Loads one page of `path`. Local and SFTP return the entire directory in a single
+    /// page; S3 returns up to `pageSize` entries plus an optional continuation cursor.
+    func listPage(
+        _ path: String,
+        cursor: String? = nil,
+        namePrefix: String? = nil,
+        pageSize: Int = S3FileSystem.defaultPageSize,
+        strict: Bool = false
+    ) async throws -> ListingPage {
+        switch backend {
+        case .local, .sftp:
+            guard cursor == nil else { return ListingPage(entries: [], nextCursor: nil) }
+            return ListingPage(entries: try await list(path, strict: strict), nextCursor: nil)
+        case .s3(let s3):
+            return try await s3.listPage(path, cursor: cursor, namePrefix: namePrefix, pageSize: pageSize, strict: strict)
+        }
+    }
 
     /// With `strict`, entries the listing would otherwise hide (S3 keys a path
     /// can't hold) fail it instead; transfers use it so nothing is left behind.
@@ -123,7 +159,8 @@ nonisolated struct FileSystemEndpoint: Sendable {
     }
 
     /// Metadata for `path`; with `followLinks` false a symlink describes itself.
-    func info(_ path: String, followLinks: Bool = true) async throws -> ItemInfo {
+    /// On S3, `isDirectory` disambiguates when both a file and a folder share a path.
+    func info(_ path: String, followLinks: Bool = true, isDirectory: Bool? = nil) async throws -> ItemInfo {
         switch backend {
         case .local(let resolver):
             let resolved = followLinks ? resolver.resolve(path) : resolver.resolveParent(path)
@@ -145,7 +182,7 @@ nonisolated struct FileSystemEndpoint: Sendable {
                 throw SFTPError.from(sftpError: error, path: path)
             }
         case .s3(let s3):
-            return try await s3.info(path)
+            return try await s3.info(path, isDirectory: isDirectory)
         }
     }
 
@@ -171,7 +208,7 @@ nonisolated struct FileSystemEndpoint: Sendable {
         var expanded = path
         if path == "~" || path.hasPrefix("~/") {
             expanded = FileTransferLogic.join(try await homeDirectory(), String(path.dropFirst(min(2, path.count))))
-        } else if !path.hasPrefix("/") {
+        } else if path.utf8.first != UInt8(ascii: "/") {
             expanded = FileTransferLogic.join(base, path)
         }
         switch backend {
@@ -204,8 +241,27 @@ nonisolated struct FileSystemEndpoint: Sendable {
         return FileTransferLogic.join(try await realPath(parent), FileTransferLogic.lastComponent(of: path))
     }
 
-    func exists(_ path: String) async -> Bool {
-        (try? await info(path, followLinks: false)) != nil
+    /// True only when `error` is a confirmed "does not exist" response from the
+    /// filesystem, never a permission, network, or server error.
+    static func isNotFoundError(_ error: Error) -> Bool {
+        if case StorageError.notFound = error { return true }
+        if case SFTPError.fileNotFound = error { return true }
+        if SFTPError.sftpStatus(from: error)?.errorCode == .noSuchFile { return true }
+        if let posix = error as? POSIXError, posix.code == .ENOENT { return true }
+        return false
+    }
+
+    /// Metadata for `path` if it exists, `nil` only on a confirmed not-found response.
+    /// Permission, network, and server errors are rethrown so callers never treat an
+    /// unreadable existing item as missing.
+    func infoIfExists(_ path: String, followLinks: Bool = true, isDirectory: Bool? = nil) async throws -> ItemInfo? {
+        do {
+            return try await info(path, followLinks: followLinks, isDirectory: isDirectory)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch where Self.isNotFoundError(error) {
+            return nil
+        }
     }
 
     func readLink(_ path: String) async throws -> String {
@@ -236,7 +292,7 @@ nonisolated struct FileSystemEndpoint: Sendable {
     /// rewritten, one request instead of checking first; a bucket is never created.
     func ensureDirectory(_ path: String) async throws {
         if let s3, s3.bucketName(of: path) == nil { return try await s3.makeDirectory(path) }
-        if !(await exists(path)) { try await makeDirectory(path) }
+        if try await infoIfExists(path, followLinks: false) == nil { try await makeDirectory(path) }
     }
 
     func createEmptyFile(_ path: String) async throws {
@@ -274,12 +330,16 @@ nonisolated struct FileSystemEndpoint: Sendable {
 
     /// Deletes `path` and, for a real directory, everything beneath it.
     /// Symlinked directories are unlinked, not descended into.
-    func removeRecursively(_ path: String) async throws {
+    /// On S3, `isDirectory` disambiguates when both a file and a folder share a path.
+    func removeRecursively(_ path: String, isDirectory: Bool? = nil) async throws {
         if case .s3(let s3) = backend {
             // Batch deletes by prefix instead of a walk.
-            return try await s3.removeRecursively(path)
+            return try await s3.removeRecursively(path, isDirectory: isDirectory)
         }
         let item = try await info(path, followLinks: false)
+        if let expectedDirectory = isDirectory, !item.isSymlink, item.isDirectory != expectedDirectory {
+            throw FileTransferLogic.ItemTypeChanged(name: FileTransferLogic.lastComponent(of: path))
+        }
         guard item.isDirectory else {
             try await removeFile(path)
             return
@@ -295,7 +355,7 @@ nonisolated struct FileSystemEndpoint: Sendable {
         try await removeDirectory(path)
     }
 
-    func rename(_ from: String, to: String) async throws {
+    func rename(_ from: String, to: String, isDirectory: Bool? = nil) async throws {
         switch backend {
         case .local(let resolver):
             try await Self.onDisk {
@@ -304,7 +364,7 @@ nonisolated struct FileSystemEndpoint: Sendable {
         case .sftp(let sftp):
             try await mapped(from) { try await sftp.rename(at: from, to: to) }
         case .s3(let s3):
-            try await s3.rename(from, to: to)
+            try await s3.rename(from, to: to, isDirectory: isDirectory)
         }
     }
 

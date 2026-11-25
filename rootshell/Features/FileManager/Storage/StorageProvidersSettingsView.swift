@@ -361,8 +361,12 @@ struct StorageProviderEditView: View {
                 let connection = try S3Connection(provider: provider)
                 do {
                     let fs = connection.browseFileSystem
-                    let count = try await fs.list(try await fs.homeDirectory()).count
-                    result = .succeeded(String(localized: "Connected. \(count) items found.", comment: "Storage provider test result; argument is an item count"))
+                    let page = try await fs.listPage(try await fs.homeDirectory())
+                    result = .succeeded(
+                        page.hasMore
+                            ? String(localized: "Connected. \(page.entries.count)+ items found.", comment: "Storage provider test result when more items exist; argument is an item count")
+                            : String(localized: "Connected. \(page.entries.count) items found.", comment: "Storage provider test result; argument is an item count")
+                    )
                 } catch {
                     result = .failed(error.localizedDescription)
                 }

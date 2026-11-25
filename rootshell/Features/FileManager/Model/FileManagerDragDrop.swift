@@ -26,13 +26,17 @@ extension FileManagerModel {
     struct DragPayload {
         let side: FilePaneModel.Side
         let endpoint: FileEndpoint
-        let paths: [String]
+        let sources: [TransferJob.Source]
         let startedAt = Date()
     }
 
     func beginDrag(of entries: [RFEntry], from side: FilePaneModel.Side) -> NSItemProvider {
         let pane = pane(side)
-        dragPayload = DragPayload(side: side, endpoint: pane.endpoint, paths: entries.map(\.path))
+        dragPayload = DragPayload(
+            side: side,
+            endpoint: pane.endpoint,
+            sources: entries.map { TransferJob.Source(path: $0.path, isDirectory: $0.isDirectory) }
+        )
         guard let first = entries.first else { return NSItemProvider() }
 
         let provider = NSItemProvider()
@@ -67,15 +71,15 @@ extension FileManagerModel {
         // A drag abandoned mid-way leaves a payload behind; only trust it for the drop it names.
         if let payload = dragPayload,
            Date().timeIntervalSince(payload.startedAt) < 600,
-           let first = payload.paths.first,
-           providers.first?.suggestedName == FileTransferLogic.lastComponent(of: first) {
+           let first = payload.sources.first,
+           providers.first?.suggestedName == FileTransferLogic.lastComponent(of: first.path) {
             dragPayload = nil
             let target = directory ?? pane(side).path
             // Dropping a folder into itself, or back onto its own listing, is a no-op.
             guard !(payload.side == side && directory == nil),
-                  !payload.paths.contains(target) else { return false }
+                  !payload.sources.contains(where: { $0.isDirectory != false && $0.path.utf8.elementsEqual(target.utf8) }) else { return false }
             activeSide = side
-            receive(paths: payload.paths, from: payload.endpoint, into: side, directory: target)
+            receive(sources: payload.sources, from: payload.endpoint, into: side, directory: target)
             return true
         }
         let fileProviders = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.item.identifier) }

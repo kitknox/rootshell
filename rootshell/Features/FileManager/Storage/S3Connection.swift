@@ -54,6 +54,26 @@ nonisolated struct S3RetryPolicy: RetryPolicy {
     }
 }
 
+/// Reverts Soto `S3Middleware`'s virtual-host rewrite for path-style custom gateways
+/// hosted under `*.amazonaws.com[.cn]` (such as Ceph RGW behind an AWS ALB/NLB).
+/// Installed via `S3.with(middleware:)`, so it runs after `S3Middleware` and before
+/// `SigningMiddleware`.
+nonisolated struct S3PathStyleFixupMiddleware: AWSMiddlewareProtocol {
+    let endpointHost: String
+
+    func handle(
+        _ request: AWSHTTPRequest,
+        context: AWSMiddlewareContext,
+        next: AWSMiddlewareNextHandler
+    ) async throws -> AWSHTTPResponse {
+        var request = request
+        if let fixed = S3KeyLogic.restorePathStyleURL(request.url, endpointHost: endpointHost) {
+            request.url = fixed
+        }
+        return try await next(request, context)
+    }
+}
+
 /// The AWSClient plus one S3 service per region. AWS rejects requests sent to
 /// the wrong region, so each bucket's region is looked up once and cached;
 /// every other provider has a single endpoint.
@@ -130,13 +150,13 @@ actor S3Session {
 
     private static func makeService(client: AWSClient, provider: StorageProvider, region: String) -> S3 {
         var options: AWSServiceConfig.Options = []
-        let endpoint = provider.resolvedEndpoint
+        let endpoint = provider.sdkEndpoint
         if endpoint != nil, provider.usesVirtualHost { options.insert(.s3ForceVirtualHost) }
         // Several S3-compatible servers mishandle Expect: 100-continue.
         if !provider.preset.isAWS { options.insert(.s3Disable100Continue) }
         // AWS signs with the bucket's own region; other endpoints may expect a fixed one.
         let signingRegion = endpoint == nil ? region : provider.effectiveSigningRegion
-        return S3(
+        let service = S3(
             client: client,
             region: SotoCore.Region(rawValue: signingRegion),
             endpoint: endpoint,
@@ -144,5 +164,11 @@ actor S3Session {
             timeout: .seconds(600),
             options: options
         )
+        if provider.needsPathStyleEndpointFixup,
+           let endpoint,
+           let host = URL(string: endpoint)?.host?.lowercased() {
+            return service.with(middleware: S3PathStyleFixupMiddleware(endpointHost: host))
+        }
+        return service
     }
 }

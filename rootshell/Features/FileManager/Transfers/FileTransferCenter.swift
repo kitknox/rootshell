@@ -89,7 +89,7 @@ final class FileTransferCenter {
         let again = TransferJob(
             operation: job.operation,
             source: job.source,
-            sourcePaths: job.sourcePaths,
+            sources: job.sources,
             destination: job.destination,
             destinationDirectory: job.destinationDirectory,
             conflictPolicy: job.conflictPolicy
@@ -273,9 +273,12 @@ private struct TransferExecutor {
 
     /// One selected item and everything beneath it.
     private struct Root {
+        let id = UUID()
         let source: String
+        let sourceIsDirectory: Bool?
         let destination: String
         var replaceExisting: Bool
+        var replaceIsDirectory: Bool?
         var items: [FileTreeCopier.Item]
         /// Same-endpoint move satisfied by a rename.
         var renamed = false
@@ -298,10 +301,10 @@ private struct TransferExecutor {
             switch job.operation {
             case .delete:
                 try await center?.acquirePaths(TransferPathClaim(job: job, destinationDirectory: nil, sources: sourceClaims), for: job)
-                try await runPerPath(sourceFS) { try await sourceFS.removeRecursively($0) }
+                try await runPerSource(sourceFS) { try await sourceFS.removeRecursively($0.path, isDirectory: $0.isDirectory) }
             case .setPermissions(let mode):
                 try await center?.acquirePaths(TransferPathClaim(job: job, destinationDirectory: nil, sources: sourceClaims), for: job)
-                try await runPerPath(sourceFS) { try await sourceFS.setPermissions($0, mode: mode) }
+                try await runPerSource(sourceFS) { try await sourceFS.setPermissions($0.path, mode: mode) }
             case .copy, .move:
                 guard let destination = job.destination, let directory = job.destinationDirectory else { return }
                 let destinationFS = try await pool.fileSystem(for: destination, purpose: .transfer, prompts: prompts)
@@ -332,12 +335,14 @@ private struct TransferExecutor {
         let followed: String
     }
 
-    private func realSources(on fs: FileSystemEndpoint) async -> [String: RealSource] {
-        var result: [String: RealSource] = [:]
-        for path in job.sourcePaths {
-            let location = (try? await fs.realLocation(of: path)) ?? path
-            let followed = (try? await fs.realPath(path)) ?? location
-            result[path] = RealSource(location: location, followed: followed)
+    private func realSources(on fs: FileSystemEndpoint) async -> [[UInt8]: RealSource] {
+        var result: [[UInt8]: RealSource] = [:]
+        for source in job.sources {
+            let key = Array(source.path.utf8)
+            guard result[key] == nil else { continue }
+            let location = (try? await fs.realLocation(of: source.path)) ?? source.path
+            let followed = (try? await fs.realPath(source.path)) ?? location
+            result[key] = RealSource(location: location, followed: followed)
         }
         return result
     }
@@ -348,18 +353,18 @@ private struct TransferExecutor {
             : String(localized: "\(job.errors.count) items failed", comment: "File transfer: several items in a job failed")
     }
 
-    private func runPerPath(_ fs: FileSystemEndpoint, _ body: (String) async throws -> Void) async throws {
-        job.setTotals(bytes: 0, items: job.sourcePaths.count)
+    private func runPerSource(_ fs: FileSystemEndpoint, _ body: (TransferJob.Source) async throws -> Void) async throws {
+        job.setTotals(bytes: 0, items: job.sources.count)
         job.setState(.running)
-        for path in job.sourcePaths {
+        for source in job.sources {
             try Task.checkCancellation()
-            job.beginItem(path)
+            job.beginItem(source.path)
             do {
-                try await body(path)
+                try await body(source)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                job.recordError(path: path, message: error.localizedDescription)
+                job.recordError(path: source.path, message: error.localizedDescription)
             }
             job.finishItem()
         }
@@ -372,94 +377,216 @@ private struct TransferExecutor {
     /// symlink can disguise the source. Both the link and its target count.
     private func runCopy(
         from sourceFS: FileSystemEndpoint, to destinationFS: FileSystemEndpoint,
-        directory: String, realDirectory: String, sources: [String: RealSource]
+        directory: String, realDirectory: String, sources: [[UInt8]: RealSource]
     ) async throws {
         // Identity, not enum equality: a borrowed pane and its profile are one filesystem.
         // Proven sameness permits the rename and skip shortcuts; possible overlap
         // (root beside another account) is enough to trigger the guards.
         let sameFileSystem = job.destination.map(job.source.sharesFileSystem) == true
         let mayOverlap = job.destination.map(job.source.mayShareFiles) == true
-        // Paths can't be compared across unproven namespaces (root beside a
-        // chrooted account), so nothing may delete or overwrite: copies only.
-        let unverifiedOverlap = mayOverlap && !sameFileSystem
-        if unverifiedOverlap, job.operation == .move {
-            for path in job.sourcePaths {
-                job.recordError(path: path, message: String(localized: "Can't move between root and another account on the same server. Copy instead.", comment: "File transfer error"))
+        let exactPathBytes = sourceFS.foldersAreImplicit && destinationFS.foldersAreImplicit
+        // Across an unproven POSIX namespace (root beside a chrooted account), paths can
+        // alias arbitrarily, so nothing may delete or overwrite: copies only. Across an
+        // unproven S3 multi-tenant namespace (different credentials on one RGW server),
+        // moves stream through both endpoints (never using source-only rename) while
+        // keeping overlap guards for buckets that may alias across tenants.
+        let unverifiedPosixOverlap = mayOverlap && !sameFileSystem && !exactPathBytes
+        let unverifiedTenantOverlap = mayOverlap && !sameFileSystem && exactPathBytes
+        if unverifiedPosixOverlap, job.operation == .move {
+            for source in job.sources {
+                job.recordError(path: source.path, message: String(localized: "Can't move between root and another account on the same server. Copy instead.", comment: "File transfer error"))
             }
             return
         }
-        var namesOnDisk: Set<String>?
-        var names = TransferNamePlanner(incomingNames: job.sourcePaths.map(FileTransferLogic.lastComponent))
+        // Resolve each source's live type before planning so a stale listing type (e.g. a
+        // file replaced by a directory on disk) can never bypass move-into-self guards,
+        // while still passing `source.isDirectory` to disambiguate same-name S3 file/folder rows.
+        var plannedSources: [(source: TransferJob.Source, name: String, isDirectory: Bool)] = []
+        plannedSources.reserveCapacity(job.sources.count)
+        for source in job.sources {
+            try Task.checkCancellation()
+            let path = source.path
+            let name = FileTransferLogic.lastComponent(of: path)
+            let liveInfo: FileSystemEndpoint.ItemInfo
+            do {
+                liveInfo = try await sourceFS.info(path, isDirectory: source.isDirectory)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // Broken symlinks fail stat(2) with ENOENT but can still be copied/moved as links.
+                if sourceFS.supportsSymlinks,
+                   let linkInfo = try? await sourceFS.info(path, followLinks: false),
+                   linkInfo.isSymlink {
+                    liveInfo = linkInfo
+                } else {
+                    job.recordError(path: path, message: error.localizedDescription)
+                    continue
+                }
+            }
+            if let expectedDirectory = source.isDirectory, liveInfo.isDirectory != expectedDirectory {
+                job.recordError(path: path, message: FileTransferLogic.ItemTypeChanged(name: name).localizedDescription)
+                continue
+            }
+            plannedSources.append((source: source, name: name, isDirectory: liveInfo.isDirectory))
+        }
+
+        var entriesOnDisk: Set<TransferNamePlanner.EntryKey>?
+        var names = TransferNamePlanner(
+            incomingEntries: plannedSources.map { (name: $0.name, isDirectory: $0.isDirectory) },
+            separatesByExactBytesAndType: destinationFS.foldersAreImplicit
+        )
         var roots: [Root] = []
 
-        for path in job.sourcePaths {
+        for planned in plannedSources {
             try Task.checkCancellation()
-            let name = FileTransferLogic.lastComponent(of: path)
+            let source = planned.source
+            let path = source.path
+            let name = planned.name
+            let resolvedSourceIsDirectory = planned.isDirectory
             var target = FileTransferLogic.join(directory, name)
-            let real = sources[path] ?? RealSource(location: path, followed: path)
+            let real = sources[Array(path.utf8)] ?? RealSource(location: path, followed: path)
             let realTarget = FileTransferLogic.join(realDirectory, name)
             let realSourcePaths = [real.location, real.followed]
             // The destination is the item itself, or what a selected link points at.
-            let targetIsSource = mayOverlap && realSourcePaths.contains(realTarget)
+            let targetIsSource = mayOverlap && realSourcePaths.contains { sourcePath in
+                unverifiedTenantOverlap
+                    ? FileTransferLogic.s3PathsMayAlias(sourcePath, realTarget)
+                    : sourcePath.utf8.elementsEqual(realTarget.utf8)
+            }
+            let destinationTypeHint: Bool? = destinationFS.foldersAreImplicit ? resolvedSourceIsDirectory : nil
+            let isSameOrDescendant: (String, String) -> Bool = { candidate, dir in
+                unverifiedTenantOverlap
+                    ? FileTransferLogic.s3IsSameOrDescendantAssumingPossibleTenantAlias(candidate, of: dir)
+                    : FileTransferLogic.isSameOrDescendant(candidate, of: dir, exactBytes: exactPathBytes)
+            }
 
-            if sameFileSystem, job.operation == .move, real.location == realTarget { continue }
+            if sameFileSystem, job.operation == .move, real.location.utf8.elementsEqual(realTarget.utf8) { continue }
             if mayOverlap {
-                if realSourcePaths.contains(where: { FileTransferLogic.isSameOrDescendant(realDirectory, of: $0) }),
-                   (try? await sourceFS.info(path))?.isDirectory == true {
+                if realSourcePaths.contains(where: { isSameOrDescendant(realDirectory, $0) }),
+                   resolvedSourceIsDirectory {
                     job.recordError(path: path, message: String(localized: "A folder can't be copied into itself.", comment: "File transfer error"))
                     continue
                 }
             }
 
             var replace = false
-            if targetIsSource || names.isClaimed(name) {
-                // Duplicating in place, or a second item with the same name: keep both.
-                target = try await keepBothTarget(name, in: directory, fs: destinationFS, onDisk: &namesOnDisk, names: &names)
-            } else if await destinationFS.exists(target) {
-                let sourceIsDirectory = (try? await sourceFS.info(path))?.isDirectory ?? false
-                let targetIsDirectory = (try? await destinationFS.info(target, followLinks: false))?.isDirectory ?? false
-                guard let resolution = try await resolveConflict(name: name, directory: directory, isDirectory: sourceIsDirectory && targetIsDirectory) else {
-                    continue
-                }
-                switch resolution {
-                case .skip:
-                    continue
-                case .keepBoth:
-                    target = try await keepBothTarget(name, in: directory, fs: destinationFS, onDisk: &namesOnDisk, names: &names)
-                case .replace, .merge:
-                    if unverifiedOverlap {
-                        job.recordError(path: path, message: String(localized: "“\(name)” may be the same item under another path, so it can't be replaced. Choose Keep Both.", comment: "File transfer error; argument is a file name"))
-                        continue
-                    }
-                    // Clearing a destination that is, or contains, the source would delete the source.
-                    if mayOverlap, realSourcePaths.contains(where: { FileTransferLogic.isSameOrDescendant($0, of: realTarget) }) {
-                        job.recordError(path: path, message: String(localized: "“\(name)” can't replace a folder that contains it.", comment: "File transfer error; argument is a file name"))
-                        continue
-                    }
-                    replace = resolution == .replace || !(sourceIsDirectory && targetIsDirectory)
-                    names.claim(name)
-                }
+            var replaceTargetIsDirectory: Bool? = destinationTypeHint
+            if targetIsSource || names.isClaimed(name, isDirectory: resolvedSourceIsDirectory) {
+                // Duplicating in place, or a second item with the same name (and type on S3): keep both.
+                target = try await keepBothTarget(
+                    name, isDirectory: resolvedSourceIsDirectory, in: directory,
+                    fs: destinationFS, onDisk: &entriesOnDisk, names: &names
+                )
             } else {
-                names.claim(name)
+                // Only a confirmed not-found response may proceed as a new destination;
+                // a 403 or transient lookup error must never silently bypass the overwrite prompt.
+                let targetInfo: FileSystemEndpoint.ItemInfo?
+                do {
+                    targetInfo = try await destinationFS.infoIfExists(target, followLinks: false, isDirectory: destinationTypeHint)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    job.recordError(path: path, message: error.localizedDescription)
+                    continue
+                }
+                if let targetInfo {
+                    let targetIsDirectory = targetInfo.isDirectory
+                    guard let resolution = try await resolveConflict(name: name, directory: directory, isDirectory: resolvedSourceIsDirectory && targetIsDirectory) else {
+                        continue
+                    }
+                    switch resolution {
+                    case .skip:
+                        continue
+                    case .keepBoth:
+                        target = try await keepBothTarget(
+                            name, isDirectory: resolvedSourceIsDirectory, in: directory,
+                            fs: destinationFS, onDisk: &entriesOnDisk, names: &names
+                        )
+                    case .replace, .merge:
+                        if unverifiedPosixOverlap {
+                            job.recordError(path: path, message: String(localized: "“\(name)” may be the same item under another path, so it can't be replaced. Choose Keep Both.", comment: "File transfer error; argument is a file name"))
+                            continue
+                        }
+                        // Clearing a destination that is, or contains, the source would delete the source.
+                        if mayOverlap, realSourcePaths.contains(where: { isSameOrDescendant($0, realTarget) }) {
+                            job.recordError(path: path, message: String(localized: "“\(name)” can't replace a folder that contains it.", comment: "File transfer error; argument is a file name"))
+                            continue
+                        }
+                        replace = resolution == .replace || !(resolvedSourceIsDirectory && targetIsDirectory)
+                        if replace {
+                            // Carry the exact destination type approved by the prompt so replacement
+                            // aborts if a file turns into a directory before removal runs.
+                            replaceTargetIsDirectory = destinationTypeHint ?? targetIsDirectory
+                        }
+                        names.claim(name, isDirectory: resolvedSourceIsDirectory)
+                    }
+                } else {
+                    names.claim(name, isDirectory: resolvedSourceIsDirectory)
+                }
             }
 
             if sameFileSystem, job.operation == .move {
+                // Re-verify live source type after any conflict prompt before mutating destination.
+                let currentIsDirectory: Bool
                 do {
-                    if replace { try await destinationFS.removeRecursively(target) }
-                    try await sourceFS.rename(path, to: target)
-                    roots.append(Root(source: path, destination: target, replaceExisting: false, items: [], renamed: true))
+                    currentIsDirectory = try await liveSourceIsDirectory(path, on: sourceFS, hint: resolvedSourceIsDirectory)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    job.recordError(path: path, message: error.localizedDescription)
+                    continue
+                }
+                guard currentIsDirectory == resolvedSourceIsDirectory else {
+                    job.recordError(path: path, message: FileTransferLogic.ItemTypeChanged(name: name).localizedDescription)
+                    continue
+                }
+                if replace {
+                    do {
+                        try await destinationFS.removeRecursively(target, isDirectory: replaceTargetIsDirectory)
+                        replace = false
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        job.recordError(path: target, message: error.localizedDescription)
+                        continue
+                    }
+                }
+                do {
+                    try await sourceFS.rename(path, to: target, isDirectory: resolvedSourceIsDirectory)
+                    roots.append(Root(source: path, sourceIsDirectory: resolvedSourceIsDirectory, destination: target, replaceExisting: false, replaceIsDirectory: nil, items: [], renamed: true))
                     continue
                 } catch {
                     // Cross-device or unsupported rename: fall through to copy + delete.
                 }
             }
 
-            let items = try await FileTreeCopier.expand(path, into: target, fs: sourceFS)
-            roots.append(Root(
-                source: path, destination: target, replaceExisting: replace, items: items,
+            let root = Root(
+                source: path, sourceIsDirectory: resolvedSourceIsDirectory, destination: target,
+                replaceExisting: replace, replaceIsDirectory: replaceTargetIsDirectory, items: [],
                 realSources: realSourcePaths,
                 realDestination: FileTransferLogic.join(realDirectory, FileTransferLogic.lastComponent(of: target))
-            ))
+            )
+            let items: [FileTreeCopier.Item]
+            do {
+                items = try await FileTreeCopier.expand(
+                    path, into: target, fs: sourceFS,
+                    isDirectory: resolvedSourceIsDirectory, rootID: root.id
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                job.recordError(path: path, message: error.localizedDescription)
+                continue
+            }
+            // Abort before any destination removal if the source flipped between file
+            // and directory (for instance while a conflict prompt was open).
+            guard let rootItem = items.first, rootItem.isDirectory == resolvedSourceIsDirectory else {
+                job.recordError(path: path, message: FileTransferLogic.ItemTypeChanged(name: name).localizedDescription)
+                continue
+            }
+            var populatedRoot = root
+            populatedRoot.items = items
+            roots.append(populatedRoot)
         }
 
         let allItems = roots.flatMap(\.items)
@@ -478,8 +605,12 @@ private struct TransferExecutor {
         // must not see that folder cleared or half-written, so those run one root at a time.
         let entangled = mayOverlap && pending.indices.contains { reader in
             pending.indices.contains { writer in
-                reader != writer && pending[reader].realSources.contains {
-                    FileTransferLogic.pathsOverlap($0, pending[writer].realDestination)
+                reader != writer && pending[reader].realSources.contains { sourcePath in
+                    if unverifiedTenantOverlap {
+                        return FileTransferLogic.s3IsSameOrDescendantAssumingPossibleTenantAlias(sourcePath, of: pending[writer].realDestination)
+                            || FileTransferLogic.s3IsSameOrDescendantAssumingPossibleTenantAlias(pending[writer].realDestination, of: sourcePath)
+                    }
+                    return FileTransferLogic.pathsOverlap(sourcePath, pending[writer].realDestination, exactBytes: exactPathBytes)
                 }
             }
         }
@@ -497,7 +628,9 @@ private struct TransferExecutor {
             try Task.checkCancellation()
             if root.replaceExisting {
                 do {
-                    try await destinationFS.removeRecursively(root.destination)
+                    try await destinationFS.removeRecursively(root.destination, isDirectory: root.replaceIsDirectory)
+                } catch is CancellationError {
+                    throw CancellationError()
                 } catch {
                     job.recordError(path: root.destination, message: error.localizedDescription)
                     continue
@@ -508,7 +641,7 @@ private struct TransferExecutor {
 
         // The batch's roots share one pool, so many loose files overlap too.
         let items = copying.flatMap(\.items)
-        let errorsBefore = job.errors.count
+        var failedRootIDs: Set<UUID> = []
         try await FileTreeCopier.copyItems(
             items, from: sourceFS, to: destinationFS, preserveAttributes: preserve,
             onStart: { job.beginItem($0.source) },
@@ -516,22 +649,39 @@ private struct TransferExecutor {
                 if delta >= 0 { job.addBytes(delta) } else { job.discardBytes(-delta) }
             },
             onFinish: { item, error in
-                if let error { job.recordError(path: item.source, message: error.localizedDescription) }
+                if let error {
+                    if let rootID = item.rootID { failedRootIDs.insert(rootID) }
+                    job.recordError(path: item.source, message: error.localizedDescription)
+                }
                 job.finishItem()
             }
         )
         if preserve { await FileTreeCopier.applyDirectoryModes(items, on: destinationFS) }
 
-        // A move deletes a source only once everything beneath it copied.
+        // A move deletes a source only once every item expanded from that root succeeded.
         guard job.operation == .move else { return }
-        let failed = job.errors[errorsBefore...].map(\.path)
-        for root in copying where !failed.contains(where: { FileTransferLogic.isSameOrDescendant($0, of: root.source) }) {
+        for root in copying where !failedRootIDs.contains(root.id) {
             try Task.checkCancellation()
             do {
-                try await sourceFS.removeRecursively(root.source)
+                try await sourceFS.removeRecursively(root.source, isDirectory: root.sourceIsDirectory)
             } catch {
                 job.recordError(path: root.source, message: error.localizedDescription)
             }
+        }
+    }
+
+    private func liveSourceIsDirectory(_ path: String, on fs: FileSystemEndpoint, hint: Bool?) async throws -> Bool {
+        do {
+            return try await fs.info(path, isDirectory: hint).isDirectory
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            if fs.supportsSymlinks,
+               let linkInfo = try? await fs.info(path, followLinks: false),
+               linkInfo.isSymlink {
+                return linkInfo.isDirectory
+            }
+            throw error
         }
     }
 
@@ -549,10 +699,17 @@ private struct TransferExecutor {
     }
 
     private func keepBothTarget(
-        _ name: String, in directory: String, fs: FileSystemEndpoint,
-        onDisk: inout Set<String>?, names: inout TransferNamePlanner
+        _ name: String, isDirectory: Bool, in directory: String, fs: FileSystemEndpoint,
+        onDisk: inout Set<TransferNamePlanner.EntryKey>?, names: inout TransferNamePlanner
     ) async throws -> String {
-        if onDisk == nil { onDisk = Set(try await fs.list(directory).map(\.name)) }
-        return FileTransferLogic.join(directory, names.claimKeepBothName(for: name, existingOnDisk: onDisk ?? []))
+        if onDisk == nil {
+            onDisk = Set(try await fs.list(directory).map {
+                TransferNamePlanner.EntryKey(name: $0.name, isDirectory: $0.isDirectory)
+            })
+        }
+        return FileTransferLogic.join(
+            directory,
+            names.claimKeepBothName(for: name, isDirectory: isDirectory, existingEntries: onDisk ?? [])
+        )
     }
 }

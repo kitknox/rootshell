@@ -801,7 +801,7 @@ final class RemoteFileEditCenter {
         stagedPath: String?,
         message: String
     ) {
-        let id = "\(endpointKey)|\(targetPath)"
+        let id = RemoteEditPathIdentity.key(endpointKey: endpointKey, path: targetPath)
         let notice = RecoveryConflictNotice(
             id: id,
             endpointDisplayName: endpointDisplayName,
@@ -818,7 +818,7 @@ final class RemoteFileEditCenter {
     }
 
     func clearRecoveryConflict(endpointKey: String, targetPath: String) {
-        let id = "\(endpointKey)|\(targetPath)"
+        let id = RemoteEditPathIdentity.key(endpointKey: endpointKey, path: targetPath)
         recoveryConflicts.removeAll { $0.id == id }
     }
 
@@ -828,7 +828,8 @@ final class RemoteFileEditCenter {
 
     func existingSession(for endpoint: FileEndpoint, remotePath: String) -> RemoteEditSession? {
         sessions.first {
-            $0.endpoint.sharesFileSystem(with: endpoint) && $0.remotePath == remotePath
+            $0.endpoint.sharesFileSystem(with: endpoint)
+                && RemoteEditPathIdentity.matches($0.remotePath, remotePath)
         }
     }
 
@@ -839,7 +840,10 @@ final class RemoteFileEditCenter {
     /// Claims an exclusive in-flight open slot for `(endpoint, remotePath)`.
     /// Returns a token to pass to `endOpen(token:)`, or `nil` if an open for the same file is already in flight.
     func beginOpen(for endpoint: FileEndpoint, remotePath: String) -> UUID? {
-        guard !inFlightOpens.contains(where: { $0.endpoint.sharesFileSystem(with: endpoint) && $0.remotePath == remotePath }) else {
+        guard !inFlightOpens.contains(where: {
+            $0.endpoint.sharesFileSystem(with: endpoint)
+                && RemoteEditPathIdentity.matches($0.remotePath, remotePath)
+        }) else {
             return nil
         }
         let token = UUID()

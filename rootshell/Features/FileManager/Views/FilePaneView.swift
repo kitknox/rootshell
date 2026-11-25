@@ -22,7 +22,7 @@ struct FilePaneView: View {
 
     @State private var arrowRepeat = ArrowKeyRepeatManager()
     @State private var isSelecting = false
-    @State private var lastClick: (path: String, time: Date)?
+    @State private var lastClick: (rowID: FileEntryID, time: Date)?
     @State private var fieldFocused = false
     @State private var isDropTargeted = false
 
@@ -45,6 +45,10 @@ struct FilePaneView: View {
                 .contentShape(Rectangle())
                 // Rows keep their own menus; empty space gets the ⋯ menu for this pane.
                 .contextMenu { FileManagerMoreMenuItems(manager: manager, side: pane.id) }
+            if pane.showsPaginationBar {
+                Divider()
+                paginationBar
+            }
             if isSelecting || (!usesPointerSemantics && !pane.selection.isEmpty) {
                 Divider()
                 selectionBar
@@ -127,7 +131,9 @@ struct FilePaneView: View {
             Image(systemName: "line.3.horizontal.decrease").foregroundStyle(.secondary).font(.caption)
             SidebarSearchField(
                 text: $pane.filterText,
-                placeholder: String(localized: "Filter", comment: "File manager filter placeholder"),
+                placeholder: pane.isTruncatedServerListing
+                    ? String(localized: "Prefix or filter", comment: "File manager filter placeholder for truncated S3 listings")
+                    : String(localized: "Filter", comment: "File manager filter placeholder"),
                 fontSize: 14,
                 canFocus: canFocus && isActive,
                 focusRequestID: isActive ? manager.focusRequestID : 0,
@@ -138,9 +144,18 @@ struct FilePaneView: View {
                 onEscape: handleEscape,
                 onSubmit: {
                     arrowRepeat.stop()
-                    // On touch, Return just closes the keyboard and keeps the filter.
-                    guard hasHardwareKeyboard else { return dismissSoftwareKeyboard() }
-                    if !manager.queueFocused { manager.openCursor() }
+                    // On touch, Return closes the keyboard and kicks off any pending S3 prefix search immediately.
+                    guard hasHardwareKeyboard else {
+                        pane.searchPrefixNow()
+                        return dismissSoftwareKeyboard()
+                    }
+                    if !manager.queueFocused {
+                        if pane.cursorEntry != nil {
+                            manager.openCursor()
+                        } else {
+                            pane.searchPrefixNow()
+                        }
+                    }
                 },
                 onFocusChange: { focused in
                     Task { @MainActor in
@@ -159,7 +174,7 @@ struct FilePaneView: View {
             .frame(height: 22)
             .frame(minWidth: 60, maxWidth: 180)
             .accessibilityLabel(String(localized: "Filter files", comment: "File manager filter accessibility"))
-            if pane.status == .loading {
+            if pane.status == .loading || pane.isSearchingPrefix {
                 ProgressView().controlSize(.mini)
             }
         }
@@ -177,7 +192,7 @@ struct FilePaneView: View {
             arrowRepeat.stop()
             switch command {
             case .extendSelection:
-                pane.selection.moveCursor(by: chord.input == UIKeyCommand.inputUpArrow ? -1 : 1, in: pane.visiblePaths, extending: true)
+                pane.selection.moveCursor(by: chord.input == UIKeyCommand.inputUpArrow ? -1 : 1, in: pane.visibleRowIDs, extending: true)
             default:
                 manager.perform(command)
             }
@@ -200,7 +215,7 @@ struct FilePaneView: View {
             if manager.queueFocused {
                 manager.moveQueueCursor(by: delta)
             } else {
-                pane.selection.moveCursor(by: delta, in: pane.visiblePaths, extending: false)
+                pane.selection.moveCursor(by: delta, in: pane.visibleRowIDs, extending: false)
             }
         }
         step()
@@ -248,14 +263,63 @@ struct FilePaneView: View {
             }
         default:
             if pane.visibleEntries.isEmpty && pane.status == .idle {
-                statusView {
-                    Text(pane.filterText.isEmpty
-                         ? String(localized: "Empty folder", comment: "File manager: no files")
-                         : String(localized: "No matches", comment: "File manager: filter matched nothing"))
+                emptyListingView
+            } else {
+                list
+            }
+        }
+    }
+
+    private var emptyListingView: some View {
+        statusView {
+            let query = pane.trimmedFilterQuery
+            if pane.isSearchingPrefix {
+                ProgressView()
+                Text(String(localized: "Searching prefix “\(query)”…", comment: "File manager S3 prefix search status; argument is prefix"))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            } else if let error = pane.prefixSearchError, !query.isEmpty {
+                Image(systemName: "exclamationmark.triangle").font(.title2).foregroundStyle(.orange)
+                Text(error).multilineTextAlignment(.center).foregroundStyle(.secondary).textSelection(.enabled)
+                Button(String(localized: "Retry", comment: "File manager: retry listing")) {
+                    pane.retryPrefixSearch()
+                }
+                .buttonStyle(.bordered)
+            } else if query.isEmpty {
+                if pane.hasMoreBaseEntries {
+                    Text(String(localized: "No visible items in the first \(pane.entries.count.formatted()) entries", comment: "File manager: all loaded items are hidden while more pages exist"))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button(String(localized: "Load More", comment: "File manager: load next page of S3 listing")) {
+                        pane.loadMore()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(pane.isLoadingMore)
+                } else {
+                    Text(String(localized: "Empty folder", comment: "File manager: no files"))
                         .foregroundStyle(.secondary)
                 }
             } else {
-                list
+                Text(String(localized: "No matches", comment: "File manager: filter matched nothing"))
+                    .foregroundStyle(.secondary)
+                if pane.hasMoreBaseEntries {
+                    if pane.supportsServerPrefixSearch {
+                        Text(
+                            pane.isPrefixQueryValid
+                                ? String(localized: "S3 searches exact key prefixes (case-sensitive).", comment: "File manager S3 prefix search empty-state hint")
+                                : String(localized: "Only loaded items are filtered when the query contains “/”.", comment: "File manager S3 slash query hint")
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                    }
+                    Button(String(localized: "Load More Folder Items", comment: "File manager: load next page of base S3 folder")) {
+                        pane.loadMore()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(pane.isLoadingMore)
+                }
             }
         }
     }
@@ -271,12 +335,15 @@ struct FilePaneView: View {
             ScrollView {
                 if columns == .detailed { columnHeader }
                 LazyVStack(spacing: 1) {
-                    ForEach(pane.visibleEntries, id: \.path) { entry in
+                    ForEach(pane.visibleEntries, id: \.rowID) { entry in
                         row(entry)
                     }
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
+                if pane.showsListFooter {
+                    listPaginationFooter
+                }
             }
             // A floating keyboard leaves a bottom safe area here; the scroll view
             // would extend into it and draw rows over the queue and hint bar.
@@ -290,6 +357,108 @@ struct FilePaneView: View {
                 proxy.scrollTo(cursor)
             }
         }
+    }
+
+    private var listPaginationFooter: some View {
+        VStack(spacing: 6) {
+            if pane.isLoadingMore {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(String(localized: "Loading more…", comment: "File manager pagination status"))
+                        .foregroundStyle(.secondary)
+                }
+            } else if let error = pane.loadMoreError {
+                Text(error)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button(String(localized: "Retry", comment: "File manager: retry listing")) {
+                    pane.loadMore()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            } else if pane.canLoadMore {
+                Button(String(localized: "Load More", comment: "File manager: load next page of S3 listing")) {
+                    pane.loadMore()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .font(.caption)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var paginationBar: some View {
+        HStack(spacing: 8) {
+            if pane.isLoadingMore {
+                ProgressView().controlSize(.mini)
+                Text(String(localized: "Loading more…", comment: "File manager pagination status"))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+            } else if pane.isSearchingPrefix {
+                ProgressView().controlSize(.mini)
+                Text(String(localized: "Searching prefix “\(pane.trimmedFilterQuery)”…", comment: "File manager S3 prefix search status; argument is prefix"))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 4)
+            } else if let error = pane.loadMoreError ?? pane.prefixSearchError {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(error)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 4)
+                Button(String(localized: "Retry", comment: "File manager: retry listing")) {
+                    if pane.loadMoreError != nil {
+                        pane.loadMore()
+                    } else {
+                        pane.retryPrefixSearch()
+                    }
+                }
+                .buttonStyle(.borderless)
+            } else if pane.hasMorePrefixEntries {
+                Text(String(localized: "Prefix “\(pane.trimmedFilterQuery)” · \(pane.prefixEntries.count.formatted())+ loaded", comment: "File manager S3 paginated prefix search status; arguments are prefix and count"))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 4)
+                Button(String(localized: "Load More", comment: "File manager: load next page of S3 listing")) {
+                    pane.loadMore()
+                }
+                .buttonStyle(.borderless)
+            } else if pane.hasActivePrefixResults {
+                Text(String(localized: "Prefix “\(pane.trimmedFilterQuery)” · \(pane.visibleEntries.count.formatted()) shown", comment: "File manager S3 completed prefix search status; arguments are prefix and count"))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 4)
+                if pane.hasMoreBaseEntries {
+                    Button(String(localized: "Load More Folder", comment: "File manager: load next page of unfiltered S3 folder")) {
+                        pane.loadMore()
+                    }
+                    .buttonStyle(.borderless)
+                }
+            } else if pane.hasMoreBaseEntries {
+                Text(String(localized: "\(pane.entries.count.formatted()) loaded · More available", comment: "File manager S3 paginated listing status; argument is loaded item count"))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Button(String(localized: "Load More", comment: "File manager: load next page of S3 listing")) {
+                    pane.loadMore()
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .font(.caption)
+        .monospacedDigit()
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.primary.opacity(0.03))
     }
 
     private var columnHeader: some View {
@@ -322,12 +491,13 @@ struct FilePaneView: View {
     }
 
     private func row(_ entry: RFEntry) -> some View {
-        folderDropTarget(for: entry) {
+        let rowID = entry.rowID
+        return folderDropTarget(for: entry) {
             FileRowContextMenuRow(
                 row: FileRowView(
                     entry: entry,
-                    isSelected: pane.selection.contains(entry.path),
-                    isCursor: pane.selection.cursor == entry.path,
+                    isSelected: pane.selection.contains(rowID),
+                    isCursor: pane.selection.cursor == rowID,
                     showsCursor: isActive && (fieldFocused || usesPointerSemantics),
                     showsCheckbox: isSelecting,
                     isExternallyEdited: !entry.isDirectory && RemoteFileEditCenter.shared.isWatching(endpoint: pane.endpoint, path: entry.path),
@@ -339,7 +509,7 @@ struct FilePaneView: View {
                 contextMenu(for: entry)
             }
             .equatable()
-            .id(entry.path)
+            .id(rowID)
             .onTapGesture { tap(entry) }
             .onDrag { manager.beginDrag(of: dragEntries(for: entry), from: pane.id) }
         }
@@ -360,7 +530,7 @@ struct FilePaneView: View {
     }
 
     private func dragEntries(for entry: RFEntry) -> [RFEntry] {
-        pane.selection.contains(entry.path) ? pane.actionEntries : [entry]
+        pane.selection.contains(entry.rowID) ? pane.actionEntries : [entry]
     }
 
     /// Touch has no Esc, so the filter gives up the on-screen keyboard on
@@ -371,29 +541,30 @@ struct FilePaneView: View {
     }
 
     private func tap(_ entry: RFEntry) {
+        let rowID = entry.rowID
         manager.activeSide = pane.id
         manager.requestFocus()
         dismissSoftwareKeyboard()
         if isSelecting {
-            pane.selection.toggle(entry.path)
+            pane.selection.toggle(rowID)
             return
         }
         let flags = KeyboardTracker.shared.hardwareModifierFlags
         if flags.contains(.command) {
-            pane.selection.click(entry.path, in: pane.visiblePaths, modifier: .toggle)
+            pane.selection.click(rowID, in: pane.visibleRowIDs, modifier: .toggle)
         } else if flags.contains(.shift) {
-            pane.selection.click(entry.path, in: pane.visiblePaths, modifier: .range)
+            pane.selection.click(rowID, in: pane.visibleRowIDs, modifier: .range)
         } else if usesPointerSemantics {
             let now = Date()
-            if let lastClick, lastClick.path == entry.path, now.timeIntervalSince(lastClick.time) < 0.4 {
+            if let lastClick, lastClick.rowID == rowID, now.timeIntervalSince(lastClick.time) < 0.4 {
                 self.lastClick = nil
                 open(entry)
             } else {
-                pane.selection.click(entry.path, in: pane.visiblePaths, modifier: .none)
-                lastClick = (entry.path, now)
+                pane.selection.click(rowID, in: pane.visibleRowIDs, modifier: .none)
+                lastClick = (rowID, now)
             }
         } else {
-            pane.selection.setCursor(entry.path)
+            pane.selection.setCursor(rowID)
             open(entry)
         }
     }
@@ -468,7 +639,7 @@ struct FilePaneView: View {
             }
         }
         if entry.isDirectory, manager.openInTerminal != nil, pane.endpoint.supportsTerminal {
-            Button { manager.activeSide = pane.id; pane.selection.setCursor(entry.path); manager.perform(.openInTerminal) } label: {
+            Button { manager.activeSide = pane.id; pane.selection.setCursor(entry.rowID); manager.perform(.openInTerminal) } label: {
                 Label(FileManagerShortcut.shortcut(for: .openInTerminal).title, systemImage: "terminal")
             }
         }
@@ -508,7 +679,7 @@ struct FilePaneView: View {
         return HStack(spacing: 14) {
             Text("\(count) selected").font(.callout).foregroundStyle(.secondary)
             Spacer()
-            Button { pane.selection.selectAll(pane.visiblePaths) } label: { Image(systemName: "checkmark.circle") }
+            Button { pane.selection.selectAll(pane.visibleRowIDs) } label: { Image(systemName: "checkmark.circle") }
                 .accessibilityLabel(FileManagerShortcut.shortcut(for: .selectAll).title)
             Button { manager.activeSide = pane.id; manager.transferToOther(move: false); isSelecting = false } label: {
                 Image(systemName: "doc.on.doc")

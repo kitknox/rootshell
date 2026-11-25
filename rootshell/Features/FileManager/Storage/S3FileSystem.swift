@@ -27,7 +27,7 @@ nonisolated struct S3FileSystem: Sendable {
     /// Paths are always `/bucket/key`, even for a provider limited to one bucket,
     /// so one object has one path on every provider that reaches it. nil is the root.
     func location(of path: String) -> Location? {
-        let components = FileTransferLogic.normalize(path).split(separator: "/").map(String.init)
+        let components = FileTransferLogic.pathComponents(of: FileTransferLogic.normalize(path))
         guard let bucket = components.first else { return nil }
         return Location(bucket: bucket, key: components.dropFirst().joined(separator: "/"))
     }
@@ -40,64 +40,159 @@ nonisolated struct S3FileSystem: Sendable {
 
     // MARK: - Listing and metadata
 
+    /// S3's native `ListObjectsV2` page ceiling: one round trip returns up to 1,000 items,
+    /// so folders of normal size complete in one request while huge prefixes show their first
+    /// rows immediately without fetching tens or hundreds of thousands of keys.
+    static let defaultPageSize = 1_000
+
+    /// Loads one page of `path`. Inside a bucket, `namePrefix` narrows `ListObjectsV2`
+    /// server-side to direct children starting with that exact prefix.
     /// With `strict`, objects whose names a path can't hold fail the listing
     /// instead of being hidden, so a transfer never silently leaves them behind.
-    func list(_ path: String, strict: Bool = false) async throws -> [RFEntry] {
+    func listPage(
+        _ path: String,
+        cursor: String? = nil,
+        namePrefix: String? = nil,
+        pageSize: Int = Self.defaultPageSize,
+        strict: Bool = false
+    ) async throws -> FileSystemEndpoint.ListingPage {
         let base = FileTransferLogic.normalize(path)
         guard let location = location(of: base) else {
             // Keys limited to one bucket often can't list buckets at all.
-            if let bucket = provider.effectiveBucket { return [Self.entry(bucket, in: "/", isDirectory: true)] }
-            return try await listBuckets()
+            if let bucket = provider.effectiveBucket {
+                if cursor != nil { return FileSystemEndpoint.ListingPage(entries: [], nextCursor: nil) }
+                if let namePrefix, !namePrefix.isEmpty, !bucket.utf8.starts(with: namePrefix.utf8) {
+                    return FileSystemEndpoint.ListingPage(entries: [], nextCursor: nil)
+                }
+                return FileSystemEndpoint.ListingPage(entries: [Self.entry(bucket, in: "/", isDirectory: true)], nextCursor: nil)
+            }
+            return try await listBucketsPage(cursor: cursor, namePrefix: namePrefix, pageSize: pageSize)
         }
+        let folderPrefix = location.key.isEmpty ? "" : location.key + "/"
+        if let namePrefix, !namePrefix.isEmpty, !S3KeyLogic.isValidChildPrefix(namePrefix) {
+            return FileSystemEndpoint.ListingPage(entries: [], nextCursor: nil)
+        }
+        let queryPrefix = S3KeyLogic.objectListPrefix(directoryPrefix: folderPrefix, namePrefix: namePrefix)
         let service = await session.service(for: location.bucket)
-        let prefix = location.key.isEmpty ? "" : location.key + "/"
-        var entries: [RFEntry] = []
-        var token: String?
-        repeat {
+        let maxKeys = max(1, min(pageSize, Self.defaultPageSize))
+        let (entries, nextCursor) = try await S3KeyLogic.fetchNonEmptyPage(startingAt: cursor) { token in
             let page = try await mapped(path) {
                 try await service.listObjectsV2(.init(
-                    bucket: location.bucket, continuationToken: token, delimiter: "/", prefix: prefix.isEmpty ? nil : prefix
+                    bucket: location.bucket,
+                    continuationToken: token,
+                    delimiter: "/",
+                    maxKeys: maxKeys,
+                    prefix: queryPrefix
                 ))
             }
-            for common in page.commonPrefixes ?? [] {
-                guard let name = try Self.listedName(common.prefix, under: prefix, in: base, strict: strict) else { continue }
-                entries.append(Self.entry(name, in: base, isDirectory: true))
+            let items = try Self.entries(from: page, under: folderPrefix, in: base, strict: strict)
+            let next = try S3KeyLogic.nextContinuationToken(
+                isTruncated: page.isTruncated,
+                nextToken: page.nextContinuationToken,
+                currentToken: token
+            )
+            return (items, next)
+        }
+        return FileSystemEndpoint.ListingPage(entries: entries, nextCursor: nextCursor)
+    }
+
+    /// With `strict`, objects whose names a path can't hold fail the listing
+    /// instead of being hidden, so a transfer never silently leaves them behind.
+    func list(_ path: String, strict: Bool = false) async throws -> [RFEntry] {
+        var entries: [RFEntry] = []
+        var cursor: String?
+        var seenCursors: Set<[UInt8]> = []
+        repeat {
+            try Task.checkCancellation()
+            let page = try await listPage(path, cursor: cursor, strict: strict)
+            entries.append(contentsOf: page.entries)
+            if let next = page.nextCursor {
+                guard seenCursors.insert(Array(next.utf8)).inserted else {
+                    throw S3KeyLogic.PaginationError.stalled
+                }
+                cursor = next
+            } else {
+                cursor = nil
             }
-            for object in page.contents ?? [] {
-                guard let name = try Self.listedName(object.key, under: prefix, in: base, strict: strict) else { continue }
-                entries.append(Self.entry(name, in: base, isDirectory: false, size: object.size ?? 0, modified: object.lastModified))
-            }
-            token = page.isTruncated == true ? page.nextContinuationToken : nil
-        } while token != nil
+        } while cursor != nil
         return entries
     }
 
-    private func listBuckets() async throws -> [RFEntry] {
-        var entries: [RFEntry] = []
-        var token: String?
-        repeat {
-            let page = try await mapped("/") { try await session.defaultService.listBuckets(.init(continuationToken: token)) }
+    private func listBucketsPage(cursor: String?, namePrefix: String?, pageSize: Int) async throws -> FileSystemEndpoint.ListingPage {
+        let supportsPaginated = provider.supportsPaginatedBucketListing
+        if let namePrefix, !namePrefix.isEmpty, !S3KeyLogic.isValidChildPrefix(namePrefix) {
+            return FileSystemEndpoint.ListingPage(entries: [], nextCursor: nil)
+        }
+        let maxBuckets = S3KeyLogic.bucketListMaxBuckets(
+            pageSize: pageSize,
+            supportsPaginatedBuckets: supportsPaginated
+        )
+        let bucketPrefix: String? = if supportsPaginated, let namePrefix, !namePrefix.isEmpty {
+            namePrefix
+        } else {
+            nil
+        }
+        let (entries, nextCursor) = try await S3KeyLogic.fetchNonEmptyPage(startingAt: cursor) { token in
+            let page = try await mapped("/") {
+                try await session.defaultService.listBuckets(.init(
+                    continuationToken: token,
+                    maxBuckets: maxBuckets,
+                    prefix: bucketPrefix
+                ))
+            }
+            var items: [RFEntry] = []
             for bucket in page.buckets ?? [] {
                 guard let name = bucket.name else { continue }
                 if let region = bucket.bucketRegion { await session.noteRegion(region, for: name) }
-                entries.append(Self.entry(name, in: "/", isDirectory: true, modified: bucket.creationDate))
+                items.append(Self.entry(name, in: "/", isDirectory: true, modified: bucket.creationDate))
             }
-            token = page.continuationToken
-        } while token != nil
+            let next = try S3KeyLogic.nextBucketContinuationToken(nextToken: page.continuationToken, currentToken: token)
+            return (items, next)
+        }
+        return FileSystemEndpoint.ListingPage(entries: entries, nextCursor: nextCursor)
+    }
+
+    private static func entries(
+        from page: S3.ListObjectsV2Output,
+        under prefix: String,
+        in base: String,
+        strict: Bool
+    ) throws -> [RFEntry] {
+        var entries: [RFEntry] = []
+        for common in page.commonPrefixes ?? [] {
+            guard let name = try Self.listedName(common.prefix, under: prefix, in: base, strict: strict) else { continue }
+            entries.append(Self.entry(name, in: base, isDirectory: true))
+        }
+        for object in page.contents ?? [] {
+            guard let name = try Self.listedName(object.key, under: prefix, in: base, strict: strict) else { continue }
+            entries.append(Self.entry(name, in: base, isDirectory: false, size: object.size ?? 0, modified: object.lastModified))
+        }
         return entries
     }
 
     /// A key names a file; a key with objects beneath it names a folder.
-    func info(_ path: String) async throws -> FileSystemEndpoint.ItemInfo {
+    /// When `isDirectory` is known from a selected row, probes only that kind so a
+    /// same-named file `foo` never shadows folder `foo/` (or vice versa).
+    func info(_ path: String, isDirectory: Bool? = nil) async throws -> FileSystemEndpoint.ItemInfo {
         guard let location = location(of: path) else { return Self.directoryInfo }
         let service = await session.service(for: location.bucket)
         if location.key.isEmpty {
+            if isDirectory == false { throw StorageError.notFound(path) }
             // Scoped keys may not allow HeadBucket; only a definite 404 means missing.
             do {
                 _ = try await service.headBucket(.init(bucket: location.bucket))
             } catch where StorageError.isNotFound(error) {
                 throw StorageError.notFound(path)
             } catch {}
+            return Self.directoryInfo
+        }
+        if isDirectory == true {
+            let page = try await mapped(path) {
+                try await service.listObjectsV2(.init(bucket: location.bucket, maxKeys: 1, prefix: location.key + "/"))
+            }
+            guard page.contents?.isEmpty == false || page.commonPrefixes?.isEmpty == false else {
+                throw StorageError.notFound(path)
+            }
             return Self.directoryInfo
         }
         do {
@@ -107,6 +202,9 @@ nonisolated struct S3FileSystem: Sendable {
                 permissions: nil, modified: head.lastModified
             )
         } catch where StorageError.isNotFound(error) {
+            if isDirectory == false {
+                throw StorageError.notFound(path)
+            }
             let page = try await mapped(path) {
                 try await service.listObjectsV2(.init(bucket: location.bucket, maxKeys: 1, prefix: location.key + "/"))
             }
@@ -141,10 +239,21 @@ nonisolated struct S3FileSystem: Sendable {
     }
 
     /// Deletes a file, or every object under a folder in batches. Never empties a bucket.
-    func removeRecursively(_ path: String) async throws {
-        if let bucket = bucketName(of: path) { return try await deleteBucket(bucket, path: path) }
+    /// When `isDirectory` is known, deletes only that kind so selecting folder `foo/`
+    /// never deletes a same-named file `foo` (and vice versa).
+    func removeRecursively(_ path: String, isDirectory: Bool? = nil) async throws {
+        if let bucket = bucketName(of: path) {
+            if isDirectory == false { throw StorageError.notFound(path) }
+            return try await deleteBucket(bucket, path: path)
+        }
         let (service, location) = try await object(path)
-        guard try await info(path).isDirectory else {
+        let targetIsDirectory: Bool
+        if let isDirectory {
+            targetIsDirectory = isDirectory
+        } else {
+            targetIsDirectory = try await info(path).isDirectory
+        }
+        guard targetIsDirectory else {
             return try await removeFile(path)
         }
         let keys = try await objects(under: location, service: service).map(\.key)
@@ -153,15 +262,21 @@ nonisolated struct S3FileSystem: Sendable {
 
     /// Server-side copy then delete; a folder moves object by object, and its
     /// originals are only deleted once every copy succeeded.
-    func rename(_ from: String, to: String) async throws {
+    /// When `isDirectory` is known, renames only that kind so a same-named file
+    /// and folder never cross-target each other.
+    func rename(_ from: String, to: String, isDirectory: Bool? = nil) async throws {
         let (_, source) = try await object(from)
         let (_, target) = try await object(to)
-        let item = try await info(from)
+        let item = try await info(from, isDirectory: isDirectory)
         guard item.isDirectory else {
             try await copyObject(source, to: target, size: Int64(item.size), path: from)
             return try await removeFile(from)
         }
-        guard !FileTransferLogic.isSameOrDescendant(FileTransferLogic.normalize(to), of: FileTransferLogic.normalize(from)) else {
+        guard !FileTransferLogic.isSameOrDescendant(
+            FileTransferLogic.normalize(to),
+            of: FileTransferLogic.normalize(from),
+            exactBytes: true
+        ) else {
             throw StorageError.unsupported(String(localized: "A folder can't be moved into itself.", comment: "Storage error"))
         }
         let service = await session.service(for: source.bucket)
@@ -169,7 +284,7 @@ nonisolated struct S3FileSystem: Sendable {
         let prefix = source.key + "/"
         for object in contents {
             try Task.checkCancellation()
-            let relative = String(object.key.dropFirst(prefix.count))
+            let relative = String(decoding: object.key.utf8.dropFirst(prefix.utf8.count), as: UTF8.self)
             let destination = Location(bucket: target.bucket, key: target.key + "/" + relative)
             try await copyObject(Location(bucket: source.bucket, key: object.key), to: destination, size: object.size, path: from)
         }
@@ -405,8 +520,7 @@ nonisolated struct S3FileSystem: Sendable {
     /// Same endpoint and keys: the server can copy without the data passing through the device.
     func canCopyOnServer(from other: S3FileSystem) -> Bool {
         provider.endpointIdentity == other.provider.endpointIdentity
-            && provider.accessKeyID == other.provider.accessKeyID
-            && provider.sessionToken == other.provider.sessionToken
+            && provider.hasSameCredentials(as: other.provider)
     }
 
     func copyOnServer(_ sourcePath: String, from source: S3FileSystem, to path: String) async throws {
@@ -587,13 +701,25 @@ nonisolated struct S3FileSystem: Sendable {
     private func objects(under folder: Location, service: S3) async throws -> [(key: String, size: Int64)] {
         var result: [(key: String, size: Int64)] = []
         var token: String?
+        var seenTokens: Set<[UInt8]> = []
         repeat {
             try Task.checkCancellation()
             let page = try await mapped(folder.key) {
                 try await service.listObjectsV2(.init(bucket: folder.bucket, continuationToken: token, prefix: folder.key + "/"))
             }
             result += (page.contents ?? []).compactMap { object in object.key.map { ($0, object.size ?? 0) } }
-            token = page.isTruncated == true ? page.nextContinuationToken : nil
+            if let next = try S3KeyLogic.nextContinuationToken(
+                isTruncated: page.isTruncated,
+                nextToken: page.nextContinuationToken,
+                currentToken: token
+            ) {
+                guard seenTokens.insert(Array(next.utf8)).inserted else {
+                    throw S3KeyLogic.PaginationError.stalled
+                }
+                token = next
+            } else {
+                token = nil
+            }
         } while token != nil
         return result
     }

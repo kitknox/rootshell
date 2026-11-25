@@ -707,6 +707,21 @@ final class FileManagerEditTests: XCTestCase {
         )
     }
 
+    // MARK: - Byte-exact Remote Path Identity
+
+    func testRemoteEditPathIdentityDistinguishesNFCAndNFDKeys() {
+        let nfc = "/bucket/caf\u{00E9}.txt"
+        let nfd = "/bucket/cafe\u{0301}.txt"
+        XCTAssertEqual(nfc, nfd, "precondition: Swift String equates NFC and NFD")
+        XCTAssertFalse(RemoteEditPathIdentity.matches(nfc, nfd))
+        XCTAssertTrue(RemoteEditPathIdentity.matches(nfc, nfc))
+        XCTAssertTrue(RemoteEditPathIdentity.matches(nfd, nfd))
+        XCTAssertNotEqual(
+            RemoteEditPathIdentity.key(endpointKey: "s3:ceph", path: nfc),
+            RemoteEditPathIdentity.key(endpointKey: "s3:ceph", path: nfd)
+        )
+    }
+
     // MARK: - JSON Formatting
 
     func testJSONPrettyPrint() throws {

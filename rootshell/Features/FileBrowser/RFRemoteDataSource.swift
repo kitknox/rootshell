@@ -46,7 +46,7 @@ final class RFRemoteDataSource: RFDataSource {
         case (.sftp(let config), .sftp(let otherConfig)):
             return config.reachesSameAccount(as: otherConfig)
         case (.storage(let provider), .storage(let otherProvider)):
-            return provider.reachesSameNamespace(as: otherProvider)
+            return provider.mayShareNamespace(with: otherProvider)
         default:
             return false
         }
@@ -172,7 +172,7 @@ final class RFRemoteDataSource: RFDataSource {
 
     func fileExists(at path: String) async -> Bool {
         guard let fs = try? fileSystem else { return false }
-        return await fs.exists(path)
+        return (try? await fs.infoIfExists(path, followLinks: false)) != nil
     }
 
     /// Deletes a file, or a directory and its contents. A symlinked directory is
@@ -187,7 +187,7 @@ final class RFRemoteDataSource: RFDataSource {
         // could corrupt the original if the copy fails midway.
         if sourcePath == destPath { return }
         let fs = try fileSystem
-        if force, await fs.exists(destPath) { try await fs.removeRecursively(destPath) }
+        if force, try await fs.infoIfExists(destPath, followLinks: false) != nil { try await fs.removeRecursively(destPath) }
         // Bytes stream through the app, except where storage can copy on the server.
         try await FileTreeCopier.copyTree(sourcePath, to: destPath, from: fs, to: fs)
     }

@@ -22,6 +22,9 @@ enum FileTreeCopier {
         let size: Int64
         let mode: UInt32?
         let modified: Date?
+        /// Originating transfer root so move cleanup tracks errors directly rather
+        /// than matching child paths back to roots by string prefix.
+        var rootID: UUID? = nil
 
         var isFile: Bool {
             if case .file = kind { return true }
@@ -37,25 +40,32 @@ enum FileTreeCopier {
     /// The item plus, for a directory, everything beneath it in copy order.
     /// The selected item is dereferenced if it is a link; nested links are
     /// copied as links, so a link cycle can't recurse forever.
-    static func expand(_ path: String, into target: String, fs: FileSystemEndpoint) async throws -> [Item] {
+    /// On S3, `isDirectory` disambiguates when both a file and a folder share `path`.
+    static func expand(
+        _ path: String,
+        into target: String,
+        fs: FileSystemEndpoint,
+        isDirectory: Bool? = nil,
+        rootID: UUID? = nil
+    ) async throws -> [Item] {
         let info: FileSystemEndpoint.ItemInfo
-        if let followed = try? await fs.info(path) {
+        if let followed = try? await fs.info(path, isDirectory: isDirectory) {
             info = followed
         } else {
-            info = try await fs.info(path, followLinks: false)
+            info = try await fs.info(path, followLinks: false, isDirectory: isDirectory)
             if info.isSymlink {
-                return [Item(kind: .symlink(target: try await fs.readLink(path)), source: path, destination: target, size: 0, mode: nil, modified: nil)]
+                return [Item(kind: .symlink(target: try await fs.readLink(path)), source: path, destination: target, size: 0, mode: nil, modified: nil, rootID: rootID)]
             }
         }
         guard info.isDirectory else {
-            return [Item(kind: .file, source: path, destination: target, size: Int64(clamping: info.size), mode: info.permissions, modified: info.modified)]
+            return [Item(kind: .file, source: path, destination: target, size: Int64(clamping: info.size), mode: info.permissions, modified: info.modified, rootID: rootID)]
         }
-        var items = [Item(kind: .directory, source: path, destination: target, size: 0, mode: info.permissions, modified: info.modified)]
-        try await walk(path, into: target, fs: fs, items: &items)
+        var items = [Item(kind: .directory, source: path, destination: target, size: 0, mode: info.permissions, modified: info.modified, rootID: rootID)]
+        try await walk(path, into: target, fs: fs, rootID: rootID, items: &items)
         return items
     }
 
-    private static func walk(_ directory: String, into target: String, fs: FileSystemEndpoint, items: inout [Item]) async throws {
+    private static func walk(_ directory: String, into target: String, fs: FileSystemEndpoint, rootID: UUID?, items: inout [Item]) async throws {
         // Strict: a move deletes the source tree afterwards, so nothing may be skipped.
         for entry in try await fs.list(directory, strict: true) {
             try Task.checkCancellation()
@@ -69,12 +79,12 @@ enum FileTreeCopier {
                 } else {
                     linkTarget = try await fs.readLink(entry.path)
                 }
-                items.append(Item(kind: .symlink(target: linkTarget), source: entry.path, destination: destination, size: 0, mode: nil, modified: nil))
+                items.append(Item(kind: .symlink(target: linkTarget), source: entry.path, destination: destination, size: 0, mode: nil, modified: nil, rootID: rootID))
             } else if entry.isDirectory {
-                items.append(Item(kind: .directory, source: entry.path, destination: destination, size: 0, mode: entry.permissions, modified: entry.modifiedDate))
-                try await walk(entry.path, into: destination, fs: fs, items: &items)
+                items.append(Item(kind: .directory, source: entry.path, destination: destination, size: 0, mode: entry.permissions, modified: entry.modifiedDate, rootID: rootID))
+                try await walk(entry.path, into: destination, fs: fs, rootID: rootID, items: &items)
             } else {
-                items.append(Item(kind: .file, source: entry.path, destination: destination, size: entry.size, mode: entry.permissions, modified: entry.modifiedDate))
+                items.append(Item(kind: .file, source: entry.path, destination: destination, size: entry.size, mode: entry.permissions, modified: entry.modifiedDate, rootID: rootID))
             }
         }
     }
@@ -191,20 +201,18 @@ enum FileTreeCopier {
         var rest = items.filter { !$0.isDirectory }
         if destination.foldersAreImplicit {
             // A folder appears with the first file inside it; only empty ones need a marker.
-            var filled: Set<String> = []
-            for item in rest where item.isFile {
-                var parent = FileTransferLogic.parent(of: item.destination)
-                while parent != "/", parent != ".", filled.insert(parent).inserted {
-                    parent = FileTransferLogic.parent(of: parent)
-                }
-            }
-            for folder in folders where filled.contains(folder.destination) {
+            // Compare parent paths by exact UTF-8 bytes so an NFD sibling containing files
+            // never suppresses an empty NFC folder's marker.
+            let filled = FileTransferLogic.implicitPopulatedFolderBytes(
+                fileDestinations: rest.filter(\.isFile).map(\.destination)
+            )
+            for folder in folders where filled.contains(FileTransferLogic.folderBytesKey(folder.destination)) {
                 try onFinish(folder, nil)
             }
-            rest += folders.filter { !filled.contains($0.destination) }
+            rest += folders.filter { !filled.contains(FileTransferLogic.folderBytesKey($0.destination)) }
         } else {
             // One depth at a time, so every folder's parent exists before it.
-            let levels = Dictionary(grouping: folders) { $0.destination.split(separator: "/").count }
+            let levels = Dictionary(grouping: folders) { FileTransferLogic.pathComponents(of: $0.destination).count }
             for depth in levels.keys.sorted() {
                 try await pool(units(levels[depth] ?? []), runUnit)
             }
@@ -289,7 +297,14 @@ enum FileTreeCopier {
             let tag = ".rootshell-\(UUID().uuidString.prefix(8))-"
             let probe = FileTransferLogic.join(folder, tag + theirs)
             try await fs.openWriter(probe, exclusive: true).close()
-            let aliased = await fs.exists(FileTransferLogic.join(folder, tag + mine))
+            let aliased: Bool
+            do {
+                aliased = try await fs.infoIfExists(FileTransferLogic.join(folder, tag + mine), followLinks: false) != nil
+            } catch {
+                // Unstructured, so a cancelled job still cleans up.
+                await Task { try? await fs.removeFile(probe) }.value
+                throw error
+            }
             // Unstructured, so a cancelled job still cleans up.
             await Task { try? await fs.removeFile(probe) }.value
             if !aliased { return false }

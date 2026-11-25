@@ -34,6 +34,18 @@ final class TransferJob: Identifiable {
         }
     }
 
+    struct Source: Equatable, Sendable {
+        let path: String
+        /// Known row type from a listing; nil for raw paths (e.g. external drops/pastes).
+        /// On S3 this disambiguates when both a file `foo` and folder `foo/` share a path.
+        let isDirectory: Bool?
+
+        init(path: String, isDirectory: Bool? = nil) {
+            self.path = path
+            self.isDirectory = isDirectory
+        }
+    }
+
     struct ItemError: Identifiable {
         let id = UUID()
         let path: String
@@ -43,7 +55,8 @@ final class TransferJob: Identifiable {
     let id = UUID()
     let operation: Operation
     let source: FileEndpoint
-    let sourcePaths: [String]
+    let sources: [Source]
+    var sourcePaths: [String] { sources.map(\.path) }
     let destination: FileEndpoint?
     let destinationDirectory: String?
     let createdAt = Date()
@@ -69,17 +82,35 @@ final class TransferJob: Identifiable {
     init(
         operation: Operation,
         source: FileEndpoint,
-        sourcePaths: [String],
+        sources: [Source],
         destination: FileEndpoint? = nil,
         destinationDirectory: String? = nil,
         conflictPolicy: TransferConflictResolution? = nil
     ) {
         self.operation = operation
         self.source = source
-        self.sourcePaths = sourcePaths
+        self.sources = sources
         self.destination = destination
         self.destinationDirectory = destinationDirectory
         self.conflictPolicy = conflictPolicy
+    }
+
+    convenience init(
+        operation: Operation,
+        source: FileEndpoint,
+        sourcePaths: [String],
+        destination: FileEndpoint? = nil,
+        destinationDirectory: String? = nil,
+        conflictPolicy: TransferConflictResolution? = nil
+    ) {
+        self.init(
+            operation: operation,
+            source: source,
+            sources: sourcePaths.map { Source(path: $0) },
+            destination: destination,
+            destinationDirectory: destinationDirectory,
+            conflictPolicy: conflictPolicy
+        )
     }
 
     var fractionCompleted: Double? {

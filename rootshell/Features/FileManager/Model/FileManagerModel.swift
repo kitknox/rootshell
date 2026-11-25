@@ -205,7 +205,7 @@ final class FileManagerModel {
         case .toggleSelection:
             pane.selection.toggleCursor()
         case .selectAll:
-            pane.selection.selectAll(pane.visiblePaths)
+            pane.selection.selectAll(pane.visibleRowIDs)
         case .openInTerminal:
             openActiveInTerminal()
         case .parent:
@@ -296,7 +296,7 @@ final class FileManagerModel {
         enqueue(TransferJob(
             operation: move ? .move : .copy,
             source: source.endpoint,
-            sourcePaths: items.map(\.path),
+            sources: items.map { TransferJob.Source(path: $0.path, isDirectory: $0.isDirectory) },
             destination: destination.endpoint,
             destinationDirectory: destination.path
         ))
@@ -306,12 +306,23 @@ final class FileManagerModel {
     /// Drops onto a pane: items from the other pane, or local files dragged in.
     /// `destination` pins the endpoint read before an async staging step.
     func receive(paths: [String], from endpoint: FileEndpoint, into side: FilePaneModel.Side, directory: String? = nil, destination: FileEndpoint? = nil, move: Bool = false) {
+        receive(
+            sources: paths.map { TransferJob.Source(path: $0) },
+            from: endpoint,
+            into: side,
+            directory: directory,
+            destination: destination,
+            move: move
+        )
+    }
+
+    func receive(sources: [TransferJob.Source], from endpoint: FileEndpoint, into side: FilePaneModel.Side, directory: String? = nil, destination: FileEndpoint? = nil, move: Bool = false) {
         let pane = pane(side)
         guard let directory = directory ?? (pane.path.isEmpty ? nil : pane.path) else { return }
         enqueue(TransferJob(
             operation: move ? .move : .copy,
             source: endpoint,
-            sourcePaths: paths,
+            sources: sources,
             destination: destination ?? pane.endpoint,
             destinationDirectory: directory
         ))
@@ -319,33 +330,48 @@ final class FileManagerModel {
 
     func delete(_ entries: [RFEntry]) {
         let pane = activePane
-        enqueue(TransferJob(operation: .delete, source: pane.endpoint, sourcePaths: entries.map(\.path)))
+        enqueue(TransferJob(
+            operation: .delete,
+            source: pane.endpoint,
+            sources: entries.map { TransferJob.Source(path: $0.path, isDirectory: $0.isDirectory) }
+        ))
         pane.selection.clear()
     }
 
     func setPermissions(_ mode: UInt32, for entries: [RFEntry]) {
-        enqueue(TransferJob(operation: .setPermissions(mode), source: activePane.endpoint, sourcePaths: entries.map(\.path)))
+        enqueue(TransferJob(
+            operation: .setPermissions(mode),
+            source: activePane.endpoint,
+            sources: entries.map { TransferJob.Source(path: $0.path, isDirectory: $0.isDirectory) }
+        ))
     }
 
     func rename(_ entry: RFEntry, to newName: String) async {
         let pane = activePane
         let trimmed = newName.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, trimmed != entry.name, !trimmed.contains("/") else { return }
+        guard !trimmed.isEmpty, !trimmed.utf8.elementsEqual(entry.name.utf8), !trimmed.utf8.contains(UInt8(ascii: "/")) else { return }
         let target = FileTransferLogic.join(FileTransferLogic.parent(of: entry.path), trimmed)
-        await run(in: pane, focus: target) { fs in
-            if await fs.exists(target) {
+        await run(in: pane, focus: FileEntryID(path: target, isDirectory: entry.isDirectory)) { fs in
+            if !entry.isSymlink, !fs.foldersAreImplicit {
+                let current = try await fs.info(entry.path, followLinks: false)
+                if !current.isSymlink, current.isDirectory != entry.isDirectory {
+                    throw FileTransferLogic.ItemTypeChanged(name: entry.name)
+                }
+            }
+            let targetTypeHint: Bool? = fs.foldersAreImplicit ? entry.isDirectory : nil
+            if try await fs.infoIfExists(target, followLinks: false, isDirectory: targetTypeHint) != nil {
                 throw FileManagerActionError.alreadyExists(trimmed)
             }
-            try await fs.rename(entry.path, to: target)
+            try await fs.rename(entry.path, to: target, isDirectory: entry.isDirectory)
         }
     }
 
     func createFolder(named name: String) async {
         let pane = activePane
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, !trimmed.contains("/"), !pane.path.isEmpty else { return }
+        guard !trimmed.isEmpty, !trimmed.utf8.contains(UInt8(ascii: "/")), !pane.path.isEmpty else { return }
         let target = FileTransferLogic.join(pane.path, trimmed)
-        await run(in: pane, focus: target) { fs in
+        await run(in: pane, focus: FileEntryID(path: target, isDirectory: true)) { fs in
             if let s3 = fs.s3, s3.bucketName(of: target) != nil {
                 try await s3.createBucket(trimmed)
             } else {
@@ -360,11 +386,10 @@ final class FileManagerModel {
     }
 
     /// Runs a quick metadata operation inline, then refreshes with the cursor on `focus`.
-    private func run(in pane: FilePaneModel, focus: String?, _ body: (FileSystemEndpoint) async throws -> Void) async {
+    private func run(in pane: FilePaneModel, focus: FileEntryID?, _ body: (FileSystemEndpoint) async throws -> Void) async {
         do {
             try await body(try await pane.fileSystem())
-            pane.refresh()
-            if let focus { pane.selection.setCursor(focus) }
+            pane.refresh(focus: focus)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -842,9 +867,12 @@ final class FileManagerModel {
     private func refreshPanes(affectedBy job: TransferJob) {
         for pane in [left, right] where !pane.path.isEmpty {
             let touchesSource = pane.endpoint.mayShareFiles(with: job.source)
-                && job.sourcePaths.contains { FileTransferLogic.parent(of: $0) == pane.path || $0 == pane.path }
+                && job.sourcePaths.contains {
+                    FileTransferLogic.parent(of: $0).utf8.elementsEqual(pane.path.utf8)
+                        || $0.utf8.elementsEqual(pane.path.utf8)
+                }
             let touchesDestination = job.destination.map(pane.endpoint.mayShareFiles) == true
-                && job.destinationDirectory == pane.path
+                && job.destinationDirectory?.utf8.elementsEqual(pane.path.utf8) == true
             if touchesSource || touchesDestination { pane.refresh() }
         }
     }
@@ -852,7 +880,7 @@ final class FileManagerModel {
     private func refreshPanes(affectedByEndpoint endpoint: FileEndpoint, path: String) {
         let parent = FileTransferLogic.parent(of: path)
         for pane in [left, right] where !pane.path.isEmpty {
-            if pane.endpoint.mayShareFiles(with: endpoint), pane.path == parent {
+            if pane.endpoint.mayShareFiles(with: endpoint), pane.path.utf8.elementsEqual(parent.utf8) {
                 pane.refresh()
             }
         }

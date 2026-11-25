@@ -1194,6 +1194,22 @@ actor RemoteStagedTempStore {
     }
 }
 
+// MARK: - Byte-exact Remote Path Identity
+
+/// Byte-exact UTF-8 path matching for active remote edit sessions and in-flight
+/// opens so canonically equivalent keys (such as NFC vs NFD on S3/Ceph) never
+/// reuse each other's working copy or upload to the wrong object.
+nonisolated enum RemoteEditPathIdentity {
+    static func matches(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.utf8.elementsEqual(rhs.utf8)
+    }
+
+    static func key(endpointKey: String, path: String) -> String {
+        let hex = Data(path.utf8).map { String(format: "%02x", $0) }.joined()
+        return "\(endpointKey)|\(hex)"
+    }
+}
+
 // MARK: - JSON Formatting
 
 nonisolated enum FileEditJSONFormatter {

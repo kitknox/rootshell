@@ -103,10 +103,14 @@ enum FileEndpoint: Hashable {
     }
 
     /// True when the two might reach the same files, even at different paths
-    /// (root beside another account on its server, which may be chrooted).
+    /// (root beside another account on its server, which may be chrooted, or two
+    /// different-credential profiles on the same multi-tenant S3 gateway).
     /// Guards against overwriting or deleting a source must use this.
     func mayShareFiles(with other: FileEndpoint) -> Bool {
         if sharesFileSystem(with: other) { return true }
+        if let provider = storageProvider, let otherProvider = other.storageProvider {
+            return provider.mayShareNamespace(with: otherProvider)
+        }
         guard isSudo || other.isSudo, let config = sshConfig, let otherConfig = other.sshConfig else { return false }
         return config.reachesSameServer(as: otherConfig)
     }
