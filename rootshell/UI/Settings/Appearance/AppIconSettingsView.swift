@@ -5,155 +5,112 @@ import UIKit
 /// platforms where `UIApplication.supportsAlternateIcons` is false (visionOS).
 struct AppIconSettingsView: View {
     @ObservedObject private var iconManager = AppIconManager.shared
-    private let radicalCollection = AppIconManager.AppIconVariant.radicalOfTheUnknownVariants
-
-    private var selectedRadicalVariant: AppIconManager.AppIconVariant? {
-        radicalCollection.first { $0 == iconManager.selectedVariant }
-    }
 
     var body: some View {
         List {
             Section {
-                ForEach(AppIconManager.AppIconVariant.standardVariants) { variant in
-                    AppIconVariantButton(variant: variant)
-                }
+                AppIconGrid(variants: AppIconManager.AppIconVariant.standardVariants)
+            } header: {
+                Text(String(
+                    localized: "Standard",
+                    comment: "Settings section title: the standard app icons"
+                ))
+            }
+
+            Section {
+                AppIconGrid(variants: AppIconManager.AppIconVariant.radicalOfTheUnknownVariants)
+            } header: {
+                Text(String(
+                    localized: "Radical of the Unknown",
+                    comment: "Settings section title: Radical of the Unknown app icon collection"
+                ))
             } footer: {
                 Text(String(
                     localized: "Changes the home-screen icon. Updates here also apply to the animated icon in Settings and the Live Activity widget.",
                     comment: "Footer explaining what the app icon picker affects"
                 ))
             }
-
-            Section {
-                NavigationLink {
-                    AppIconCollectionSettingsView(
-                        title: String(
-                            localized: "Radical of the Unknown",
-                            comment: "Settings navigation title: Radical of the Unknown app icon collection"
-                        ),
-                        variants: radicalCollection
-                    )
-                } label: {
-                    HStack(spacing: 14) {
-                        AppIconCollectionPreview(variants: Array(radicalCollection.prefix(3)))
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(String(
-                                localized: "Radical of the Unknown",
-                                comment: "Settings row title: Radical of the Unknown app icon collection"
-                            ))
-                            .foregroundColor(.primary)
-
-                            Text(String(
-                                localized: "12 colorways",
-                                comment: "Settings row subtitle: number of app icon colorways in a collection"
-                            ))
-                            .foregroundColor(.secondary)
-                            .font(.subheadline)
-                        }
-
-                        Spacer()
-
-                        if let selectedRadicalVariant {
-                            Text(selectedRadicalVariant.displayName)
-                                .foregroundColor(.secondary)
-                                .font(.subheadline)
-                                .lineLimit(1)
-                        }
-                    }
-                }
-                .themedRow()
-            } header: {
-                Text(String(
-                    localized: "Collections",
-                    comment: "Settings section title: app icon collections"
-                ))
-            }
         }
         .themedList()
+        .sensoryFeedback(.selection, trigger: iconManager.selectedVariant)
         .navigationTitle(String(localized: "App Icon", comment: "Settings navigation title: app icon picker"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { SettingsScreenPinMenu(groups: [.theme]) }
     }
 }
 
-private struct AppIconCollectionSettingsView: View {
-    let title: String
+/// One list row holding a grid of icon tiles; columns follow the row width.
+private struct AppIconGrid: View {
     let variants: [AppIconManager.AppIconVariant]
+    @ScaledMetric(relativeTo: .caption) private var minimumTileWidth: CGFloat = 80
 
     var body: some View {
-        List {
-            Section {
-                ForEach(variants) { variant in
-                    AppIconVariantButton(variant: variant)
-                }
-            } footer: {
-                Text(String(
-                    localized: "Changes the home-screen icon. Updates here also apply to the animated icon in Settings and the Live Activity widget.",
-                    comment: "Footer explaining what the app icon collection picker affects"
-                ))
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: minimumTileWidth), spacing: 8, alignment: .top)],
+            spacing: 14
+        ) {
+            ForEach(variants) { variant in
+                AppIconTile(variant: variant)
             }
         }
-        .themedList()
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar { SettingsScreenPinMenu(groups: [.theme]) }
+        .padding(.vertical, 10)
+        .themedRow()
     }
 }
 
-private struct AppIconVariantButton: View {
+private struct AppIconTile: View {
     @ObservedObject private var iconManager = AppIconManager.shared
+    @Environment(\.sheetThemeColors) private var sheetThemeColors
+    @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 60
     let variant: AppIconManager.AppIconVariant
+
+    private var isSelected: Bool { iconManager.selectedVariant == variant }
+
+    private var rowBackground: Color {
+        sheetThemeColors?.rowBackground ?? Color(uiColor: .secondarySystemGroupedBackground)
+    }
 
     var body: some View {
         Button {
             iconManager.selectedVariant = variant
         } label: {
-            HStack(spacing: 14) {
-                AppIconPreview(variant: variant)
-                    .frame(width: 60, height: 60)
+            VStack(spacing: 6) {
+                Image(variant.previewAssetName)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: iconSize, height: iconSize)
+                    .padding(4)
+                    .overlay {
+                        // Ring radius tracks the preview's baked-in squircle plus the padding.
+                        RoundedRectangle(cornerRadius: iconSize * 0.2237 + 4, style: .continuous)
+                            .strokeBorder(Color.accentColor, lineWidth: 2.5)
+                            .opacity(isSelected ? 1 : 0)
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        if isSelected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, Color.accentColor)
+                                .font(.system(size: 20, weight: .semibold))
+                                .background(Circle().fill(rowBackground).padding(-2))
+                                .offset(x: 6, y: -6)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
 
                 Text(variant.displayName)
-                    .foregroundColor(.primary)
-
-                Spacer()
-
-                if iconManager.selectedVariant == variant {
-                    Image(systemName: "checkmark")
-                        .foregroundColor(.accentColor)
-                        .font(.body.weight(.semibold))
-                }
+                    .font(.caption)
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
             }
+            .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
+            .animation(.snappy(duration: 0.2), value: isSelected)
         }
         .buttonStyle(.plain)
-        .themedRow()
-    }
-}
-
-private struct AppIconCollectionPreview: View {
-    let variants: [AppIconManager.AppIconVariant]
-
-    var body: some View {
-        ZStack {
-            ForEach(Array(variants.enumerated()), id: \.element.id) { index, variant in
-                AppIconPreview(variant: variant)
-                    .frame(width: 32, height: 32)
-                    .offset(x: CGFloat(index) * 14)
-                    .zIndex(Double(index))
-            }
-        }
-        .frame(width: 60, height: 36, alignment: .leading)
-    }
-}
-
-private struct AppIconPreview: View {
-    let variant: AppIconManager.AppIconVariant
-
-    var body: some View {
-        Image(variant.previewAssetName)
-            .resizable()
-            .interpolation(.high)
-            .aspectRatio(contentMode: .fit)
+        .accessibilityLabel(variant.displayName)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
