@@ -41,9 +41,7 @@ private final class ToolbarHistoryScope {
 
 struct KeyboardToolbarSettingsView: View {
     @Environment(\.sheetThemeColors) private var sheetThemeColors
-    #if os(visionOS)
     @Environment(\.dismiss) private var dismiss
-    #endif
     @State private var manager = KeyboardToolbarManager.shared
     /// The toolbar on screen. Opens on the one the settings key was pressed in.
     @State private var context: ToolbarContext
@@ -77,8 +75,12 @@ struct KeyboardToolbarSettingsView: View {
     @Setting(Settings.Keyboard.touchEnabled) private var terminalKeyboard
     @Setting(Settings.ScreenSharing.floatingToolbarDefault) private var floatingBar
 
+    /// Presented on its own from the toolbar, not pushed inside Settings: it needs its own way out.
+    private let showsClose: Bool
+
     /// `surface` is where the toolbar was showing when its settings key was pressed.
-    init(context: ToolbarContext = .terminal, surface: ToolbarPreviewSurface? = nil) {
+    init(context: ToolbarContext = .terminal, surface: ToolbarPreviewSurface? = nil, showsClose: Bool = false) {
+        self.showsClose = showsClose
         _context = State(initialValue: ToolbarContext.editableCases.contains(context)
             ? context : ToolbarContext.editableCases[0])
         _chosenSurface = State(initialValue: surface)
@@ -152,6 +154,10 @@ struct KeyboardToolbarSettingsView: View {
                 Button("Done") {
                     dismiss()
                 }
+            }
+            #else
+            if showsClose {
+                ToolbarItem(placement: .topBarLeading) { closeButton }
             }
             #endif
             ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -337,6 +343,15 @@ struct KeyboardToolbarSettingsView: View {
         edit(String(localized: "Move Key"), keys: [slot]) { target in
             manager.placeKeys([slot], in: section, before: anchor, in: target)
         }
+    }
+
+    /// Edits save as they happen, so this only closes. A full-height sheet
+    /// (the Duo's outer display) otherwise leaves just a swipe from the top edge.
+    private var closeButton: some View {
+        Button { dismiss() } label: {
+            Label(String(localized: "Close", comment: "Close the toolbar key editor"), systemImage: "xmark")
+        }
+        .labelStyle(.iconOnly)
     }
 
     // MARK: - Selecting

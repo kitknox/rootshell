@@ -192,8 +192,9 @@ extension MainView {
             ))
             .sheet(isPresented: $showToolbarSettings) {
                 NavigationStack {
-                    KeyboardToolbarSettingsView(context: toolbarSettingsContext, surface: toolbarSettingsSurface)
+                    KeyboardToolbarSettingsView(context: toolbarSettingsContext, surface: toolbarSettingsSurface, showsClose: true)
                 }
+                .presentationDragIndicator(.visible)
                 .themedSheet(themeColors: sheetTheme.themeColors, accentColor: sheetTheme.accentColor, colorScheme: sheetTheme.colorScheme)
             }
             // Clipboard manager: compact-width presentation (iPhone). Regular
