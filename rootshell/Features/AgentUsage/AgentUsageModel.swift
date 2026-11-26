@@ -411,9 +411,7 @@ nonisolated enum AgentUsageUnavailableReason: Equatable, Sendable {
                         macOS will not release Antigravity's saved sign-in to a \
                         shell it did not start, so this connection cannot read \
                         it. Start tmux on that Mac once from its own desktop \
-                        session and usage is read through the tmux server, or \
-                        keep the Antigravity app open there, which answers \
-                        directly.
+                        session and usage is read through the tmux server.
                         """,
                     comment: "Agent usage help when a remote Mac will not release Antigravity credentials")
             }
@@ -446,16 +444,6 @@ nonisolated enum AgentUsageUnavailableReason: Equatable, Sendable {
                 localized: "The agent's saved sign-in could not be read on that host.",
                 comment: "Agent usage unavailable detail")
         case .signInExpired:
-            if provider == .antigravity {
-                return String(
-                    localized: """
-                        Google refused the saved sign-in. rootshell asks agy on \
-                        that host to renew it in the background, at most every \
-                        30 minutes, and usage reappears once it has. If it stays \
-                        expired, sign in to agy again there, then Refresh.
-                        """,
-                    comment: "Agent usage help when an Antigravity sign-in has expired")
-            }
             if provider == .copilot {
                 return String(
                     localized: """

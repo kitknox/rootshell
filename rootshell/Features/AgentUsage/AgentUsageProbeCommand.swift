@@ -25,9 +25,8 @@ nonisolated enum AgentUsageProvider: String, CaseIterable, Sendable, Codable {
     /// finished `omp usage --json` report instead, and no token ever leaves
     /// the host. See `AgentUsageOMPReport`.
     case omp
-    /// Antigravity (`agy` and the desktop app). A report lane like omp: the
-    /// host asks the running language server, or hands back the saved
-    /// sign-in so the app asks Google (`AgentUsageAPIClient`).
+    /// Antigravity (`agy`). A report lane like omp: the host runs
+    /// `agy -p /usage --output-format json` and no token leaves it.
     case antigravity = "agy"
 
     var displayName: String {
@@ -62,29 +61,12 @@ nonisolated enum AgentUsageCredentialReadout: Equatable, Sendable {
     /// diagnosable reason worth surfacing: the macOS login keychain was
     /// locked in the exec channel's session.
     case unreadable(keychainLocked: Bool)
-    /// Credentials were read but the provider refused them. Antigravity only:
-    /// the host handed back a token Google already refused.
-    case signInExpired
-}
-
-/// Antigravity's saved Google sign-in, for the app to call Google with.
-/// Held in memory only; never persisted or logged.
-nonisolated struct AgentUsageAntigravityToken: Equatable, Sendable {
-    let accessToken: String
-    /// The `agy` user agent for the host's OS and architecture.
-    let userAgent: String
 }
 
 nonisolated struct AgentUsageProbeResult: Equatable, Sendable {
     /// Keyed by provider; a provider missing entirely means its section was
     /// truncated or never ran — retry, don't cache.
     var readouts: [AgentUsageProvider: AgentUsageCredentialReadout] = [:]
-    /// The Antigravity section started a background `agy models` to renew
-    /// an expired sign-in.
-    var antigravityRenewed = false
-    /// The desktop app did not answer, so the host sent its sign-in. Only set
-    /// when the section ended with its marker.
-    var antigravityToken: AgentUsageAntigravityToken?
 }
 
 nonisolated enum AgentUsageProbeCommand {
@@ -97,20 +79,11 @@ nonisolated enum AgentUsageProbeCommand {
     ///   `SSHConfig.remoteExecPathPrefix`). An exec channel does NOT get the
     ///   interactive shell's PATH. Defaulted so the pure test harness need
     ///   not link SSHConfig.
-    /// - Parameter antigravityRenewal: Google refused the saved token, so the
-    ///   Antigravity section starts `agy models` in the background.
-    /// - Parameter antigravitySkipLocal: skips the desktop app and reads the
-    ///   sign-in, for a host whose desktop app last answered with nothing usable.
     static func command(
         providers: [AgentUsageProvider],
-        pathPrefix: String = "",
-        antigravityRenewal: Bool = false,
-        antigravitySkipLocal: Bool = false
+        pathPrefix: String = ""
     ) -> (command: String, nonce: String) {
-        let built = script(
-            providers: providers, pathPrefix: pathPrefix,
-            antigravityRenewal: antigravityRenewal,
-            antigravitySkipLocal: antigravitySkipLocal)
+        let built = script(providers: providers, pathPrefix: pathPrefix)
         // `sh -lc`: the login shell gives $CLAUDE_CODE_OAUTH_TOKEN (and any
         // profile-set CLAUDE_CONFIG_DIR / CODEX_HOME) a chance to exist.
         return ("sh -lc \(ProjectProbeCommand.singleQuoted(built.script))", built.nonce)
@@ -123,9 +96,7 @@ nonisolated enum AgentUsageProbeCommand {
     /// line. Same guard as ProjectProbeCommand.
     static func script(
         providers: [AgentUsageProvider],
-        pathPrefix: String = "",
-        antigravityRenewal: Bool = false,
-        antigravitySkipLocal: Bool = false
+        pathPrefix: String = ""
     ) -> (script: String, nonce: String) {
         let nonce = String(UUID().uuidString.prefix(8))
 
@@ -136,9 +107,7 @@ nonisolated enum AgentUsageProbeCommand {
             case .codex: script += codexSection(nonce: nonce)
             case .copilot: script += copilotSection(nonce: nonce)
             case .omp: script += ompSection(nonce: nonce)
-            case .antigravity:
-                script += antigravitySection(
-                    nonce: nonce, renewal: antigravityRenewal, skipLocal: antigravitySkipLocal)
+            case .antigravity: script += antigravitySection(nonce: nonce)
             }
         }
         // Always succeed. A non-zero exit makes Citadel raise CommandFailed
@@ -278,141 +247,33 @@ nonisolated enum AgentUsageProbeCommand {
         return s
     }
 
-    /// Separates the answers inside an Antigravity payload. Payload structure,
-    /// not protocol framing, so no nonce (same as `copilotSourceSeparator`).
-    static let antigravityPartPrefix = "::AGPART:"
-
-    /// Bytes the host keeps from any one Antigravity HTTP response, status
-    /// marker included. At most three parts are emitted, so they stay under
-    /// the app's 1 MiB read cap; an oversized response loses its marker and
-    /// counts as a failed call.
-    static let antigravityResponseMaxBytes = 256 * 1024
-
-    /// Antigravity's quota, or the token the app needs to ask Google itself.
+    /// Antigravity's quota from `agy -p /usage --output-format json`, agy's
+    /// own report. agy reads and renews its sign-in itself, so no token
+    /// leaves the host.
     ///
-    /// 1. The running desktop app's language server: found by its command
-    ///    line (`--csrf_token`), its listening ports from lsof or ss, then the
-    ///    quota summary over HTTPS on 127.0.0.1 (self-signed, so `-k`, local
-    ///    only). The `agy` CLI keeps its token in-process, so it never answers
-    ///    here. A port's three calls run in parallel (a temp dir holds the
-    ///    answers), so a dead port costs one timeout, not three.
-    /// 2. Otherwise the saved sign-in goes back to the app (`::AGTOKEN_`),
-    ///    which calls Google and holds it in memory only: the macOS Keychain
-    ///    item `gemini`/`antigravity` (tmux bridge on rc 36, as for Claude),
-    ///    the Secret Service on Linux, or the token file `agy` writes on hosts
-    ///    without a keyring.
-    ///
-    /// The CSRF token reaches curl on stdin (`-H @-`), never in argv, and
-    /// loopback calls skip any proxy so it stays on the machine. Each
-    /// response passes through `head -c` before the shell holds it, and the
-    /// desktop scan stops calling after 10 s. `renewal` is set after Google
-    /// refused the token: `agy models` then starts in the BACKGROUND to renew
-    /// it, far too slow to wait for, and a later probe reads the new token.
-    private static func antigravitySection(
-        nonce: String, renewal: Bool, skipLocal: Bool
-    ) -> String {
+    /// On a Mac, a detached exec channel cannot read agy's keychain sign-in
+    /// (rc 36, as for Claude), so a failed run is retried through the tmux
+    /// server, which runs in the desktop session. When both fail, a
+    /// discarded `-w` read tells a locked keychain apart from other errors.
+    private static func antigravitySection(nonce: String) -> String {
         #"""
 
         printf '::AGB_\#(nonce)::\n'
-        _agsvc=/exa.language_server_pb.LanguageServerService
-        _agbody='{"metadata":{"ideName":"antigravity","extensionName":"antigravity","ideVersion":"unknown","locale":"en"}}'
-        _agout=''; _aglocked=0; _agfound=0; _agren=0; _agvia=''; _agtok=''; _agcap=\#(antigravityResponseMaxBytes)
-        _aglend=$(($(date +%s) + 10))
-        _agtime() { _agleft=$(($2 - $(date +%s))); [ "$_agleft" -gt 0 ] || return 1; [ "$_agleft" -lt "$1" ] || _agleft=$1; }
-        _agwatch() { _agws=$1; shift; "$@" 2>/dev/null & _agwp=$!; ( sleep "$_agws"; kill "$_agwp" ) >/dev/null 2>&1 & _agww=$!; wait "$_agwp"; _agwr=$?; kill "$_agww" 2>/dev/null; return "$_agwr"; }
-        _aglspost() {
-          _agtime 3 "$_aglend" || return 1
-          _agr=$(printf 'X-Codeium-Csrf-Token: %s\n' "$2" | curl -sk --noproxy '*' --max-time "$_agleft" -X POST "$1" -H 'Content-Type: application/json' -H 'Connect-Protocol-Version: 1' -H @- -d "$_agbody" -w '\n::AGHTTP:%{http_code}::' 2>/dev/null | head -c "$_agcap")
-          _agc=${_agr##*::AGHTTP:}; _agc=${_agc%%::*}; _agr=${_agr%::AGHTTP:*}
-          [ "$_agc" = 200 ] || return 1
-          case "$_agr" in *"$3"*|*"${5:-$3}"*) printf '::AGPART:%s::\n%s\n' "$4" "$_agr"; return 0;; esac
-          return 1
-        }
-        _agjob() { _agn=$1; shift; "$@" > "$_agd/$_agn" 2>/dev/null & }
-        _agserver() {
-          _agjob ls-summary _aglspost "$1$_agsvc/RetrieveUserQuotaSummary" "$2" '"remainingFraction"' ls-summary '"remaining_fraction"'
-          _agjob ls-status _aglspost "$1$_agsvc/GetUserStatus" "$2" '"userStatus"' ls-status
-          _agjob ls-configs _aglspost "$1$_agsvc/GetCommandModelConfigs" "$2" '"quotaInfo"' ls-configs
-          wait
-          _ags=$(cat "$_agd/ls-summary"); _agu=$(cat "$_agd/ls-status"); _agm=$(cat "$_agd/ls-configs")
-          # Every quota source goes back; the parser picks what it can read.
-          # Status alone is account metadata, not an answer.
-          case "$_ags$_agm$_agu" in *'"remainingFraction"'*|*'"remaining_fraction"'*|*'"quotaInfo"'*) ;; *) return 1;; esac
-          printf '%s\n%s\n%s\n' "$_ags" "$_agu" "$_agm"
-        }
-        _agports() {
-          if command -v lsof >/dev/null 2>&1; then
-            lsof -nP -a -iTCP -sTCP:LISTEN -p "$1" 2>/dev/null | awk 'NR>1 { n=split($9,a,":"); if (a[n] ~ /^[0-9]+$/) print a[n] }'
-          elif command -v ss >/dev/null 2>&1; then
-            ss -ltnpH 2>/dev/null | awk -v p="pid=$1," 'index($0,p) { n=split($4,a,":"); if (a[n] ~ /^[0-9]+$/) print a[n] }'
-          fi | sort -un | head -n 8
-        }
-        _aglocal() {
-          command -v curl >/dev/null 2>&1 || return 1
-          ps -A -ww -o pid= -o args= 2>/dev/null | awk '/language_server/ && /--csrf_token/ && !/AGPART/ && tolower($0) ~ /antigravity/ { c=""; e=""; for (i=2; i<=NF; i++) { if ($i=="--csrf_token") c=$(i+1); else if (index($i,"--csrf_token=")==1) c=substr($i,14); if ($i=="--extension_server_port") e=$(i+1); else if (index($i,"--extension_server_port=")==1) e=substr($i,25); }; if (c!="") print $1, c, e }' | sort -n | while read -r _agp _agk _age; do
-            for _agpt in $(_agports "$_agp"); do _agserver "https://127.0.0.1:$_agpt" "$_agk" && exit 0; done
-            case "$_age" in ''|*[!0-9]*) ;; *) _agserver "http://127.0.0.1:$_age" "$_agk" && exit 0;; esac
-          done
-        }
-        _agread() {
-          _agj=''
-          if [ "$(uname -s 2>/dev/null)" = Darwin ] && command -v security >/dev/null 2>&1 && security find-generic-password -s gemini -a antigravity >/dev/null 2>&1; then
-            _agfound=1
-            _agj=$(security find-generic-password -s gemini -a antigravity -w 2>/dev/null); _agrc=$?
-            if [ "$_agrc" = 0 ] && [ -n "$_agj" ]; then _agvia=direct
-            else
-              _agj=''
-              if [ "$_agrc" = 36 ] && command -v tmux >/dev/null 2>&1; then
-                _agj=$(_agwatch 5 tmux run-shell 'security find-generic-password -s gemini -a antigravity -w')
-              fi
-              case "$_agj" in *go-keyring*|*ccess_token*|*ccessToken*) _agvia=tmux;; *) _agj=''; [ "$_agrc" = 36 ] && _aglocked=1;; esac
-            fi
-          fi
-          if [ -z "$_agj" ] && [ -n "$DBUS_SESSION_BUS_ADDRESS" ] && command -v secret-tool >/dev/null 2>&1; then
-            _agj=$(_agwatch 5 secret-tool lookup service gemini username antigravity)
-            [ -n "$_agj" ] && { _agfound=1; _agvia=direct; }
-          fi
-          if [ -z "$_agj" ]; then
-            for _agf in "$HOME/.gemini/antigravity-cli"/* "$HOME/.gemini/antigravity"/*; do
-              [ -f "$_agf" ] && [ -r "$_agf" ] || continue
-              _agsz=$(wc -c < "$_agf" 2>/dev/null); [ $((${_agsz:-0} + 0)) -le 65536 ] || continue
-              grep -q '"access_token"[[:space:]]*:[[:space:]]*"ya29\.' "$_agf" 2>/dev/null || continue
-              _agj=$(cat "$_agf" 2>/dev/null); _agfound=1; _agvia=direct; break
-            done
-          fi
-          case "$_agj" in
-            go-keyring-base64:*) _agj=$(printf '%s' "${_agj#go-keyring-base64:}" | tr -d '\r\n' | base64 --decode 2>/dev/null);;
-            go-keyring-encoded:*) _agj=$(printf '%s' "${_agj#go-keyring-encoded:}" | tr -d '\r\n' | xxd -r -p 2>/dev/null);;
+        if _agbin=$(command -v agy 2>/dev/null) && [ -n "$_agbin" ]; then
+          _ag=$("$_agbin" -p /usage --output-format json --print-timeout 15s </dev/null 2>/dev/null)
+          case "$_ag" in *'"buckets"'*) ;; *)
+            if [ "$(uname -s 2>/dev/null)" = Darwin ] && command -v tmux >/dev/null 2>&1; then
+              _ag=$(tmux run-shell "'$_agbin' -p /usage --output-format json --print-timeout 15s </dev/null 2>/dev/null" 2>/dev/null)
+            fi;;
           esac
-          _agtok=$(printf '%s' "$_agj" | tr -d '\r\n' | sed -n 's/.*"access_\{0,1\}[tT]oken"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
-        }
-        _agos=$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')
-        case "$(uname -m 2>/dev/null)" in x86_64|amd64) _agarch=amd64;; aarch64|arm64) _agarch=arm64;; *) _agarch=$(uname -m 2>/dev/null);; esac
-        _agua="antigravity/cli/1.4.12 (aidev_client; os_type=${_agos:-linux}; arch=${_agarch}; auth_method=consumer)"
-        if [ \#(skipLocal ? "1" : "0") = 0 ]; then
-          # The parallel local calls write here, one file per answer.
-          _agd=$(mktemp -d 2>/dev/null) || { _agd="${TMPDIR:-/tmp}/rootshell-agy.$$"; mkdir -m 700 "$_agd" 2>/dev/null || _agd=''; }
-          if [ -n "$_agd" ]; then
-            _agout=$(_aglocal)
-            { rm -f "$_agd"/ls-summary "$_agd"/ls-status "$_agd"/ls-configs; rmdir "$_agd"; } 2>/dev/null
-          fi
-        fi
-        [ -n "$_agout" ] || _agread
-        if [ \#(renewal ? "1" : "0") = 1 ] && [ -z "$_agout" ] && [ -n "$_agtok" ] && _agbin=$(command -v agy 2>/dev/null) && [ -n "$_agbin" ]; then
-          if [ "$_agvia" = tmux ]; then
-            tmux run-shell -b "\"$_agbin\" models </dev/null >/dev/null 2>&1" >/dev/null 2>&1 && _agren=1
-          elif command -v setsid >/dev/null 2>&1; then
-            ( setsid nohup "$_agbin" models </dev/null >/dev/null 2>&1 & ) >/dev/null 2>&1; _agren=1
-          else
-            ( nohup "$_agbin" models </dev/null >/dev/null 2>&1 & ) >/dev/null 2>&1; _agren=1
-          fi
-        fi
-        if [ -n "$_agout" ]; then printf '%s\n' "$_agout"
-        elif [ -n "$_agtok" ]; then printf '::AGTOKEN_\#(nonce)::\n%s\n%s\n' "$_agtok" "$_agua"
-        elif [ "$_aglocked" = 1 ]; then printf '::AGLOCKED_\#(nonce)::\n'
-        elif [ "$_agfound" = 0 ]; then printf '::AGNONE_\#(nonce)::\n'
-        else printf '::AGERR_\#(nonce)::\n'; fi
-        [ "$_agren" = 1 ] && printf '::AGRENEWED_\#(nonce)::\n'
+          case "$_ag" in
+            *'"buckets"'*) printf '%s\n' "$_ag";;
+            *) if [ "$(uname -s 2>/dev/null)" = Darwin ] && command -v security >/dev/null 2>&1 \
+                  && { security find-generic-password -s gemini -a antigravity -w >/dev/null 2>&1; [ $? = 36 ]; }; then
+                 printf '::AGLOCKED_\#(nonce)::\n'
+               else printf '::AGERR_\#(nonce)::\n'; fi;;
+          esac
+        else printf '::AGNONE_\#(nonce)::\n'; fi
         printf '::AGE_\#(nonce)::\n'
 
         """#
@@ -551,7 +412,6 @@ nonisolated enum AgentUsageProbeCommand {
         var current: AgentUsageProvider?
         var marker: AgentUsageCredentialReadout?
         var payloadLines: [String] = []
-        var tokenLines: [String]?
 
         func close(_ provider: AgentUsageProvider) {
             // A marker beats accumulated payload: a partial `cat` followed by
@@ -588,23 +448,10 @@ nonisolated enum AgentUsageProbeCommand {
                 if current == .omp { close(.omp) }
                 current = nil
             case "::AGB_\(nonce)::":
-                current = .antigravity; marker = nil; payloadLines = []; tokenLines = nil
+                current = .antigravity; marker = nil; payloadLines = []
             case "::AGE_\(nonce)::":
-                if current == .antigravity {
-                    close(.antigravity)
-                    if let tokenLines, tokenLines.count == 2, !tokenLines[0].isEmpty {
-                        result.antigravityToken = AgentUsageAntigravityToken(
-                            accessToken: tokenLines[0], userAgent: tokenLines[1])
-                    }
-                }
+                if current == .antigravity { close(.antigravity) }
                 current = nil
-            case "::AGRENEWED_\(nonce)::":
-                if current == .antigravity { result.antigravityRenewed = true }
-            case "::AGTOKEN_\(nonce)::":
-                if current == .antigravity { tokenLines = [] }
-            case _ where tokenLines.map { $0.count < 2 } == true && current == .antigravity:
-                // The token and user agent, never part of a payload.
-                tokenLines?.append(trimmed)
             case "::CLNONE_\(nonce)::", "::CXNONE_\(nonce)::", "::CPNONE_\(nonce)::",
                  "::OMNONE_\(nonce)::", "::AGNONE_\(nonce)::":
                 if current != nil { marker = .absent }

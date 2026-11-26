@@ -124,67 +124,6 @@ nonisolated enum AgentUsageAPIClient {
         return parsed
     }
 
-    /// Antigravity's three Cloud Code answers, asked in parallel and returned
-    /// as an `::AGPART:` payload for `AgentUsageAntigravityReport`. Each call
-    /// tries the daily host, then production. Throws `.unauthorized` only
-    /// when nothing answered and Google refused the token.
-    static func fetchAntigravityPayload(
-        _ token: AgentUsageAntigravityToken
-    ) async throws -> String {
-        async let summary = antigravityPart("retrieveUserQuotaSummary", token)
-        async let models = antigravityPart("fetchAvailableModels", token)
-        async let plan = antigravityPart("loadCodeAssist", token)
-        let answers = await [("summary", summary), ("models", models), ("plan", plan)]
-
-        let prefix = AgentUsageProbeCommand.antigravityPartPrefix
-        var payload = ""
-        for (name, answer) in answers {
-            if case .body(let body) = answer { payload += "\(prefix)\(name)::\n\(body)\n" }
-        }
-        if !payload.isEmpty { return payload }
-        if answers.contains(where: { $0.1 == .refused }) { throw AgentUsageAPIError.unauthorized }
-        throw AgentUsageAPIError.badResponse
-    }
-
-    private enum AntigravityAnswer: Equatable {
-        case body(String)
-        case refused
-        case failed
-    }
-
-    private static func antigravityPart(
-        _ method: String,
-        _ token: AgentUsageAntigravityToken
-    ) async -> AntigravityAnswer {
-        // Refused only when every host refused: a 403 from one host and no
-        // answer from the other is inconclusive, so it stays retryable.
-        var refusals = 0
-        let hosts = ["daily-cloudcode-pa.googleapis.com", "cloudcode-pa.googleapis.com"]
-        for host in hosts {
-            var request = URLRequest(url: URL(string: "https://\(host)/v1internal:\(method)")!)
-            request.httpMethod = "POST"
-            request.timeoutInterval = 8
-            let trimmed = token.accessToken.trimmingCharacters(in: .whitespacesAndNewlines)
-            request.setValue("Bearer \(trimmed)", forHTTPHeaderField: "Authorization")
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.setValue(token.userAgent, forHTTPHeaderField: "User-Agent")
-            request.httpBody = Data("{}".utf8)
-            guard let reply = try? await perform(request) else { continue }
-            let (data, response) = reply
-            switch response.statusCode {
-            case 200:
-                let body = String(decoding: data, as: UTF8.self)
-                if body.contains("{") { return .body(body) }
-            // 401 is the token everywhere; 403 may be one host or method.
-            case 401: return .refused
-            case 403: refusals += 1
-            default: break
-            }
-        }
-        return refusals == hosts.count ? .refused : .failed
-    }
-
     private static func perform(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         do {
             let (data, response) = try await session.data(for: request)

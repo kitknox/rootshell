@@ -254,21 +254,10 @@ nonisolated enum AgentUsageTuning {
     /// Antigravity's quota is asked on the host each probe, so the probe
     /// cadence is the fetch cadence.
     static let antigravityFetchFloor: TimeInterval = 5 * 60
-    /// Between background `agy models` renewals on one host. It is slow, and
-    /// a renewed sign-in lasts about an hour.
-    static let antigravityRenewalCooldown: TimeInterval = 30 * 60
-    /// Re-probe after a renewal was started, to pick up the new token.
-    static let antigravityRenewalRecheck: TimeInterval = 90
-    /// Antigravity probes run on their own: the desktop scan stops calling
-    /// after 10 s, then a keychain read, plus slack for reads and the link.
+    /// Antigravity probes run on their own: up to two `agy -p /usage` runs
+    /// (direct, then through tmux) at 15 s each, plus slack for the link.
     static let antigravityProbeTimeout: TimeInterval = 40
-    static let antigravityProbeMaxBytes = 1024 * 1024
-    /// After the desktop app answered with nothing usable, how long the probe
-    /// asks Google directly before trying the app again.
-    static let antigravitySkipLocalDuration: TimeInterval = 30 * 60
-    /// How long a Google sign-in read from the host is reused in the app
-    /// before the host is asked again, so an account switch there shows.
-    static let antigravityTokenReuse: TimeInterval = 10 * 60
+    static let antigravityProbeMaxBytes = 256 * 1024
     /// Wait before retrying a probe that found tssh's probe slot occupied.
     static let probeBusyRetry: TimeInterval = 10
     /// The same wait while a manual Refresh is pending.
