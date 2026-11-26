@@ -830,7 +830,6 @@ private struct RemoteCodeTextView: UIViewRepresentable {
             coordinator?.outdentSelection(in: textView)
         }
         coordinator.attach(to: container)
-        coordinator.configureAccessoryBarIfNeeded(on: textView)
         return container
     }
 
@@ -847,9 +846,6 @@ private struct RemoteCodeTextView: UIViewRepresentable {
         textView.onIndent = nil
         textView.onOutdent = nil
         textView.onDidLayoutNonContiguousViewport = nil
-        #if !targetEnvironment(macCatalyst) && !os(visionOS)
-        textView.inputAccessoryView = nil
-        #endif
     }
 
     func updateUIView(_ container: CodeEditorContainerView, context: Context) {
@@ -1281,27 +1277,6 @@ private struct RemoteCodeTextView: UIViewRepresentable {
             }
             storage.endEditing()
             hasAppliedSyntaxColors = !spans.isEmpty
-        }
-
-        func configureAccessoryBarIfNeeded(on textView: UITextView) {
-            #if !targetEnvironment(macCatalyst) && !os(visionOS)
-            guard !KeyboardTracker.shared.isHardwareKeyboard else { return }
-            let bar = CodeEditorAccessoryBar(
-                onInsert: { [weak textView, weak self] symbol in
-                    guard let textView else { return }
-                    if symbol == "\t" {
-                        self?.insertIndentation(in: textView)
-                    } else {
-                        textView.insertText(symbol)
-                    }
-                },
-                onUndo: { [weak textView] in textView?.undoManager?.undo() },
-                onRedo: { [weak textView] in textView?.undoManager?.redo() },
-                onFind: { [weak textView] in textView?.findInteraction?.presentFindNavigator(showingReplace: false) },
-                onDismiss: { [weak textView] in textView?.resignFirstResponder() }
-            )
-            textView.inputAccessoryView = bar
-            #endif
         }
     }
 }
@@ -1978,114 +1953,6 @@ private final class LineNumberGutterView: UIView {
         }
     }
 }
-
-// MARK: - Touch Keyboard Accessory Bar (iOS / iPadOS)
-
-#if !targetEnvironment(macCatalyst) && !os(visionOS)
-private final class CodeEditorAccessoryBar: UIInputView {
-    private let onInsert: (String) -> Void
-    private let onUndo: () -> Void
-    private let onRedo: () -> Void
-    private let onFind: () -> Void
-    private let onDismiss: () -> Void
-
-    init(
-        onInsert: @escaping (String) -> Void,
-        onUndo: @escaping () -> Void,
-        onRedo: @escaping () -> Void,
-        onFind: @escaping () -> Void,
-        onDismiss: @escaping () -> Void
-    ) {
-        self.onInsert = onInsert
-        self.onUndo = onUndo
-        self.onRedo = onRedo
-        self.onFind = onFind
-        self.onDismiss = onDismiss
-        super.init(frame: CGRect(x: 0, y: 0, width: 320, height: 42), inputViewStyle: .keyboard)
-        allowsSelfSizing = true
-        build()
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    private func build() {
-        let scroll = UIScrollView()
-        scroll.showsHorizontalScrollIndicator = false
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-
-        let stack = UIStackView()
-        stack.axis = .horizontal
-        stack.spacing = 6
-        stack.alignment = .center
-        stack.translatesAutoresizingMaskIntoConstraints = false
-
-        let keys: [(title: String, value: String)] = [
-            ("⇥", "\t"), ("{", "{"), ("}", "}"), ("[", "["), ("]", "]"),
-            ("\"", "\""), ("'", "'"), (":", ":"), ("=", "="), ("#", "#"),
-            ("/", "/"), ("-", "-"), ("_", "_"), ("\\", "\\"), ("$", "$"),
-        ]
-        for key in keys {
-            stack.addArrangedSubview(makeKeyButton(title: key.title) { [weak self] in
-                self?.onInsert(key.value)
-            })
-        }
-
-        scroll.addSubview(stack)
-
-        let trailing = UIStackView()
-        trailing.axis = .horizontal
-        trailing.spacing = 4
-        trailing.alignment = .center
-        trailing.translatesAutoresizingMaskIntoConstraints = false
-        trailing.addArrangedSubview(makeIconButton("arrow.uturn.backward") { [weak self] in self?.onUndo() })
-        trailing.addArrangedSubview(makeIconButton("arrow.uturn.forward") { [weak self] in self?.onRedo() })
-        trailing.addArrangedSubview(makeIconButton("magnifyingglass") { [weak self] in self?.onFind() })
-        trailing.addArrangedSubview(makeIconButton("keyboard.chevron.compact.down") { [weak self] in self?.onDismiss() })
-
-        addSubview(scroll)
-        addSubview(trailing)
-
-        NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: 42),
-            scroll.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor, constant: 6),
-            scroll.topAnchor.constraint(equalTo: topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
-            scroll.trailingAnchor.constraint(equalTo: trailing.leadingAnchor, constant: -6),
-
-            stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: scroll.frameLayoutGuide.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: scroll.frameLayoutGuide.bottomAnchor),
-
-            trailing.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -6),
-            trailing.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-    }
-
-    private func makeKeyButton(title: String, action: @escaping () -> Void) -> UIButton {
-        var config = UIButton.Configuration.gray()
-        config.title = title
-        config.baseForegroundColor = .label
-        config.cornerStyle = .medium
-        config.contentInsets = NSDirectionalEdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10)
-        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
-            var out = incoming
-            out.font = .monospacedSystemFont(ofSize: 15, weight: .medium)
-            return out
-        }
-        let button = UIButton(configuration: config, primaryAction: UIAction { _ in action() })
-        return button
-    }
-
-    private func makeIconButton(_ systemName: String, action: @escaping () -> Void) -> UIButton {
-        var config = UIButton.Configuration.plain()
-        config.image = UIImage(systemName: systemName, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium))
-        config.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 6, bottom: 6, trailing: 6)
-        return UIButton(configuration: config, primaryAction: UIAction { _ in action() })
-    }
-}
-#endif
 
 private extension View {
     /// Selected: an accent fill with a hairline edge, so it reads on any theme.
