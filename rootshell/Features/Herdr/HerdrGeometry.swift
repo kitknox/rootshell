@@ -446,4 +446,10 @@ nonisolated struct HerdrActivation {
     mutating func finishPane(_ terminalID: String) {
         pendingPanes.remove(terminalID)
     }
+
+    mutating func cancelTab(_ tabID: String, generation: UUID) {
+        guard self.tabID == tabID, self.generation == generation else { return }
+        needsClaim = false
+        pendingPanes.removeAll()
+    }
 }

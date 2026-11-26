@@ -260,7 +260,7 @@ final class TerminalSurfaceController: NSObject {
         staleFrameContents = nil
         if failOpen {
             Ghostty.logger.warning("First frame poll timed out; treating surface as rendered")
-            if host.surfaceIsTmuxPane {
+            if host.surfaceIsTmuxPane || host.surfaceRequiresHerdrFirstFrameGeometry {
                 host.surfaceFirstFrameDidFailOpen()
             }
         }
@@ -1023,6 +1023,21 @@ extension Ghostty.TerminalView: TerminalSurfaceHost {
     func surfaceControllerDidSetSurface(_ surface: ghostty_surface_t?) {
         self.surface = surface
         self.lastAppliedGhosttyFocus = nil
+        if let surface {
+            let size = ghostty_surface_size(surface)
+            if size.cell_width_px > 0, size.cell_height_px > 0 {
+                let seeded = CGSize(
+                    width: CGFloat(size.cell_width_px),
+                    height: CGFloat(size.cell_height_px)
+                )
+                if self.cellSize != seeded {
+                    self.cellSize = seeded
+                    if isHerdrPane, !usesHerdrFallbackScrolling {
+                        enclosingSplitHost?.herdrSurfaceMetricsDidChange()
+                    }
+                }
+            }
+        }
     }
 
     func surfaceRegisterForScrollbackPersistence() {

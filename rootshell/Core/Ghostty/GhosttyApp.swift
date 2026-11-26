@@ -661,8 +661,17 @@ extension Ghostty {
         }
 
         /// Runs with a foreground tick, where resume already allows action work.
-        /// Any scrollbar that tick reported has already replaced a held one.
+        /// Cell metrics apply before scrollbars so newly created background
+        /// surfaces have non-zero cell heights when sizing their scroll views.
         private func applyHeldScrollbars() {
+            let cellSizes = Self.heldCellSizes.withLock { held in
+                defer { held.removeAll() }
+                return held
+            }
+            for (surfaceId, size) in cellSizes {
+                surfaceDelegates[surfaceId]?.delegate?.handleCellSizeChange(
+                    width: size.width, height: size.height)
+            }
             let scrollbars = Self.heldScrollbars.withLock { held in
                 defer { held.removeAll() }
                 return held
@@ -2171,7 +2180,8 @@ extension Ghostty {
             // Use raw pointer address as key (not ObjectIdentifier which creates new wrapper each time)
             let surfaceId = Int(bitPattern: surface)
             surfaceDelegates[surfaceId] = WeakActionDelegate(delegate: delegate)
-            // A scrollbar held for an earlier surface at this address is not ours.
+            // Metrics held for an earlier surface at this address are not ours.
+            Self.heldCellSizes.withLock { _ = $0.removeValue(forKey: surfaceId) }
             Self.heldScrollbars.withLock { _ = $0.removeValue(forKey: surfaceId) }
         }
 
@@ -2179,6 +2189,8 @@ extension Ghostty {
             // Use raw pointer address as key (not ObjectIdentifier which creates new wrapper each time)
             let surfaceId = Int(bitPattern: surface)
             surfaceDelegates.removeValue(forKey: surfaceId)
+            Self.heldCellSizes.withLock { _ = $0.removeValue(forKey: surfaceId) }
+            Self.heldScrollbars.withLock { _ = $0.removeValue(forKey: surfaceId) }
         }
 
         /// The live `TerminalView` registered as `surface`'s action delegate, or
@@ -2230,6 +2242,11 @@ extension Ghostty {
         /// `applyHeldScrollbars`. Written and drained on the main actor only:
         /// scrollbar actions arrive from `ghostty_app_tick`.
         private nonisolated static let heldScrollbars = OSAllocatedUnfairLock(initialState: [Int: PendingScrollbar]())
+
+        /// Latest cell size per surface reported while backgrounded. Ghostty
+        /// sends `.cell_size` only at surface init and font changes, so dropping
+        /// it while backgrounded leaves `TerminalView.cellSize` at `.zero`.
+        private nonisolated static let heldCellSizes = OSAllocatedUnfairLock(initialState: [Int: CGSize]())
 
         private nonisolated struct PendingScrollbar {
             var total: UInt64
@@ -2902,19 +2919,24 @@ extension Ghostty {
                 return true
 
             case GHOSTTY_ACTION_CELL_SIZE:
-                if isBackgrounded { return true }
                 let cellSize = action.action.cell_size
 
                 // Route to the appropriate surface delegate
                 if target.tag == GHOSTTY_TARGET_SURFACE {
                     let surface = target.target.surface
                     let surfaceId = Int(bitPattern: surface)
+                    let latest = CGSize(width: CGFloat(cellSize.width), height: CGFloat(cellSize.height))
+                    if isBackgrounded {
+                        heldCellSizes.withLock { $0[surfaceId] = latest }
+                        return true
+                    }
+                    heldCellSizes.withLock { _ = $0.removeValue(forKey: surfaceId) }
 
                     Task { @MainActor in
                         if let delegate = appInstance.surfaceDelegates[surfaceId]?.delegate {
                             delegate.handleCellSizeChange(
-                                width: CGFloat(cellSize.width),
-                                height: CGFloat(cellSize.height)
+                                width: latest.width,
+                                height: latest.height
                             )
                         } else {
                             Ghostty.logger.error("No delegate found for cell size action, surfaceId=\(String(format: "0x%lx", surfaceId))")

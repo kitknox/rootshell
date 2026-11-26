@@ -501,6 +501,7 @@ extension HerdrController {
 
     func scheduleGeometryPush(from view: Ghostty.TerminalView) {
         reconcileActivation()
+        defer { reconcileReturnToLive() }
         guard let binding = view.herdrPaneBinding, let tab = tabs[binding.tabId],
               let channel, let size = tabGeometry(from: view) else { return }
         let tabId = binding.tabId
@@ -538,6 +539,7 @@ extension HerdrController {
                 self.keyboardSettledGeometry[tabId] = nil
             }
             var failures = 0
+            var claimAttemptGeneration: UUID?
             var movingSince: ContinuousClock.Instant?
             while !Task.isCancelled, self.streamGeneration == generation,
                   self.channel === channel, self.tabs[tabId] === tab {
@@ -584,7 +586,16 @@ extension HerdrController {
                 let claims = request.claim
                 // Consume intent when sent. Retrying after an ambiguous
                 // response must not take the tab back from a newer owner.
-                if let claim { self.activation.claimed(generation: claim) }
+                if let claim {
+                    if claimAttemptGeneration != claim {
+                        failures = 0
+                    }
+                    claimAttemptGeneration = claim
+                    self.activation.claimed(generation: claim)
+                } else if self.activation.tabID == tabId, !self.activation.needsClaim {
+                    claimAttemptGeneration = self.activation.generation
+                }
+                let attemptActivationGeneration = claimAttemptGeneration
                 var params = HerdrControl.TabGeometryParams(
                     tab_id: tabId, cols: size.cols, rows: size.rows,
                     cell_width_px: size.cellWidth, cell_height_px: size.cellHeight
@@ -613,7 +624,18 @@ extension HerdrController {
                     // A failed background preparation must not require a tab
                     // switch to retry, nor endlessly hammer a rejecting server.
                     failures += 1
-                    guard failures < 3 else { return }
+                    guard failures < 3 else {
+                        if let attemptActivationGeneration {
+                            self.activation.cancelTab(tabId, generation: attemptActivationGeneration)
+                        }
+                        // A newer tab activation arrived while this attempt was
+                        // in flight; let the loop service its fresh claim.
+                        if self.claimGeneration(for: tabId) != nil {
+                            failures = 0
+                            continue
+                        }
+                        return
+                    }
                     do { try await Task.sleep(for: .milliseconds(500)) }
                     catch { return }
                 }
