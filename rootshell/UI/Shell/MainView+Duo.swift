@@ -194,13 +194,19 @@ extension MainView {
 private struct DuoRailOverflowFullScreen: ViewModifier {
     let watches: Bool
     let railFits: Bool
+    /// In the background the rail is laid out for snapshots and shows the
+    /// app's own Live Activity; only its foreground layout counts.
+    @Environment(\.scenePhase) private var scenePhase
     @State private var holds = false
+
+    private var overflowed: Bool { !railFits && scenePhase == .active }
 
     func body(content: Content) -> some View {
         content
-            .task(id: watches && !railFits && !holds) {
-                guard watches, !railFits, !holds else { return }
-                // UIKit moves the button in and out while the rail settles.
+            .task(id: watches && overflowed && !holds) {
+                guard watches, overflowed, !holds else { return }
+                // UIKit moves the button in and out while the rail settles,
+                // including the relayout on becoming active.
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled else { return }
                 setHold(true)
