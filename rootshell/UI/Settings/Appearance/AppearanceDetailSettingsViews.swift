@@ -100,24 +100,8 @@ struct AppearanceModeSettingsView: View {
     var body: some View {
         List {
             Section {
-                ForEach(AppearanceManager.AppearanceMode.allCases, id: \.self) { mode in
-                    Button(action: {
-                        appearanceManager.currentAppearanceMode = mode
-                    }) {
-                        HStack {
-                            Text(mode.displayName)
-                                .foregroundColor(.primary)
-                            Spacer()
-                            if appearanceManager.currentAppearanceMode == mode {
-                                Image(systemName: "checkmark")
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                AppearanceModePickerCard()
                     .themedRow()
-                }
             } footer: {
                 Text("Controls the appearance of the app interface. Terminal themes are configured separately.")
                     .font(.caption)
