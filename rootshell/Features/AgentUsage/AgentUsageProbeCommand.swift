@@ -252,25 +252,32 @@ nonisolated enum AgentUsageProbeCommand {
     /// leaves the host.
     ///
     /// On a Mac, a detached exec channel cannot read agy's keychain sign-in
-    /// (rc 36, as for Claude), so a failed run is retried through the tmux
-    /// server, which runs in the desktop session. When both fail, a
-    /// discarded `-w` read tells a locked keychain apart from other errors.
+    /// (rc 36, as for Claude), and agy then waits a minute on a login prompt
+    /// that `--print-timeout` does not cover. So the keychain is checked
+    /// first (secret discarded) and an unreadable one goes straight to the
+    /// tmux server, which runs in the desktop session. Every run is killed
+    /// after 15 s so a prompt can never hold tssh's probe slot.
     private static func antigravitySection(nonce: String) -> String {
         #"""
 
         printf '::AGB_\#(nonce)::\n'
+        _agwatch() { _agws=$1; shift; "$@" </dev/null 2>/dev/null & _agwp=$!; ( sleep "$_agws"; kill "$_agwp" ) >/dev/null 2>&1 & _agww=$!; wait "$_agwp"; _agwr=$?; kill "$_agww" 2>/dev/null; return "$_agwr"; }
         if _agbin=$(command -v agy 2>/dev/null) && [ -n "$_agbin" ]; then
-          _ag=$("$_agbin" -p /usage --output-format json --print-timeout 15s </dev/null 2>/dev/null)
+          _ag=''; _agrc=0
+          if [ "$(uname -s 2>/dev/null)" = Darwin ] && command -v security >/dev/null 2>&1; then
+            security find-generic-password -s gemini -a antigravity -w >/dev/null 2>&1; _agrc=$?
+          fi
+          if [ "$_agrc" != 36 ]; then
+            _ag=$(_agwatch 15 "$_agbin" -p /usage --output-format json --print-timeout 15s)
+          fi
           case "$_ag" in *'"buckets"'*) ;; *)
-            if [ "$(uname -s 2>/dev/null)" = Darwin ] && command -v tmux >/dev/null 2>&1; then
-              _ag=$(tmux run-shell "'$_agbin' -p /usage --output-format json --print-timeout 15s </dev/null 2>/dev/null" 2>/dev/null)
+            if [ "$_agrc" = 36 ] && command -v tmux >/dev/null 2>&1; then
+              _ag=$(_agwatch 15 tmux run-shell "'$_agbin' -p /usage --output-format json --print-timeout 15s </dev/null 2>/dev/null")
             fi;;
           esac
           case "$_ag" in
             *'"buckets"'*) printf '%s\n' "$_ag";;
-            *) if [ "$(uname -s 2>/dev/null)" = Darwin ] && command -v security >/dev/null 2>&1 \
-                  && { security find-generic-password -s gemini -a antigravity -w >/dev/null 2>&1; [ $? = 36 ]; }; then
-                 printf '::AGLOCKED_\#(nonce)::\n'
+            *) if [ "$_agrc" = 36 ]; then printf '::AGLOCKED_\#(nonce)::\n'
                else printf '::AGERR_\#(nonce)::\n'; fi;;
           esac
         else printf '::AGNONE_\#(nonce)::\n'; fi
