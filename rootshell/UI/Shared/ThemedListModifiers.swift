@@ -43,8 +43,57 @@ struct ThemedSheetContent: ViewModifier {
             .environment(\.sheetThemeColors, themeColors)
             .tint(accentColor)
             .optionalPreferredColorScheme(colorScheme)
+            #if canImport(UIKit)
+            .background {
+                if colorScheme == nil { PresentationStyleOverrideReset() }
+            }
+            #endif
     }
 }
+
+#if canImport(UIKit)
+/// SwiftUI turns a sheet's `preferredColorScheme` into style overrides on the
+/// presented controller and its presentation controller, and leaves both when
+/// the preference goes away, so turning themed UI off kept the theme's scheme.
+/// Clears them so the sheet follows the window's appearance override again.
+private struct PresentationStyleOverrideReset: UIViewRepresentable {
+    func makeUIView(context: Context) -> ResetView {
+        let view = ResetView()
+        view.isHidden = true
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ view: ResetView, context: Context) {}
+
+    final class ResetView: UIView {
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard window != nil else { return }
+            // After the SwiftUI update that dropped the preference.
+            DispatchQueue.main.async { [weak self] in self?.reset() }
+        }
+
+        private func reset() {
+            var responder = next
+            while let current = responder {
+                if let controller = current as? UIViewController,
+                   controller.presentingViewController?.presentedViewController === controller {
+                    if controller.overrideUserInterfaceStyle != .unspecified {
+                        controller.overrideUserInterfaceStyle = .unspecified
+                    }
+                    if let presentation = controller.presentationController,
+                       presentation.traitOverrides.contains(UITraitUserInterfaceStyle.self) {
+                        presentation.traitOverrides.remove(UITraitUserInterfaceStyle.self)
+                    }
+                    return
+                }
+                responder = current.next
+            }
+        }
+    }
+}
+#endif
 
 extension View {
     func themedList() -> some View { modifier(ThemedListStyle()) }

@@ -101,10 +101,13 @@ struct LaunchGate<Content: View>: View {
 }
 
 /// Keeps `AppearanceManager` from being created before the launch is ready.
+/// The mode reaches views only through its window trait override: a root
+/// `preferredColorScheme` is copied into each sheet as it presents and never
+/// updated, so an open sheet kept the previous mode.
 struct AppearanceColorSchemeModifier: ViewModifier {
-    @ObservedObject private var appearance = AppearanceManager.shared
+    private let appearance = AppearanceManager.shared
 
     func body(content: Content) -> some View {
-        content.preferredColorScheme(appearance.colorScheme)
+        content
     }
 }
