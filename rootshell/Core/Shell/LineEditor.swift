@@ -38,21 +38,64 @@ class LineEditor {
         return before + "│" + after  // Using │ to show cursor position
     }
 
-    // MARK: - Display Width
+    // MARK: - Terminal Drawing
 
     // The cursor model above is character-based (correct for editing — moving one
-    // grapheme at a time). The terminal, however, positions the cursor in display
-    // cells: CJK and most emoji occupy 2 cells but count as 1 Character. These
-    // accessors translate the character model into display columns for redrawing.
+    // grapheme at a time). The terminal positions the cursor in display cells:
+    // CJK and most emoji occupy 2 cells but count as 1 Character. Every prompt
+    // that owns a LineEditor draws through here, and the editor remembers what it
+    // drew so the next redraw can rewind to the input's first row at any width.
 
-    /// Display-cell column of the cursor (sum of cell widths of text before it).
-    var cursorColumn: Int { DisplayWidth.width(of: textBeforeCursor) }
+    /// What the last draw left on screen.
+    private(set) var drawn = CursorTracker.DrawnInput()
 
-    /// Total display-cell width of the buffer.
-    var displayWidth: Int { DisplayWidth.width(of: buffer) }
+    private static func measure(_ text: String, prefixWidth: Int, cursorIndex: Int) -> CursorTracker.DrawnInput {
+        CursorTracker.DrawnInput(
+            prefixWidth: prefixWidth,
+            cells: text.map { $0.isNewline ? CursorTracker.lineBreak : DisplayWidth.width(of: $0) },
+            cursorIndex: cursorIndex
+        )
+    }
 
-    /// Display-cell width of the text after the cursor.
-    var widthAfterCursor: Int { DisplayWidth.width(of: textAfterCursor) }
+    /// A bare prompt was printed; the cursor sits right after it.
+    func promptDrawn(prefixWidth: Int) {
+        drawn = CursorTracker.DrawnInput(prefixWidth: prefixWidth)
+    }
+
+    /// Whether the screen shows the current buffer, cursor, and `ghostText`.
+    func isDrawn(ghostText: String = "") -> Bool {
+        Self.measure(buffer + ghostText, prefixWidth: drawn.prefixWidth, cursorIndex: cursorPosition) == drawn
+    }
+
+    /// Buffer, dimmed ghost text, and cursor placement, for a cursor sitting
+    /// right after a prompt of `prefixWidth` cells.
+    func drawTail(prefixWidth: Int, ghostText: String = "", terminalWidth: Int) -> String {
+        drawn = Self.measure(buffer + ghostText, prefixWidth: prefixWidth, cursorIndex: cursorPosition)
+
+        // A recalled multi-line command starts each of its lines at column 0.
+        var out = buffer.replacingOccurrences(of: "\n", with: "\r\n")
+        if !ghostText.isEmpty {
+            out += "\u{1b}[2;90m" + ghostText + "\u{1b}[0m"  // Dim gray, then reset
+        }
+        return out + drawn.layout(terminalWidth: terminalWidth).cursorMove
+    }
+
+    /// Rewinds to the input's first row, clears to the end of the display, and
+    /// draws `prefix` and the input again.
+    func redraw(prefix: String, prefixWidth: Int, ghostText: String = "", terminalWidth: Int) -> String {
+        let rewind = drawn.layout(terminalWidth: terminalWidth).rewind
+        return rewind + "\u{1b}[J" + prefix
+            + drawTail(prefixWidth: prefixWidth, ghostText: ghostText, terminalWidth: terminalWidth)
+    }
+
+    /// Moves the cursor to the last drawn row, so a following newline lands
+    /// below the whole input, and forgets the draw. `drawn` is what was left
+    /// behind on screen.
+    func stepPastDrawn(terminalWidth: Int) -> (sequence: String, drawn: CursorTracker.DrawnInput) {
+        let left = drawn
+        drawn = CursorTracker.DrawnInput()
+        return (left.layout(terminalWidth: terminalWidth).stepPast, left)
+    }
 
     // MARK: - Initialization
 

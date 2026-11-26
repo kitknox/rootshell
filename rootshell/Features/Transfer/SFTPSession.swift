@@ -186,10 +186,6 @@ final class SFTPSession {
     private let promptText = "sftp> "
     /// Current terminal width in columns; updated via `resize(cols:rows:)`.
     private var terminalCols = 80
-    /// Physical cursor row (relative to the input-start row) the last `redrawLine()`
-    /// left the cursor on. Tracked so the next redraw moves up to the input start by
-    /// the exact amount, even when the line wraps across terminal rows.
-    private var renderedCursorRow = 0
 
     // MARK: - Tab Completion State
 
@@ -306,11 +302,9 @@ final class SFTPSession {
 
     /// Update the terminal width used for line-wrap math. The terminal reflows the
     /// in-flight (soft-wrapped) line to the new width and keeps the cursor on its
-    /// glyph, so re-derive the physical cursor row under the new width — otherwise
-    /// the next redraw would move up by a row count computed for the old width.
+    /// glyph; the next redraw lays out what was drawn at this width to find it.
     func resize(cols: UInt16, rows: UInt16) {
         terminalCols = max(1, Int(cols))
-        renderedCursorRow = promptLayout().cursorRow
     }
 
     // MARK: - Input Handling
@@ -596,48 +590,10 @@ final class SFTPSession {
         redrawLine()
     }
 
-    /// Display-cell layout of `promptText + buffer` at the current terminal width.
-    /// All values are in display cells (CJK/emoji occupy 2 columns but 1 Character).
-    /// `cursorRow` is clamped to the last drawn row: at an exact column-width
-    /// boundary the raw row would read one past the content, a position the cursor
-    /// can never actually occupy.
-    private func promptLayout() -> (totalRows: Int, cursorRow: Int, cursorCol: Int) {
-        let promptWidth = DisplayWidth.width(of: promptText)   // "sftp> " = 6 cells
-        let term = max(1, terminalCols)
-        let totalRows = CursorTracker.calculateTotalRows(
-            promptSecondLinePrefix: promptWidth,
-            bufferLength: lineEditor.displayWidth,
-            terminalWidth: term)
-        let (row, col) = CursorTracker.calculateCursorPosition(
-            promptSecondLinePrefix: promptWidth,
-            bufferCursorPosition: lineEditor.cursorColumn,
-            terminalWidth: term)
-        return (totalRows, min(row, totalRows - 1), col)
-    }
+    private var promptWidth: Int { DisplayWidth.width(of: promptText) }   // "sftp> " = 6 cells
 
     private func redrawLine() {
-        let buffer = lineEditor.buffer
-        let layout = promptLayout()
-
-        var out = ""
-        // Move up to the input-start row (the prompt has no info bar above it),
-        // clear the whole input area, then redraw prompt + buffer.
-        if renderedCursorRow > 0 { out += "\u{1b}[\(renderedCursorRow)A" }
-        out += "\r\u{1b}[J"
-        out += promptText + buffer
-
-        // When the cursor is at the end of the buffer, printing already left it in
-        // the right place (including the deferred-wrap state at an exact row
-        // boundary). Repositioning would round-trip through column 0 and misplace
-        // it there. Only reposition for mid-line edits.
-        if lineEditor.widthAfterCursor > 0 {
-            out += CursorTracker.cursorPositionSequence(
-                totalRows: layout.totalRows,
-                targetRow: layout.cursorRow,
-                targetCol: layout.cursorCol)
-        }
-        onOutput?(out)
-        renderedCursorRow = layout.cursorRow
+        onOutput?(lineEditor.redraw(prefix: promptText, prefixWidth: promptWidth, terminalWidth: terminalCols))
     }
 
     // MARK: - Tab Completion
@@ -2229,8 +2185,7 @@ Available commands:
     // MARK: - Prompt
 
     private func displayPrompt() {
-        // A fresh prompt starts a new line with the cursor at the input-start row.
-        renderedCursorRow = 0
+        lineEditor.promptDrawn(prefixWidth: promptWidth)
         onOutput?(promptText)
     }
 }

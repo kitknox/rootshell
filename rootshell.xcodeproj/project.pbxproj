@@ -197,6 +197,7 @@
 		47AF0F1D0000000000000B04 /* rootshell/Features/OpenInFolder/DirectoryListingProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF0F1D0000000000000A04 /* rootshell/Features/OpenInFolder/DirectoryListingProbe.swift */; };
 		47AF0F1D0000000000000B05 /* rootshell/Features/OpenInFolder/DirectoryListingCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF0F1D0000000000000A05 /* rootshell/Features/OpenInFolder/DirectoryListingCache.swift */; };
 		47AF0F1D0000000000000B06 /* rootshell/Features/OpenInFolder/PathCompletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF0F1D0000000000000A06 /* rootshell/Features/OpenInFolder/PathCompletion.swift */; };
+		47AF07890000000000000B01 /* rootshell/Core/Shell/CursorTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF07890000000000000A01 /* rootshell/Core/Shell/CursorTracker.swift */; };
 		47AF0F1D0000000000000B07 /* rootshell/Features/OpenInFolder/OpenInFolderPlacement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF0F1D0000000000000A07 /* rootshell/Features/OpenInFolder/OpenInFolderPlacement.swift */; };
 		47AF0F1D0000000000000B08 /* rootshell/Features/OpenInFolder/OpenInFolderRecents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF0F1D0000000000000A08 /* rootshell/Features/OpenInFolder/OpenInFolderRecents.swift */; };
 		47AF1A7E0000000000000B01 /* rootshell/Core/Networking/Geo/IPAddressExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47AF1A7E0000000000000A01 /* rootshell/Core/Networking/Geo/IPAddressExtractor.swift */; };
@@ -738,6 +739,7 @@
 		47AF0F1D0000000000000A04 /* rootshell/Features/OpenInFolder/DirectoryListingProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/OpenInFolder/DirectoryListingProbe.swift; sourceTree = SOURCE_ROOT; };
 		47AF0F1D0000000000000A05 /* rootshell/Features/OpenInFolder/DirectoryListingCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/OpenInFolder/DirectoryListingCache.swift; sourceTree = SOURCE_ROOT; };
 		47AF0F1D0000000000000A06 /* rootshell/Features/OpenInFolder/PathCompletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/OpenInFolder/PathCompletion.swift; sourceTree = SOURCE_ROOT; };
+		47AF07890000000000000A01 /* rootshell/Core/Shell/CursorTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Shell/CursorTracker.swift; sourceTree = SOURCE_ROOT; };
 		47AF0F1D0000000000000A07 /* rootshell/Features/OpenInFolder/OpenInFolderPlacement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/OpenInFolder/OpenInFolderPlacement.swift; sourceTree = SOURCE_ROOT; };
 		47AF0F1D0000000000000A08 /* rootshell/Features/OpenInFolder/OpenInFolderRecents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Features/OpenInFolder/OpenInFolderRecents.swift; sourceTree = SOURCE_ROOT; };
 		47AF1A7E0000000000000A01 /* rootshell/Core/Networking/Geo/IPAddressExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rootshell/Core/Networking/Geo/IPAddressExtractor.swift; sourceTree = SOURCE_ROOT; };
@@ -1458,6 +1460,7 @@
 				47AF0F1D0000000000000A04 /* rootshell/Features/OpenInFolder/DirectoryListingProbe.swift */,
 				47AF0F1D0000000000000A05 /* rootshell/Features/OpenInFolder/DirectoryListingCache.swift */,
 				47AF0F1D0000000000000A06 /* rootshell/Features/OpenInFolder/PathCompletion.swift */,
+				47AF07890000000000000A01 /* rootshell/Core/Shell/CursorTracker.swift */,
 				47AF0F1D0000000000000A07 /* rootshell/Features/OpenInFolder/OpenInFolderPlacement.swift */,
 				47AF0F1D0000000000000A08 /* rootshell/Features/OpenInFolder/OpenInFolderRecents.swift */,
 				47AF1A7E0000000000000A01 /* rootshell/Core/Networking/Geo/IPAddressExtractor.swift */,
@@ -2527,6 +2530,7 @@
 				47AF0F1D0000000000000B04 /* rootshell/Features/OpenInFolder/DirectoryListingProbe.swift in Sources */,
 				47AF0F1D0000000000000B05 /* rootshell/Features/OpenInFolder/DirectoryListingCache.swift in Sources */,
 				47AF0F1D0000000000000B06 /* rootshell/Features/OpenInFolder/PathCompletion.swift in Sources */,
+				47AF07890000000000000B01 /* rootshell/Core/Shell/CursorTracker.swift in Sources */,
 				47AF0F1D0000000000000B07 /* rootshell/Features/OpenInFolder/OpenInFolderPlacement.swift in Sources */,
 				47AF0F1D0000000000000B08 /* rootshell/Features/OpenInFolder/OpenInFolderRecents.swift in Sources */,
 				47AF1A7E0000000000000B01 /* rootshell/Core/Networking/Geo/IPAddressExtractor.swift in Sources */,

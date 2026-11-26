@@ -598,15 +598,15 @@ struct PromptFormatEvaluator {
             let afterLF = lastLF + 1
             if afterLF < utf8.count {
                 let lastLineBytes = Array(utf8[afterLF...])
-                // Convert back to string to get character count
+                // Convert back to string to measure it in display cells
                 if let lastLine = String(bytes: lastLineBytes, encoding: .utf8) {
-                    return lastLine.count
+                    return DisplayWidth.width(of: lastLine)
                 }
             }
             return 0  // \n is the last byte
         }
         // No line break — entire text is one line
-        return stripped.count
+        return DisplayWidth.width(of: stripped)
     }
 }
 

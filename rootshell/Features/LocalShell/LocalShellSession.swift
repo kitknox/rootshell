@@ -291,6 +291,13 @@ final class LocalShellSession: TerminalSession, EmbeddedConnectionConfigProvidin
     // incomplete input and we show a `> ` continuation prompt.
     var multiLineInputBuffer: String?
 
+    /// What Enter submitted since the prompt, one draw per continuation line.
+    /// The transient prompt takes these and rewinds over their rows, once.
+    var submittedInput: [CursorTracker.DrawnInput] = []
+
+    /// A redraw Task is queued; it reads live editor state, so one covers a burst.
+    var redrawScheduled = false
+
     /// Completion callback for app commands running inside scripts.
     /// Set by bridgeToMainActor(), called when the command finishes (session returns to localShell).
     var scriptCommandCompletion: (() -> Void)?
@@ -965,7 +972,10 @@ final class LocalShellSession: TerminalSession, EmbeddedConnectionConfigProvidin
                     guard let self = self else { return }
                     Self.logger.debug("[Ctrl-C] No command running - resetting prompt")
                     // Show ^C and reset prompt (like bash)
-                    self.onOutput?(self.normalizeLineEndings("^C\n"))
+                    self.clearGhostText()
+                    // The marker goes after the text, not over it
+                    self.lineEditor.moveCursorToEnd()
+                    self.onOutput?(self.stepPastInput().sequence + self.normalizeLineEndings("^C\n"))
                     self.lineEditor.clear()
                     self.historyManager.stopNavigation()
                     self.generalCompletionState = .idle

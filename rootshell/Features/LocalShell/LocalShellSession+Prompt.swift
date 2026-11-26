@@ -102,6 +102,8 @@ extension LocalShellSession {
 
         let prompt = generateFreshPrompt()
 
+        lineEditor.promptDrawn(prefixWidth: prompt.secondLinePrefix)
+
         // Count lines the prompt occupies (for transient prompt replacement later)
         let visibleText = PromptStyle.stripANSI(prompt.text)
         lastPromptLineCount = max(1, visibleText.components(separatedBy: "\n").count)
@@ -125,6 +127,12 @@ extension LocalShellSession {
     /// so cursor is one line below the input line.
     func applyTransientPrompt(command: String) {
         guard shouldUseTransientPrompt() else { return }
+
+        // Only an Enter leaves drawn input to replace. A built-in that submits
+        // again (editrc launching the editor) finds none and keeps what is there.
+        let submitted = submittedInput
+        submittedInput = []
+        guard !submitted.isEmpty else { return }
 
         let currentPath = sessionCurrentDirectory
         let gitInfo = showGitInPrompt ? PromptGitInfo.query(directory: currentPath) : nil
@@ -151,15 +159,10 @@ extension LocalShellSession {
         // Cursor is on a blank line below the input line (handleEnter already output \n).
         // Calculate how many terminal rows to move up to reach the info bar start:
         //   - infoBarLines: logical lines before the input line (lastPromptLineCount - 1)
-        //   - inputRows: terminal rows the input line occupies (prompt prefix + typed text)
+        //   - inputRows: terminal rows the submitted draws occupy at the current width
         //   - +1 for the blank line we're currently on (from handleEnter's \n)
-        let terminalWidth = max(1, Int(pty.windowSize.cols))
-        let promptPrefix = getCurrentPromptResult().secondLinePrefix
-        // Measure in display cells, not characters — a CJK/emoji command wraps to
-        // more rows than its character count suggests, and undercounting here moves
-        // the cursor up too few lines before the clear-to-end-of-screen.
-        let inputCols = promptPrefix + DisplayWidth.width(of: command)
-        let inputRows = max(1, (inputCols + terminalWidth - 1) / terminalWidth)
+        let terminalWidth = Int(pty.windowSize.cols)
+        let inputRows = submitted.reduce(0) { $0 + $1.layout(terminalWidth: terminalWidth).totalRows }
         let infoBarLines = max(0, lastPromptLineCount - 1)  // lines before input line
         let totalRowsUp = infoBarLines + inputRows  // from blank line to info bar start
 
@@ -173,7 +176,7 @@ extension LocalShellSession {
 
         // Write transient prompt + the command the user typed + newline
         output += transient.text
-        output += command
+        output += normalizeLineEndings(command)
         output += "\r\n"
 
         onOutput?(output)

@@ -157,9 +157,16 @@ extension LocalShellSession {
         // Clear ghost text on command submission
         clearGhostText()
 
+        // Before consuming: draws a queued edit and drops the cleared ghost text.
+        let stepPast = stepPastInput()
+        if multiLineInputBuffer == nil {
+            submittedInput = []
+        }
+        submittedInput.append(stepPast.drawn)
+
         let line = lineEditor.consume().trimmingCharacters(in: .whitespaces)
 
-        onOutput?(normalizeLineEndings("\n"))
+        onOutput?(stepPast.sequence + normalizeLineEndings("\n"))
 
         // Multi-line continuation: accumulate into buffer
         if var buffer = multiLineInputBuffer {
@@ -803,7 +810,7 @@ extension LocalShellSession {
         let numCols = max(termWidth / colWidth, 1)
         let numRows = (names.count + numCols - 1) / numCols  // ceil division
 
-        var output = "\r\n"
+        var output = stepPastInput().sequence + "\r\n"
 
         // Column-major order (like ls): items fill down columns first
         for row in 0..<numRows {
@@ -828,9 +835,6 @@ extension LocalShellSession {
 
     /// Redraw the prompt and current buffer after printing match list
     private func displayPromptAndBuffer() {
-        let buffer = lineEditor.buffer
-        let terminalWidth = Int(pty.windowSize.cols)
-
         let prompt = getCurrentPromptResult()
 
         // Right prompt ANSI sequence (cursor-positioned on info bar)
@@ -848,38 +852,7 @@ extension LocalShellSession {
             }
         }
 
-        if prompt.secondLinePrefix > 0, useStarshipPrompt || PromptConfigManager.shared.hasConfigFile() {
-            var out = prompt.text + rightPromptSeq
-
-            if !buffer.isEmpty {
-                let prefixWidth = prompt.secondLinePrefix
-                let totalRows = CursorTracker.calculateTotalRows(
-                    promptSecondLinePrefix: prefixWidth,
-                    bufferLength: lineEditor.displayWidth,
-                    terminalWidth: terminalWidth
-                )
-                let (targetRow, targetCol) = CursorTracker.calculateCursorPosition(
-                    promptSecondLinePrefix: prefixWidth,
-                    bufferCursorPosition: lineEditor.cursorColumn,
-                    terminalWidth: terminalWidth
-                )
-                let cursorMove = CursorTracker.cursorPositionSequence(
-                    totalRows: totalRows,
-                    targetRow: targetRow,
-                    targetCol: targetCol
-                )
-                out += buffer + cursorMove
-            }
-            onOutput?(out)
-        } else {
-            var out = prompt.text
-            if !buffer.isEmpty {
-                let cursorOffset = lineEditor.widthAfterCursor
-                let cursorMove = cursorOffset > 0 ? "\u{1b}[\(cursorOffset)D" : ""
-                out += buffer + cursorMove
-            }
-            onOutput?(out)
-        }
+        onOutput?(prompt.text + rightPromptSeq + inputTail(prefixWidth: prompt.secondLinePrefix))
     }
 
     private func handleBackspace() {
@@ -999,44 +972,9 @@ extension LocalShellSession {
                 self.onOutput?("\r\n")
             }
 
-            let isMultiLine = prompt.secondLinePrefix > 0 && (self.useStarshipPrompt || PromptConfigManager.shared.hasConfigFile())
-
-            if prompt.rightPromptWidth > 0 {
-                self.onOutput?(self.renderPromptWithRightAlign(prompt))
-            } else {
-                self.onOutput?(prompt.text)
-            }
-
-            // Render existing buffer content with cursor positioning
-            if !self.lineEditor.buffer.isEmpty {
-                let buffer = self.lineEditor.buffer
-
-                if isMultiLine {
-                    let terminalWidth = Int(self.pty.windowSize.cols)
-                    let prefixWidth = prompt.secondLinePrefix
-
-                    let totalRows = CursorTracker.calculateTotalRows(
-                        promptSecondLinePrefix: prefixWidth,
-                        bufferLength: self.lineEditor.displayWidth,
-                        terminalWidth: terminalWidth
-                    )
-                    let (targetRow, targetCol) = CursorTracker.calculateCursorPosition(
-                        promptSecondLinePrefix: prefixWidth,
-                        bufferCursorPosition: self.lineEditor.cursorColumn,
-                        terminalWidth: terminalWidth
-                    )
-                    let cursorMove = CursorTracker.cursorPositionSequence(
-                        totalRows: totalRows,
-                        targetRow: targetRow,
-                        targetCol: targetCol
-                    )
-                    self.onOutput?(buffer + cursorMove)
-                } else {
-                    let cursorOffset = self.lineEditor.widthAfterCursor
-                    let cursorMove = cursorOffset > 0 ? "\u{1b}[\(cursorOffset)D" : ""
-                    self.onOutput?(buffer + cursorMove)
-                }
-            }
+            // Prompt, then the existing buffer with cursor positioning
+            let promptText = prompt.rightPromptWidth > 0 ? self.renderPromptWithRightAlign(prompt) : prompt.text
+            self.onOutput?(promptText + self.inputTail(prefixWidth: prompt.secondLinePrefix))
         }
     }
 
@@ -1139,86 +1077,67 @@ extension LocalShellSession {
         redrawLine()
     }
 
-    /// Redraw the current line (clears and reprints with cursor position)
+    // MARK: - Wrapped Input Drawing
+
+    private var terminalWidth: Int { Int(pty.windowSize.cols) }
+
+    /// Ghost text as drawn: the continuation prompt shows none.
+    private var drawnGhostText: String { multiLineInputBuffer == nil ? currentGhostText : "" }
+
+    /// Prompt text and display width on the input line: the continuation prompt,
+    /// or what follows the cached prompt's last line break (never the info bar).
+    private func inputPrefix() -> (text: String, width: Int) {
+        if multiLineInputBuffer != nil {
+            return ("> ", 2)
+        }
+        let prompt = getCurrentPromptResult()
+        if let lastCRLF = prompt.text.range(of: "\r\n", options: .backwards) {
+            return (String(prompt.text[lastCRLF.upperBound...]), prompt.secondLinePrefix)
+        }
+        return (prompt.text, prompt.secondLinePrefix)
+    }
+
+    /// Buffer, ghost text, and cursor placement after a freshly printed prompt.
+    /// Any queued redraw is satisfied by this draw, and continuation lines
+    /// submitted above the fresh prompt no longer sit next to the input.
+    private func inputTail(prefixWidth: Int) -> String {
+        redrawScheduled = false
+        submittedInput = []
+        return lineEditor.drawTail(prefixWidth: prefixWidth, ghostText: drawnGhostText, terminalWidth: terminalWidth)
+    }
+
+    /// Redraws the input line(s) in place, now.
+    private func drawInput() {
+        redrawScheduled = false
+        let prefix = inputPrefix()
+        onOutput?(lineEditor.redraw(
+            prefix: prefix.text,
+            prefixWidth: prefix.width,
+            ghostText: drawnGhostText,
+            terminalWidth: terminalWidth
+        ))
+    }
+
+    /// Brings the screen up to date (a queued redraw, ghost text just cleared),
+    /// then moves the cursor to the last input row so a following newline lands
+    /// below the whole input. Call before consuming the buffer.
+    func stepPastInput() -> (sequence: String, drawn: CursorTracker.DrawnInput) {
+        if redrawScheduled || !lineEditor.isDrawn(ghostText: drawnGhostText) {
+            drawInput()
+        }
+        return lineEditor.stepPastDrawn(terminalWidth: terminalWidth)
+    }
+
+    /// Redraw the input line(s) in place. Coalesced: the Task reads live editor
+    /// state, so one redraw covers a burst of edits such as a paste.
     func redrawLine() {
+        guard !redrawScheduled else { return }
+        redrawScheduled = true
+
         Task { @MainActor [weak self] in
-            guard let self = self else { return }
-
-            let buffer = self.lineEditor.buffer
-            let terminalWidth = Int(self.pty.windowSize.cols)
-            let ghostText = self.currentGhostText
-
-            // ANSI codes for ghost text styling (dim gray)
-            let ghostStart = "\u{1b}[2;90m"  // Dim + Gray foreground
-            let ghostEnd = "\u{1b}[0m"       // Reset all attributes
-
-            // In multi-line input mode, use simple "> " continuation prompt
-            if self.multiLineInputBuffer != nil {
-                let clearLine = "\r\u{1b}[K"
-                let totalAfterCursor = self.lineEditor.widthAfterCursor
-                let cursorMove = totalAfterCursor > 0 ? "\u{1b}[\(totalAfterCursor)D" : ""
-                self.onOutput?(clearLine + "> " + buffer + cursorMove)
-                return
-            }
-
-            let prompt = self.getCurrentPromptResult()
-            let isMultiLine = prompt.secondLinePrefix > 0 && (self.useStarshipPrompt || PromptConfigManager.shared.hasConfigFile())
-
-            if isMultiLine {
-                let prefixWidth = prompt.secondLinePrefix
-
-                // Calculate total rows that input line(s) will occupy (include ghost text width).
-                // Measured in display cells, not characters — CJK/emoji occupy 2 cells.
-                let totalContentLength = self.lineEditor.displayWidth + DisplayWidth.width(of: ghostText)
-                let totalRows = CursorTracker.calculateTotalRows(
-                    promptSecondLinePrefix: prefixWidth,
-                    bufferLength: totalContentLength,
-                    terminalWidth: terminalWidth
-                )
-
-                // Calculate cursor target position in row/col (cursor is at buffer position, not ghost text)
-                let (targetRow, targetCol) = CursorTracker.calculateCursorPosition(
-                    promptSecondLinePrefix: prefixWidth,
-                    bufferCursorPosition: self.lineEditor.cursorColumn,
-                    terminalWidth: terminalWidth
-                )
-
-                // Generate cursor positioning sequence
-                let cursorMove = CursorTracker.cursorPositionSequence(
-                    totalRows: totalRows,
-                    targetRow: targetRow,
-                    targetCol: targetCol
-                )
-
-                // Extract just the input line prefix (chevron + space) from prompt.text.
-                // This is everything after the last \r\n — avoids redrawing the info bar.
-                let inputPrefix: String
-                if let lastCRLF = prompt.text.range(of: "\r\n", options: .backwards) {
-                    inputPrefix = String(prompt.text[lastCRLF.upperBound...])
-                } else {
-                    inputPrefix = prompt.text
-                }
-
-                // Move up to start of input area (not info bar), clear from there
-                let cursorRow = targetRow
-                var moveToInputStart = ""
-                if cursorRow > 0 {
-                    moveToInputStart = "\u{1b}[\(cursorRow)A"
-                }
-                let clearToEnd = "\r\u{1b}[J"  // CR + Erase from cursor to end of display
-
-                // Build output with ghost text after buffer
-                let ghostTextDisplay = ghostText.isEmpty ? "" : ghostStart + ghostText + ghostEnd
-                self.onOutput?(moveToInputStart + clearToEnd + inputPrefix + buffer + ghostTextDisplay + cursorMove)
-            } else {
-                // Simple single-line prompt - original behavior
-                let clearLine = "\r\u{1b}[K"
-                // Ghost text width affects cursor offset calculation (display cells, not chars)
-                let ghostTextDisplay = ghostText.isEmpty ? "" : ghostStart + ghostText + ghostEnd
-                let totalAfterCursor = self.lineEditor.widthAfterCursor + DisplayWidth.width(of: ghostText)
-                let cursorMove = totalAfterCursor > 0 ? "\u{1b}[\(totalAfterCursor)D" : ""
-                self.onOutput?(clearLine + prompt.text + buffer + ghostTextDisplay + cursorMove)
-            }
+            // Nothing to do if a draw in the meantime already covered it
+            guard let self = self, self.redrawScheduled else { return }
+            self.drawInput()
         }
     }
 
