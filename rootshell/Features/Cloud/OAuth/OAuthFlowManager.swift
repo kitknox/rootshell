@@ -211,13 +211,17 @@ class OAuthFlowManager: ObservableObject {
         statusMessage = "Starting callback server..."
         Self.logger.info("Starting callback server on port \(config.redirectPort) with redirect scheme: \(Self.callbackURLScheme)")
 
-        let server = OAuthCallbackServer(port: config.redirectPort, redirectURLScheme: Self.callbackURLScheme)
+        let server = OAuthCallbackServer(
+            port: config.redirectPort,
+            expectedState: pkce.state,
+            redirectURLScheme: Self.callbackURLScheme
+        )
         callbackServer = server
 
         // Start the server listening task (it handles the redirect, but we get the result from ASWebAuthenticationSession)
         let serverTask = Task<OAuthCallbackServer.OAuthCallback, Error> {
             Self.logger.info("Server waiting for OAuth callback...")
-            return try await server.waitForCallback(expectedState: pkce.state)
+            return try await server.waitForCallback()
         }
 
         // Give the server a moment to start listening
@@ -239,10 +243,11 @@ class OAuthFlowManager: ObservableObject {
             )
             Self.logger.info("Received callback URL from ASWebAuthenticationSession")
         } catch let error as ASWebAuthSessionProvider.SessionError where error == .userCancelled {
-            serverTask.cancel()
+            // Cancelling the task alone leaves the listener up until its timeout.
+            await server.stop()
             throw OAuthError.cancelled
         } catch {
-            serverTask.cancel()
+            await server.stop()
             Self.logger.error("ASWebAuthenticationSession error: \(error.localizedDescription)")
             throw OAuthError.serverError(error)
         }
@@ -256,9 +261,9 @@ class OAuthFlowManager: ObservableObject {
             throw OAuthError.invalidCallbackURL
         }
 
-        // Validate state matches PKCE state
-        if let receivedState = params.state, receivedState != pkce.state {
-            Self.logger.error("State mismatch: expected \(pkce.state), got \(receivedState)")
+        // Validate state matches PKCE state; a missing state is a mismatch too
+        guard params.state == pkce.state else {
+            Self.logger.error("State mismatch: expected \(pkce.state), got \(params.state ?? "nil")")
             throw OAuthError.invalidCallbackURL
         }
 
@@ -334,11 +339,15 @@ class OAuthFlowManager: ObservableObject {
         statusMessage = "Starting callback server..."
         Self.logger.info("Starting callback server on port \(config.redirectPort) with redirect scheme: \(Self.callbackURLScheme)")
 
-        let server = OAuthCallbackServer(port: config.redirectPort, redirectURLScheme: Self.callbackURLScheme)
+        let server = OAuthCallbackServer(
+            port: config.redirectPort,
+            expectedState: pkce.state,
+            redirectURLScheme: Self.callbackURLScheme
+        )
         callbackServer = server
 
         let serverTask = Task<OAuthCallbackServer.OAuthCallback, Error> {
-            return try await server.waitForCallback(expectedState: pkce.state)
+            return try await server.waitForCallback()
         }
 
         // Give the server a moment to start
@@ -358,10 +367,11 @@ class OAuthFlowManager: ObservableObject {
                 callbackURLScheme: Self.callbackURLScheme
             )
         } catch let error as ASWebAuthSessionProvider.SessionError where error == .userCancelled {
-            serverTask.cancel()
+            // Cancelling the task alone leaves the listener up until its timeout.
+            await server.stop()
             throw OAuthError.cancelled
         } catch {
-            serverTask.cancel()
+            await server.stop()
             Self.logger.error("ASWebAuthenticationSession error: \(error.localizedDescription)")
             throw OAuthError.serverError(error)
         }
@@ -374,9 +384,9 @@ class OAuthFlowManager: ObservableObject {
             throw OAuthError.invalidCallbackURL
         }
 
-        // Validate state matches PKCE state
-        if let receivedState = params.state, receivedState != pkce.state {
-            Self.logger.error("State mismatch: expected \(pkce.state), got \(receivedState)")
+        // Validate state matches PKCE state; a missing state is a mismatch too
+        guard params.state == pkce.state else {
+            Self.logger.error("State mismatch: expected \(pkce.state), got \(params.state ?? "nil")")
             throw OAuthError.invalidCallbackURL
         }
 
@@ -612,12 +622,14 @@ extension Data {
     }
 }
 
-private extension Dictionary where Key == String, Value == String {
-    /// Percent-encode dictionary for application/x-www-form-urlencoded
-    func percentEncoded() -> Data {
-        map { key, value in
-            let encodedKey = key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? key
-            let encodedValue = value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
+extension Dictionary where Key == String, Value == String {
+    /// application/x-www-form-urlencoded body. Only ASCII unreserved characters
+    /// pass unescaped, so `&`, `=` and `+` inside a value survive.
+    nonisolated func percentEncoded() -> Data {
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        return map { key, value in
+            let encodedKey = key.addingPercentEncoding(withAllowedCharacters: allowed) ?? key
+            let encodedValue = value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
             return "\(encodedKey)=\(encodedValue)"
         }
         .joined(separator: "&")

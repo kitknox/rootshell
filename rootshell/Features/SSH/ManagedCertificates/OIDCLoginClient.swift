@@ -124,6 +124,7 @@ final class OIDCLoginClient {
         for port in redirect.ports {
             let server = OAuthCallbackServer(
                 port: port,
+                expectedState: state,
                 redirectURLScheme: "rootshell",
                 callbackPath: redirect.handlerPath
             )
@@ -170,8 +171,7 @@ final class OIDCLoginClient {
         do {
             let code = try await runBrowserFlow(
                 server: server,
-                authorizationURL: authorizationURL,
-                expectedState: state
+                authorizationURL: authorizationURL
             )
             return try await exchangeCode(
                 code: code,
@@ -233,10 +233,9 @@ final class OIDCLoginClient {
     /// server's parse (it validated state already).
     private func runBrowserFlow(
         server: OAuthCallbackServer,
-        authorizationURL: URL,
-        expectedState: String
+        authorizationURL: URL
     ) async throws -> String {
-        async let callbackTask = server.waitForCallback(expectedState: expectedState)
+        async let callbackTask = server.waitForCallback()
 
         do {
             _ = try await webAuthProvider.startSession(
@@ -297,15 +296,7 @@ final class OIDCLoginClient {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = body
-            .map { key, value in
-                let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
-                let encodedKey = key.addingPercentEncoding(withAllowedCharacters: allowed) ?? key
-                let encodedValue = value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
-                return "\(encodedKey)=\(encodedValue)"
-            }
-            .joined(separator: "&")
-            .data(using: .utf8)
+        request.httpBody = body.percentEncoded()
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {

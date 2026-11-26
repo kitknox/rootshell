@@ -50,7 +50,8 @@ actor OAuthCallbackServer {
     private var listener: NWListener?
     private var continuation: CheckedContinuation<OAuthCallback, Error>?
     private var startContinuation: CheckedContinuation<Void, Error>?
-    private var expectedState: String?
+    /// Known before the listener binds, so no request is ever accepted unchecked.
+    private let expectedState: String
     private var port: UInt16
     private var timeoutTask: Task<Void, Never>?
 
@@ -72,11 +73,19 @@ actor OAuthCallbackServer {
     /// Initialize the callback server
     /// - Parameters:
     ///   - port: The port to listen on
+    ///   - expectedState: The OAuth `state` sent in the authorization request.
+    ///     Requests that don't echo it, including `error` callbacks, are rejected.
     ///   - redirectURLScheme: Optional URL scheme for redirect mode (e.g., "rootshell").
     ///     When set, server redirects to `scheme://oauth/callback?code=...` instead of showing HTML.
     ///   - callbackPath: HTTP path to accept the provider redirect on.
-    init(port: UInt16, redirectURLScheme: String? = nil, callbackPath: String = "/oauth/callback") {
+    init(
+        port: UInt16,
+        expectedState: String,
+        redirectURLScheme: String? = nil,
+        callbackPath: String = "/oauth/callback"
+    ) {
         self.port = port
+        self.expectedState = expectedState
         self.redirectURLScheme = redirectURLScheme
         self.callbackPath = callbackPath
     }
@@ -133,17 +142,14 @@ actor OAuthCallbackServer {
     }
 
     /// Wait for the OAuth callback, starting the server first if needed.
-    /// - Parameter expectedState: The state parameter to validate (from PKCE)
     /// - Returns: The OAuth callback containing the authorization code
-    func waitForCallback(expectedState: String?) async throws -> OAuthCallback {
+    func waitForCallback() async throws -> OAuthCallback {
         if listener == nil {
             try await start()
         }
         guard continuation == nil else {
             throw ServerError.alreadyRunning
         }
-
-        self.expectedState = expectedState
 
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
@@ -287,6 +293,15 @@ actor OAuthCallbackServer {
             }
         }
 
+        // Any local page can hit this port; only the provider knows the state.
+        // A mismatch keeps listening so the real callback can still arrive.
+        let state = params["state"]
+        guard state == expectedState else {
+            Self.logger.error("State mismatch in callback")
+            sendResponse(to: connection, status: "400 Bad Request", body: errorHTML("Invalid state parameter"))
+            return
+        }
+
         // Check for error response
         if let error = params["error"] {
             let description = params["error_description"] ?? error
@@ -294,9 +309,10 @@ actor OAuthCallbackServer {
 
             if let scheme = redirectURLScheme {
                 // Redirect mode: pass error to ASWebAuthenticationSession
-                let encodedError = error.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? error
-                let encodedDesc = description.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? description
-                let redirectURL = "\(scheme)://oauth/callback?error=\(encodedError)&error_description=\(encodedDesc)"
+                let redirectURL = callbackRedirectURL(scheme: scheme, items: [
+                    URLQueryItem(name: "error", value: error),
+                    URLQueryItem(name: "error_description", value: description),
+                ])
                 sendRedirect(to: connection, location: redirectURL)
             } else {
                 sendResponse(to: connection, status: "200 OK", body: errorHTML(description))
@@ -317,28 +333,15 @@ actor OAuthCallbackServer {
             return
         }
 
-        let state = params["state"]
-
-        // Validate state if expected
-        if let expectedState = expectedState {
-            guard state == expectedState else {
-                Self.logger.error("State mismatch: expected \(expectedState), got \(state ?? "nil")")
-                sendResponse(to: connection, status: "400 Bad Request", body: errorHTML("Invalid state parameter"))
-                return
-            }
-        }
-
         Self.logger.info("OAuth callback received successfully")
 
         // Send response based on mode
         if let scheme = redirectURLScheme {
             // Redirect mode: pass code/state to ASWebAuthenticationSession
-            let encodedCode = code.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? code
-            var redirectURL = "\(scheme)://oauth/callback?code=\(encodedCode)"
-            if let state = state {
-                let encodedState = state.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? state
-                redirectURL += "&state=\(encodedState)"
-            }
+            let redirectURL = callbackRedirectURL(scheme: scheme, items: [
+                URLQueryItem(name: "code", value: code),
+                URLQueryItem(name: "state", value: state),
+            ])
             sendRedirect(to: connection, location: redirectURL)
         } else {
             // Legacy mode: show success HTML
@@ -392,6 +395,16 @@ actor OAuthCallbackServer {
             }
             connection.cancel()
         })
+    }
+
+    /// URLComponents encodes `&` and `=` inside values, so a value can't add parameters.
+    private func callbackRedirectURL(scheme: String, items: [URLQueryItem]) -> String {
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = "oauth"
+        components.path = "/callback"
+        components.queryItems = items
+        return components.string ?? "\(scheme)://oauth/callback"
     }
 
     private func stopAfterResponse() {
@@ -471,6 +484,23 @@ actor OAuthCallbackServer {
         """
     }
 
+    /// Per scalar: a grapheme cluster can fuse `<` with a preceding prepend mark.
+    private nonisolated static func htmlEscaped(_ text: String) -> String {
+        var escaped = ""
+        escaped.reserveCapacity(text.unicodeScalars.count)
+        for scalar in text.unicodeScalars {
+            switch scalar {
+            case "&": escaped += "&amp;"
+            case "<": escaped += "&lt;"
+            case ">": escaped += "&gt;"
+            case "\"": escaped += "&quot;"
+            case "'": escaped += "&#39;"
+            default: escaped.unicodeScalars.append(scalar)
+            }
+        }
+        return escaped
+    }
+
     private func errorHTML(_ message: String) -> String {
         """
         <!DOCTYPE html>
@@ -534,7 +564,7 @@ actor OAuthCallbackServer {
                 <div class="error-icon"></div>
                 <h1>Authorization Failed</h1>
                 <p>Something went wrong during authorization.</p>
-                <div class="error-message">\(message)</div>
+                <div class="error-message">\(Self.htmlEscaped(message))</div>
             </div>
         </body>
         </html>
