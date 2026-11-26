@@ -51,6 +51,8 @@ struct MainView: View {
     /// Flips to replace the Duo rail's tab item; see `noteDuoTabButtonMounted`.
     @State var duoTabItemGeneration = 0
     @State var duoTabButtonMounts = 0
+    /// Rail tab buttons whose UIKit host is on screen; see `DuoRailPresenceProbe`.
+    @State var duoTabButtonsInRail = 0
     @EnvironmentObject var ghosttyApp: Ghostty.App
     @Environment(\.openWindow) var openWindow
     @Environment(\.dismissWindow) var dismissWindow

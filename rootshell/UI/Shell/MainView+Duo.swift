@@ -73,6 +73,10 @@ extension MainView {
         #if !targetEnvironment(macCatalyst) && !os(visionOS)
         if #available(iOS 27.1, *) {
             content
+                .modifier(DuoRailOverflowFullScreen(
+                    watches: duoLayout.hasHinge && duoLayout.isFrontDisplay && showsDuoSideRail,
+                    railFits: duoTabButtonsInRail > 0 || tabsModel.selectedTab == nil
+                ))
                 .toolbarVisibility(showsDuoSideRail ? .visible : .hidden, for: .navigationBar)
                 .toolbar {
                     if showsDuoSideRail {
@@ -150,7 +154,10 @@ extension MainView {
                         if let position = tabsModel.index(of: tab.id) { requestUserCloseTab(at: position) }
                     },
                     onManage: { showingTabSwitcher = true },
-                    onMountChange: noteDuoTabButtonMounted
+                    onMountChange: noteDuoTabButtonMounted,
+                    onRailPresenceChange: { inRail in
+                        duoTabButtonsInRail = max(0, duoTabButtonsInRail + (inRail ? 1 : -1))
+                    }
                 )
             } else {
                 Button("Tabs", systemImage: "square.on.square") {
@@ -179,12 +186,53 @@ extension MainView {
     }
 }
 
+#if !targetEnvironment(macCatalyst) && !os(visionOS)
+/// The front rail shares its column with the clock and Live Activities and
+/// ends above the keyboard. When the tab button is pushed into "…", hide the
+/// status bar until the input view goes away: the regained room brings the
+/// button back, so its presence can't end the hold.
+private struct DuoRailOverflowFullScreen: ViewModifier {
+    let watches: Bool
+    let railFits: Bool
+    @State private var holds = false
+
+    func body(content: Content) -> some View {
+        content
+            .task(id: watches && !railFits && !holds) {
+                guard watches, !railFits, !holds else { return }
+                // UIKit moves the button in and out while the rail settles.
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
+                setHold(true)
+            }
+            .onChange(of: watches) { _, watches in
+                if !watches { setHold(false) }
+            }
+            .onChange(of: KeyboardTracker.shared.isAnyInputViewPresented) { _, presented in
+                if !presented { setHold(false) }
+            }
+            .onDisappear { setHold(false) }
+    }
+
+    private func setHold(_ value: Bool) {
+        guard value != holds else { return }
+        holds = value
+        if value {
+            ImmersiveChromeManager.shared.beginTransientImmersion()
+        } else {
+            ImmersiveChromeManager.shared.endTransientImmersion()
+        }
+    }
+}
+#endif
+
 private struct DuoTabButton: View {
     let terminal: Ghostty.TerminalView?
     let number: Int
     let onClose: () -> Void
     let onManage: () -> Void
     let onMountChange: (Bool) -> Void
+    let onRailPresenceChange: (Bool) -> Void
 
     var body: some View {
         Button(action: onManage) {
@@ -200,6 +248,7 @@ private struct DuoTabButton: View {
                     }
                 }
         }
+        .background(DuoRailPresenceProbe(onChange: onRailPresenceChange))
         .onAppear { onMountChange(true) }
         .onDisappear { onMountChange(false) }
         .accessibilityLabel("Tab \(number)")
@@ -207,6 +256,34 @@ private struct DuoTabButton: View {
         .contextMenu {
             Button("Close Tab", systemImage: "xmark", action: onClose)
             Button("Manage Tabs", systemImage: "square.on.square", action: onManage)
+        }
+    }
+}
+
+/// An item UIKit moves into the rail's "…" menu stays mounted in SwiftUI, but
+/// its UIKit host leaves the window. Reports each change of that.
+private struct DuoRailPresenceProbe: UIViewRepresentable {
+    let onChange: (Bool) -> Void
+
+    func makeUIView(context: Context) -> ProbeView { ProbeView() }
+    func updateUIView(_ view: ProbeView, context: Context) { view.onChange = onChange }
+    static func dismantleUIView(_ view: ProbeView, coordinator: ()) { view.report(false) }
+
+    final class ProbeView: UIView {
+        var onChange: ((Bool) -> Void)?
+        private var inWindow = false
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            report(window != nil)
+        }
+
+        func report(_ value: Bool) {
+            guard value != inWindow else { return }
+            inWindow = value
+            let onChange = onChange
+            // UIKit moves bar items during layout; never mutate SwiftUI state there.
+            Task { @MainActor in onChange?(value) }
         }
     }
 }
