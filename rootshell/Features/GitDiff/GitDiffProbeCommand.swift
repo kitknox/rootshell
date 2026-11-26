@@ -6,6 +6,8 @@
 //  connection: repository facts, a change stamp, per-file counts and,
 //  when asked, the patch. It never writes to the repository and takes no
 //  index lock, so it is safe to run beside an agent's own git commands.
+//  It runs on any directory the pane enters, so it never runs a command a
+//  repository's config names: no fsmonitor, hooks, filters, textconv or fetch.
 //
 
 import Foundation
@@ -43,6 +45,9 @@ nonisolated enum GitDiffProbeCommand {
     static let untrackedByteLimit = 1_048_576
     /// New files whose patch is fetched; the rest show counts only.
     static let untrackedPatchLimit = 150
+    /// Every git call carries these. An empty fsmonitor disables it on every
+    /// version; before 2.36 `false` would run a program by that name.
+    static let hardenedOptions = "--no-pager -c core.quotePath=false -c core.fsmonitor= -c core.hooksPath=/dev/null -c protocol.allow=never"
 
     /// Builds the script.
     /// - Parameters:
@@ -62,13 +67,30 @@ nonisolated enum GitDiffProbeCommand {
         var s = pathPrefix
         // Citadel fails the whole reply if anything reaches stderr.
         s += "exec 2>/dev/null; "
-        s += "export GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; "
+        // An empty allow list beats any `protocol.<name>.allow` in repository
+        // config, so a git without GIT_NO_LAZY_FETCH still cannot fetch.
+        s += "export GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0 GIT_NO_LAZY_FETCH=1 GIT_ALLOW_PROTOCOL=; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; "
         s += "_d=\(quote(request.directory ?? "")); "
         if let paneDirectoryScript {
             // A reported directory can be stale, or belong to another host.
             s += "if [ -z \"$_d\" ] || [ ! -d \"$_d\" ]; then\(paneDirectoryScript) fi; "
         }
-        s += "_g() { git -c core.quotePath=false \"$@\"; }; "
+        s += "_go='\(hardenedOptions)'; _g() { eval \"git $_go \\\"\\$@\\\"\"; }; "
+        // Blanks every filter driver the repository's config defines; which
+        // one runs is the repository's choice. `-c` splits at the first `=`,
+        // so a name holding one cannot be blanked and fails the probe. Names
+        // are raw bytes, hence LC_ALL=C; a key that does not parse, or a
+        // stage that fails, also fails the probe rather than skip a driver.
+        let failure = "::GDX_\(nonce)::"
+        s += "_hf() { _fk=$({ _g config -z --name-only --get-regexp '^filter\\.' || [ $? -eq 1 ] || printf '\\0%s\\0' '\(failure)'; }"
+        s += " | { LC_ALL=C tr '\\0' '\\n' || printf '%s\\n' '\(failure)'; }); "
+        s += "case \"$_fk\" in *'\(failure)'*) return 1;; esac; "
+        s += "_fn=$(printf '%s\\n' \"$_fk\" | { LC_ALL=C sed -e '/^$/d' -e '/^filter\\.[^.]*$/d' -e 's/^filter\\.\\(.*\\)\\.[^.]*$/\\1/' -e t -e 's/.*/=/' || echo =; }"
+        s += " | LC_ALL=C sort -u) || return 1; "
+        s += "case \"$_fn\" in *=*|*\"'\"*) return 1;; esac; "
+        s += "_fo=$(printf '%s\\n' \"$_fn\" | { LC_ALL=C sed \"s/.*/ -c 'filter.&.clean=' -c 'filter.&.process=' -c 'filter.&.required=false'/\" || printf '%s' '\(failure)'; }"
+        s += " | LC_ALL=C tr -d '\\n') || return 1; "
+        s += "case \"$_fo\" in ''|*'\(failure)'*) return 1;; esac; _go=\"$_go$_fo\"; }; "
         // Paths travel NUL-delimited so tabs, quotes and backslashes stay
         // literal. A shell variable cannot hold NUL, so a list is stored one
         // name per line with a newline inside a name swapped for \001.
@@ -76,11 +98,12 @@ nonisolated enum GitDiffProbeCommand {
         s += "printf '%s\\n' \(marker("B")); "
         s += "if ! command -v git >/dev/null 2>&1; then printf 'E\\tnogit\\n'; "
         s += "elif [ -z \"$_d\" ] || ! cd \"$_d\"; then printf 'E\\tnodir\\n'; "
-        s += "else _root=$(git rev-parse --show-toplevel); "
-        s += "if [ -z \"$_root\" ] || ! cd \"$_root\"; then printf 'E\\tnorepo\\t%s\\n' \"$_d\"; else "
+        s += "else _root=$(_g rev-parse --show-toplevel); "
+        s += "if [ -z \"$_root\" ] || ! cd \"$_root\"; then printf 'E\\tnorepo\\t%s\\n' \"$_d\"; "
+        s += "elif ! _hf; then printf 'E\\tfailed\\n'; else "
 
-        s += "_head=$(git rev-parse -q --verify HEAD); _br=$(git symbolic-ref --short -q HEAD); "
-        s += "_empty=$(git hash-object -t tree /dev/null); "
+        s += "_head=$(_g rev-parse -q --verify HEAD); _br=$(_g symbolic-ref --short -q HEAD); "
+        s += "_empty=$(_g hash-object -t tree /dev/null); "
         s += "_ws=\(request.ignoreWhitespace ? "-w" : ""); _to=; _bref=; _skip=; _err=; "
         switch request.scope {
         case .uncommitted:
@@ -88,21 +111,21 @@ nonisolated enum GitDiffProbeCommand {
         case .branch:
             // The remote's default branch first, so a branch cut from it
             // compares against where a pull request would land.
-            s += "for _c in \"$(git symbolic-ref -q --short refs/remotes/origin/HEAD)\" origin/main origin/master main master; do "
-            s += "[ -n \"$_c\" ] || continue; git rev-parse -q --verify \"$_c^{commit}\" >/dev/null || continue; _bref=$_c; break; done; "
-            s += "_base=; [ -n \"$_bref\" ] && [ -n \"$_head\" ] && _base=$(git merge-base \"$_bref\" HEAD); "
+            s += "for _c in \"$(_g symbolic-ref -q --short refs/remotes/origin/HEAD)\" origin/main origin/master main master; do "
+            s += "[ -n \"$_c\" ] || continue; _g rev-parse -q --verify \"$_c^{commit}\" >/dev/null || continue; _bref=$_c; break; done; "
+            s += "_base=; [ -n \"$_bref\" ] && [ -n \"$_head\" ] && _base=$(_g merge-base \"$_bref\" HEAD); "
             s += "_base=${_base:-${_head:-$_empty}}; _unt=1; "
         case .lastCommit:
             // Without a commit there is nothing to show; an empty `_to`
             // would compare against the working tree instead.
-            s += "_base=$(git rev-parse -q --verify 'HEAD~1^{commit}'); _base=${_base:-$_empty}; _to=HEAD; _unt=; "
+            s += "_base=$(_g rev-parse -q --verify 'HEAD~1^{commit}'); _base=${_base:-$_empty}; _to=HEAD; _unt=; "
             s += "[ -n \"$_head\" ] || _skip=1; "
         }
 
         // A git that cannot read the repository must not look like a clean
         // tree. The pipe hides git's exit status, so failure leaves a mark.
-        let failure = "::GDX_\(nonce)::"
-        s += "_st=$({ _g status --porcelain=v2 --branch -z || printf '\\0%s\\0' '\(failure)'; } | _enc); "
+        // A dirty submodule would be read by a git with its own config.
+        s += "_st=$({ _g status --porcelain=v2 --branch -z --ignore-submodules=dirty || printf '\\0%s\\0' '\(failure)'; } | _enc); "
         s += "case \"$_st\" in *'\(failure)'*) _err=1;; esac; "
         // In -z output a rename's original path is a record of its own.
         s += "_mod=$(printf '%s\\n' \"$_st\" | awk 'skip{skip=0;next}"
@@ -145,7 +168,7 @@ nonisolated enum GitDiffProbeCommand {
         }
 
         s += "printf 'R\\t%s\\n' \"$_root\"; "
-        s += "printf 'H\\t%s\\t%s\\n' \"$_br\" \"$(git rev-parse --short HEAD)\"; "
+        s += "printf 'H\\t%s\\t%s\\n' \"$_br\" \"$(_g rev-parse --short HEAD)\"; "
         s += "printf 'F\\t%s\\n' \"$_bref\"; "
         s += "[ -n \"$_tr\" ] && printf '%s\\n' \"$_tr\"; "
         s += "printf 'S\\t%s\\n' \"$_stamp\"; "
@@ -155,8 +178,9 @@ nonisolated enum GitDiffProbeCommand {
         s += "if [ -n \"$_err\" ]; then printf 'E\\tfailed\\n'; "
         s += "elif [ \"$_stamp\" = \(quote(known)) ]; then printf 'U\\n'; else "
         s += "_ns=; _nm=; if [ -z \"$_skip\" ]; then "
-        s += "_ns=$(_g diff -M --name-status $_ws \"$_base\" $_to --) || _err=1; "
-        s += "_nm=$(_g diff -M --numstat $_ws \"$_base\" $_to --) || _err=1; fi; "
+        let safeDiff = "--no-ext-diff --no-textconv --ignore-submodules=dirty"
+        s += "_ns=$(_g diff \(safeDiff) -M --name-status $_ws \"$_base\" $_to --) || _err=1; "
+        s += "_nm=$(_g diff \(safeDiff) -M --numstat $_ws \"$_base\" $_to --) || _err=1; fi; "
         s += "if [ -n \"$_err\" ]; then printf 'E\\tfailed\\n'; else "
         s += "printf '%s\\n' \(marker("N")); [ -n \"$_ns\" ] && printf '%s\\n' \"$_ns\"; "
         s += "printf '%s\\n' \(marker("S")); [ -n \"$_nm\" ] && printf '%s\\n' \"$_nm\"; "
@@ -187,9 +211,9 @@ nonisolated enum GitDiffProbeCommand {
         if request.includePatch {
             let flags = "--no-color --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/"
             s += "printf '%s\\n' \(marker("P")); { "
-            s += "[ -z \"$_skip\" ] && _g -c diff.suppressBlankEmpty=false diff \(flags) -M --submodule=short $_ws \"$_base\" $_to --; "
+            s += "[ -z \"$_skip\" ] && _g -c diff.suppressBlankEmpty=false diff \(flags) --ignore-submodules=dirty -M --submodule=short $_ws \"$_base\" $_to --; "
             s += "{ printf '%s\\n' \"$_cf\"; printf '%s\\n' \"$_cl\"; } | sed '/^$/d' | head -n \(untrackedPatchLimit) | _dec"
-            s += " | xargs -0 -n 1 git -c core.quotePath=false diff \(flags) --no-index -- /dev/null; "
+            s += " | eval \"xargs -0 -n 1 git $_go diff \(flags) --no-index -- /dev/null\"; "
             s += "} | head -c \(max(1, request.patchByteLimit)); "
         }
         s += "fi; fi; "

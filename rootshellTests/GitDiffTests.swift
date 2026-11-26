@@ -392,7 +392,30 @@ final class GitDiffTests: XCTestCase {
         XCTAssertTrue(script.contains("grep -Ic -e '' -- /dev/null"))
         XCTAssertTrue(script.contains("sed 's/$/:1/'"))
         // Patches take exact NUL-delimited names.
-        XCTAssertTrue(script.contains("xargs -0 -n 1 git -c core.quotePath=false diff"))
+        XCTAssertTrue(script.contains("eval \"xargs -0 -n 1 git $_go diff"))
+    }
+
+    func testProbeNeverRunsRepositoryCommands() {
+        let script = GitDiffProbeCommand.script(GitDiffProbeRequest(directory: "/work", scope: .branch)).script
+        for option in ["-c core.fsmonitor= ", "-c core.hooksPath=/dev/null", "-c protocol.allow=never", "-c core.quotePath=false"] {
+            XCTAssertTrue(GitDiffProbeCommand.hardenedOptions.contains(option), option)
+        }
+        XCTAssertTrue(script.contains("_go='\(GitDiffProbeCommand.hardenedOptions)'; _g() { eval \"git $_go \\\"\\$@\\\"\"; }; "))
+        XCTAssertTrue(script.contains("GIT_NO_LAZY_FETCH=1 GIT_ALLOW_PROTOCOL=;"))
+        // Driver names are bytes; a key that does not parse becomes `=` and fails the probe.
+        XCTAssertTrue(script.contains("LC_ALL=C sed -e '/^$/d' -e '/^filter\\.[^.]*$/d' -e 's/^filter\\.\\(.*\\)\\.[^.]*$/\\1/' -e t -e 's/.*/=/' || echo =;"))
+        XCTAssertTrue(script.contains("| LC_ALL=C sort -u) || return 1; "))
+        // Every filter driver is blanked before anything reads the worktree.
+        XCTAssertTrue(script.contains("elif ! _hf; then printf 'E\\tfailed\\n'; else "))
+        XCTAssertTrue(script.contains("-c 'filter.&.clean=' -c 'filter.&.process=' -c 'filter.&.required=false'"))
+        XCTAssertTrue(script.contains("_g status --porcelain=v2 --branch -z --ignore-submodules=dirty"))
+        XCTAssertEqual(script.components(separatedBy: "_g diff --no-ext-diff --no-textconv --ignore-submodules=dirty -M").count - 1, 2)
+        XCTAssertTrue(script.contains("diff --no-color --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/ --ignore-submodules=dirty"))
+        // No git runs without the hardened options.
+        let allowed = ["command -v git ", "eval \"git $_go", "xargs -0 -n 1 git $_go"]
+        var rest = script
+        for form in allowed { rest = rest.replacingOccurrences(of: form, with: "") }
+        XCTAssertFalse(rest.contains("git "), "a git call bypasses _g")
     }
 
     func testUnpairedNamesAreReportedNotGuessed() {
@@ -462,7 +485,7 @@ final class GitDiffTests: XCTestCase {
         XCTAssertTrue(built.script.hasPrefix("PATHPREFIX; exec 2>/dev/null; "))
         XCTAssertTrue(built.script.contains("_d='/srv/it'\"'\"'s here'"))
         XCTAssertTrue(built.script.contains("_ws=-w"))
-        XCTAssertTrue(built.script.contains("git merge-base"))
+        XCTAssertTrue(built.script.contains("_g merge-base"))
         XCTAssertTrue(built.script.contains("= '777' ]"))
         XCTAssertTrue(built.script.contains("::GDP_\(built.nonce)::"))
         XCTAssertTrue(built.script.hasSuffix("exit 0"))
