@@ -879,7 +879,7 @@ extension HerdrController {
     /// first-frame and tab-switch retries deliberately do not unhide panes.
     func showPanesIfSelected(in tab: TabModel) {
         guard tabsModel.selectedTabID == tab.id, !Ghostty.isAppBackgroundedAtomic else { return }
-        for view in tab.splitTree.terminalLeaves where !view.isTabVisible {
+        for view in tab.splitTree.terminalLeaves {
             view.setOcclusion(true)
         }
     }

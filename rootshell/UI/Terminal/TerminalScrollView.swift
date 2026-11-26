@@ -42,6 +42,10 @@ extension Ghostty {
     /// Track whether the user is actively scrolling (prevents fighting user gestures)
     private var isLiveScrolling: Bool = false {
         didSet {
+            if !isLiveScrolling {
+                staleLiveScrollResetWorkItem?.cancel()
+                staleLiveScrollResetWorkItem = nil
+            }
             if isLiveScrolling != oldValue {
                 TerminalScrollActivity.setScrolling(isLiveScrolling, ObjectIdentifier(self))
             }
@@ -116,6 +120,12 @@ extension Ghostty {
     /// Grace window for callbacks around live scroll streams before considering state stale.
     private static let staleLiveScrollGraceInterval: TimeInterval = 0.2
 
+    /// Last time a scroll-wheel, trackpad, or scrollbar-gutter input event was
+    /// routed to `scrollView`. Distinguishes non-drag user scroll events from
+    /// programmatic/layout offset clamps on Mac Catalyst and iPadOS.
+    private var lastDirectScrollInputTime: TimeInterval = 0
+    private static let directScrollInputWindow: TimeInterval = 0.5
+
     /// Work item used to restore UIKit's native indicator after silent core sync.
     private var restoreNativeScrollIndicatorWorkItem: DispatchWorkItem?
     /// Silent syncs leave the indicator alone until then, after an action-scroll reveal.
@@ -131,6 +141,10 @@ extension Ghostty {
 
     /// Work item used to release a selection-driven native indicator hold.
     private var selectionScrollIndicatorHoldWorkItem: DispatchWorkItem?
+
+    /// Idle timer clearing `isLiveScrolling` after non-drag scroll inputs
+    /// (mouse wheel, trackpad without drag callbacks, scrollbar scrubbing).
+    private var staleLiveScrollResetWorkItem: DispatchWorkItem?
 
     #if targetEnvironment(macCatalyst)
     /// Original offset for an in-flight Catalyst indicator nudge.
@@ -223,9 +237,24 @@ extension Ghostty {
         if layer.mask !== cardMask { layer.mask = cardMask }
     }
 
+    private var lastSyncedScrollBoundsHeight: CGFloat = -1
+    private var lastSyncedScrollScale: CGFloat = -1
+
     override func layoutSubviews() {
+        let priorOffset = scrollView.contentOffset
+        let hadPriorLayout = lastSyncedScrollBoundsHeight > 0
+        let priorScale = lastSyncedScrollScale > 0 ? lastSyncedScrollScale : nil
+        let wasAtBottomBeforeLayout = hadPriorLayout
+            ? (lastObservedScrollbar.map { isVisuallyAtLiveBottom(scrollbar: $0, scaleOverride: priorScale) }
+                ?? isAtCurrentScrollRangeBottom())
+            : true
         super.layoutSubviews()
         if layer.mask === cardMask { applyCardClip() }
+        syncDocumentGeometryForLayout(
+            priorOffset: priorOffset,
+            hadPriorLayout: hadPriorLayout,
+            wasAtBottomBeforeLayout: wasAtBottomBeforeLayout
+        )
     }
 
     /// Progress bar view (for OSC 9;4 progress indicators)
@@ -247,6 +276,9 @@ extension Ghostty {
 
     /// Cancellable for observing progress report changes
     private var progressReportCancellable: AnyCancellable?
+
+    /// Cancellable for observing terminal cell metrics
+    private var cellSizeCancellable: AnyCancellable?
 
     /// Cancellable for observing mouse capture state changes
     private var mouseCapturedCancellable: AnyCancellable?
@@ -305,7 +337,7 @@ extension Ghostty {
         #if targetEnvironment(macCatalyst)
         self.scrollView = TabSwipeYieldingScrollView()
         #else
-        self.scrollView = UIScrollView()
+        self.scrollView = LayoutAwareScrollView()
         #endif
         self.documentView = UIView()
 
@@ -324,11 +356,17 @@ extension Ghostty {
         setupScrollIndicatorStyleObservers()
         setupNotifications()
         setupProgressBar()
+        setupCellSizeObserver()
         setupMouseCaptureObserver()
         setupMultiplexerScrollActiveObserver()
         setupDropInteraction()
         setupMoshRoamBannerObserver()
         setupUploadBannerObserver()
+
+        terminalView.synchronizeScrollbarFromSurfaceIfNeeded(notify: false)
+        if terminalView.scrollbar != nil {
+            synchronizeToTerminalScrollbar()
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -341,6 +379,7 @@ extension Ghostty {
         indicatorStyleTasks.forEach { $0.cancel() }
         restoreNativeScrollIndicatorWorkItem?.cancel()
         selectionScrollIndicatorHoldWorkItem?.cancel()
+        staleLiveScrollResetWorkItem?.cancel()
         // Clean up notification observers
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         let id = ObjectIdentifier(self)
@@ -435,6 +474,7 @@ extension Ghostty {
         if event?.type == .scroll {
             let scrollPoint = convert(point, to: scrollView)
             if scrollView.bounds.contains(scrollPoint) {
+                noteDirectScrollInput()
                 return scrollView
             }
         }
@@ -445,6 +485,10 @@ extension Ghostty {
             setNativePanAcceptsPointer(inScrollbarGutter)
         }
         if inScrollbarGutter {
+            if event?.type == .touches {
+                noteDirectScrollInput()
+                terminalView.cancelHerdrReturnToLive()
+            }
             return scrollView
         }
 
@@ -480,7 +524,15 @@ extension Ghostty {
         #endif
 
         #if !targetEnvironment(macCatalyst)
-        isTouchScrollbarDrag = isPointInTouchScrollbarGutter(point)
+        if event?.type == .scroll {
+            noteDirectScrollInput()
+        } else if event?.type == .touches {
+            isTouchScrollbarDrag = isPointInTouchScrollbarGutter(point)
+            if isTouchScrollbarDrag {
+                noteDirectScrollInput()
+                terminalView.cancelHerdrReturnToLive()
+            }
+        }
         #endif
 
         // In non-capture mode, use default hit testing (UIScrollView handles scrolling)
@@ -735,10 +787,11 @@ extension Ghostty {
         documentView.backgroundColor = .clear
         scrollView.addSubview(documentView)
 
-        // Create explicit height constraint (will be updated based on scrollback)
-        // Initialize to a large value (1000) to ensure terminal is visible initially
-        // This will be updated to the correct value when scrollbar updates arrive
-        let heightConstraint = documentView.heightAnchor.constraint(equalToConstant: 1000)
+        // Create explicit height constraint (updated from viewport + scrollback).
+        // Start at 0 rather than an arbitrary constant so an un-synced pane
+        // never exposes a phantom scrollable range before layout/metrics arrive;
+        // layoutSubviews sizes it to the viewport immediately.
+        let heightConstraint = documentView.heightAnchor.constraint(equalToConstant: 0)
         heightConstraint.priority = .required
         self.documentHeightConstraint = heightConstraint
 
@@ -907,6 +960,16 @@ extension Ghostty {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] report in
                 self?.updateProgressBar(report: report)
+            }
+    }
+
+    private func setupCellSizeObserver() {
+        cellSizeCancellable = terminalView.$cellSize
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] cellSize in
+                guard let self, cellSize.height > 0 else { return }
+                self.synchronizeToTerminalScrollbar()
             }
     }
 
@@ -1654,13 +1717,44 @@ extension Ghostty {
         scrollView.isDragging || scrollView.isTracking || scrollView.isDecelerating
     }
 
+    var isUserActivelyScrolling: Bool {
+        scrollView.isTracking || scrollView.isDragging
+    }
+
+    private var hasRecentDirectScrollInput: Bool {
+        Date().timeIntervalSinceReferenceDate - lastDirectScrollInputTime <= Self.directScrollInputWindow
+    }
+
+    private func noteDirectScrollInput() {
+        lastDirectScrollInputTime = Date().timeIntervalSinceReferenceDate
+    }
+
+    /// Synchronizes document height and (when not fighting an active gesture)
+    /// scroll offset to `terminalView.scrollbar` without flashing the native
+    /// indicator.
+    func synchronizeToTerminalScrollbar() {
+        performWithoutNativeScrollIndicatorFlash {
+            applyScrollbarUpdate()
+        }
+    }
+
     private func isVisuallyAtLiveBottom(scrollbar: Ghostty.Action.Scrollbar) -> Bool {
+        isVisuallyAtLiveBottom(scrollbar: scrollbar, scaleOverride: nil)
+    }
+
+    private func isVisuallyAtLiveBottom(
+        scrollbar: Ghostty.Action.Scrollbar,
+        scaleOverride: CGFloat?
+    ) -> Bool {
         let cellHeight = terminalView.cellSize.height
         guard cellHeight > 0 else { return false }
 
         let bottomOffset = scrollbar.total > scrollbar.len ? scrollbar.total - scrollbar.len : 0
         let bottomModelOffsetY = CGFloat(bottomOffset) * cellHeight
-        let currentModelOffsetY = scrollModelOffsetY(forContentOffsetY: scrollView.contentOffset.y)
+        let currentModelOffsetY = scrollModelOffsetY(
+            forContentOffsetY: scrollView.contentOffset.y,
+            scaleOverride: scaleOverride
+        )
 
         // Keep a small tolerance for subpixel rounding and Catalyst's
         // model/physical scale conversion, but don't mask real scrollback.
@@ -1684,6 +1778,29 @@ extension Ghostty {
         updateTerminalBottomInsetSuppression(rubberBanding: false)
         isTouchScrollbarDrag = false
         #endif
+    }
+
+    /// Ensures non-drag scroll streams (such as discrete mouse wheel ticks on
+    /// iPadOS or Catalyst wheel/trackpad scrolling) clear `isLiveScrolling` once
+    /// input goes idle, even when no further scroll or output callbacks arrive.
+    private func scheduleIdleLiveScrollReset() {
+        staleLiveScrollResetWorkItem?.cancel()
+        let delay = Self.staleLiveScrollGraceInterval + 0.02
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.staleLiveScrollResetWorkItem = nil
+            guard self.isLiveScrolling else { return }
+            if self.isScrollViewUserInteracting {
+                self.scheduleIdleLiveScrollReset()
+                return
+            }
+            self.clearStaleLiveScrollStateIfNeeded()
+            if self.isLiveScrolling {
+                self.scheduleIdleLiveScrollReset()
+            }
+        }
+        staleLiveScrollResetWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 
     private func performWithoutNativeScrollIndicatorFlash(_ updates: () -> Void) {
@@ -1725,11 +1842,12 @@ extension Ghostty {
     /// Called when there's no scrollbar state to mirror — e.g. after
     /// tmux tracking ends without a native snapshot to restore.
     private func resetDocumentToViewport() {
-        let frameHeight = scrollView.frame.height
-        guard frameHeight > 0 else { return }
+        let frameHeight = max(0, scrollView.bounds.height)
         documentHeightConstraint?.constant = frameHeight
-        scrollView.setNeedsLayout()
-        scrollView.layoutIfNeeded()
+        if frameHeight > 0 {
+            scrollView.setNeedsLayout()
+            scrollView.layoutIfNeeded()
+        }
         if scrollView.contentOffset != .zero {
             setContentOffsetFromTerminalSync(.zero)
         }
@@ -1750,12 +1868,12 @@ extension Ghostty {
         // shorter physical (points) range and map it back to the full terminal
         // scrollback range, so the finger tracks 1:1 on every display scale and
         // native bounce physics stay untouched.
-        let documentGridHeight = CGFloat(scrollbar.total) * cellHeight
-        let frameHeight = scrollView.frame.height
-        let gridHeight = CGFloat(scrollbar.len) * cellHeight
-        let modelScrollableHeight = max(0, documentGridHeight - gridHeight)
-        let physicalScrollableHeight = modelScrollableHeight / scrollCoordinateScale
-        let documentHeight = frameHeight + physicalScrollableHeight
+        let documentHeight = TerminalScrollbarAvailabilityPolicy.documentHeight(
+            viewportHeight: scrollView.bounds.height,
+            cellHeight: cellHeight,
+            scale: scrollCoordinateScale,
+            scrollbar: (total: scrollbar.total, len: scrollbar.len)
+        )
 
         // Update the stored height constraint
         guard let heightConstraint = documentHeightConstraint else {
@@ -1771,6 +1889,118 @@ extension Ghostty {
         // Force layout update
         scrollView.setNeedsLayout()
         scrollView.layoutIfNeeded()
+    }
+
+    /// Keeps `documentHeightConstraint` aligned with `scrollView.bounds.height`
+    /// and `scrollCoordinateScale` across initial layout, keyboard transitions,
+    /// split resizes, and display-scale changes even when `(total, offset, len)`
+    /// does not re-emit (e.g. foreign-owned Herdr tabs or zero-scrollback panes).
+    private func syncDocumentGeometryForLayout(
+        priorOffset: CGPoint,
+        hadPriorLayout: Bool,
+        wasAtBottomBeforeLayout: Bool
+    ) {
+        let boundsHeight = scrollView.bounds.height
+        let scale = scrollCoordinateScale
+        let previousScale = lastSyncedScrollScale
+        guard boundsHeight != lastSyncedScrollBoundsHeight || scale != previousScale else {
+            return
+        }
+        let scaleChanged = hadPriorLayout && previousScale > 0 && scale != previousScale
+        lastSyncedScrollBoundsHeight = boundsHeight
+        lastSyncedScrollScale = scale
+
+        guard boundsHeight > 0 else {
+            documentHeightConstraint?.constant = 0
+            return
+        }
+
+        terminalScrollbarUpdateGeneration &+= 1
+        let updateGeneration = terminalScrollbarUpdateGeneration
+        isApplyingTerminalScrollbarUpdate = true
+        defer {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.terminalScrollbarUpdateGeneration == updateGeneration else { return }
+                self.isApplyingTerminalScrollbarUpdate = false
+            }
+        }
+
+        let cellHeight = terminalView.cellSize.height
+        let effectiveScrollbar = TerminalScrollbarAvailabilityPolicy.resolveLayoutScrollbar(
+            liveSample: terminalView.scrollbar,
+            cachedSample: &lastObservedScrollbar,
+            isTmuxPane: terminalView.isTmuxPane,
+            hasSurface: terminalView.surface != nil
+        )
+        guard let scrollbar = effectiveScrollbar, cellHeight > 0 else {
+            if TerminalScrollbarAvailabilityPolicy.preservesExistingDocument(
+                isTmuxPane: terminalView.isTmuxPane,
+                hasSurface: terminalView.surface != nil,
+                hasValidSample: lastObservedScrollbar != nil
+            ) {
+                updateTerminalPositionForCurrentOffset()
+                return
+            }
+            if documentHeightConstraint?.constant != boundsHeight {
+                documentHeightConstraint?.constant = boundsHeight
+                scrollView.setNeedsLayout()
+                scrollView.layoutIfNeeded()
+            }
+            if !isScrollViewUserInteracting {
+                if scrollView.contentOffset != .zero {
+                    setContentOffsetFromTerminalSync(.zero)
+                }
+                if effectiveScrollbar == nil {
+                    lastSentRow = 0
+                    resetSmoothScrollOffset()
+                }
+            }
+            updateTerminalPositionForCurrentOffset()
+            return
+        }
+
+        updateDocumentHeight(scrollbar: scrollbar)
+        lastObservedScrollbar = scrollbar
+
+        guard !isScrollViewUserInteracting else {
+            updateTerminalPositionForCurrentOffset()
+            return
+        }
+
+        if !hadPriorLayout || wasAtBottomBeforeLayout {
+            synchronizeScrollPosition(scrollbar: scrollbar)
+        } else if scaleChanged {
+            let isAtLiveBottom = scrollbar.offset + scrollbar.len >= scrollbar.total
+            let shouldPreserveSmooth =
+                userParkedInSmoothScrollback &&
+                !useLineScrollback &&
+                !terminalView.multiplexerScrollActive &&
+                !isAtLiveBottom
+            let activeRow = isLiveScrolling
+                ? UInt64(max(0, lastSentRow))
+                : scrollbar.offset
+            let modelOffsetY = TerminalScrollbarAvailabilityPolicy.scaleAdjustedParkedModelOffsetY(
+                scrollbar: (total: scrollbar.total, offset: activeRow, len: scrollbar.len),
+                cellHeight: cellHeight,
+                preservedSmoothOffset: shouldPreserveSmooth ? lastSentSmoothScrollOffset : 0
+            )
+            let restoredY = contentOffsetY(forScrollModelOffsetY: modelOffsetY)
+            if abs(scrollView.contentOffset.y - restoredY) > 0.5 {
+                setContentOffsetFromTerminalSync(CGPoint(x: priorOffset.x, y: restoredY))
+            }
+            updateTerminalPositionForCurrentOffset()
+            let bottomRow = scrollbar.total > scrollbar.len ? scrollbar.total - scrollbar.len : 0
+            lastSentRow = Int(min(activeRow, bottomRow))
+            if !shouldPreserveSmooth || lastSentRow >= Int(bottomRow) {
+                resetSmoothScrollOffset()
+            }
+        } else {
+            let restoredY = clampedScrollModelOffsetY(priorOffset.y)
+            if abs(scrollView.contentOffset.y - restoredY) > 0.5 {
+                setContentOffsetFromTerminalSync(CGPoint(x: priorOffset.x, y: restoredY))
+            }
+            updateTerminalPositionForCurrentOffset()
+        }
     }
 
     /// Synchronize scrollbar position to match Ghostty's scrollback state
@@ -1966,6 +2196,10 @@ extension Ghostty {
 
     /// Reset native gesture state before a one-shot herdr viewport jump.
     func prepareHerdrReturnToLive() {
+        guard !scrollView.isTracking, !scrollView.isDragging else {
+            terminalView.cancelHerdrReturnToLive()
+            return
+        }
         isLiveScrolling = false
         isTouchScrolling = false
         wasRubberBandingDuringScroll = false
@@ -2178,7 +2412,21 @@ extension Ghostty {
     #endif
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        if isApplyingTerminalScrollSync || isApplyingTerminalScrollbarUpdate {
+        let isAdjustingLayoutGeometry =
+            (scrollView as? LayoutAwareScrollView)?.isAdjustingLayoutGeometry == true
+        #if targetEnvironment(macCatalyst)
+        let nativePanActive = isNativeScrollPanActive
+        #else
+        let nativePanActive = false
+        #endif
+        if TerminalScrollbarAvailabilityPolicy.shouldIgnoreProgrammaticOrClampedScroll(
+            isApplyingTerminalSync: isApplyingTerminalScrollSync || isApplyingTerminalScrollbarUpdate,
+            isAdjustingLayoutGeometry: isAdjustingLayoutGeometry,
+            isUserInteracting: isScrollViewUserInteracting,
+            hasPendingHerdrReturnToLive: terminalView.hasPendingHerdrReturnToLive,
+            isNativeScrollPanActive: nativePanActive,
+            hasRecentDirectScrollInput: hasRecentDirectScrollInput
+        ) {
             clearStaleLiveScrollStateIfNeeded()
             updateTerminalPositionForCurrentOffset()
             return
@@ -2199,21 +2447,23 @@ extension Ghostty {
             updateTerminalPositionForCurrentOffset()
             return
         }
-        // A herdr replay resizes the content under us, and Catalyst has no
-        // drag callbacks to tell UIKit's clamp from a trackpad scroll. Inferring
-        // a live scroll here would push the pre-replay row back into the
-        // terminal and cancel the pending jump to live output. A real scroll
-        // owns the pan gesture (or the scroll view), and still cancels it.
-        if terminalView.hasPendingHerdrReturnToLive,
-           !isNativeScrollPanActive, !isScrollViewUserInteracting {
-            updateTerminalPositionForCurrentOffset()
-            return
-        }
         ensureCatalystLiveScrollTracking()
         #else
         if applyTouchScrollBoostIfNeeded(scrollView) {
             updateTerminalPositionForCurrentOffset()
             return
+        }
+        if TerminalScrollbarAvailabilityPolicy.shouldPromoteNonDragScrollToLive(
+            isLiveScrolling: isLiveScrolling,
+            isAdjustingLayoutGeometry: isAdjustingLayoutGeometry,
+            hasRecentDirectScrollInput: hasRecentDirectScrollInput,
+            isTouchScrollbarDrag: isTouchScrollbarDrag
+        ) {
+            terminalView.cancelHerdrReturnToLive()
+            isLiveScrolling = true
+            lastLiveScrollEventTime = Date().timeIntervalSinceReferenceDate
+            wasRubberBandingDuringScroll = false
+            scheduleIdleLiveScrollReset()
         }
         #endif
 
@@ -2250,17 +2500,23 @@ extension Ghostty {
 
     #if targetEnvironment(macCatalyst)
     private func ensureCatalystLiveScrollTracking() {
+        terminalView.cancelHerdrReturnToLive()
         guard !isLiveScrolling else { return }
 
         isLiveScrolling = true
         lastLiveScrollEventTime = Date().timeIntervalSinceReferenceDate
         wasRubberBandingDuringScroll = false
+        scheduleIdleLiveScrollReset()
     }
     #endif
 
     /// Handle user scrolling and send it to the active scroll owner.
     private func handleLiveScroll() {
+        terminalView.cancelHerdrReturnToLive()
         lastLiveScrollEventTime = Date().timeIntervalSinceReferenceDate
+        if !isScrollViewUserInteracting {
+            scheduleIdleLiveScrollReset()
+        }
 
         let cellHeight = terminalView.cellSize.height
         guard cellHeight > 0 else { return }
@@ -2429,9 +2685,12 @@ extension Ghostty {
         return base * Self.scrollSpeedGain
     }
 
-    private func scrollModelOffsetY(forContentOffsetY contentOffsetY: CGFloat) -> CGFloat {
+    private func scrollModelOffsetY(
+        forContentOffsetY contentOffsetY: CGFloat,
+        scaleOverride: CGFloat? = nil
+    ) -> CGFloat {
         let physicalOffsetY = clampedScrollModelOffsetY(contentOffsetY)
-        let scale = scrollCoordinateScale
+        let scale = scaleOverride ?? scrollCoordinateScale
         guard scale != 1 else { return physicalOffsetY }
         let range = scrollableOffsetRangeY()
         return range.lowerBound + (physicalOffsetY - range.lowerBound) * scale
@@ -2721,6 +2980,46 @@ extension Ghostty.TerminalScrollView: UIDropInteractionDelegate {
     }
 }
 
+// MARK: - Layout-Aware Scroll View
+
+/// Tracks synchronous `frame`, `bounds.size`, and `contentSize` mutations so
+/// `TerminalScrollView` can tell UIKit's geometry-clamp `scrollViewDidScroll`
+/// callbacks from user scroll input. Scrolling itself only mutates
+/// `bounds.origin`, leaving `isAdjustingLayoutGeometry == false`.
+class LayoutAwareScrollView: UIScrollView {
+    private(set) var isAdjustingLayoutGeometry = false
+
+    override var frame: CGRect {
+        get { super.frame }
+        set {
+            let sizeChanged = frame.size != newValue.size
+            if sizeChanged { isAdjustingLayoutGeometry = true }
+            defer { if sizeChanged { isAdjustingLayoutGeometry = false } }
+            super.frame = newValue
+        }
+    }
+
+    override var bounds: CGRect {
+        get { super.bounds }
+        set {
+            let sizeChanged = bounds.size != newValue.size
+            if sizeChanged { isAdjustingLayoutGeometry = true }
+            defer { if sizeChanged { isAdjustingLayoutGeometry = false } }
+            super.bounds = newValue
+        }
+    }
+
+    override var contentSize: CGSize {
+        get { super.contentSize }
+        set {
+            let changed = contentSize != newValue
+            if changed { isAdjustingLayoutGeometry = true }
+            defer { if changed { isAdjustingLayoutGeometry = false } }
+            super.contentSize = newValue
+        }
+    }
+}
+
 #if targetEnvironment(macCatalyst)
 // MARK: - Trackpad Tab-Swipe Yield
 
@@ -2728,7 +3027,7 @@ extension Ghostty.TerminalScrollView: UIDropInteractionDelegate {
 /// pan ignores `require(toFail:)` for scroll-type events. Once there is
 /// scrollback it begins on any trackpad delta and, being exclusive with the
 /// wrapper's tab swipe, starves it. Yield horizontal intent to the swipe here.
-final class TabSwipeYieldingScrollView: UIScrollView {
+final class TabSwipeYieldingScrollView: LayoutAwareScrollView {
     var yieldsToTabSwipe: ((UIPanGestureRecognizer) -> Bool)?
 
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {

@@ -171,6 +171,9 @@ extension HerdrController {
            layout.area.width == desired.cols, layout.area.height == desired.rows,
            desired.panes.allSatisfy({ id, size in layout.panes.contains { $0.pane_id == id && $0.terminal_size == size } }) {
             tabGeometryStates[tabId]?.noteServerApplied(desired)
+            if let claim = claimGeneration(for: tabId) {
+                activation.claimed(generation: claim)
+            }
         }
         syncControlledElsewhereBadge(tabId: tabId)
         for view in paneViews.values where view.herdrPaneBinding?.tabId == tabId {

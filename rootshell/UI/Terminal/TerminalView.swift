@@ -2529,16 +2529,7 @@ extension Ghostty {
                     return (rows: size.rows, cols: size.columns)
                 },
                 altScreenActive: { [weak self] in
-                    // Direct mosh renders a reconstructed framebuffer into
-                    // Ghostty instead of forwarding the remote PTY byte stream.
-                    // Its renderer restores mouse modes, but it does not emit
-                    // smcup/1049, so Ghostty's alternate-screen flag remains
-                    // false even while tmux is rendering copy mode.
-                    if self?.connectionConfig.isMosh == true {
-                        return true
-                    }
-                    guard let surface = self?.surface else { return false }
-                    return ghostty_surface_is_alternate_active(surface)
+                    self?.isMultiplexerScrollAlternateScreenActive ?? false
                 },
                 // Query the C side directly. The cached @Published
                 // `isMouseCaptured` can lag tmux's mouse-on sequence (same
@@ -3279,7 +3270,10 @@ extension Ghostty {
             setRemotePortMonitorVisible(visible)
 
             surfaceController.setOcclusion(visible)
-            if visible { updateHerdrGatewayOverlay() }
+            if visible {
+                synchronizeScrollbarFromSurfaceIfNeeded()
+                updateHerdrGatewayOverlay()
+            }
         }
 
         /// Backstop re-assert used by the tab-switch + foreground reconcile paths
@@ -5710,6 +5704,70 @@ extension Ghostty.TerminalView: GhosttyActionDelegate {
         NotificationCenter.default.post(
             name: .ghosttyDidUpdateScrollbar, object: self,
             userInfo: [ScrollbarUpdateKey.revealsIndicator: revealScrollIndicator])
+    }
+
+    private var isMultiplexerScrollAlternateScreenActive: Bool {
+        TerminalScrollbarAvailabilityPolicy.allowsMultiplexerScrollTrackingOnScreen(
+            isMosh: connectionConfig.isMosh,
+            isSurfaceAlternateActive: surface.map { ghostty_surface_is_alternate_active($0) } ?? false
+        )
+    }
+
+    /// Re-reads active-screen scrollback geometry and mouse-capture state
+    /// directly from the live Ghostty surface so a scrollbar callback dropped
+    /// while occluded or during a mailbox burst cannot leave UIScrollView on
+    /// a stale range.
+    func synchronizeScrollbarFromSurfaceIfNeeded(notify: Bool = true) {
+        guard herdrEndpointPane == nil,
+              tmuxPaneBinding == nil,
+              let surface else { return }
+        // Refresh capture state before checking multiplexerScrollActive: if
+        // tmux/zellij released mouse capture while this tab was hidden, the
+        // observer resets here and clears multiplexerScrollActive so we can
+        // immediately overwrite its stale pre-tracking snapshot with the
+        // live surface's actual scrollback range.
+        updateMouseCaptureState()
+        let isAlternate = ghostty_surface_is_alternate_active(surface)
+        if multiplexerScrollActive, !isMultiplexerScrollAlternateScreenActive {
+            multiplexerScrollObserver?.reset()
+        }
+        guard !multiplexerScrollActive else { return }
+
+        var raw = ghostty_action_scrollbar_s()
+        let displaySample: (total: UInt64, offset: UInt64, len: UInt64)?
+        if !isAlternate, ghostty_surface_display_scrollbar(surface, &raw) {
+            displaySample = (total: raw.total, offset: raw.offset, len: raw.len)
+        } else {
+            displaySample = nil
+        }
+        let surfaceRows = ghostty_surface_size(surface).rows
+        guard let live = TerminalScrollbarAvailabilityPolicy.resolvedLiveScrollbar(
+            isAlternateScreen: isAlternate,
+            displayScrollbar: displaySample,
+            surfaceRows: surfaceRows
+        ) else { return }
+
+        let changed = scrollbarTotal != live.total
+            || scrollbarOffset != live.offset
+            || scrollbarLen != live.len
+        guard changed else { return }
+
+        let viewportChanged = scrollbarOffset != live.offset || scrollbarLen != live.len
+        scrollbarTotal = live.total
+        scrollbarOffset = live.offset
+        scrollbarLen = live.len
+
+        if viewportChanged {
+            updateSelectionHandlePositions()
+        }
+        updateScrollIndicatorLayout()
+        updateScrollIndicatorVisibility(animated: false, reveal: false)
+
+        if notify {
+            NotificationCenter.default.post(
+                name: .ghosttyDidUpdateScrollbar, object: self,
+                userInfo: [ScrollbarUpdateKey.revealsIndicator: false])
+        }
     }
 
     /// Apply a multiplexer-derived scrollbar sample (or clear it). Maps the

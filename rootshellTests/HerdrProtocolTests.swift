@@ -955,6 +955,49 @@ final class HerdrProtocolTests: XCTestCase {
         XCTAssertTrue(state.select("restored", panes: ["p", "q"]))
     }
 
+    func testExhaustedGeometryClaimCancelsPendingReturnToLiveForThatTabOnly() {
+        var state = HerdrActivation()
+        XCTAssertTrue(state.select("tab-a", panes: ["p1", "p2"]))
+        let firstGeneration = state.generation
+        // Cancelling a different tab is a no-op.
+        state.cancelTab("tab-b", generation: firstGeneration)
+        XCTAssertTrue(state.needsClaim)
+        XCTAssertEqual(state.pendingPanes, ["p1", "p2"])
+
+        // User switches away and back while an older attempt is still in flight;
+        // the old attempt's failure must not cancel the newer activation.
+        XCTAssertTrue(state.select("tab-b", panes: ["q1"]))
+        XCTAssertTrue(state.select("tab-a", panes: ["p1", "p2"]))
+        let newerGeneration = state.generation
+        XCTAssertNotEqual(firstGeneration, newerGeneration)
+        state.cancelTab("tab-a", generation: firstGeneration)
+        XCTAssertTrue(state.needsClaim)
+        XCTAssertEqual(state.pendingPanes, ["p1", "p2"])
+
+        // Giving up on the matching generation clears both needsClaim and
+        // pendingPanes so hasPendingHerdrReturnToLive cannot remain wedged.
+        state.cancelTab("tab-a", generation: newerGeneration)
+        XCTAssertFalse(state.needsClaim)
+        XCTAssertTrue(state.pendingPanes.isEmpty)
+    }
+
+    func testServerAppliedHandoffConsumesPendingClaimGeneration() {
+        var geometry = HerdrTabGeometryState()
+        geometry.update(size)
+        geometry.setOwnership(.other(connectionId: 2, kind: "control"))
+        var activation = HerdrActivation()
+        XCTAssertTrue(activation.select("tab-a", panes: ["p1"]))
+        XCTAssertTrue(activation.needsClaim)
+
+        // Server hands ownership to us at our stored size before the claim task sends.
+        geometry.setOwnership(.mine)
+        geometry.noteServerApplied(size)
+        XCTAssertTrue(geometry.isConfirmed)
+        activation.claimed(generation: activation.generation)
+        XCTAssertFalse(activation.needsClaim)
+        XCTAssertEqual(activation.pendingPanes, ["p1"])
+    }
+
     // MARK: Live resize
 
     func testLiveResizeKeepsTheCommittedGridUntilServerLayoutArrives() {

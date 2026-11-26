@@ -50,11 +50,22 @@ extension Ghostty.TerminalView {
     }
 
     func finishHerdrReturnToLive() {
+        guard enclosingTerminalScrollView?.isUserActivelyScrolling != true else {
+            cancelHerdrReturnToLive()
+            return
+        }
         _ = cancelMomentumScrolling()
         enclosingTerminalScrollView?.prepareHerdrReturnToLive()
-        // Let the next core scrollbar sample synchronize UIKit. Sending a
-        // scroll_to_row based on a pre-replay sample would undo this jump.
+        // Pin the active screen to live bottom synchronously before reading back
+        // its scrollbar, so UIKit synchronizes even when Ghostty was already at
+        // the bottom after a snapshot replay (where scroll_to_bottom emits no
+        // new GHOSTTY_ACTION_SCROLLBAR).
+        if let surface {
+            ghostty_surface_scroll_to_row_smooth(surface, UInt.max, 0)
+        }
         _ = performAction("scroll_to_bottom")
+        synchronizeScrollbarFromSurfaceIfNeeded(notify: false)
+        enclosingTerminalScrollView?.synchronizeToTerminalScrollbar()
     }
 
 

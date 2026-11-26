@@ -2420,7 +2420,7 @@ final class TabsModel {
             Ghostty.logger.warning("Tab reveal timed out waiting for first frame; revealing anyway")
             self.displayedTabID = targetID
             guard let target = self.tab(withID: targetID) else { return }
-            for view in target.splitTree.terminalLeaves where view.isTmuxPane && !view.hasRenderedFirstFrame {
+            for view in target.splitTree.terminalLeaves where (view.isTmuxPane || view.isHerdrPane) && !view.hasRenderedFirstFrame {
                 _ = view.reassertVisibleIfNeeded(
                     shouldFocus: view === target.focusedPane,
                     reason: "tab-reveal-fail-open"
