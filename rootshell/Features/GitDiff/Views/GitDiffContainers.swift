@@ -105,14 +105,7 @@ struct GitDiffPillHUD: View {
     let onExpand: () -> Void
     let onClose: () -> Void
 
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
     var body: some View {
-        // The host sizes the pill when this body runs, not when the hosted
-        // view changes, so read everything that sets the pill's width.
-        let _ = (store.phase, store.snapshot?.headLabel, store.snapshot?.files.count,
-                 store.snapshot?.additions, store.snapshot?.deletions, store.snapshot?.countsIncomplete,
-                 dynamicTypeSize)
         GeometryReader { geometry in
             DraggableHUDContainer(forwardsGitDiffToggle: true, onDismiss: onClose) {
                 GitDiffSummaryPill(

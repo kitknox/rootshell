@@ -126,11 +126,15 @@ struct DraggableHUDContainer<Content: View>: UIViewRepresentable {
         view.onFind = onFind
         view.onDismiss = onDismiss
 
-        let host = UIHostingController(rootView: AnyView(content()))
+        let host = HUDHostingController(rootView: AnyView(content()))
         host.view.backgroundColor = .clear
         // Self-size to the SwiftUI content (matters for the theme picker's ScrollView).
         // A resizable or filling HUD is sized by the host instead.
-        host.sizingOptions = resizing == nil && !fills ? .intrinsicContentSize : []
+        let selfSizing = resizing == nil && !fills
+        host.sizingOptions = selfSizing ? [.intrinsicContentSize, .preferredContentSize] : []
+        // The bar's frame is set by hand, so nothing re-measures it when the
+        // content's ideal size changes on its own; the controller reports that.
+        if selfSizing { host.onPreferredSizeChange = { [weak view] in view?.setNeedsLayout() } }
         context.coordinator.host = host
 
         view.hostController = host
@@ -181,6 +185,18 @@ struct DraggableHUDContainer<Content: View>: UIViewRepresentable {
 
         deinit {
             host = nil
+        }
+    }
+}
+
+/// Reports when SwiftUI changes the content's ideal size (`.preferredContentSize`).
+final class HUDHostingController: UIHostingController<AnyView> {
+    var onPreferredSizeChange: (() -> Void)?
+
+    override var preferredContentSize: CGSize {
+        didSet {
+            guard preferredContentSize != oldValue else { return }
+            onPreferredSizeChange?()
         }
     }
 }
