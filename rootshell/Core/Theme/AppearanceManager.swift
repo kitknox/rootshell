@@ -77,11 +77,6 @@ class AppearanceManager: ObservableObject {
     /// Publisher that emits when appearance mode changes
     let appearanceModeDidChange = PassthroughSubject<AppearanceMode, Never>()
 
-    /// Computed property for SwiftUI's preferredColorScheme modifier
-    var colorScheme: ColorScheme? {
-        currentAppearanceMode.colorScheme
-    }
-
     #if canImport(UIKit)
     private var windowObserver: NSObjectProtocol?
     #endif
@@ -107,6 +102,8 @@ class AppearanceManager: ObservableObject {
             }
         }
         #endif
+        // Windows already on screen missed the observer above.
+        applyWindowOverrides()
     }
 
     /// Save current appearance mode through the settings store

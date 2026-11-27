@@ -8,6 +8,15 @@ struct EffectShowcaseView: View {
     @ObservedObject var effect: AnyTerminalEffect
     @Environment(\.dismiss) private var dismiss
 
+    /// Live Weather has its own showcase below; other effects show as in the terminal.
+    private var isLiveWeather: Bool {
+        #if CHINA_BUILD
+        return false
+        #else
+        return effect.asEffect(LiveWeatherEffect.self) != nil
+        #endif
+    }
+
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
@@ -23,6 +32,8 @@ struct EffectShowcaseView: View {
                 } else if let jellyfish = effect.asEffect(JellyfishEffect.self) {
                     JellyfishView(effect: jellyfish, previewMode: true, showcase: true)
                         .blendMode(jellyfish.isLightBackground ? .multiply : .plusLighter)
+                } else if !isLiveWeather {
+                    EffectPreviewSurface(effect: effect)
                 }
                 #if !CHINA_BUILD
                 if let weather = effect.asEffect(LiveWeatherEffect.self) {

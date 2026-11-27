@@ -18,9 +18,17 @@ enum SettingsSearchDestination: String, Hashable, CaseIterable {
     case appearanceMode
     case palette
     case backgroundEffect
+    case backgroundEffectSidebar
+    case backgroundEffectKeyboard
+    case backgroundEffectWindow
     case customShaders
     case transparency
     case window
+    case windowTabBar
+    case windowTabSwitcher
+    case windowPanes
+    case windowDisplay
+    case windowSelection
     case battery
     case visor
     case toolbarKeys
@@ -151,6 +159,15 @@ extension SettingsSearchDestination {
                             "jellyfish", "photo", "video", "ken burns", "theme tint", "intensity", "speed"]
                     + (SearchBuild.isChinaBuild ? [String]() : ["weather", "live weather", "rain", "snow", "clouds", "storm", "sky", "stars",
                                                                  "weather provider", "accuweather", "open-meteo"]))
+        case .backgroundEffectSidebar:
+            Meta(section: .appearance, title: String(localized: "Sidebar Effect"), systemImage: "sidebar.left",
+                 keywords: ["layout", "sidebar", "effect", "sidebar only", "include pinned sidebar", "same as terminal"])
+        case .backgroundEffectKeyboard:
+            Meta(section: .appearance, title: String(localized: "Keyboard Effect"), systemImage: "keyboard",
+                 keywords: ["custom keyboard", "toolbar", "effect", "background", "aquarium", "keyboard only", "show behind"])
+        case .backgroundEffectWindow:
+            Meta(section: .appearance, title: String(localized: "Theme Gradient Backdrop"), systemImage: "macwindow",
+                 keywords: ["backdrop", "window", "theme gradient", "glow", "behind tabs", "rounded panes"])
         case .customShaders:
             Meta(section: .appearance, title: String(localized: "Custom Shaders"), systemImage: "cpu",
                  keywords: ["shader", "graphics", "metal"])
@@ -161,6 +178,21 @@ extension SettingsSearchDestination {
             Meta(section: .appearance, title: String(localized: "Window"), systemImage: "macwindow",
                  keywords: ["tab bar", "group menu", "project switcher", "layout", "display", "brightness", "hdr", "edr",
                             "boost", "dynamic range", "selection", "loupe", "magnifier", "native"])
+        case .windowTabBar:
+            Meta(section: .appearance, title: String(localized: "Tab Bar"), systemImage: "menubar.rectangle",
+                 keywords: ["tabs", "tab style", "pills", "integrated", "ledger", "trough", "top", "bottom", "hide tabs"])
+        case .windowTabSwitcher:
+            Meta(section: .appearance, title: SearchBuild.isPhone ? String(localized: "Tab Switcher") : String(localized: "Tab Sidebar"),
+                 systemImage: "sidebar.left", keywords: ["switcher", "sidebar", "translucent", "title lines"])
+        case .windowPanes:
+            Meta(section: .appearance, title: String(localized: "Panes & Padding"), systemImage: "rectangle.split.2x1",
+                 keywords: ["split", "panes", "padding", "margins", "rounded", "border", "remote ports"])
+        case .windowDisplay:
+            Meta(section: .appearance, title: String(localized: "Display"), systemImage: "sun.max",
+                 keywords: ["full screen", "always on", "brightness", "hdr", "edr", "home indicator"])
+        case .windowSelection:
+            Meta(section: .appearance, title: String(localized: "Text Selection"), systemImage: "character.cursor.ibeam",
+                 keywords: ["selection", "copy on select", "loupe", "magnifier"])
         case .battery:
             Meta(section: .appearance, title: String(localized: "Battery"), systemImage: "battery.25percent",
                  keywords: ["power", "refresh", "fps", "hz", "thermal", "saver", "low power", "promotion",
@@ -395,6 +427,13 @@ extension SettingsSearchDestination {
             #endif
         case .localShell, .localSSHAgent, .externalSSHAgents:
             return SearchBuild.isStandalone && SearchBuild.isCatalyst
+        case .backgroundEffectSidebar:
+            // Phones are filtered per search; see `isShownOnCurrentDisplay`.
+            return !SearchBuild.isVisionOS
+        case .backgroundEffectKeyboard:
+            return !SearchBuild.isCatalyst && !SearchBuild.isVisionOS
+        case .windowDisplay:
+            return !SearchBuild.isVisionOS && (!SearchBuild.isCatalyst || SearchBuild.hasBrightnessBoost)
         default:
             return true
         }
@@ -512,7 +551,14 @@ struct SettingsSearchEntry: Identifiable, Hashable {
     }()
 
     static var suggested: [SettingsSearchEntry] {
-        all.filter(\.isSuggested).prefix(8).map { $0 }
+        all.filter { $0.isSuggested && $0.isShownOnCurrentDisplay }.prefix(8).map { $0 }
+    }
+
+    /// The Duo docks a tab sidebar only while unfolded, and its hinge is detected
+    /// after launch, so this is checked per search rather than when `all` is built.
+    var isShownOnCurrentDisplay: Bool {
+        guard action == .destination(.backgroundEffectSidebar), SearchBuild.isPhone else { return true }
+        return DuoHingeEvents.hasHinge && !DuoHingeEvents.isFrontDisplay
     }
 
     static func filtered(for query: String) -> [SettingsSearchEntry] {
@@ -520,6 +566,7 @@ struct SettingsSearchEntry: Identifiable, Hashable {
         guard !trimmedQuery.isEmpty else { return suggested }
 
         let matches: [(entry: SettingsSearchEntry, score: Int)] = all.compactMap { entry in
+                guard entry.isShownOnCurrentDisplay else { return nil }
                 guard let score = entry.matchScore(for: trimmedQuery) else { return nil }
                 return (entry: entry, score: score)
             }
@@ -617,61 +664,61 @@ struct SettingsSearchEntry: Identifiable, Hashable {
                 keywords: ["sidebar", "transparent"]),
 
             // MARK: Window
-            row("window-tab-bar", String(localized: "Show Top Tab Bar"), in: .window,
+            row("window-tab-bar", String(localized: "Show Top Tab Bar"), in: .windowTabBar,
                 keywords: ["tab bar", "hide tabs", "tabs"]),
-            row("window-tab-bar-position", String(localized: "Tab Bar Position"), in: .window,
+            row("window-tab-bar-position", String(localized: "Tab Bar Position"), in: .windowTabBar,
                 keywords: ["bottom tabs", "top tabs", "tab bar", "keyboard"]),
-            row("window-tab-style", String(localized: "Tab Style"), in: .window,
+            row("window-tab-style", String(localized: "Tab Style"), in: .windowTabBar,
                 keywords: ["tab appearance", "compact"]),
-            row("window-duo-front-display", String(localized: "Duo Front Display"), in: .window,
+            row("window-duo-front-display", String(localized: "Duo Front Display"), in: .windowTabBar,
                 keywords: ["duo", "front display", "camera", "side rail", "below camera", "behind camera", "full width"],
                 available: SearchBuild.supportsDuoLayout),
-            row("window-duo-top-tabs", String(localized: "Show Top Tabs Behind Camera"), in: .window,
+            row("window-duo-top-tabs", String(localized: "Show Top Tabs Behind Camera"), in: .windowTabBar,
                 keywords: ["duo", "front display", "camera", "top tabs", "hide tabs"],
                 available: SearchBuild.supportsDuoLayout),
-            row("window-tab-shortcuts", String(localized: "Show Tab Shortcuts"), in: .window,
+            row("window-tab-shortcuts", String(localized: "Show Tab Shortcuts"), in: .windowTabBar,
                 keywords: ["tab numbers", "cmd number"]),
-            row("window-group-menu", String(localized: "Show Group Menu"), in: .window,
+            row("window-group-menu", String(localized: "Show Group Menu"), in: .windowTabBar,
                 keywords: ["group", "project switcher"]),
-            row("window-tab-animations", String(localized: "Disable Tab Animations"), in: .window,
+            row("window-tab-animations", String(localized: "Disable Tab Animations"), in: .windowTabBar,
                 keywords: ["animation", "motion"]),
-            row("window-expose-captions", String(localized: "Tab Exposé Captions"), in: .window,
+            row("window-expose-captions", String(localized: "Tab Exposé Captions"), in: .windowTabBar,
                 keywords: ["expose", "captions", "previews"]),
-            row("window-hover-previews", String(localized: "Tab Hover Previews"), in: .window,
+            row("window-hover-previews", String(localized: "Tab Hover Previews"), in: .windowTabBar,
                 keywords: ["hover", "activation", "preview size"], available: !isVisionOS && !onPhone),
-            row("window-translucent-switcher", String(localized: "Translucent Tab Switcher"), in: .window,
+            row("window-translucent-switcher", String(localized: "Translucent Tab Switcher"), in: .windowTabSwitcher,
                 keywords: ["translucent", "blur", "switcher"], available: !isVisionOS && onPhone),
-            row("window-translucent-sidebar", String(localized: "Translucent Tab Sidebar"), in: .window,
+            row("window-translucent-sidebar", String(localized: "Translucent Tab Sidebar"), in: .windowTabSwitcher,
                 keywords: ["translucent", "blur", "sidebar"], available: !isVisionOS && !onPhone),
-            row("window-auto-hide-sidebar", String(localized: "Auto-Hide Sidebar After Selection"), in: .window,
+            row("window-auto-hide-sidebar", String(localized: "Auto-Hide Sidebar After Selection"), in: .windowTabSwitcher,
                 keywords: ["sidebar", "auto hide"], available: !isVisionOS && !onPhone),
-            row("window-switcher-title-lines", String(localized: "Tab Switcher Title Lines"), in: .window,
+            row("window-switcher-title-lines", String(localized: "Tab Switcher Title Lines"), in: .windowTabSwitcher,
                 keywords: ["title lines", "wrap"], available: onPhone),
-            row("window-sidebar-title-lines", String(localized: "Sidebar Title Lines"), in: .window,
+            row("window-sidebar-title-lines", String(localized: "Sidebar Title Lines"), in: .windowTabSwitcher,
                 keywords: ["title lines", "wrap"], available: !onPhone),
-            row("window-tabs-in-titlebar", String(localized: "Tabs in Title Bar"), in: .window,
+            row("window-tabs-in-titlebar", String(localized: "Tabs in Title Bar"), in: .windowTabBar,
                 keywords: ["titlebar", "tabs"], available: isCatalyst),
-            row("window-hide-titlebar", String(localized: "Hide Title Bar"), in: .window,
+            row("window-hide-titlebar", String(localized: "Hide Title Bar"), in: .windowTabBar,
                 keywords: ["titlebar", "hide"], available: isCatalyst),
-            row("window-padding", String(localized: "Window Padding"), in: .window,
+            row("window-padding", String(localized: "Window Padding"), in: .windowPanes,
                 keywords: ["horizontal", "vertical", "padding", "margins", "inset"]),
-            row("window-split-border", String(localized: "Split Focus Border"), in: .window,
+            row("window-split-border", String(localized: "Split Focus Border"), in: .windowPanes,
                 keywords: ["split panes", "border", "border color", "focus"]),
-            row("window-rounded-panes", String(localized: "Rounded Panes"), in: .window,
+            row("window-rounded-panes", String(localized: "Rounded Panes"), in: .windowPanes,
                 keywords: ["rounded", "corners", "cards", "gap", "split panes", "sidebar"]),
-            row("window-full-screen", String(localized: "Full Screen"), in: .window,
+            row("window-full-screen", String(localized: "Full Screen"), in: .windowDisplay,
                 keywords: ["status bar", "immersive"], available: isTouch),
-            row("window-always-on", String(localized: "Always On Display"), in: .window,
+            row("window-always-on", String(localized: "Always On Display"), in: .windowDisplay,
                 keywords: ["idle timer", "sleep", "screen lock", "stay awake"], available: isTouch),
-            row("window-home-indicator", String(localized: "Extend Under Home Indicator"), in: .window,
+            row("window-home-indicator", String(localized: "Extend Under Home Indicator"), in: .windowDisplay,
                 keywords: ["home indicator", "safe area"], available: isTouch),
-            row("window-brightness-boost", String(localized: "Brightness Boost"), in: .window,
+            row("window-brightness-boost", String(localized: "Brightness Boost"), in: .windowDisplay,
                 keywords: ["hdr", "edr", "brightness"], available: !isVisionOS && SearchBuild.hasBrightnessBoost),
-            row("window-selection-style", String(localized: "Selection Style"), in: .window,
+            row("window-selection-style", String(localized: "Selection Style"), in: .windowSelection,
                 keywords: ["text selection", "selection colors", "foreground", "background"]),
-            row("window-copy-on-select", String(localized: "Copy on Select"), in: .window,
+            row("window-copy-on-select", String(localized: "Copy on Select"), in: .windowSelection,
                 keywords: ["copy", "select", "clipboard"]),
-            row("window-selection-loupe", String(localized: "Use Native Selection Loupe"), in: .window,
+            row("window-selection-loupe", String(localized: "Use Native Selection Loupe"), in: .windowSelection,
                 keywords: ["loupe", "magnifier", "selection"], available: isTouch),
 
             // MARK: Cursor
@@ -713,11 +760,7 @@ struct SettingsSearchEntry: Identifiable, Hashable {
                 keywords: ["saver", "low power"]),
 
             // MARK: Background Effect
-            row("effect-pinned-sidebar", String(localized: "Sidebar Effect"), in: .backgroundEffect,
-                keywords: ["layout", "sidebar", "effect", "sidebar only", "include pinned sidebar"], available: isTouch && !onPhone || isCatalyst),
-            row("effect-keyboard", String(localized: "Custom Keyboard Background"), in: .backgroundEffect, icon: "keyboard",
-                keywords: ["custom keyboard", "toolbar", "effect", "background", "aquarium", "keyboard only"], available: isTouch),
-            row("effect-backdrop-transparency", String(localized: "Transparent Backdrop"), in: .backgroundEffect,
+            row("effect-backdrop-transparency", String(localized: "Transparent Backdrop"), in: .backgroundEffectWindow,
                 keywords: ["backdrop", "theme gradient", "transparent", "desktop", "see-through"], available: isCatalyst),
             row("effect-text-above", String(localized: "Text Above Effect"), in: .backgroundEffect,
                 keywords: ["text", "glyphs", "readability", "blend", "behind text", "true colors", "weather"]),
@@ -1175,12 +1218,28 @@ func settingsSearchDestinationView(for destination: SettingsSearchDestination) -
         AppearanceModeSettingsView()
     case .backgroundEffect:
         EffectSettingsView()
+    case .backgroundEffectSidebar:
+        EffectSettingsView(initialArea: .sidebar)
+    case .backgroundEffectKeyboard:
+        EffectSettingsView(initialArea: .keyboard)
+    case .backgroundEffectWindow:
+        EffectSettingsView(initialArea: .window)
     case .customShaders:
         ShaderSettingsView()
     case .transparency:
         TransparencySettingsView()
     case .window:
         WindowSettingsView()
+    case .windowTabBar:
+        WindowTabBarSettingsView()
+    case .windowTabSwitcher:
+        WindowTabSwitcherSettingsView()
+    case .windowPanes:
+        WindowPanesSettingsView()
+    case .windowDisplay:
+        WindowDisplaySettingsView()
+    case .windowSelection:
+        WindowSelectionSettingsView()
     case .battery:
         BatterySettingsView()
     case .visor:

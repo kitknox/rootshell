@@ -29,6 +29,52 @@ struct ThemeSettingsView: View {
     @State private var showingDeleteConfirmation = false
     @State private var themeToDelete: ThemeManager.ThemeInfo?
     @State private var uiOverridesEditTarget: ThemeManager.ThemeInfo?
+    /// 0 with the room fully shown, 1 once it has shrunk to the band.
+    @State private var roomCollapse = 0.0
+    @State private var filterHeight: CGFloat = 0
+    @State private var locateRequest = 0
+    /// The room opened in place over the list, wherever it is scrolled to.
+    @State private var roomPeek = false
+    @State private var scrollOffset: CGFloat = 0
+    @State private var peekOffset: CGFloat = 0
+    /// A room opened for a theme change ignores scrolling until its repaint is done.
+    @State private var peekHoldUntil = Date.distantPast
+
+    private let roomTopPadding: CGFloat = 8
+
+    @State private var containerSize: CGSize = .zero
+
+    /// The room keeps its 360 × 150 proportions as the card widens, and grows
+    /// a little taller (up to 1.4×) in tall, narrow panels such as the Mac sheet,
+    /// within about a third of the height so the list keeps room to scroll.
+    private var roomMetrics: (expanded: CGFloat, collapsed: CGFloat) {
+        let collapsed: CGFloat = verticalSizeClass == .compact ? 44 : (horizontalSizeClass == .compact ? 52 : 56)
+        let width = containerSize.width - 32
+        guard width > 0, containerSize.height > 0 else {
+            return (verticalSizeClass == .compact ? 110 : 150, collapsed)
+        }
+        let tallness = min(max(1 + (containerSize.height / width - 2) * 0.3, 1), 1.4)
+        var natural = width * 150 / 360 * tallness
+        // iPhone portrait: enough headroom that the name chip sits above the wall art.
+        if horizontalSizeClass == .compact, verticalSizeClass != .compact {
+            natural = max(natural, ThemeRoomScene.heightClearingChip(width: width))
+        }
+        let cap = min(300, max(110, containerSize.height * 0.38))
+        return (min(max(natural, 110), cap), collapsed)
+    }
+
+    /// Opens the room over the list without scrolling; only while it is shrunk.
+    private func setRoomPeek(_ open: Bool) {
+        guard open != roomPeek, !open || roomCollapse > 0.05 else { return }
+        peekOffset = scrollOffset
+        withAnimation(.smooth(duration: 0.35)) { roomPeek = open }
+    }
+
+    /// The theme for the slot being chosen, which the room shows.
+    private var displayedTheme: ThemeManager.ThemeInfo? {
+        let name = selectedThemeName
+        return themeManager.availableThemes.first { $0.name == name }
+    }
 
     /// Which theme slot we're editing when day/night mode is enabled
     enum ThemeEditingMode: String, CaseIterable {
@@ -52,18 +98,65 @@ struct ThemeSettingsView: View {
 
     var body: some View {
         PanelSideRailReader { inRail in
-            VStack(spacing: 0) {
-                // Header: Search + Light/Dark filter
-                filterHeader(inRail: inRail)
-
-                // Responsive content
-                if horizontalSizeClass == .compact {
-                    // iPhone: List layout with inline terminal preview
-                    themeList
-                } else {
-                    // iPad/Mac/unfolded Duo: 2-column grid
-                    themeGrid
+            // The room and controls float over the list, which reserves room
+            // for them fully expanded, so rows stay attached as the room shrinks.
+            ZStack(alignment: .top) {
+                Group {
+                    if horizontalSizeClass == .compact {
+                        // iPhone: List layout with inline terminal preview
+                        themeList
+                    } else {
+                        // iPad/Mac/unfolded Duo: 2-column grid
+                        themeGrid
+                    }
                 }
+                .contentMargins(.top, roomMetrics.expanded + roomTopPadding + filterHeight, for: .scrollContent)
+                .contentMargins(.top, roomMetrics.expanded + roomTopPadding + filterHeight, for: .scrollIndicators)
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentOffset.y + geometry.contentInsets.top
+                } action: { _, offset in
+                    scrollOffset = offset
+                    let range = roomMetrics.expanded - roomMetrics.collapsed
+                    let next = min(max(offset / range, 0), 1)
+                    if next != roomCollapse { roomCollapse = next }
+                    // Scrolling on puts an opened room back to the band, once a repaint
+                    // that opened it has had time to play.
+                    if roomPeek, Date() > peekHoldUntil, abs(offset - peekOffset) > 40 { setRoomPeek(false) }
+                }
+
+                VStack(spacing: 0) {
+                    ThemeRoomHeader(
+                        theme: displayedTheme,
+                        collapse: roomPeek ? 0 : roomCollapse,
+                        expandedHeight: roomMetrics.expanded,
+                        collapsedHeight: roomMetrics.collapsed,
+                        slotSymbol: dayNightManager.enabled ? editingMode.icon : nil,
+                        onLocate: { locateRequest += 1 },
+                        onTap: { setRoomPeek(!roomPeek) },
+                        onPinch: { scale in
+                            if scale > 1.1 { setRoomPeek(true) } else if scale < 0.9 { setRoomPeek(false) }
+                        }
+                    )
+                    .padding(.top, roomTopPadding)
+                    .padding(.leading, 16)
+                    .padding(.trailing, inRail && horizontalSizeClass == .compact ? 0 : 16)
+
+                    filterHeader(inRail: inRail)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { filterHeight = $0 }
+                }
+                .background {
+                    (sheetThemeColors?.background ?? Color(uiColor: .systemGroupedBackground))
+                        .ignoresSafeArea(edges: .top)
+                }
+            }
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { containerSize = $0 }
+            // Picking a theme with the room shrunk opens it for the repaint. It stays
+            // open until a scroll or tap; closing on a timer moved the search field
+            // under a finger reaching for the room.
+            .onChange(of: displayedTheme?.id) { _, _ in
+                guard roomCollapse > 0.05 else { return }
+                peekHoldUntil = Date().addingTimeInterval(1.6)
+                setRoomPeek(true)
             }
         }
         // Awaits the background parse if the browser is opened before it lands;
@@ -316,10 +409,10 @@ struct ThemeSettingsView: View {
             .scrollDismissesKeyboard(.interactively)
             #endif
             .themedList()
-            .onAppear {
+            .onChange(of: editingMode) { _, _ in
                 scrollToSelectedTheme(proxy: proxy)
             }
-            .onChange(of: editingMode) { _, _ in
+            .onChange(of: locateRequest) { _, _ in
                 scrollToSelectedTheme(proxy: proxy)
             }
         }
@@ -483,10 +576,10 @@ struct ThemeSettingsView: View {
             .scrollDismissesKeyboard(.interactively)
             #endif
             .id(searchText + filterMode.rawValue)
-            .onAppear {
+            .onChange(of: editingMode) { _, _ in
                 scrollToSelectedTheme(proxy: proxy)
             }
-            .onChange(of: editingMode) { _, _ in
+            .onChange(of: locateRequest) { _, _ in
                 scrollToSelectedTheme(proxy: proxy)
             }
         }

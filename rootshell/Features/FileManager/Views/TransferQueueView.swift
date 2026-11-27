@@ -2,8 +2,8 @@
 //  TransferQueueView.swift
 //  rootshell
 //
-//  Transfer progress: a one-line strip that expands into the queue, and a
-//  pill shown over the terminal while the file manager is hidden.
+//  Transfer progress: a one-line strip in the file manager that expands into
+//  the queue.
 //
 
 import SwiftUI
@@ -223,81 +223,5 @@ private struct TransferJobRow: View {
         case .cancelled:
             return String(localized: "Cancelled", comment: "File manager: cancelled transfer")
         }
-    }
-}
-
-/// Floating progress over the terminal while the file manager is hidden.
-struct TransferPill: View {
-    /// Opens on the file list, where transfers and edit problems are listed.
-    let manager: FileManagerModel?
-    let onOpen: () -> Void
-    private var center: FileTransferCenter { .shared }
-    private var edits: RemoteFileEditCenter { .shared }
-
-    private var showsEditStatus: Bool {
-        !center.hasActiveJobs && (edits.hasActiveUploads || edits.hasAttentionItems)
-    }
-
-    var body: some View {
-        if center.hasActiveJobs || showsEditStatus {
-            Button {
-                manager?.showFiles()
-                onOpen()
-            } label: {
-                HStack(spacing: 8) {
-                    if center.hasActiveJobs {
-                        ZStack {
-                            Circle().stroke(.secondary.opacity(0.3), lineWidth: 3)
-                            Circle()
-                                .trim(from: 0, to: center.aggregateFraction ?? 0.05)
-                                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                                .rotationEffect(.degrees(-90))
-                        }
-                        .frame(width: 16, height: 16)
-                        Text(pillText).font(.caption.weight(.medium)).monospacedDigit()
-                    } else if edits.hasActiveUploads {
-                        ProgressView().controlSize(.mini)
-                        Text(editPillText).font(.caption.weight(.medium))
-                    } else {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                        Text(editPillText).font(.caption.weight(.medium))
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(.regularMaterial, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(String(localized: "File transfers in progress. Open file manager.", comment: "Transfer pill accessibility"))
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-    }
-
-    private var pillText: String {
-        let active = center.activeJobs.count
-        let rate = center.aggregateBytesPerSecond
-        let count = String(localized: "\(active) transferring", comment: "Transfer pill: active job count")
-        return rate > 0 ? "\(count) · \(TransferQueueView.rateText(rate))" : count
-    }
-
-    private var editPillText: String {
-        if let uploading = edits.sessions.first(where: { $0.state == .uploading }) {
-            return String(localized: "Uploading \(uploading.fileName)…", comment: "Transfer pill: auto-uploading external edit")
-        }
-        if let recovery = edits.recoveryConflicts.first {
-            return String(localized: "Recovery conflict: \(recovery.fileName)", comment: "Transfer pill: interrupted save recovery conflict")
-        }
-        if let preserved = edits.preservedEdits.first {
-            return String(localized: "Unsynced edit: \(preserved.fileName)", comment: "Transfer pill: preserved unsynced edit")
-        }
-        if let conflict = edits.sessions.first(where: { if case .conflict = $0.state { true } else { false } }) {
-            return String(localized: "Edit conflict: \(conflict.fileName)", comment: "Transfer pill: external edit conflict")
-        }
-        if let swapPending = edits.sessions.first(where: { if case .stagingFilesRemaining = $0.state { true } else { false } }) {
-            return String(localized: "Close editor: \(swapPending.fileName)", comment: "Transfer pill: editor swap file remains")
-        }
-        return String(localized: "Upload failed", comment: "Transfer pill: external edit upload failed")
     }
 }

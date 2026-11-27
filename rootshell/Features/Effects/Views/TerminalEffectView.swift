@@ -91,7 +91,7 @@ private struct BackgroundEffectSelectionPicker: View {
             }
             if let effect = effectManager.selectedEffect(id: effectID) {
                 NavigationLink {
-                    EffectSettingsView(configurationEffect: effect)
+                    EffectDetailView(effect: effect)
                 } label: {
                     Text("Configure Effect")
                 }
@@ -104,31 +104,6 @@ private struct BackgroundEffectSelectionPicker: View {
             #if !CHINA_BUILD
             effectManager.selectedEffect(id: effectID)?.asEffect(LiveWeatherEffect.self)?.onActivated()
             #endif
-        }
-    }
-}
-
-struct SidebarBackgroundEffectPicker: View {
-    @Setting(Settings.Shaders.sidebarEffectId) private var effectID
-    @Setting(Settings.Shaders.effectIncludesPinnedSidebar) private var includesSidebar
-
-    private var selection: Binding<String> {
-        Binding(get: {
-            // Preserve the old Include Pinned Sidebar preference.
-            effectID == BackgroundEffectSelection.followTerminalID && !includesSidebar ? "" : effectID
-        }, set: {
-            effectID = $0
-            if $0 == BackgroundEffectSelection.followTerminalID { includesSidebar = true }
-        })
-    }
-
-    var body: some View {
-        Group {
-            BackgroundEffectSelectionPicker(title: "Sidebar Effect", effectID: selection)
-                .settingContextMenu(Settings.Shaders.sidebarEffectId)
-            Text("Choose an effect for the pinned tab sidebar. Set the terminal effect to None to show effects only in the sidebar. Same as Terminal extends the terminal's effect across both areas. Settings are shared when areas use the same effect.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 }
