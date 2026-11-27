@@ -2,16 +2,14 @@
 //  SSHKeysHeaderView.swift
 //  rootshell
 //
-//  Animated header for Settings → SSH Keys: a pufferfish swims back and forth
-//  while the public key text it trails turns into bubbles.
+//  Animated header for Settings → SSH Keys: a pufferfish swims back and forth,
+//  trailing lines from the ciphers SSH uses that dissolve into bubbles.
 //
 
 import SwiftUI
 
 struct SSHKeysHeaderView: View {
     let keyCount: Int
-    /// Base64 of a saved public key, streamed as the fish's trail.
-    let trailText: String
     /// Bumped by the owner (key added, refresh finished) to make the fish puff up.
     let puffTrigger: Int
 
@@ -69,7 +67,6 @@ struct SSHKeysHeaderView: View {
                             swimWidth: max(size.width - labelWidth - 28, size.width * 0.4),
                             time: time,
                             puffAge: puffAge,
-                            glyphs: Array(trailText),
                             reduceMotion: reduceMotion,
                             scale: scale,
                             palette: palette
@@ -180,7 +177,6 @@ private nonisolated struct CipherStreamRenderer {
     let swimWidth: Double
     let time: Double
     let puffAge: Double
-    let glyphs: [Character]
     let reduceMotion: Bool
     /// Fish and trail size relative to the 100 pt design.
     let scale: Double
@@ -189,9 +185,36 @@ private nonisolated struct CipherStreamRenderer {
     private var w: Double { size.width }
     private var h: Double { size.height }
 
-    private static let emitInterval = 0.16
-    private static let glyphLife = 3.2
-    private static let fallbackGlyphs = Array("AAAAC3NzaC1lZDI1NTE5AAAAIG9wZW4gc2VzYW1lIGtlZXAgaXQgc2VjcmV0")
+    /// Real lines from the algorithms SSH negotiates, each group under its
+    /// OpenSSH name. ChaCha20's quarter round is written as in RFC 8439.
+    private static let formulas: [[Character]] = [
+        "// chacha20-poly1305",
+        "a += b; d ^= a; d <<<= 16",
+        "c += d; b ^= c; b <<<= 12",
+        "a += b; d ^= a; d <<<= 8",
+        "c += d; b ^= c; b <<<= 7",
+        "acc = (acc+m)·r mod 2¹³⁰−5",
+        "// aes256-gcm",
+        "S(b) = A·b⁻¹ ⊕ 0x63",
+        "Cᵢ = Pᵢ ⊕ AES(K, ctrᵢ)",
+        "X = (X ⊕ Cᵢ)·H in GF(2¹²⁸)",
+        "// curve25519-sha256",
+        "y² = x³ + 486662x² + x",
+        "p = 2²⁵⁵ − 19",
+        "Σ₀ = a⋙2 ⊕ a⋙13 ⊕ a⋙22",
+        "// ssh-ed25519",
+        "−x² + y² = 1 + d·x²y²",
+        "S = r + H(R,A,M)·a mod ℓ",
+        "// rsa-sha2-512",
+        "s = mᵈ mod n",
+        "m = sᵉ mod n",
+    ].map(Array.init)
+
+    private static let longestFormula = formulas.map(\.count).max() ?? 1
+    /// How long a finished line stays whole before it starts to dissolve.
+    private static let readTime = 2.6
+    private static let liftTime = 0.7
+    private static let bubbleLife = 1.3
 
     func draw(in context: inout GraphicsContext) {
         guard w > 1, h > 1 else { return }
@@ -279,46 +302,89 @@ private nonisolated struct CipherStreamRenderer {
 
     // MARK: Trail
 
+    /// On each rightward crossing the fish breathes out one line, a character as
+    /// its mouth passes that spot. Each rises clear of the fish's path, stays
+    /// whole long enough to read on the way back, then dissolves into bubbles
+    /// in the order it was written, so it is gone before the next one begins.
     private func drawTrail(_ context: inout GraphicsContext) {
-        let source = glyphs.isEmpty ? Self.fallbackGlyphs : glyphs
-        let newest = Int(floor(time / Self.emitInterval))
-        let oldest = Int(ceil((time - Self.glyphLife) / Self.emitInterval))
-        guard newest >= oldest else { return }
-
-        for index in oldest...newest {
-            let born = Double(index) * Self.emitInterval
-            let age = time - born
-            guard age >= 0, age < Self.glyphLife else { continue }
-
-            let origin = pose(at: born)
-            // A slow fish would stack glyphs on one spot; it only trails while cruising.
-            guard origin.speed > 0.35 else { continue }
-            let wobble = sin(Double(index) * 2.3) * 5 * scale
-            let x = origin.center.x - cos(origin.yaw) * (22 + age * 9) * scale + sin(age * 2.2 + Double(index)) * 2.5 * scale
-            let y = origin.center.y + wobble - age * 11 * scale
-            let point = CGPoint(x: x, y: y)
-
-            // Glyph for the first beat, then it dissolves into a bubble.
-            let glyphAlpha = 1 - smoothstep(0.55, 0.95, age)
-            let bubbleAlpha = smoothstep(0.6, 1.0, age) * (1 - smoothstep(Self.glyphLife - 0.9, Self.glyphLife, age))
-
-            if glyphAlpha > 0.01 {
-                let character = source[((index % source.count) + source.count) % source.count]
-                let text = Text(String(character))
-                    .font(.system(size: 11 * scale, weight: .medium, design: .monospaced))
-                    .foregroundStyle(palette.glyph.opacity(glyphAlpha))
-                context.draw(text, at: point)
-            }
-            if bubbleAlpha > 0.01 {
-                let radius = (1.6 + smoothstep(0.6, 2.0, age) * 1.6) * scale
-                let bubble = Path(ellipseIn: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2))
-                context.stroke(bubble, with: .color(palette.bubble.opacity(0.75 * bubbleAlpha)), lineWidth: 1)
-                context.fill(
-                    Path(ellipseIn: CGRect(x: x - radius * 0.45, y: y - radius * 0.55, width: radius * 0.5, height: radius * 0.5)),
-                    with: .color(palette.bubbleGlint.opacity(0.6 * bubbleAlpha))
-                )
-            }
+        let last = Int(floor(time / swimPeriod))
+        let count = Self.formulas.count
+        for pass in (reduceMotion ? last : last - 1)...last {
+            drawLine(Self.formulas[(pass % count + count) % count], pass: pass, in: &context)
         }
+    }
+
+    private func drawLine(_ line: [Character], pass: Int, in context: inout GraphicsContext) {
+        let inset = 6.0
+        // One size for every line: as large as the longest fits in the open
+        // water left of the label fade.
+        let right = swimWidth - 20 - inset
+        let fontSize = min(max((right - inset) / (Double(Self.longestFormula) * 0.6), 7), 11 * scale)
+        // A fixed monospaced grid, so symbols that fall back to another font
+        // still sit in their slot.
+        let advance = fontSize * 0.6
+        let width = Double(line.count) * advance
+        let start = max(inset + (right - inset - width) / 2, inset)
+
+        // Characters leave the mouth at a steady pace while the fish cruises, then
+        // glide up into their slot, so the line assembles in reading order.
+        let mouth = 16 * scale * 0.9
+        let passStart = Double(pass) * swimPeriod
+        func revealTime(_ index: Int) -> Double {
+            passStart + swimPeriod / 2 * (0.1 + 0.8 * (Double(index) + 0.5) / Double(line.count))
+        }
+        let life = revealTime(line.count - 1) - revealTime(0) + Self.readTime
+
+        // Just above the fish at the top of its bob, spikes included.
+        let fishTop = h * 0.43 - 16 * scale * 1.16
+        let lane = max(fishTop - fontSize * 0.6 - 1, fontSize * 0.6 + 2)
+        let isComment = line.starts(with: ["/", "/"])
+        let ink = isComment ? palette.glyph.opacity(0.6) : palette.glyph
+
+        for (index, character) in line.enumerated() where character != " " {
+            let revealed = revealTime(index)
+            let age = reduceMotion ? Self.liftTime : time - revealed
+            let pop = life + (hash(index, line.count) - 0.5) * 0.5
+            guard age >= 0, age < pop + Self.bubbleLife else { continue }
+
+            let lips = pose(at: revealed).center
+            let glide = easeOut(age / Self.liftTime)
+            let slot = start + (Double(index) + 0.5) * advance
+            let x = lips.x + mouth + (slot - lips.x - mouth) * glide
+            let y = lips.y + mouth * 0.15 + (lane - lips.y - mouth * 0.15) * glide + sin(time * 1.4 + Double(index) * 0.4) * 0.6 * scale
+            let glyphAlpha = smoothstep(0, 0.15, age) * (1 - smoothstep(pop, pop + 0.25, age))
+            if glyphAlpha > 0.01 {
+                let text = Text(String(character))
+                    .font(.system(size: fontSize, weight: .medium, design: .monospaced))
+                    .foregroundStyle(ink.opacity(glyphAlpha))
+                context.draw(text, at: CGPoint(x: x, y: y))
+            }
+
+            // About half the characters become bubbles, so a line doesn't fizz.
+            let bubbleAge = age - pop
+            guard bubbleAge > 0, hash(index * 7 + 3, line.count) < 0.55 else { continue }
+            let bubbleAlpha = smoothstep(0, 0.2, bubbleAge) * (1 - smoothstep(Self.bubbleLife - 0.5, Self.bubbleLife, bubbleAge))
+            let bx = x + sin(bubbleAge * 3 + Double(index)) * 1.5 * scale
+            let by = y - bubbleAge * 14 * scale
+            let radius = (1.4 + smoothstep(0, 1, bubbleAge) * 1.4) * scale
+            let bubble = Path(ellipseIn: CGRect(x: bx - radius, y: by - radius, width: radius * 2, height: radius * 2))
+            context.stroke(bubble, with: .color(palette.bubble.opacity(0.75 * bubbleAlpha)), lineWidth: 1)
+            context.fill(
+                Path(ellipseIn: CGRect(x: bx - radius * 0.45, y: by - radius * 0.55, width: radius * 0.5, height: radius * 0.5)),
+                with: .color(palette.bubbleGlint.opacity(0.6 * bubbleAlpha))
+            )
+        }
+    }
+
+    /// Stable 0..<1 per character, so each one pops at the same moment every frame.
+    private func hash(_ a: Int, _ b: Int) -> Double {
+        let value = sin(Double(a) * 12.9898 + Double(b) * 78.233) * 43758.5453
+        return value - floor(value)
+    }
+
+    private func easeOut(_ t: Double) -> Double {
+        let t = min(max(t, 0), 1)
+        return 1 - pow(1 - t, 3)
     }
 
     // MARK: Helpers

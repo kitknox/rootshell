@@ -26,7 +26,6 @@ struct SSHKeyManagementView: View {
             Section {
                 SSHKeysHeaderView(
                     keyCount: sshKeyManager.savedKeys.count,
-                    trailText: sshKeyManager.savedKeys.lazy.compactMap(\.publicKeyBlob).first?.base64EncodedString() ?? "",
                     puffTrigger: headerPuff
                 )
                 .listRowInsets(EdgeInsets())
