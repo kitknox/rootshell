@@ -245,7 +245,7 @@ extension MainView {
         }
     }
 
-    /// The HUD and, while the manager is hidden, the transfer progress pill.
+    /// The floating or full-size HUD.
     /// `fullSize` picks the full-size panel's layer or the floating one.
     @ViewBuilder
     func fileManagerOverlays(fullSize: Bool) -> some View {
@@ -263,18 +263,6 @@ extension MainView {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // A fresh host per presentation; the HUD host sets up dragging and resizing once.
             .id(fileManagerPresentation)
-        }
-        if !fullSize, !showFileManager {
-            TransferPill(manager: fileManagerModel, onOpen: { openFileManager() })
-                .padding(.bottom, 16 + pillKeyboardLift(above: focusedTerminalForFileManager))
-                .padding(.trailing, 16)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .animation(
-                    .snappy,
-                    value: FileTransferCenter.shared.hasActiveJobs
-                        || RemoteFileEditCenter.shared.hasActiveUploads
-                        || RemoteFileEditCenter.shared.hasAttentionItems
-                )
         }
     }
 
