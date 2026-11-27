@@ -19,21 +19,24 @@ struct SSHKeyManagementView: View {
     @State private var showingError = false
     @State private var errorMessage = ""
 
+    @State private var headerPuff = 0
+
     var body: some View {
         List {
-            if sshKeyManager.savedKeys.isEmpty {
-                Section {
-                    VStack(spacing: 12) {
-                        Image(systemName: "key.fill").font(.system(size: 48)).foregroundColor(.secondary).padding(.top, 20)
+            Section {
+                SSHKeysHeaderView(
+                    keyCount: sshKeyManager.savedKeys.count,
+                    trailText: sshKeyManager.savedKeys.lazy.compactMap(\.publicKeyBlob).first?.base64EncodedString() ?? "",
+                    puffTrigger: headerPuff
+                )
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+            }
+            .onChange(of: sshKeyManager.savedKeys.count) { old, new in
+                if new > old { headerPuff += 1 }
+            }
 
-                        Text("No SSH Keys").font(.headline)
-
-                        Text("Generate or import an SSH key to use for authentication").font(.subheadline).foregroundColor(.secondary).multilineTextAlignment(
-                            .center
-                        ).padding(.bottom, 20)
-                    }.frame(maxWidth: .infinity).listRowBackground(Color.clear)
-                }
-            } else {
+            if !sshKeyManager.savedKeys.isEmpty {
                 Section {
                     ForEach(sshKeyManager.savedKeys) { key in
                         NavigationLink {
@@ -67,9 +70,10 @@ struct SSHKeyManagementView: View {
             } footer: {
                 Text("Manage YubiKey hardware security keys for SSH authentication").font(.caption)
             }
-
-            Section { Text("SSH keys are stored securely in the system Keychain").font(.caption).foregroundColor(.secondary).themedRow() }
-        }.themedList().refreshable { await sshKeyManager.refreshKeysAsync() }.navigationTitle("SSH Keys").navigationBarTitleDisplayMode(.inline).toolbar {
+        }.themedList().refreshable {
+            await sshKeyManager.refreshKeysAsync()
+            headerPuff += 1
+        }.navigationTitle("SSH Keys").navigationBarTitleDisplayMode(.inline).toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button(action: { showingGenerate = true }) { Label("Generate New Key", systemImage: "wand.and.stars") }
