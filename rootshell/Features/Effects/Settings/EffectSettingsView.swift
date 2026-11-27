@@ -2,1918 +2,709 @@
 //  EffectSettingsView.swift
 //  rootshell
 //
-//  Settings view for configuring terminal background effects
+//  Settings → Background Effect: the stage, a gallery for the area being
+//  edited, and the effect's main controls. Everything else is on its page.
 //
 
+import Combine
 import SwiftUI
-import PhotosUI
-import CoreLocation
-import UniformTypeIdentifiers
+import UIKit
 
 struct EffectSettingsView: View {
-    /// Open an effect's controls without selecting it for the main terminal.
-    var configurationEffect: AnyTerminalEffect? = nil
     var effectManager = EffectManager.shared
-    var themeManager = ThemeManager.shared
     var transparencyManager = TransparencyManager.shared
-    @ObservedObject private var videoManager = VideoBackgroundManager.shared
-    @ObservedObject private var downloadManager = VideoBackgroundDownloadManager.shared
-    @ObservedObject private var localVideoManager = LocalVideoBackgroundManager.shared
 
-    // Local state for sliders - only commit on release
-    @State private var localIntensity: Double = 0.3
-    @State private var localSpeed: Double = 1.0
-    @State private var isDraggingIntensity = false
-    @State private var isDraggingSpeed = false
+    @Setting(Settings.Shaders.sidebarEffectId) private var sidebarEffectID
+    @Setting(Settings.Shaders.effectIncludesPinnedSidebar) private var includesSidebar
+    @Setting(Settings.Shaders.keyboardBackgroundEffect) private var keyboardPlacement
+    @Setting(Settings.Shaders.keyboardEffectId) private var keyboardEffectID
 
-    // SolarGraph-specific state
-    @State private var solarDemoMode: Bool = false
-    @State private var solarDemoSpeed: Double = 60.0
-    @State private var solarUseLocation: Bool = true
-    @State private var selectedTimezoneId: String = TimeZone.current.identifier
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.sheetThemeColors) private var sheetThemeColors
+    @Environment(\.duoLayout) private var duoLayout
 
-    // Photo picker state
-    @State private var selectedPhotoItem: PhotosPickerItem?
-    @State private var isLoadingPhoto: Bool = false
+    @State private var area: BackgroundEffectArea
+    /// 0 with the stage fully shown, 1 once it has shrunk to the band.
+    @State private var collapse = 0.0
+    @State private var controlsHeight: CGFloat = 52
+    @State private var showsVideoLibrary = false
+    @State private var textMoment = 0
+    @State private var separation = 0.0
+    /// Bumped when a gradient's style changes, so its tiles and stage repaint.
+    @State private var gradientRevision = 0
 
-    // Video section expansion
-    @State private var showVideoList = false
-
-    // Local video import state
-    @State private var showVideoFileImporter = false
-    @State private var videoImportError: String?
-    @State private var isImportingVideo = false
-    @State private var selectedPhotosVideoItem: PhotosPickerItem?
-
-    // Keep the presenter outside recycled List sections. A section can leave
-    // the visible list during the first sheet layout, dismissing its sheet.
-    @State private var showcaseEffect: AnyTerminalEffect?
-
-    // Built-in effect IDs (non-video)
-    private let builtInEffectIds = ["aquarium", "aurora", "themeGradient", "solarGraph", "liveWeather", "fireflies", "butterflies", "jellyfish", "photoBackground"]
-
-    /// Built-in effects only (not video backgrounds)
-    private var builtInEffects: [AnyTerminalEffect] {
-        effectManager.availableEffects.filter { builtInEffectIds.contains($0.id) }
+    /// Search results for one area open on it.
+    init(initialArea: BackgroundEffectArea = .terminal) {
+        _area = State(initialValue: initialArea)
     }
 
-    private var effectBeingConfigured: AnyTerminalEffect? {
-        configurationEffect ?? effectManager.activeEffect
+    private let headerTopPadding: CGFloat = 8
+    private let headerSpacing: CGFloat = 10
+    private let headerBottomPadding: CGFloat = 4
+    /// The unfolded Duo docks a tab sidebar too, though it reports a phone idiom.
+    private var areas: [BackgroundEffectArea] {
+        BackgroundEffectArea.allCases.filter { candidate in
+            candidate == .sidebar ? candidate.isAvailable || (duoLayout.hasHinge && !duoLayout.isFrontDisplay) : candidate.isAvailable
+        }
     }
 
-    /// Whether to show the video backgrounds list section
-    private var isVideoBackgroundMode: Bool {
-        showVideoList
-        || effectManager.activeEffect?.id.hasPrefix("videoBackground_") == true
-        || effectManager.pendingVideoActivation != nil
+    private var metrics: (expanded: CGFloat, collapsed: CGFloat) {
+        verticalSizeClass == .compact ? (128, 56) : (176, 72)
+    }
+
+    private var groundColor: Color {
+        sheetThemeColors?.background ?? Color(uiColor: .systemGroupedBackground)
     }
 
     var body: some View {
-        List {
-            if configurationEffect == nil {
-            // Built-in Effect Selection
-            Section {
-                // None option
-                Button(action: {
-                    effectManager.setActiveEffect(id: nil)
-                    effectManager.cancelPendingVideoActivation()
-                    showVideoList = false
-                }) {
-                    HStack {
-                        Image(systemName: "circle.slash")
-                            .foregroundColor(.secondary)
-                            .frame(width: 24)
-                        Text("None")
-                            .foregroundColor(.primary)
-                        Spacer()
-                        if effectManager.activeEffect == nil && effectManager.pendingVideoActivation == nil && !showVideoList {
-                            Image(systemName: "checkmark")
-                                .foregroundColor(.blue)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .themedRow()
-
-                // Built-in effects only
-                ForEach(builtInEffects) { effect in
-                    Button(action: {
-                        let wasActive = effectManager.activeEffect?.id == effect.id
-                        effectManager.setActiveEffect(id: effect.id)
-                        effectManager.cancelPendingVideoActivation()
-                        showVideoList = false
-
-                        // Trigger activation callback for newly selected effects
-                        if !wasActive, effect.id == "solarGraph",
-                           let solarEffect = effect.asEffect(SolarGraphEffect.self) {
-                            Task { await solarEffect.onActivated() }
-                        }
-                        #if !CHINA_BUILD
-                        if !wasActive { effect.asEffect(LiveWeatherEffect.self)?.onActivated() }
-                        #endif
-                    }) {
-                        HStack {
-                            Image(systemName: effect.previewIcon)
-                                .foregroundColor(.blue)
-                                .frame(width: 24)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(effect.displayName)
-                                    .foregroundColor(.primary)
-                                Text(effect.effectDescription)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            if effectManager.activeEffect?.id == effect.id {
-                                Image(systemName: "checkmark")
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .themedRow()
-                }
-
-                // Video Background option
-                Button(action: {
-                    showVideoList = true
-                    // Clear any non-video active effect so only video shows checkmark
-                    if effectManager.activeEffect?.id.hasPrefix("videoBackground_") != true {
-                        effectManager.setActiveEffect(id: nil)
-                    }
-                }) {
-                    HStack {
-                        Image(systemName: "film")
-                            .foregroundColor(.blue)
-                            .frame(width: 24)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Video Background")
-                                .foregroundColor(.primary)
-                            Text("Looping video wallpapers")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
-                        if isVideoBackgroundMode {
-                            Image(systemName: "checkmark")
-                                .foregroundColor(.blue)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .themedRow()
-            } header: {
-                SettingGroupHeader("Terminal Effect", group: .shaders)
-            }
-
-            Section {
-                #if !os(visionOS)
-                if UIDevice.current.userInterfaceIdiom != .phone {
-                    SidebarBackgroundEffectPicker()
-                        .themedRow()
-                }
-                #endif
-                #if !os(visionOS) && !targetEnvironment(macCatalyst)
-                KeyboardBackgroundEffectPicker()
-                    .themedRow()
-                #endif
-                SettingDescribedToggle(
-                    Settings.Shaders.textAboveEffect,
-                    isOn: Binding(get: { effectManager.isTextAboveEffectEnabled },
-                                  set: { effectManager.isTextAboveEffectEnabled = $0 }),
-                    title: "Text Above Effect",
-                    description: "Draws terminal text over the effect in its own colors, while the effect still tints the background. Programs that paint their own background, such as some Neovim color schemes, cover the effect there."
-                )
-                .themedRow()
-            } header: {
-                SettingGroupHeader("Layout", group: .shaders)
-            }
-
-            Section {
-                SettingDescribedToggle(
-                    Settings.Shaders.themeGradientBackdrop,
-                    isOn: Binding(get: { effectManager.isBackdropEnabled },
-                                  set: { effectManager.isBackdropEnabled = $0 }),
-                    title: "Theme Gradient",
-                    description: "Fills the whole window behind tabs and panes with a soft glow in the theme's colors. It shows around Rounded Panes and through transparent terminals, beneath the effects above."
-                )
-                .themedRow()
-                if effectManager.isBackdropEnabled {
-                    #if targetEnvironment(macCatalyst)
-                    SettingDescribedToggle(
-                        Settings.Transparency.backdropTransparency,
-                        isOn: Binding(get: { transparencyManager.backdropTransparencyEnabled },
-                                      set: { transparencyManager.backdropTransparencyEnabled = $0 }),
-                        title: "Transparent Backdrop",
-                        description: "Apply the window opacity to the gradient too, so the desktop shows through it. When off, transparency only reveals the gradient behind the terminal."
-                    )
-                    .themedRow()
-                    #endif
-                    NavigationLink {
-                        EffectSettingsView(configurationEffect: effectManager.backdropEffect)
-                    } label: {
-                        Text("Configure Backdrop")
-                    }
-                    .themedRow()
-                }
-            } header: {
-                SettingGroupHeader("Backdrop", group: .shaders)
-            }
-
-            // My Videos Section (user-imported local videos)
-            if isVideoBackgroundMode {
-            Section {
-                Button {
-                    showVideoFileImporter = true
-                } label: {
-                    HStack {
-                        Image(systemName: "folder.badge.plus")
-                            .foregroundColor(.blue)
-                            .frame(width: 24)
-                        Text(localVideoManager.localVideos.isEmpty ? "Choose Local Video…" : "Add Another Video…")
-                            .foregroundColor(.primary)
-                        if isImportingVideo {
-                            Spacer()
-                            ProgressView()
-                        }
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(isImportingVideo)
-                .themedRow()
-
-                PhotosPicker(
-                    selection: $selectedPhotosVideoItem,
-                    matching: .videos,
-                    preferredItemEncoding: .current
-                ) {
-                    HStack {
-                        Image(systemName: "photo.on.rectangle.angled")
-                            .foregroundColor(.blue)
-                            .frame(width: 24)
-                        Text("Choose from Photos…")
-                            .foregroundColor(.primary)
-                        if isImportingVideo {
-                            Spacer()
-                            ProgressView()
-                        }
-                    }
-                    .contentShape(Rectangle())
-                }
-                .disabled(isImportingVideo)
-                .themedRow()
-                .onChange(of: selectedPhotosVideoItem) { _, newItem in
-                    guard let newItem else { return }
-                    handlePhotosVideoImport(item: newItem)
-                }
-
-                ForEach(localVideoManager.localVideos) { video in
-                    LocalVideoBackgroundRow(
-                        video: video,
-                        isActive: effectManager.activeEffect?.id == "videoBackground_\(video.id)",
-                        onSelect: {
-                            effectManager.requestVideoEffectActivation(video.id)
-                        }
-                    )
-                    .themedRow()
-                }
-
-                if let error = videoImportError {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .foregroundColor(.orange)
-                        Text(error)
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                    }
-                    .themedRow()
-                }
-            } header: {
-                Text("My Videos")
-            } footer: {
-                Text("Import an MP4 (H.264 or HEVC) or MOV file. Looping works best when the first and last frames match. Audio tracks are ignored.")
-            }
-            .fileImporter(
-                isPresented: $showVideoFileImporter,
-                allowedContentTypes: [.movie, .mpeg4Movie, .quickTimeMovie],
-                allowsMultipleSelection: false
-            ) { result in
-                handleVideoImport(result: result)
-            }
-            }
-
-            // Video Backgrounds Section (only shown when video mode selected)
-            if isVideoBackgroundMode {
-            Section("Video Backgrounds") {
-                if videoManager.isLoadingIndex && videoManager.remoteVideos.isEmpty {
-                    HStack(spacing: 12) {
-                        ProgressView()
-                        Text("Loading available videos...")
-                            .foregroundColor(.secondary)
-                    }
-                    .themedRow()
-                } else if let error = videoManager.indexError, videoManager.remoteVideos.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle")
-                                .foregroundColor(.orange)
-                            Text("Failed to load videos")
-                                .foregroundColor(.primary)
-                        }
-                        Text(error)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Button("Retry") {
-                            Task { await videoManager.fetchRemoteIndex() }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                    }
-                    .padding(.vertical, 4)
-                    .themedRow()
-                } else if videoManager.remoteVideos.isEmpty {
-                    Text("No video backgrounds available")
-                        .foregroundColor(.secondary)
-                        .themedRow()
-                } else {
-                    ForEach(videoManager.remoteVideos) { video in
-                        VideoBackgroundRow(
-                            video: video,
-                            isActive: effectManager.activeEffect?.id == "videoBackground_\(video.id)",
-                            isPending: effectManager.pendingVideoActivation == video.id,
-                            onSelect: {
-                                effectManager.requestVideoEffectActivation(video.id)
-                            }
-                        )
-                        .themedRow()
-                    }
+        // The stage floats over the list, which reserves room for it fully
+        // expanded, so rows stay attached as it shrinks.
+        ZStack(alignment: .top) {
+            List {
+                switch area {
+                case .terminal: terminalPanel
+                case .sidebar: sidebarPanel
+                case .keyboard: keyboardPanel
+                case .window: windowPanel
                 }
             }
+            .themedList()
+            .contentMargins(.top, headerHeight, for: .scrollContent)
+            .contentMargins(.top, headerHeight, for: .scrollIndicators)
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top
+            } action: { _, offset in
+                let next = min(max(offset / (metrics.expanded - metrics.collapsed), 0), 1)
+                if next != collapse { collapse = next }
             }
-            } // Terminal effect selection and layout
 
-            // Keyboard and sidebar controls do not activate the terminal effect.
-            if let activeEffect = effectBeingConfigured {
-                if let gradientEffect = activeEffect.asEffect(ThemeGradientEffect.self) {
-                    ThemeGradientStyleSection(effect: gradientEffect)
-                }
-
-                Section("Settings") {
-                    // Intensity slider; the backdrop is always opaque
-                    if activeEffect.asEffect(ThemeGradientEffect.self)?.isBackdrop != true {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Intensity")
-                                Spacer()
-                                Text(localIntensity, format: .wholePercent)
-                                    .foregroundColor(.secondary)
-                                    .monospacedDigit()
-                                    .frame(width: 50, alignment: .trailing)
-                            }
-                            Slider(value: $localIntensity, in: 0.05...0.6) { editing in
-                                isDraggingIntensity = editing
-                                if !editing {
-                                    // Commit value when drag ends
-                                    activeEffect.intensity = localIntensity
-                                }
-                            }
-                        }
-                        .padding(.vertical, 4)
-                        .themedRow()
-                    }
-
-                    // Speed slider (Solar and Live Weather follow real time)
-                    if activeEffect.id != "solarGraph" && activeEffect.id != "liveWeather" {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Speed")
-                                Spacer()
-                                Text(speedLabel(localSpeed))
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 80, alignment: .trailing)
-                            }
-                            Slider(value: $localSpeed, in: 0.25...2.0) { editing in
-                                isDraggingSpeed = editing
-                                if !editing {
-                                    // Commit value when drag ends
-                                    activeEffect.speed = localSpeed
-                                }
-                            }
-                        }
-                        .padding(.vertical, 4)
-                        .themedRow()
-                    }
-
-                    // Reset button
-                    Button("Reset to Defaults") {
-                        activeEffect.resetToDefaults()
-                        localIntensity = activeEffect.intensity
-                        localSpeed = activeEffect.speed
-                        if activeEffect.id == "solarGraph" {
-                            solarDemoMode = false
-                            solarDemoSpeed = 60.0
-                        }
-                    }
-                    .themedRow()
-                }
-
-                // SolarGraph-specific settings
-                if activeEffect.id == "solarGraph", let solarEffect = activeEffect.asEffect(SolarGraphEffect.self) {
-                    // Transparency warning
-                    if transparencyManager.effectiveBackgroundOpacity < 1.0 {
-                        Section {
-                            HStack(alignment: .top, spacing: 12) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.orange)
-                                    .font(.title3)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Transparency Enabled")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                    Text("Window transparency can cause visual artifacts with the solar background. Set transparency to \(1.0.formatted(.wholePercent)) for optimal quality.")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            .padding(.vertical, 4)
-                            .themedRow()
-
-                            Button("Set Opacity to \(1.0.formatted(.wholePercent))") {
-                                transparencyManager.backgroundOpacity = 1.0
-                            }
-                            .themedRow()
-                        }
-                    }
-
-                    Section("Time Mode") {
-                        Toggle("Demo Mode", isOn: $solarDemoMode)
-                            .onChange(of: solarDemoMode) { _, newValue in
-                                if newValue {
-                                    // Reset demo start time so all views sync
-                                    solarEffect.demoStartTime = Date.now
-                                    activeEffect.speed = solarDemoSpeed
-                                } else {
-                                    activeEffect.speed = 1.0
-                                }
-                            }
-                            .themedRow()
-
-                        if solarDemoMode {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text("Cycle Speed")
-                                    Spacer()
-                                    Text(solarDemoSpeedLabel(solarDemoSpeed))
-                                        .foregroundColor(.secondary)
-                                        .frame(width: 100, alignment: .trailing)
-                                }
-                                Slider(value: $solarDemoSpeed, in: 30...1440, step: 30) { editing in
-                                    if !editing {
-                                        activeEffect.speed = solarDemoSpeed
-                                    }
-                                }
-                            }
-                            .padding(.vertical, 4)
-                            .themedRow()
-                        }
-                    }
-
-                    Section("Location") {
-                        Toggle("Use Device Location", isOn: $solarUseLocation)
-                            .onChange(of: solarUseLocation) { _, newValue in
-                                solarEffect.useLocation = newValue
-                                if newValue {
-                                    Task {
-                                        await solarEffect.refreshLocation()
-                                        // Update local state if permission was denied
-                                        solarUseLocation = solarEffect.useLocation
-                                    }
-                                }
-                            }
-                            .themedRow()
-
-                        if solarUseLocation {
-                            // Location enabled - show status
-                            if let locality = solarEffect.locationService.locality {
-                                HStack {
-                                    Image(systemName: "mappin.circle.fill")
-                                        .foregroundColor(.green)
-                                    Text(locality)
-                                        .foregroundColor(.secondary)
-                                }
-                                .font(.caption)
-                                .themedRow()
-                            } else if solarEffect.locationService.isRequestingLocation {
-                                HStack {
-                                    ProgressView()
-                                        .scaleEffect(0.7)
-                                    Text("Getting location...")
-                                        .foregroundColor(.secondary)
-                                }
-                                .font(.caption)
-                                .themedRow()
-                            } else {
-                                Text("Accurate sunrise & sunset times")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .themedRow()
-                            }
-                        } else {
-                            // Location disabled - show timezone picker
-                            Picker("Timezone", selection: $selectedTimezoneId) {
-                                ForEach(commonTimezones, id: \.self) { tz in
-                                    Text(formatTimezone(tz)).tag(tz)
-                                }
-                            }
-                            .onChange(of: selectedTimezoneId) { _, newValue in
-                                if let tz = TimeZone(identifier: newValue) {
-                                    solarEffect.manualTimezone = tz
-                                }
-                            }
-                            .themedRow()
-
-                            Text("Using timezone estimate for sunrise & sunset")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .themedRow()
-                        }
-                    }
-
-                    Section("Display") {
-                        Toggle(isOn: Binding(
-                            get: { solarEffect.showArcTrack },
-                            set: { solarEffect.showArcTrack = $0 }
-                        )) {
-                            HStack {
-                                Image(systemName: "sun.horizon.circle")
-                                    .foregroundColor(.orange)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Solar Arc")
-                                    Text("Show sun path indicator")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                        .themedRow()
-
-                        Toggle(isOn: Binding(
-                            get: { solarEffect.showSunHotspot },
-                            set: { solarEffect.showSunHotspot = $0 }
-                        )) {
-                            HStack {
-                                Image(systemName: "sun.max.circle")
-                                    .foregroundColor(.yellow)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Sun Hotspot")
-                                    Text("3D depth highlight on sun disc")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                        .themedRow()
-                    }
-
-                    Section("Night Sky") {
-                        Toggle(isOn: Binding(
-                            get: { solarEffect.showStars },
-                            set: { solarEffect.showStars = $0 }
-                        )) {
-                            HStack {
-                                Image(systemName: "sparkles")
-                                    .foregroundColor(.blue)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Star Field")
-                                    Text("Real astronomical positions")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                        .themedRow()
-
-                        if solarEffect.showStars {
-                            Toggle(isOn: Binding(
-                                get: { solarEffect.starTwinkle },
-                                set: { solarEffect.starTwinkle = $0 }
-                            )) {
-                                HStack {
-                                    Image(systemName: "star.fill")
-                                        .foregroundColor(.yellow)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Twinkling")
-                                        Text("Atmospheric shimmer effect")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                            }
-                            .themedRow()
-
-                            HStack {
-                                Image(systemName: "info.circle")
-                                    .foregroundColor(.secondary)
-                                Text("Includes Milky Way, nebulae, and diffraction spikes for brightest stars")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            .padding(.vertical, 4)
-                            .themedRow()
-                        }
-                    }
-
-                    Section("Ocean") {
-                        OceanSettingsView(effect: solarEffect)
-                            .themedRow()
-                    }
-                }
-
-                // Photo background settings
-                if activeEffect.id == "photoBackground",
-                   let photoEffect = activeEffect.asEffect(PhotoBackgroundEffect.self) {
-                    PhotoBackgroundSettingsSection(
-                        effect: photoEffect,
-                        selectedPhotoItem: $selectedPhotoItem,
-                        isLoadingPhoto: $isLoadingPhoto
-                    )
-                }
-
-                // Video background theme tint
-                if activeEffect.id.hasPrefix("videoBackground_"),
-                   let videoEffect = activeEffect.asEffect(VideoBackgroundEffect.self) {
-                    VideoThemeTintSection(effect: videoEffect)
-                }
-
-                // Fireflies-specific settings
-                if activeEffect.id == "fireflies",
-                   let firefliesEffect = activeEffect.asEffect(FirefliesEffect.self) {
-                    FirefliesSettingsSection(effect: firefliesEffect)
-                }
-
-                // Butterflies-specific settings
-                if activeEffect.id == "butterflies",
-                   let butterfliesEffect = activeEffect.asEffect(ButterfliesEffect.self) {
-                    ButterfliesSettingsSection(effect: butterfliesEffect)
-                }
-
-                // Jellyfish-specific settings
-                if activeEffect.id == "jellyfish",
-                   let jellyfishEffect = activeEffect.asEffect(JellyfishEffect.self) {
-                    JellyfishSettingsSection(effect: jellyfishEffect) {
-                        showcaseEffect = activeEffect
-                    }
-                }
-
-                // Aquarium-specific settings
-                if activeEffect.id == "aquarium",
-                   let aquariumEffect = activeEffect.asEffect(AquariumEffect.self) {
-                    AquariumSettingsSection(effect: aquariumEffect, onShowcase: {
-                        showcaseEffect = activeEffect
-                    }) {
-                        aquariumEffect.resetToDefaults()
-                        localIntensity = aquariumEffect.intensity
-                        localSpeed = aquariumEffect.speed
-                    }
-                }
-
-                #if !CHINA_BUILD
-                if activeEffect.id == "liveWeather",
-                   let weatherEffect = activeEffect.asEffect(LiveWeatherEffect.self) {
-                    LiveWeatherSettingsSection(effect: weatherEffect) {
-                        showcaseEffect = activeEffect
-                    }
-                }
-                #endif
-
-                // Aurora-specific settings
-                if activeEffect.id == "aurora",
-                   let auroraEffect = activeEffect.asEffect(AuroraEffect.self) {
-                    AuroraSettingsSection(effect: auroraEffect)
-                }
-
-                // Both the area effect and the window backdrop
-                if let gradientEffect = activeEffect.asEffect(ThemeGradientEffect.self) {
-                    ThemeGradientSettingsSection(effect: gradientEffect)
-                }
-
-                // Live Preview
-                Section("Preview") {
-                    ZStack {
-                        // Background
-                        previewBackgroundColor
-                            .ignoresSafeArea()
-
-                        // Effect layer. Butterflies visit too rarely for a
-                        // passive preview, so give it a preview-mode view
-                        // that spawns immediately and often.
-                        if activeEffect.id == "butterflies",
-                           let butterfliesEffect = activeEffect.asEffect(ButterfliesEffect.self) {
-                            ButterfliesView(effect: butterfliesEffect, previewMode: true)
-                        } else if activeEffect.id == "jellyfish",
-                                  let jellyfishEffect = activeEffect.asEffect(JellyfishEffect.self) {
-                            // Jellyfish visits are rare and slow, so the
-                            // preview also uses a fast-spawning view
-                            JellyfishView(effect: jellyfishEffect, previewMode: true)
-                                .blendMode(jellyfishEffect.isLightBackground ? .multiply : .plusLighter)
-                        } else if activeEffect.id == "aurora" || activeEffect.id == "aquarium"
-                                    || activeEffect.id == "themeGradient" || activeEffect.id == "liveWeather" {
-                            // These shaders' light-theme output is white-based
-                            // and needs the same blend mode MainView applies.
-                            activeEffect.createEffectView()
-                                .blendMode(effectManager.isLightTheme ? .multiply : .plusLighter)
-                        } else {
-                            activeEffect.createEffectView()
-                        }
-
-                        // Sample terminal text
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("user@host ~ $")
-                            Text("ls -la")
-                            Text("total 42")
-                            Text("drwxr-xr-x  5 user staff  160 Nov 24 12:00 .")
-                        }
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundColor(previewForegroundColor)
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(height: 140)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .themedRow()
-                }
-            }
+            header
         }
-        .themedList()
-        .navigationTitle(configurationEffect?.displayName ?? String(localized: "Background Effect"))
+        .background(groundColor.ignoresSafeArea())
+        .navigationTitle("Background Effect")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $showcaseEffect) { effect in
-            EffectShowcaseView(effect: effect)
+        .navigationDestination(isPresented: $showsVideoLibrary) {
+            VideoBackgroundLibraryView(area: area)
         }
-        .onAppear {
-            syncLocalState()
-            // Pre-fetch video index if already in video mode
-            if configurationEffect == nil && isVideoBackgroundMode {
-                Task { await videoManager.fetchRemoteIndex() }
-            }
+        .onChange(of: effectManager.isTextAboveEffectEnabled) { _, _ in textMoment += 1 }
+        .onChange(of: areas, initial: true) { _, available in
+            if !available.contains(area) { area = .terminal }
         }
-        .onChange(of: effectBeingConfigured?.id) { _, _ in
-            syncLocalState()
-        }
-        .onChange(of: showVideoList) { _, newValue in
-            if configurationEffect == nil && newValue {
-                Task { await videoManager.fetchRemoteIndex() }
-            }
+        .task { await watchGradient(effectManager.effect(withId: "themeGradient")) }
+        .task { await watchGradient(effectManager.backdropEffect) }
+        .task(id: textMoment) {
+            guard textMoment > 0, !reduceMotion else { return }
+            withAnimation(.smooth(duration: 0.4)) { separation = 1 }
+            try? await Task.sleep(for: .seconds(1.1))
+            withAnimation(.smooth(duration: 0.5)) { separation = 0 }
         }
     }
 
-    /// Sync local slider state from the active effect
-    private func syncLocalState() {
-        if let effect = effectBeingConfigured {
-            localIntensity = effect.intensity
-            localSpeed = effect.speed
+    private var headerHeight: CGFloat {
+        metrics.expanded + headerTopPadding + headerSpacing + controlsHeight + headerBottomPadding
+    }
 
-            // Show video list if a video background is active
-            if effect.id.hasPrefix("videoBackground_") {
-                showVideoList = true
-            }
+    // MARK: Header
 
-            // Sync SolarGraph-specific state
-            if effect.id == "solarGraph",
-               let solarEffect = effect.asEffect(SolarGraphEffect.self) {
-                solarDemoMode = effect.speed > 1.0
-                if solarDemoMode {
-                    solarDemoSpeed = effect.speed
-                }
-                solarUseLocation = solarEffect.useLocation
-                selectedTimezoneId = solarEffect.manualTimezone.identifier
-            }
+    private var header: some View {
+        VStack(spacing: headerSpacing) {
+            BackgroundEffectStage(state: stageState, collapse: collapse,
+                                  expandedHeight: metrics.expanded, collapsedHeight: metrics.collapsed,
+                                  separation: separation)
+            PreviewSegmentedControl<BackgroundEffectArea>(
+                title: "Area",
+                options: areas.map { PreviewSegmentedControl<BackgroundEffectArea>.Option(value: $0, symbol: $0.symbol, title: $0.title) },
+                selection: area,
+                onSelect: { area = $0 },
+                labelAxis: horizontalSizeClass == .compact && areas.count > 3 ? .vertical : .horizontal
+            )
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controlsHeight = $0 }
         }
+        .padding(.top, headerTopPadding)
+        .padding(.horizontal, 16)
+        .padding(.bottom, headerBottomPadding)
+        .background(groundColor.ignoresSafeArea(edges: .top))
     }
 
-    // MARK: - Helpers
-
-    private func speedLabel(_ speed: Double) -> String {
-        switch speed {
-        case 0.25: return "Very Slow"
-        case 0.5: return "Slow"
-        case 0.75: return "Slower"
-        case 1.0: return "Normal"
-        case 1.25: return "Faster"
-        case 1.5: return "Fast"
-        case 1.75: return "Faster"
-        case 2.0: return "Very Fast"
-        default: return String(format: "%.1fx", speed)
-        }
+    private func watchGradient(_ effect: AnyTerminalEffect?) async {
+        guard let effect else { return }
+        for await _ in effect.configurationDidChange.values { gradientRevision &+= 1 }
     }
 
-    private func solarDemoSpeedLabel(_ speed: Double) -> String {
-        // Speed represents how many real seconds = 1 simulated day second
-        // So speed of 60 means 60x faster = 24 min cycle
-        // speed of 1440 means 1440x = 1 min cycle
-        let cycleMinutes = 24 * 60 / speed
-        if cycleMinutes >= 60 {
-            let hours = Int(cycleMinutes / 60)
-            let mins = Int(cycleMinutes.truncatingRemainder(dividingBy: 60))
-            if mins == 0 {
-                return "\(hours)h cycle"
-            }
-            return String(localized: "\(hours)h \(mins)m cycle", comment: "Effect schedule duration")
-        } else if cycleMinutes >= 1 {
-            return "\(Int(cycleMinutes))m cycle"
-        } else {
-            return "\(Int(cycleMinutes * 60))s cycle"
-        }
+    private var stageState: BackgroundEffectStageState {
+        _ = gradientRevision
+        return BackgroundEffectStageState(
+            area: area,
+            areas: areas,
+            terminal: effectManager.activeEffect,
+            sidebar: effectManager.selectedEffect(id: sidebarSelection),
+            keyboard: effectManager.selectedEffect(id: keyboardEffectID),
+            keyboardPlacement: keyboardPlacement,
+            backdrop: effectManager.isBackdropEnabled ? effectManager.backdropEffect : nil,
+            textAbove: effectManager.isTextAboveEffectEnabled
+        )
     }
 
-    private var previewBackgroundColor: Color {
-        if let hex = themeManager.currentThemeInfo?.colors.background,
-           let color = Color(hex: hex) {
-            return color
-        }
-        return Color(uiColor: .systemBackground)
-    }
+    // MARK: Terminal
 
-    private var previewForegroundColor: Color {
-        if let hex = themeManager.currentThemeInfo?.colors.foreground,
-           let color = Color(hex: hex) {
-            return color
-        }
-        return .primary
-    }
+    @ViewBuilder
+    private var terminalPanel: some View {
+        EffectGallerySection(
+            title: "Terminal Effect",
+            items: galleryItems(includesFollow: false),
+            selectedID: terminalSelection,
+            footer: nil,
+            onSelect: { select($0, in: .terminal) }
+        )
 
-    // MARK: - Timezone Helpers
-
-    /// Common timezones organized by region for picker
-    private var commonTimezones: [String] {
-        // Return a curated list of common timezones
-        return [
-            // Americas
-            "America/New_York",
-            "America/Chicago",
-            "America/Denver",
-            "America/Los_Angeles",
-            "America/Anchorage",
-            "Pacific/Honolulu",
-            "America/Toronto",
-            "America/Vancouver",
-            "America/Mexico_City",
-            "America/Sao_Paulo",
-            "America/Buenos_Aires",
-            // Europe
-            "Europe/London",
-            "Europe/Paris",
-            "Europe/Berlin",
-            "Europe/Rome",
-            "Europe/Madrid",
-            "Europe/Amsterdam",
-            "Europe/Stockholm",
-            "Europe/Moscow",
-            // Asia
-            "Asia/Dubai",
-            "Asia/Kolkata",
-            "Asia/Bangkok",
-            "Asia/Singapore",
-            "Asia/Hong_Kong",
-            "Asia/Shanghai",
-            "Asia/Tokyo",
-            "Asia/Seoul",
-            // Oceania
-            "Australia/Sydney",
-            "Australia/Melbourne",
-            "Australia/Perth",
-            "Pacific/Auckland",
-            // Africa
-            "Africa/Cairo",
-            "Africa/Johannesburg",
-            "Africa/Lagos"
-        ]
-    }
-
-    private func formatTimezone(_ identifier: String) -> String {
-        guard let tz = TimeZone(identifier: identifier) else {
-            return identifier
+        if let pending = effectManager.pendingVideoActivation {
+            PendingVideoSection(videoID: pending)
         }
 
-        // Get city name from identifier (e.g., "America/New_York" -> "New York")
-        let city = identifier.components(separatedBy: "/").last?
-            .replacingOccurrences(of: "_", with: " ") ?? identifier
-
-        // Get UTC offset
-        let offset = tz.secondsFromGMT()
-        let hours = offset / 3600
-        let sign = hours >= 0 ? "+" : ""
-
-        return "\(city) (UTC\(sign)\(hours))"
-    }
-
-    // MARK: - Local Video Import
-
-    private func handleVideoImport(result: Result<[URL], Error>) {
-        videoImportError = nil
-        switch result {
-        case .success(let urls):
-            guard let url = urls.first else { return }
-            isImportingVideo = true
-            Task {
-                defer { isImportingVideo = false }
-                do {
-                    _ = try await localVideoManager.importVideo(from: url)
-                } catch {
-                    videoImportError = error.localizedDescription
-                }
-            }
-        case .failure(let error):
-            videoImportError = error.localizedDescription
+        if let effect = effectManager.activeEffect {
+            tuning(for: effect, in: .terminal)
         }
-    }
 
-    private func handlePhotosVideoImport(item: PhotosPickerItem) {
-        videoImportError = nil
-        isImportingVideo = true
-        Task {
-            defer {
-                isImportingVideo = false
-                selectedPhotosVideoItem = nil
-            }
-            do {
-                guard let transferable = try await item.loadTransferable(type: PhotosVideoTransferable.self) else {
-                    videoImportError = "Could not load selected video."
-                    return
-                }
-                defer { try? FileManager.default.removeItem(at: transferable.url) }
-                _ = try await localVideoManager.importVideo(from: transferable.url)
-            } catch {
-                videoImportError = error.localizedDescription
-            }
-        }
-    }
-}
-
-// MARK: - Photo Background Settings
-
-private struct PhotoBackgroundSettingsSection: View {
-    @ObservedObject var effect: PhotoBackgroundEffect
-    @Binding var selectedPhotoItem: PhotosPickerItem?
-    @Binding var isLoadingPhoto: Bool
-
-    @State private var localTintAmount: Double = 0.6
-    @State private var isDraggingTintAmount: Bool = false
-    @State private var photoImportError: String?
-
-    var body: some View {
         Section {
-            PhotosPicker(
-                selection: $selectedPhotoItem,
-                matching: .images
-            ) {
-                HStack {
-                    Image(systemName: "photo.badge.plus")
-                        .foregroundColor(.blue)
-                        .frame(width: 24)
-                    Text(effect.photos.isEmpty ? "Choose Photo" : "Add Another Photo")
-                    if isLoadingPhoto {
-                        Spacer()
-                        ProgressView()
-                    }
-                }
-            }
-            .disabled(isLoadingPhoto)
+            SettingDescribedToggle(
+                Settings.Shaders.textAboveEffect,
+                isOn: Binding(get: { effectManager.isTextAboveEffectEnabled },
+                              set: { effectManager.isTextAboveEffectEnabled = $0 }),
+                title: "Text Above Effect",
+                description: "Draws terminal text over the effect in its own colors. Off, the effect washes over the text too. Programs that paint their own background, such as some Neovim color schemes, cover the effect there."
+            )
             .themedRow()
-            .onChange(of: selectedPhotoItem) { _, newItem in
-                guard let newItem else { return }
-                photoImportError = nil
-                isLoadingPhoto = true
-                Task {
-                    defer {
-                        isLoadingPhoto = false
-                        selectedPhotoItem = nil
-                    }
-                    do {
-                        guard let data = try await newItem.loadTransferable(type: Data.self),
-                              let image = UIImage(data: data) else {
-                            photoImportError = "Could not load the selected photo."
-                            return
-                        }
-                        try effect.savePhoto(image)
-                    } catch {
-                        photoImportError = error.localizedDescription
-                    }
-                }
-            }
+        }
+    }
 
-            ForEach(effect.photos) { photo in
-                PhotoBackgroundRow(
-                    photo: photo,
-                    effect: effect,
-                    isSelected: effect.selectedPhotoID == photo.id,
-                    onSelect: { effect.selectPhoto(id: photo.id) },
-                    onDelete: {
-                        do {
-                            try effect.removePhoto(id: photo.id)
-                            photoImportError = nil
-                        } catch {
-                            photoImportError = error.localizedDescription
-                        }
-                    }
+    private var terminalSelection: String {
+        guard let id = effectManager.activeEffect?.id else { return "" }
+        return id.hasPrefix(Self.videoPrefix) ? Self.videoTileID : id
+    }
+
+    // MARK: Sidebar
+
+    /// The old Include Pinned Sidebar preference reads as None when off.
+    private var sidebarSelection: String {
+        sidebarEffectID == BackgroundEffectSelection.followTerminalID && !includesSidebar ? "" : sidebarEffectID
+    }
+
+    @ViewBuilder
+    private var sidebarPanel: some View {
+        EffectGallerySection(
+            title: "Sidebar Effect",
+            items: galleryItems(includesFollow: true),
+            selectedID: tileID(for: sidebarSelection),
+            footer: "Same as Terminal extends the terminal's effect across the pinned tab sidebar. Set the terminal to None to show an effect only here.",
+            onSelect: { select($0, in: .sidebar) }
+        )
+        .settingContextMenu(Settings.Shaders.sidebarEffectId)
+        areaTuning(selection: sidebarSelection, in: .sidebar)
+    }
+
+    // MARK: Keyboard
+
+    @ViewBuilder
+    private var keyboardPanel: some View {
+        Section {
+            PreviewSegmentedControl<TerminalTouchKeyboardModel.BackgroundEffectPlacement>(
+                title: "Keyboard Effect Area",
+                options: [
+                    .init(value: .off, symbol: "circle.slash", title: String(localized: "Off", comment: "Keyboard effect area: none")),
+                    .init(value: .toolbar, symbol: "menubar.rectangle", title: String(localized: "Toolbar", comment: "Keyboard effect area: toolbar only")),
+                    .init(value: .entireKeyboard, symbol: "keyboard", title: String(localized: "Keyboard", comment: "Keyboard effect area: whole keyboard")),
+                ],
+                selection: keyboardPlacement,
+                onSelect: { keyboardPlacement = $0 }
+            )
+            .settingContextMenu(Settings.Shaders.keyboardBackgroundEffect)
+            .themedRow()
+        } header: {
+            SettingGroupHeader("Show Behind", group: .shaders)
+        } footer: {
+            Text("The rootshell keyboard and its toolbar can show an effect of their own, independent of the terminal.")
+        }
+
+        if keyboardPlacement != .off {
+            EffectGallerySection(
+                title: "Keyboard Effect",
+                items: galleryItems(includesFollow: true),
+                selectedID: tileID(for: keyboardEffectID),
+                footer: nil,
+                onSelect: { select($0, in: .keyboard) }
+            )
+            .settingContextMenu(Settings.Shaders.keyboardEffectId)
+            areaTuning(selection: keyboardEffectID, in: .keyboard)
+        }
+    }
+
+    // MARK: Window
+
+    @ViewBuilder
+    private var windowPanel: some View {
+        Section {
+            SettingDescribedToggle(
+                Settings.Shaders.themeGradientBackdrop,
+                isOn: Binding(get: { effectManager.isBackdropEnabled },
+                              set: { effectManager.isBackdropEnabled = $0 }),
+                title: "Theme Gradient Backdrop",
+                description: "Fills the whole window behind tabs and panes with a soft glow in the theme's colors. It shows around Rounded Panes and through transparent terminals, beneath the other effects."
+            )
+            .themedRow()
+            #if targetEnvironment(macCatalyst)
+            if effectManager.isBackdropEnabled {
+                SettingDescribedToggle(
+                    Settings.Transparency.backdropTransparency,
+                    isOn: Binding(get: { transparencyManager.backdropTransparencyEnabled },
+                                  set: { transparencyManager.backdropTransparencyEnabled = $0 }),
+                    title: "Transparent Backdrop",
+                    description: "Apply the window opacity to the gradient too, so the desktop shows through it. When off, transparency only reveals the gradient behind the terminal."
                 )
                 .themedRow()
             }
-
-            if let photoImportError {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .foregroundColor(.orange)
-                    Text(photoImportError)
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                }
-                .themedRow()
-            }
+            #endif
         } header: {
-            Text("My Photos")
-        } footer: {
-            if !effect.photos.isEmpty {
-                Text("Photos are stored on this device. Tap a photo to use it as the terminal background.")
-            }
+            SettingGroupHeader("Window Backdrop", group: .shaders)
         }
 
-        if effect.hasPhoto {
-            Section("Opacity") {
-                ForEach(PhotoOpacityPreset.allCases.filter { $0 != .custom }, id: \.self) { preset in
+        if effectManager.isBackdropEnabled {
+            tuning(for: effectManager.backdropEffect, in: .window)
+        }
+    }
+
+    // MARK: Tuning
+
+    /// Areas following the terminal share its effect and settings.
+    @ViewBuilder
+    private func areaTuning(selection: String, in area: BackgroundEffectArea) -> some View {
+        if selection == BackgroundEffectSelection.followTerminalID {
+            if effectManager.activeEffect != nil {
+                Section {
                     Button {
-                        effect.opacityPreset = preset
+                        self.area = .terminal
                     } label: {
-                        HStack {
-                            Text(preset.displayName)
-                                .foregroundColor(.primary)
-                            Spacer()
-                            Text(preset.intensity, format: .wholePercent)
-                                .foregroundColor(.secondary)
-                                .monospacedDigit()
-                            if effect.opacityPreset == preset {
-                                Image(systemName: "checkmark")
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .themedRow()
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Custom")
-                            .foregroundColor(effect.opacityPreset == .custom ? .primary : .secondary)
-                        Spacer()
-                        Text(effect.intensity, format: .wholePercent)
-                            .foregroundColor(.secondary)
-                            .monospacedDigit()
-                            .frame(width: 50, alignment: .trailing)
-                    }
-                    Slider(value: Binding(
-                        get: { effect.intensity },
-                        set: {
-                            effect.opacityPreset = .custom
-                            effect.intensity = $0
-                        }
-                    ), in: 0.05...0.9)
-                }
-                .padding(.vertical, 4)
-                .themedRow()
-            }
-
-            Section("Filter") {
-                Picker("Image Filter", selection: Binding(
-                    get: { effect.imageFilter },
-                    set: { effect.imageFilter = $0 }
-                )) {
-                    ForEach(PhotoImageFilter.allCases, id: \.self) { filter in
-                        Text(filter.displayName).tag(filter)
-                    }
-                }
-                .themedRow()
-            }
-
-            Section {
-                Toggle(isOn: Binding(
-                    get: { effect.themeTintEnabled },
-                    set: { effect.themeTintEnabled = $0 }
-                )) {
-                    HStack {
-                        Image(systemName: "paintpalette.fill")
-                            .foregroundColor(.purple)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Match Theme Color")
-                            Text("Recolor photo toward theme palette")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .themedRow()
-
-                if effect.themeTintEnabled {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Tint Strength")
-                            Spacer()
-                            Text(localTintAmount, format: .wholePercent)
-                                .foregroundColor(.secondary)
-                                .monospacedDigit()
-                                .frame(width: 50, alignment: .trailing)
-                        }
-                        Slider(value: $localTintAmount, in: 0.0...1.0) { editing in
-                            isDraggingTintAmount = editing
-                            if !editing {
-                                effect.themeTintAmount = localTintAmount
-                            }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                    .onAppear {
-                        if !isDraggingTintAmount {
-                            localTintAmount = effect.themeTintAmount
-                        }
+                        Label("Uses the terminal's effect and its settings", systemImage: "link")
                     }
                     .themedRow()
                 }
-            } header: {
-                Text("Theme Tint")
-            } footer: {
-                Text("Smoothly remaps the photo's colors toward the current theme's palette using a Gaussian-weighted color cube.")
             }
-
-            Section("Animation") {
-                Toggle(isOn: Binding(
-                    get: { effect.kenBurnsEnabled },
-                    set: { effect.kenBurnsEnabled = $0 }
-                )) {
-                    HStack {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .foregroundColor(.blue)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Ken Burns")
-                            Text("Slow cinematic pan & zoom")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .themedRow()
-
-                if effect.kenBurnsEnabled {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Speed")
-                            Spacer()
-                            Text(kenBurnsSpeedLabel(effect.speed))
-                                .foregroundColor(.secondary)
-                                .frame(width: 80, alignment: .trailing)
-                        }
-                        Slider(value: Binding(
-                            get: { effect.speed },
-                            set: { effect.speed = $0 }
-                        ), in: 0.25...2.0)
-                    }
-                    .padding(.vertical, 4)
-                    .themedRow()
-                }
-            }
+        } else if let effect = effectManager.selectedEffect(id: selection) {
+            tuning(for: effect, in: area)
         }
     }
 
-    private func kenBurnsSpeedLabel(_ speed: Double) -> String {
-        switch speed {
-        case 0.0..<0.5: return "Very Slow"
-        case 0.5..<0.8: return "Slow"
-        case 0.8..<1.2: return "Normal"
-        case 1.2..<1.6: return "Fast"
-        default: return "Very Fast"
+    @ViewBuilder
+    private func tuning(for effect: AnyTerminalEffect, in area: BackgroundEffectArea) -> some View {
+        if let gradient = effect.asEffect(ThemeGradientEffect.self) {
+            ThemeGradientStyleSection(effect: gradient)
+        }
+        EffectTuningSection(effect: effect, onChangeVideo: { showsVideoLibrary = true })
+    }
+
+    // MARK: Gallery
+
+    private static let videoPrefix = "videoBackground_"
+    private static let videoTileID = "video"
+    private static let galleryOrder = ["aquarium", "jellyfish", "fireflies", "butterflies", "aurora",
+                                       "solarGraph", "liveWeather", "themeGradient", "photoBackground"]
+
+    private func tileID(for selection: String) -> String {
+        selection.hasPrefix(Self.videoPrefix) ? Self.videoTileID : selection
+    }
+
+    private func galleryItems(includesFollow: Bool) -> [EffectGalleryItem] {
+        _ = gradientRevision
+        var items: [EffectGalleryItem] = []
+        if includesFollow {
+            items.append(EffectGalleryItem(id: BackgroundEffectSelection.followTerminalID,
+                                           kind: EffectPortraitKind(effect: effectManager.activeEffect),
+                                           title: String(localized: "Same as Terminal", comment: "Background effect: follow the terminal's effect"),
+                                           badge: "link"))
+        }
+        items.append(EffectGalleryItem(id: "", kind: .none, title: String(localized: "None", comment: "Background effect: no effect")))
+        for id in Self.galleryOrder {
+            guard let effect = effectManager.effect(withId: id) else { continue }
+            items.append(EffectGalleryItem(id: id, kind: EffectPortraitKind(effect: effect), title: effect.displayName))
+        }
+        items.append(EffectGalleryItem(id: Self.videoTileID, kind: .video,
+                                       title: String(localized: "Video", comment: "Background effect: looping video wallpapers")))
+        return items
+    }
+
+    private func select(_ id: String, in area: BackgroundEffectArea) {
+        if id == Self.videoTileID {
+            showsVideoLibrary = true
+            return
+        }
+        switch area {
+        case .terminal, .window:
+            let wasActive = effectManager.activeEffect?.id == id
+            effectManager.cancelPendingVideoActivation()
+            effectManager.setActiveEffect(id: id.isEmpty ? nil : id)
+            if !wasActive { activate(id) }
+        case .sidebar:
+            sidebarEffectID = id
+            if id == BackgroundEffectSelection.followTerminalID { includesSidebar = true }
+            activate(id)
+        case .keyboard:
+            keyboardEffectID = id
+            activate(id)
         }
     }
-}
 
-private struct PhotoBackgroundRow: View {
-    let photo: PhotoBackground
-    let effect: PhotoBackgroundEffect
-    let isSelected: Bool
-    let onSelect: () -> Void
-    let onDelete: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            PhotoBackgroundThumbnailView(photo: photo, effect: effect)
-            .frame(width: 60, height: 48)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(isSelected ? "Current Photo" : "Background Photo")
-                    .foregroundColor(.primary)
-                Text(photo.importedAt, format: .dateTime.month(.abbreviated).day().year())
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            Spacer()
-
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .font(.body.weight(.semibold))
-                    .foregroundColor(.blue)
-            }
-
-            Menu {
-                if !isSelected {
-                    Button {
-                        onSelect()
-                    } label: {
-                        Label("Use This Photo", systemImage: "checkmark.circle")
-                    }
-                }
-                Button(role: .destructive) {
-                    onDelete()
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.title2)
-                    .foregroundColor(.secondary)
-            }
+    /// Effects that fetch their location or weather start when chosen.
+    private func activate(_ id: String) {
+        guard let effect = effectManager.selectedEffect(id: id) else { return }
+        if let solar = effect.asEffect(SolarGraphEffect.self) {
+            Task { await solar.onActivated() }
         }
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onSelect)
+        #if !CHINA_BUILD
+        effect.asEffect(LiveWeatherEffect.self)?.onActivated()
+        #endif
     }
 }
 
-private struct PhotoBackgroundThumbnailView: View {
-    let photo: PhotoBackground
-    let effect: PhotoBackgroundEffect
+// MARK: - Gallery
 
-    @State private var thumbnailData: Data?
-
-    var body: some View {
-        Group {
-            if let thumbnailData, let image = UIImage(data: thumbnailData) {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .overlay {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-            }
-        }
-        .task(id: photo.id) {
-            thumbnailData = await effect.thumbnailData(for: photo)
-        }
-    }
+struct EffectGalleryItem: Identifiable {
+    let id: String
+    let kind: EffectPortraitKind
+    let title: String
+    var badge: String? = nil
 }
 
-// MARK: - Video Theme Tint Section
+private struct EffectGallerySection: View {
+    let title: LocalizedStringKey
+    let items: [EffectGalleryItem]
+    let selectedID: String
+    let footer: LocalizedStringKey?
+    let onSelect: (String) -> Void
 
-private struct VideoThemeTintSection: View {
-    @ObservedObject var effect: VideoBackgroundEffect
+    @State private var width: CGFloat = 0
+
+    /// As many columns as fit, one fewer when that would leave a tile alone on the last row.
+    private var columns: [GridItem] {
+        let fit = max(2, Int((width + 12) / (92 + 12)))
+        let count = items.count % fit == 1 && fit > 2 ? fit - 1 : fit
+        return Array(repeating: GridItem(.flexible(maximum: 160), spacing: 12), count: count)
+    }
 
     var body: some View {
         Section {
-            Toggle(isOn: Binding(
-                get: { effect.themeTintEnabled },
-                set: { effect.themeTintEnabled = $0 }
-            )) {
-                HStack {
-                    Image(systemName: "paintpalette.fill")
-                        .foregroundColor(.purple)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Match Theme Color")
-                        Text("Recolor video toward theme palette")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+            LazyVGrid(columns: columns, spacing: 14) {
+                ForEach(items) { item in
+                    EffectTile(kind: item.kind, title: item.title, badgeSymbol: item.badge, isSelected: item.id == selectedID) {
+                        onSelect(item.id)
                     }
                 }
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+            .padding(.vertical, 6)
             .themedRow()
-
-            if effect.themeTintEnabled {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Tint Strength")
-                        Spacer()
-                        Text(effect.themeTintAmount, format: .wholePercent)
-                            .foregroundColor(.secondary)
-                            .monospacedDigit()
-                            .frame(width: 50, alignment: .trailing)
-                    }
-                    Slider(value: Binding(
-                        get: { effect.themeTintAmount },
-                        set: { effect.themeTintAmount = $0 }
-                    ), in: 0.0...1.0)
-                }
-                .padding(.vertical, 4)
-                .themedRow()
-            }
         } header: {
-            Text("Theme Tint")
+            SettingGroupHeader(title, group: .shaders)
         } footer: {
-            Text("Smoothly remaps each video frame toward the current theme's palette. Applied in real-time on the GPU.")
+            if let footer { Text(footer) }
         }
     }
 }
 
-// MARK: - Fireflies Settings Section
+// MARK: - Tuning
 
-/// Separate view that properly observes FirefliesEffect for reactive updates.
-/// Without `@ObservedObject`, mutations to `colorMode`, `fireflyCount`, etc. wouldn't
-/// invalidate the parent body, leaving the picker label and slider value labels stale.
-private struct FirefliesSettingsSection: View {
+/// The few controls people reach for, and a link to everything else.
+private struct EffectTuningSection: View {
+    @ObservedObject var effect: AnyTerminalEffect
+    let onChangeVideo: () -> Void
+
+    @State private var intensity = 0.3
+    @State private var speed = 1.0
+
+    private var isBackdrop: Bool { effect.asEffect(ThemeGradientEffect.self)?.isBackdrop == true }
+    private var showsIntensity: Bool { !isBackdrop && effect.id != "photoBackground" }
+    private var showsSpeed: Bool { !["solarGraph", "liveWeather", "photoBackground"].contains(effect.id) }
+
+    var body: some View {
+        Section {
+            if showsIntensity {
+                EffectSliderRow(title: "Intensity", value: $intensity, range: 0.05...0.6,
+                                label: intensity.formatted(.percent.precision(.fractionLength(0)))) {
+                    effect.intensity = intensity
+                }
+                .themedRow()
+            }
+            if showsSpeed {
+                EffectSliderRow(title: "Speed", value: $speed, range: 0.25...2.0, label: EffectSpeedLabel.text(speed)) {
+                    effect.speed = speed
+                }
+                .themedRow()
+            }
+
+            EffectQuickControls(effect: effect, onChangeVideo: onChangeVideo)
+
+            NavigationLink {
+                EffectDetailView(effect: effect)
+            } label: {
+                if let photo = effect.asEffect(PhotoBackgroundEffect.self), !photo.hasPhoto {
+                    Text("Choose a Photo…")
+                } else {
+                    Text("More \(effect.displayName) Settings")
+                }
+            }
+            .themedRow()
+        } header: {
+            Text(effect.displayName)
+        }
+        .onAppear(perform: sync)
+        .onChange(of: effect.id) { _, _ in sync() }
+    }
+
+    private func sync() {
+        intensity = effect.intensity
+        speed = effect.speed
+    }
+}
+
+private struct EffectQuickControls: View {
+    let effect: AnyTerminalEffect
+    let onChangeVideo: () -> Void
+
+    var body: some View {
+        if let aquarium = effect.asEffect(AquariumEffect.self) {
+            AquariumQuickControls(effect: aquarium)
+        } else if let jellyfish = effect.asEffect(JellyfishEffect.self) {
+            JellyfishQuickControls(effect: jellyfish)
+        } else if let butterflies = effect.asEffect(ButterfliesEffect.self) {
+            ButterfliesQuickControls(effect: butterflies)
+        } else if let fireflies = effect.asEffect(FirefliesEffect.self) {
+            FirefliesQuickControls(effect: fireflies)
+        } else if let aurora = effect.asEffect(AuroraEffect.self) {
+            AuroraQuickControls(effect: aurora)
+        } else if let solar = effect.asEffect(SolarGraphEffect.self) {
+            SolarQuickControls(effect: solar)
+        } else if let video = effect.asEffect(VideoBackgroundEffect.self) {
+            VideoQuickControls(effect: video, onChangeVideo: onChangeVideo)
+        } else if let gradient = effect.asEffect(ThemeGradientEffect.self) {
+            GradientQuickControls(effect: gradient)
+        } else {
+            weather
+        }
+    }
+
+    @ViewBuilder
+    private var weather: some View {
+        #if !CHINA_BUILD
+        if let weather = effect.asEffect(LiveWeatherEffect.self) {
+            WeatherQuickControls(effect: weather)
+        }
+        #endif
+    }
+}
+
+private struct AquariumQuickControls: View {
+    @ObservedObject var effect: AquariumEffect
+
+    var body: some View {
+        Stepper(value: Binding(get: { effect.configuration.fishCount }, set: { effect.configuration.fishCount = $0 }), in: 0...64) {
+            LabeledContent("Fish", value: effect.configuration.fishCount, format: .number)
+        }
+        .themedRow()
+        Toggle("Bubbles", isOn: Binding(get: { effect.configuration.bubbles }, set: { effect.configuration.bubbles = $0 }))
+            .themedRow()
+    }
+}
+
+private struct JellyfishQuickControls: View {
+    @ObservedObject var effect: JellyfishEffect
+
+    var body: some View {
+        Picker("Visits", selection: Binding(get: { effect.visitFrequency }, set: { effect.visitFrequency = $0 })) {
+            ForEach(JellyfishVisitState.VisitFrequency.allCases, id: \.self) { Text($0.displayName).tag($0) }
+        }
+        .themedRow()
+        VisitNowButton(symbol: "water.waves", arriving: String(localized: "Jellyfish on the way"), action: effect.requestVisit)
+            .themedRow()
+    }
+}
+
+private struct ButterfliesQuickControls: View {
+    @ObservedObject var effect: ButterfliesEffect
+
+    var body: some View {
+        Picker("Visits", selection: Binding(get: { effect.visitFrequency }, set: { effect.visitFrequency = $0 })) {
+            ForEach(ButterflyVisitState.VisitFrequency.allCases, id: \.self) { Text($0.displayName).tag($0) }
+        }
+        .themedRow()
+        VisitNowButton(symbol: "wind", arriving: String(localized: "Butterflies on the way"), action: effect.requestVisit)
+            .themedRow()
+    }
+}
+
+private struct FirefliesQuickControls: View {
     @ObservedObject var effect: FirefliesEffect
 
     var body: some View {
-        Section("Particles") {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Firefly Count")
-                    Spacer()
-                    Text("\(effect.fireflyCount)")
-                        .foregroundColor(.secondary)
-                        .monospacedDigit()
-                        .frame(width: 40, alignment: .trailing)
-                }
-                Slider(value: Binding(
-                    get: { Double(effect.fireflyCount) },
-                    set: { effect.fireflyCount = Int($0) }
-                ), in: 10...100, step: 5)
-            }
-            .padding(.vertical, 4)
-            .themedRow()
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Glow Size")
-                    Spacer()
-                    Text(glowSizeLabel(effect.glowSize))
-                        .foregroundColor(.secondary)
-                        .frame(width: 60, alignment: .trailing)
-                }
-                Slider(value: Binding(
-                    get: { effect.glowSize },
-                    set: { effect.glowSize = $0 }
-                ), in: 0.5...2.0)
-            }
-            .padding(.vertical, 4)
-            .themedRow()
+        Stepper(value: Binding(get: { effect.fireflyCount }, set: { effect.fireflyCount = $0 }), in: 10...100, step: 5) {
+            LabeledContent("Fireflies", value: effect.fireflyCount, format: .number)
         }
-
-        Section("Color Mode") {
-            Picker("Style", selection: Binding(
-                get: { effect.colorMode },
-                set: { effect.colorMode = $0 }
-            )) {
-                ForEach(FirefliesEffect.ColorMode.allCases, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .themedRow()
-
-            if effect.colorMode == .themeAdaptive {
-                HStack {
-                    Image(systemName: "info.circle")
-                        .foregroundColor(.secondary)
-                    Text("Warm on dark themes, cool on light themes")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .themedRow()
-            }
-        }
-    }
-
-    private func glowSizeLabel(_ size: Double) -> String {
-        switch size {
-        case 0.0..<0.7: return "Small"
-        case 0.7..<1.2: return "Normal"
-        case 1.2..<1.6: return "Large"
-        default: return "Huge"
-        }
+        .themedRow()
     }
 }
 
-// MARK: - Butterflies Settings Section
-
-/// Separate view that properly observes ButterfliesEffect for reactive updates
-private struct ButterfliesSettingsSection: View {
-    @ObservedObject var effect: ButterfliesEffect
-
-    /// Transient confirmation after tapping Visit Now
-    @State private var visitAcknowledged = false
-
-    var body: some View {
-        Section("Visits") {
-            Picker("Frequency", selection: Binding(
-                get: { effect.visitFrequency },
-                set: { effect.visitFrequency = $0 }
-            )) {
-                ForEach(ButterflyVisitState.VisitFrequency.allCases, id: \.self) { frequency in
-                    Text(frequency.displayName).tag(frequency)
-                }
-            }
-            .themedRow()
-
-            HStack {
-                Image(systemName: "info.circle")
-                    .foregroundColor(.secondary)
-                Text(effect.visitFrequency.intervalDescription)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .themedRow()
-
-            Toggle(isOn: Binding(
-                get: { effect.moreButterflies },
-                set: { effect.moreButterflies = $0 }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("More Butterflies")
-                    Text("Larger groups per visit")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .themedRow()
-
-            Button {
-                effect.requestVisit()
-                withAnimation(.easeIn(duration: 0.15)) {
-                    visitAcknowledged = true
-                }
-                Task {
-                    try? await Task.sleep(for: .seconds(2.5))
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        visitAcknowledged = false
-                    }
-                }
-            } label: {
-                HStack {
-                    Image(systemName: visitAcknowledged ? "checkmark.circle.fill" : "wind")
-                        .foregroundColor(visitAcknowledged ? .green : .blue)
-                        .contentTransition(.symbolEffect(.replace))
-                    Text(visitAcknowledged ? "Butterflies on the way" : "Visit Now")
-                        .foregroundColor(visitAcknowledged ? .secondary : .primary)
-                }
-            }
-            .disabled(visitAcknowledged)
-            .themedRow()
-        }
-
-        Section("Flight") {
-            Toggle(isOn: Binding(
-                get: { effect.flutterEnabled },
-                set: { effect.flutterEnabled = $0 }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Wing Flutter")
-                    Text("Rapid wing beats in flight. Turn off for calm, less distracting gliding")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .themedRow()
-
-            Toggle(isOn: Binding(
-                get: { effect.perchingEnabled },
-                set: { effect.perchingEnabled = $0 }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Perching")
-                    Text("Butterflies sometimes pause to rest")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .themedRow()
-
-            Toggle(isOn: Binding(
-                get: { effect.textAvoidanceEnabled },
-                set: { effect.textAvoidanceEnabled = $0 }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Text Avoidance")
-                    Text("Butterflies steer around on-screen text and the cursor")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .themedRow()
-        }
-
-        Section("Color Mode") {
-            Picker("Style", selection: Binding(
-                get: { effect.colorMode },
-                set: { effect.colorMode = $0 }
-            )) {
-                ForEach(ButterfliesEffect.ColorMode.allCases, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .themedRow()
-
-            if effect.colorMode == .themeAdaptive {
-                HStack {
-                    Image(systemName: "info.circle")
-                        .foregroundColor(.secondary)
-                    Text("Luminous blue on dark themes, warm orange on light themes")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .themedRow()
-            } else if effect.colorMode == .glasswing {
-                HStack {
-                    Image(systemName: "info.circle")
-                        .foregroundColor(.secondary)
-                    Text("Translucent wings with amber borders — the terminal shows through")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .themedRow()
-            }
-        }
-    }
-}
-
-// MARK: - Jellyfish Settings Section
-
-/// Separate view that properly observes JellyfishEffect for reactive updates
-private struct JellyfishSettingsSection: View {
-    @ObservedObject var effect: JellyfishEffect
-    let onShowcase: () -> Void
-    @State private var bloomDraft = 0.55
-    @State private var editingBloom = false
-
-    /// Transient confirmation after tapping Visit Now
-    @State private var visitAcknowledged = false
-
-    var body: some View {
-        Section {
-            Picker("Rendering", selection: Binding(
-                get: { effect.renderingStyle },
-                set: { effect.renderingStyle = $0 }
-            )) {
-                ForEach(JellyfishEffect.RenderingStyle.allCases, id: \.self) { style in
-                    Text(style.displayName).tag(style)
-                }
-            }
-            .themedRow()
-        } footer: {
-            Text("Original uses simpler graphics for lower GPU usage. Enhanced adds translucent detail and richer glow.")
-        }
-
-        Section("Visits") {
-            Picker("Frequency", selection: Binding(
-                get: { effect.visitFrequency },
-                set: { effect.visitFrequency = $0 }
-            )) {
-                ForEach(JellyfishVisitState.VisitFrequency.allCases, id: \.self) { frequency in
-                    Text(frequency.displayName).tag(frequency)
-                }
-            }
-            .themedRow()
-
-            HStack {
-                Image(systemName: "info.circle")
-                    .foregroundColor(.secondary)
-                Text(effect.visitFrequency.intervalDescription)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .themedRow()
-
-            Toggle(isOn: Binding(
-                get: { effect.moreJellyfish },
-                set: { effect.moreJellyfish = $0 }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("More Jellyfish")
-                    Text("Larger blooms per visit")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .themedRow()
-
-            Button {
-                effect.requestVisit()
-                withAnimation(.easeIn(duration: 0.15)) {
-                    visitAcknowledged = true
-                }
-                Task {
-                    try? await Task.sleep(for: .seconds(2.5))
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        visitAcknowledged = false
-                    }
-                }
-            } label: {
-                HStack {
-                    Image(systemName: visitAcknowledged ? "checkmark.circle.fill" : "water.waves")
-                        .foregroundColor(visitAcknowledged ? .green : .blue)
-                        .contentTransition(.symbolEffect(.replace))
-                    Text(visitAcknowledged ? "Jellyfish on the way" : "Visit Now")
-                        .foregroundColor(visitAcknowledged ? .secondary : .primary)
-                }
-            }
-            .disabled(visitAcknowledged)
-            .themedRow()
-        }
-
-        Section("Drift") {
-            Toggle(isOn: Binding(
-                get: { effect.textAvoidanceEnabled },
-                set: { effect.textAvoidanceEnabled = $0 }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Text Avoidance")
-                    Text("Jellyfish drift clear of on-screen text and the cursor")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .themedRow()
-        }
-
-        Section("Glow") {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Bloom")
-                    Spacer()
-                    Text(bloomDraft, format: .percent.precision(.fractionLength(0)))
-                        .foregroundStyle(.secondary).monospacedDigit()
-                }
-                Slider(value: $bloomDraft, in: 0...1) { editing in
-                    editingBloom = editing
-                    if !editing { effect.bloom = bloomDraft }
-                }
-                    .accessibilityLabel(Text("Bloom"))
-            }
-            .onAppear { bloomDraft = effect.bloom }
-            .onChange(of: effect.bloom) { _, value in
-                if !editingBloom { bloomDraft = value }
-            }
-            .themedRow()
-
-            Toggle(isOn: Binding(
-                get: { effect.shimmerEnabled },
-                set: { effect.shimmerEnabled = $0 }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Bioluminescent Shimmer")
-                    Text("Rare brightening ripple down the tentacles, on dark themes")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .themedRow()
-        }
-
-        Section("Color Mode") {
-            Picker("Style", selection: Binding(
-                get: { effect.colorMode },
-                set: { effect.colorMode = $0 }
-            )) {
-                ForEach(JellyfishEffect.ColorMode.allCases, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .themedRow()
-
-            if effect.colorMode == .themeAdaptive {
-                HStack {
-                    Image(systemName: "info.circle")
-                        .foregroundColor(.secondary)
-                    Text("Glows cyan on dark themes, reads as ink wash on light themes")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .themedRow()
-            }
-        }
-
-        Section {
-            Button(action: onShowcase) {
-                Label("Full-screen Jellyfish Preview", systemImage: "arrow.up.left.and.arrow.down.right")
-            }
-            .themedRow()
-        } footer: {
-            Text("Translucent bells, flowing oral arms, and luminous tentacles. Battery Saver reduces detail automatically. Reduce Motion softens swimming and disables shimmer.")
-        }
-    }
-}
-
-// MARK: - Aurora Settings Section
-
-/// Separate view that properly observes AuroraEffect for reactive updates
-private struct AuroraSettingsSection: View {
+private struct AuroraQuickControls: View {
     @ObservedObject var effect: AuroraEffect
 
     var body: some View {
-        Section("Color Mode") {
-            Picker("Style", selection: Binding(
-                get: { effect.colorMode },
-                set: { effect.colorMode = $0 }
-            )) {
-                ForEach(AuroraEffect.ColorMode.allCases, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .themedRow()
-
-            if effect.colorMode == .theme {
-                HStack {
-                    Image(systemName: "info.circle")
-                        .foregroundColor(.secondary)
-                    Text("Curtain colors follow the terminal theme palette")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .themedRow()
-            }
+        Picker("Colors", selection: Binding(get: { effect.colorMode }, set: { effect.colorMode = $0 })) {
+            ForEach(AuroraEffect.ColorMode.allCases, id: \.self) { Text($0.displayName).tag($0) }
         }
-
-        Section("Motion") {
-            Toggle(isOn: Binding(
-                get: { effect.rayShimmer },
-                set: { effect.rayShimmer = $0 }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Ray Shimmer")
-                    Text("Fast flicker of individual rays. Turn off for calm, slow drift only")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .themedRow()
-        }
+        .themedRow()
     }
 }
 
-// MARK: - Theme Gradient Settings Section
+private struct SolarQuickControls: View {
+    @ObservedObject var effect: SolarGraphEffect
 
-private struct ThemeGradientSettingsSection: View {
+    var body: some View {
+        Toggle("Ocean Surface", isOn: Binding(get: { effect.showOcean }, set: { effect.showOcean = $0 }))
+            .themedRow()
+        Toggle("Star Field", isOn: Binding(get: { effect.showStars }, set: { effect.showStars = $0 }))
+            .themedRow()
+    }
+}
+
+private struct VideoQuickControls: View {
+    @ObservedObject var effect: VideoBackgroundEffect
+    let onChangeVideo: () -> Void
+
+    var body: some View {
+        Toggle("Match Theme Color", isOn: Binding(get: { effect.themeTintEnabled }, set: { effect.themeTintEnabled = $0 }))
+            .themedRow()
+        Button("Choose Another Video…", action: onChangeVideo)
+            .themedRow()
+    }
+}
+
+private struct GradientQuickControls: View {
     @ObservedObject var effect: ThemeGradientEffect
 
     var body: some View {
-        Section("Motion") {
-            Toggle(isOn: Binding(
-                get: { effect.drift },
-                set: { effect.drift = $0 }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Drift")
-                    Text("Slowly moves the glow. Turn off for a still gradient that uses no GPU after drawing")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
+        Toggle("Drift", isOn: Binding(get: { effect.drift }, set: { effect.drift = $0 }))
             .themedRow()
-        }
     }
 }
 
-// MARK: - Ocean Settings View
-
-/// Separate view that properly observes SolarGraphEffect for reactive updates
-private struct OceanSettingsView: View {
-    @ObservedObject var effect: SolarGraphEffect
-
-    // Local state to ensure view updates
-    @State private var showOcean: Bool = true
+#if !CHINA_BUILD
+private struct WeatherQuickControls: View {
+    @ObservedObject var effect: LiveWeatherEffect
 
     var body: some View {
-        Toggle(isOn: $showOcean) {
-            HStack {
-                Image(systemName: "water.waves")
-                    .foregroundColor(.cyan)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Ocean Surface")
-                    Text("Animated waves below horizon")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .onAppear {
-            showOcean = effect.showOcean
-        }
-        .onChange(of: showOcean) { _, newValue in
-            effect.showOcean = newValue
-        }
-
-        if showOcean {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Wave Intensity")
-                    Spacer()
-                    Text(waveIntensityLabel(effect.oceanWaveAmplitude))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .frame(width: 70, alignment: .trailing)
-                }
-                Slider(value: Binding(
-                    get: { effect.oceanWaveAmplitude },
-                    set: { effect.oceanWaveAmplitude = $0 }
-                ), in: 0.1...1.0)
-            }
-            .padding(.vertical, 4)
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Sun Reflection")
-                    Spacer()
-                    Text(effect.oceanReflectionStrength, format: .wholePercent)
-                        .foregroundColor(.secondary)
-                        .monospacedDigit()
-                        .frame(width: 50, alignment: .trailing)
-                }
-                Slider(value: Binding(
-                    get: { effect.oceanReflectionStrength },
-                    set: { effect.oceanReflectionStrength = $0 }
-                ), in: 0.0...1.0)
-            }
-            .padding(.vertical, 4)
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Wave Speed")
-                    Spacer()
-                    Text(waveSpeedLabel(effect.oceanWaveSpeed))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .frame(width: 70, alignment: .trailing)
-                }
-                Slider(value: Binding(
-                    get: { effect.oceanWaveSpeed },
-                    set: { effect.oceanWaveSpeed = $0 }
-                ), in: 0.2...3.0)
-            }
-            .padding(.vertical, 4)
-
-            HStack {
-                Image(systemName: "info.circle")
-                    .foregroundColor(.secondary)
-                Text("Realistic Gerstner waves with sun reflection path")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.vertical, 4)
-        }
+        Toggle("Demo Mode", isOn: Binding(get: { effect.configuration.demo }, set: { effect.configuration.demo = $0 }))
+            .themedRow()
     }
+}
+#endif
 
-    private func waveSpeedLabel(_ speed: Double) -> String {
-        switch speed {
-        case 0.0..<0.5: return "Slow"
-        case 0.5..<0.9: return "Gentle"
-        case 0.9..<1.2: return "Normal"
-        case 1.2..<2.0: return "Fast"
-        default: return "Rapid"
+/// Calls a visitor in now, then confirms for a moment.
+private struct VisitNowButton: View {
+    let symbol: String
+    let arriving: String
+    let action: () -> Void
+
+    @State private var acknowledged = false
+
+    var body: some View {
+        Button {
+            action()
+            withAnimation(.easeIn(duration: 0.15)) { acknowledged = true }
+        } label: {
+            Label {
+                Text(acknowledged ? arriving : String(localized: "Visit Now"))
+                    .foregroundStyle(acknowledged ? .secondary : .primary)
+            } icon: {
+                Image(systemName: acknowledged ? "checkmark.circle.fill" : symbol)
+                    .foregroundStyle(acknowledged ? Color.green : Color.accentColor)
+                    .contentTransition(.symbolEffect(.replace))
+            }
         }
-    }
-
-    private func waveIntensityLabel(_ amplitude: Double) -> String {
-        switch amplitude {
-        case 0.0..<0.25: return "Calm"
-        case 0.25..<0.45: return "Gentle"
-        case 0.45..<0.65: return "Moderate"
-        case 0.65..<0.85: return "Choppy"
-        default: return "Stormy"
+        .disabled(acknowledged)
+        .task(id: acknowledged) {
+            guard acknowledged else { return }
+            try? await Task.sleep(for: .seconds(2.5))
+            withAnimation(.easeOut(duration: 0.3)) { acknowledged = false }
         }
     }
 }
 
-private struct PhotosVideoTransferable: Transferable {
-    let url: URL
+/// The video the terminal switches to once it downloads, in its real download state.
+private struct PendingVideoSection: View {
+    let videoID: String
+    var effectManager = EffectManager.shared
+    @ObservedObject private var downloadManager = VideoBackgroundDownloadManager.shared
+    @ObservedObject private var videoManager = VideoBackgroundManager.shared
 
-    static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(contentType: .movie) { movie in
-            SentTransferredFile(movie.url)
-        } importing: { received in
-            let tempDir = FileManager.default.temporaryDirectory
-            let ext = received.file.pathExtension.isEmpty ? "mov" : received.file.pathExtension
-            let tempURL = tempDir.appendingPathComponent("photos-video-\(UUID().uuidString).\(ext)")
-            try? FileManager.default.removeItem(at: tempURL)
-            try FileManager.default.copyItem(at: received.file, to: tempURL)
-            return PhotosVideoTransferable(url: tempURL)
+    private var video: RemoteVideoBackground? { videoManager.remoteVideo(for: videoID) }
+    private var name: String { video?.displayName ?? String(localized: "Video", comment: "Pending video background without a name") }
+
+    var body: some View {
+        Section {
+            HStack(spacing: 12) {
+                status
+                Spacer()
+                action
+                Button("Cancel") { effectManager.cancelPendingVideoActivation() }
+                    .buttonStyle(.borderless)
+            }
+            .themedRow()
+        } footer: {
+            Text("The terminal switches to the video when it finishes downloading.")
+        }
+        // After a relaunch the video list may not be loaded yet.
+        .task { if video == nil { await videoManager.fetchRemoteIndex() } }
+    }
+
+    @ViewBuilder
+    private var status: some View {
+        switch downloadManager.downloadStates[videoID] ?? .notDownloaded {
+        case .downloading(let progress):
+            ProgressView(value: progress)
+                .progressViewStyle(.circular)
+            Text("Downloading \(name)…", comment: "Video background download in progress")
+        case .paused(let progress):
+            Label(String(localized: "\(name) paused at \(progress.formatted(.wholePercent))", comment: "Video background download paused"),
+                  systemImage: "pause.circle.fill")
+                .foregroundStyle(.orange)
+        case .failed:
+            Label(String(localized: "\(name) didn't download", comment: "Video background download failed"),
+                  systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+        case .notDownloaded:
+            // No download running, e.g. one that failed before a relaunch.
+            Label(String(localized: "\(name) isn't downloaded", comment: "Video background download not running"),
+                  systemImage: "arrow.down.circle")
+        case .completed:
+            ProgressView()
+            Text("Preparing \(name)…", comment: "Video background download finishing")
         }
     }
-}
 
-#Preview {
-    NavigationView {
-        EffectSettingsView()
+    @ViewBuilder
+    private var action: some View {
+        if let video {
+            switch downloadManager.downloadStates[videoID] ?? .notDownloaded {
+            case .paused:
+                Button("Resume") { downloadManager.resumeDownload(for: videoID, video: video) }
+                    .buttonStyle(.borderless)
+            case .failed:
+                Button("Retry") { downloadManager.startDownload(for: video) }
+                    .buttonStyle(.borderless)
+            case .notDownloaded:
+                Button("Download") { downloadManager.startDownload(for: video) }
+                    .buttonStyle(.borderless)
+            default:
+                EmptyView()
+            }
+        }
     }
 }

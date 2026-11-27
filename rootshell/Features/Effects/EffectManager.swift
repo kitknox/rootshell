@@ -771,8 +771,7 @@ final class EffectManager {
         if effect(withId: effectId) == nil {
             registerEffect(VideoBackgroundEffect(videoInfo: videoInfo))
         }
-        setActiveEffect(id: effectId)
-        pendingVideoActivation = nil
+        // The importer assigns it to an area; the terminal may not be the one.
     }
 
     /// Called when a local video's looping mode changes. Rebuilds the effect
@@ -822,6 +821,10 @@ final class EffectManager {
         if activeEffect?.id == effectId {
             setActiveEffect(id: nil)
         }
+        // Areas showing it fall back to None, like the terminal.
+        let store = SettingsStore.shared
+        if store.value(Settings.Shaders.sidebarEffectId) == effectId { store.set(Settings.Shaders.sidebarEffectId, "") }
+        if store.value(Settings.Shaders.keyboardEffectId) == effectId { store.set(Settings.Shaders.keyboardEffectId, "") }
         availableEffects.removeAll { $0.id == effectId }
         effectConfigCancellables.removeValue(forKey: effectId)
         if wasKeyboardEffect { effectDidChange.send() }

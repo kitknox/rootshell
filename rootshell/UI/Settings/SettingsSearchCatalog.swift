@@ -18,6 +18,9 @@ enum SettingsSearchDestination: String, Hashable, CaseIterable {
     case appearanceMode
     case palette
     case backgroundEffect
+    case backgroundEffectSidebar
+    case backgroundEffectKeyboard
+    case backgroundEffectWindow
     case customShaders
     case transparency
     case window
@@ -156,6 +159,15 @@ extension SettingsSearchDestination {
                             "jellyfish", "photo", "video", "ken burns", "theme tint", "intensity", "speed"]
                     + (SearchBuild.isChinaBuild ? [String]() : ["weather", "live weather", "rain", "snow", "clouds", "storm", "sky", "stars",
                                                                  "weather provider", "accuweather", "open-meteo"]))
+        case .backgroundEffectSidebar:
+            Meta(section: .appearance, title: String(localized: "Sidebar Effect"), systemImage: "sidebar.left",
+                 keywords: ["layout", "sidebar", "effect", "sidebar only", "include pinned sidebar", "same as terminal"])
+        case .backgroundEffectKeyboard:
+            Meta(section: .appearance, title: String(localized: "Keyboard Effect"), systemImage: "keyboard",
+                 keywords: ["custom keyboard", "toolbar", "effect", "background", "aquarium", "keyboard only", "show behind"])
+        case .backgroundEffectWindow:
+            Meta(section: .appearance, title: String(localized: "Theme Gradient Backdrop"), systemImage: "macwindow",
+                 keywords: ["backdrop", "window", "theme gradient", "glow", "behind tabs", "rounded panes"])
         case .customShaders:
             Meta(section: .appearance, title: String(localized: "Custom Shaders"), systemImage: "cpu",
                  keywords: ["shader", "graphics", "metal"])
@@ -415,6 +427,11 @@ extension SettingsSearchDestination {
             #endif
         case .localShell, .localSSHAgent, .externalSSHAgents:
             return SearchBuild.isStandalone && SearchBuild.isCatalyst
+        case .backgroundEffectSidebar:
+            // Phones are filtered per search; see `isShownOnCurrentDisplay`.
+            return !SearchBuild.isVisionOS
+        case .backgroundEffectKeyboard:
+            return !SearchBuild.isCatalyst && !SearchBuild.isVisionOS
         case .windowDisplay:
             return !SearchBuild.isVisionOS && (!SearchBuild.isCatalyst || SearchBuild.hasBrightnessBoost)
         default:
@@ -534,7 +551,14 @@ struct SettingsSearchEntry: Identifiable, Hashable {
     }()
 
     static var suggested: [SettingsSearchEntry] {
-        all.filter(\.isSuggested).prefix(8).map { $0 }
+        all.filter { $0.isSuggested && $0.isShownOnCurrentDisplay }.prefix(8).map { $0 }
+    }
+
+    /// The Duo docks a tab sidebar only while unfolded, and its hinge is detected
+    /// after launch, so this is checked per search rather than when `all` is built.
+    var isShownOnCurrentDisplay: Bool {
+        guard action == .destination(.backgroundEffectSidebar), SearchBuild.isPhone else { return true }
+        return DuoHingeEvents.hasHinge && !DuoHingeEvents.isFrontDisplay
     }
 
     static func filtered(for query: String) -> [SettingsSearchEntry] {
@@ -542,6 +566,7 @@ struct SettingsSearchEntry: Identifiable, Hashable {
         guard !trimmedQuery.isEmpty else { return suggested }
 
         let matches: [(entry: SettingsSearchEntry, score: Int)] = all.compactMap { entry in
+                guard entry.isShownOnCurrentDisplay else { return nil }
                 guard let score = entry.matchScore(for: trimmedQuery) else { return nil }
                 return (entry: entry, score: score)
             }
@@ -735,11 +760,7 @@ struct SettingsSearchEntry: Identifiable, Hashable {
                 keywords: ["saver", "low power"]),
 
             // MARK: Background Effect
-            row("effect-pinned-sidebar", String(localized: "Sidebar Effect"), in: .backgroundEffect,
-                keywords: ["layout", "sidebar", "effect", "sidebar only", "include pinned sidebar"], available: isTouch && !onPhone || isCatalyst),
-            row("effect-keyboard", String(localized: "Custom Keyboard Background"), in: .backgroundEffect, icon: "keyboard",
-                keywords: ["custom keyboard", "toolbar", "effect", "background", "aquarium", "keyboard only"], available: isTouch),
-            row("effect-backdrop-transparency", String(localized: "Transparent Backdrop"), in: .backgroundEffect,
+            row("effect-backdrop-transparency", String(localized: "Transparent Backdrop"), in: .backgroundEffectWindow,
                 keywords: ["backdrop", "theme gradient", "transparent", "desktop", "see-through"], available: isCatalyst),
             row("effect-text-above", String(localized: "Text Above Effect"), in: .backgroundEffect,
                 keywords: ["text", "glyphs", "readability", "blend", "behind text", "true colors", "weather"]),
@@ -1197,6 +1218,12 @@ func settingsSearchDestinationView(for destination: SettingsSearchDestination) -
         AppearanceModeSettingsView()
     case .backgroundEffect:
         EffectSettingsView()
+    case .backgroundEffectSidebar:
+        EffectSettingsView(initialArea: .sidebar)
+    case .backgroundEffectKeyboard:
+        EffectSettingsView(initialArea: .keyboard)
+    case .backgroundEffectWindow:
+        EffectSettingsView(initialArea: .window)
     case .customShaders:
         ShaderSettingsView()
     case .transparency:

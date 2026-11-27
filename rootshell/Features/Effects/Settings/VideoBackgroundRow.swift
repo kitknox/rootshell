@@ -11,6 +11,8 @@ struct VideoBackgroundRow: View {
     let video: RemoteVideoBackground
     let isActive: Bool
     let isPending: Bool
+    /// False while any area shows this video, so another area's list cannot remove its file.
+    var canDelete = true
     let onSelect: () -> Void
 
     @ObservedObject private var downloadManager = VideoBackgroundDownloadManager.shared
@@ -148,8 +150,10 @@ struct VideoBackgroundRow: View {
                     Button(action: onSelect) {
                         Label("Select", systemImage: "checkmark.circle")
                     }
-                    Button(role: .destructive, action: deleteVideo) {
-                        Label("Delete", systemImage: "trash")
+                    if canDelete {
+                        Button(role: .destructive, action: deleteVideo) {
+                            Label("Delete", systemImage: "trash")
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -170,24 +174,10 @@ struct VideoBackgroundRow: View {
 
     // MARK: - Actions
 
+    /// The owner decides what a tap does in each download state; the terminal
+    /// queues activation, other areas download first.
     private func handleTap() {
-        switch downloadState {
-        case .notDownloaded, .failed:
-            // Start download and set as pending activation
-            EffectManager.shared.requestVideoEffectActivation(video.id)
-
-        case .downloading:
-            // Could pause, but tapping row should select for pending activation
-            EffectManager.shared.requestVideoEffectActivation(video.id)
-
-        case .paused:
-            // Resume and set as pending
-            EffectManager.shared.requestVideoEffectActivation(video.id)
-
-        case .completed:
-            // Already downloaded - just activate
-            onSelect()
-        }
+        onSelect()
     }
 
     private func startDownload() {
