@@ -312,7 +312,7 @@ class KeyboardTracker {
     private var ignoredHiddenKeyboardFrameDuringOverlayPreservation = false
 
     /// Height threshold to treat a keyboard frame as an on-screen keyboard
-    private static let softwareKeyboardHeightThreshold: CGFloat = 120
+    static let softwareKeyboardHeightThreshold: CGFloat = 120
     private static let appTransitionKeyboardPreservationDuration: Duration = .milliseconds(750)
     /// Quiet time after the returned keyboard's last frame before the latch
     /// releases. Covers the with/without-accessory flaps on the way back.
@@ -1706,6 +1706,10 @@ class KeyboardTracker {
     private func isSoftwareKeyboardFrameVisible(_ keyboardFrame: CGRect) -> Bool {
         visibleKeyboardHeight(for: keyboardFrame) > Self.softwareKeyboardHeightThreshold
     }
+
+    /// On-screen height of the last applied keyboard frame, accessory included.
+    @MainActor
+    var currentVisibleKeyboardHeight: CGFloat { visibleKeyboardHeight(for: keyboardFrame) }
 
     @MainActor
     private static var activeKeyWindow: UIWindow? {
