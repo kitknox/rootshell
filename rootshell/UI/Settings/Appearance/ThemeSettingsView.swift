@@ -54,7 +54,11 @@ struct ThemeSettingsView: View {
             return (verticalSizeClass == .compact ? 110 : 150, collapsed)
         }
         let tallness = min(max(1 + (containerSize.height / width - 2) * 0.3, 1), 1.4)
-        let natural = width * 150 / 360 * tallness
+        var natural = width * 150 / 360 * tallness
+        // iPhone portrait: enough headroom that the name chip sits above the wall art.
+        if horizontalSizeClass == .compact, verticalSizeClass != .compact {
+            natural = max(natural, ThemeRoomScene.heightClearingChip(width: width))
+        }
         let cap = min(300, max(110, containerSize.height * 0.38))
         return (min(max(natural, 110), cap), collapsed)
     }

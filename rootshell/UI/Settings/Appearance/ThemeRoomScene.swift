@@ -60,9 +60,27 @@ nonisolated enum ThemeRoomScene {
     static let designHeight = 150.0
     static let floorY = 113.0
 
+    /// The wall art hanging above the sofa.
+    static let artFrame = CGRect(x: 70, y: 24, width: 52, height: 40)
+    /// The header's theme name chip covers this much of the top-leading corner.
+    static let chipClearance = CGSize(width: 180, height: 44)
+    /// The art's top edge, picture frame included.
+    private static let artTop = artFrame.minY - 3
+
     /// Design units to points: fills the height, trimming at most 15% off the sides.
+    /// Shrinks further when that would hang the wall art under the name chip.
     static func scale(for size: CGSize) -> Double {
-        min(size.width / designWidth * 1.15, size.height / designHeight)
+        let k = min(size.width / designWidth * 1.15, size.height / designHeight)
+        let extra = (size.width / k - designWidth) / 2
+        let artX = (artFrame.minX + extra) * k
+        let artY = size.height - (designHeight - artTop) * k
+        guard artX < chipClearance.width, artY < chipClearance.height else { return k }
+        return max(0.1, min(k, (size.height - chipClearance.height) / (designHeight - artTop)))
+    }
+
+    /// The height at which a room `width` wide clears the name chip at full scale.
+    static func heightClearingChip(width: Double) -> Double {
+        width / designWidth * 1.15 * (designHeight - artTop) + chipClearance.height
     }
 
     /// How far to shift a frame of `size` up so a band of `band` points shows
@@ -477,7 +495,7 @@ private nonisolated struct ThemeRoomPainter {
     // MARK: Wall art
 
     private func drawArt(_ c: inout GraphicsContext) {
-        let frame = CGRect(x: 70, y: 24, width: 52, height: 40)
+        let frame = ThemeRoomScene.artFrame
         if room.art == .neon {
             drawNeon(&c, frame)
             return
