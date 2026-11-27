@@ -535,8 +535,8 @@ private struct TabStyleTilePicker: View {
 
     var body: some View {
         let palette = WindowPreviewPalette.current(sheetThemeColors: sheetThemeColors, environment: environment)
-        let columns = [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 130 : 58), spacing: 2)]
-        LazyVGrid(columns: columns, spacing: 2) {
+        let minWidth: CGFloat = dynamicTypeSize.isAccessibilitySize ? 130 : 58
+        TileRowLayout(minWidth: minWidth, maxWidth: max(minWidth, 96), spacing: 2) {
             ForEach(TopTabLayout.allCases) { layout in
                 tile(layout, palette: palette)
             }
@@ -600,6 +600,56 @@ private struct TabStyleTilePicker: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Equal-width tiles that wrap like an adaptive grid when narrow, but never make
+/// more columns than tiles and stop growing at `maxWidth`, so wide rows hug and center.
+private struct TileRowLayout: Layout {
+    let minWidth: CGFloat
+    let maxWidth: CGFloat
+    let spacing: CGFloat
+
+    private struct Metrics {
+        let columns: Int
+        let tileWidth: CGFloat
+        let rowHeights: [CGFloat]
+        var width: CGFloat { CGFloat(columns) * tileWidth + CGFloat(columns - 1) * spacing }
+        var height: CGFloat { rowHeights.reduce(0, +) + CGFloat(max(0, rowHeights.count - 1)) * spacing }
+        let spacing: CGFloat
+    }
+
+    private func metrics(width proposed: CGFloat?, subviews: Subviews) -> Metrics {
+        let count = max(1, subviews.count)
+        let available = proposed ?? CGFloat(count) * maxWidth + CGFloat(count - 1) * spacing
+        let fit = Int((available + spacing) / (minWidth + spacing))
+        let columns = min(count, max(1, fit))
+        let tileWidth = min(maxWidth, (available - CGFloat(columns - 1) * spacing) / CGFloat(columns))
+        let proposal = ProposedViewSize(width: tileWidth, height: nil)
+        let rowHeights = stride(from: 0, to: subviews.count, by: columns).map { start in
+            subviews[start..<min(start + columns, subviews.count)].map { $0.sizeThatFits(proposal).height }.max() ?? 0
+        }
+        return Metrics(columns: columns, tileWidth: tileWidth, rowHeights: rowHeights, spacing: spacing)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let m = metrics(width: proposal.width, subviews: subviews)
+        return CGSize(width: m.width, height: m.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let m = metrics(width: bounds.width, subviews: subviews)
+        let originX = bounds.minX + (bounds.width - m.width) / 2
+        var y = bounds.minY
+        for (row, height) in m.rowHeights.enumerated() {
+            for column in 0..<m.columns {
+                let index = row * m.columns + column
+                guard index < subviews.count else { break }
+                let x = originX + CGFloat(column) * (m.tileWidth + m.spacing)
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(width: m.tileWidth, height: height))
+            }
+            y += height + m.spacing
+        }
     }
 }
 
