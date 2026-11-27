@@ -84,6 +84,12 @@ nonisolated extension TmuxLayoutNode {
             }
         }
     }
+
+    /// Any nesting starts at the root, so checking its children is enough.
+    var hasNestedSplit: Bool {
+        guard case let .split(_, children, _, _, _, _) = self else { return false }
+        return children.contains { if case .split = $0 { return true } else { return false } }
+    }
 }
 
 extension TmuxLayoutNode {
@@ -249,6 +255,16 @@ extension TmuxLayoutNode {
     var nativeEqualizationProducesEqualLeaves: Bool {
         equalizedLayout(width: width, height: height, x: x, y: y,
                         flattenSameAxis: false)?.hasEqualVisibleSplits == true
+    }
+
+    /// What any tmux -E leaves behind: before 3.6 the last child took the
+    /// whole remainder, so direct siblings differ by less than their count.
+    var isNativelySpread: Bool {
+        guard case let .split(direction, children, _, _, _, _) = self else { return true }
+        let sizes = children.map { direction == .horizontal ? $0.width : $0.height }
+        guard let smallest = sizes.min(), let largest = sizes.max(),
+              largest - smallest < children.count else { return false }
+        return children.allSatisfy(\.isNativelySpread)
     }
 
     private var hasEqualVisibleSplits: Bool {

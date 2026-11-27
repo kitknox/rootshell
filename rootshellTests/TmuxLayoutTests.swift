@@ -68,8 +68,23 @@ final class TmuxLayoutTests: XCTestCase {
         return String(repeating: "0", count: 4 - hex.count) + hex + "," + value
     }
 
-    private func reply(_ node: TmuxLayoutNode, zoom: Int? = nil, status: String = "off", scrollbars: String = "off") -> String {
-        "\(wireLayout(node))|\(zoom == nil ? 0 : 1)|%\(zoom ?? node.paneIDs[0])|\(status)|\(scrollbars)\r\n"
+    private func reply(_ node: TmuxLayoutNode, zoom: Int? = nil, status: String = "off", scrollbars: String = "off",
+                       version: String = "3.7c", floating: Int = 0, borderType: String = "") -> String {
+        "\(wireLayout(node))|\(zoom == nil ? 0 : 1)|%\(zoom ?? node.paneIDs[0])|\(status)|\(scrollbars)|\(version)"
+            + "|\(node.paneIDs.count + floating)|\(borderType)\r\n"
+    }
+
+    /// Columns split top/bottom in a 50-row window; bottom pane IDs follow the tops.
+    private func gridColumns(_ widths: [Int]) -> TmuxLayoutNode {
+        var x = 0
+        let columns = widths.enumerated().map { index, width -> TmuxLayoutNode in
+            defer { x += width + 1 }
+            return .split(direction: .vertical, children: [
+                .pane(paneId: index, width: width, height: 25, x: x, y: 0),
+                .pane(paneId: index + widths.count, width: width, height: 24, x: x, y: 26)
+            ], width: width, height: 50, x: x, y: 0)
+        }
+        return .split(direction: .horizontal, children: columns, width: x - 1, height: 50, x: 0, y: 0)
     }
 
     private func nestedGroups(_ widths: [[Int]]) -> TmuxLayoutNode {
@@ -444,12 +459,13 @@ final class TmuxLayoutTests: XCTestCase {
     }
 
     func testDecorationsFailClosedInsteadOfUndercountingMinimumCells() async {
-        for (status, scrollbars) in [("top", "off"), ("off", "on")] {
+        for (status, scrollbars, borderType) in [("top", "off", ""), ("off", "on", ""),
+                                                 ("off", "off", "separate"), ("off", "off", "separate-active")] {
             var calls = 0
             do {
                 try await TmuxSplitEqualizer.run(windowID: 0, layout: pair()) { _ in
                     calls += 1
-                    return self.reply(self.pair(), status: status, scrollbars: scrollbars)
+                    return self.reply(self.pair(), status: status, scrollbars: scrollbars, borderType: borderType)
                 }
                 XCTFail("Decoration minima must not be ignored")
             } catch TmuxSplitEqualizer.Failure.unsafeLayout {
@@ -481,6 +497,98 @@ final class TmuxLayoutTests: XCTestCase {
         } catch TmuxSplitEqualizer.Failure.didNotConverge {
             XCTAssertEqual(reads, 1 + layout.paneIDs.count * (2 * layout.depth + 1))
         } catch { XCTFail("Unexpected error: \(error)") }
+    }
+
+    func testTmux38AndAmbiguousDevelopmentBuildsMatchTheSpreadBug() {
+        for version in ["3.8", "3.8-rc", "3.8-rc2", "3.8-rc3", "3.8a", "next-3.8", "next-3.9",
+                        "openbsd-7.9", "openbsd-8.0"] {
+            XCTAssertTrue(TmuxSplitEqualizer.spreadSkipsNestedGroups(version: version), version)
+        }
+        for version in ["3.7c", "3.9", "next-3.10", "openbsd-7.8", "openbsd-8.1", ""] {
+            XCTAssertFalse(TmuxSplitEqualizer.spreadSkipsNestedGroups(version: version), version)
+        }
+    }
+
+    func testTmux38NestedLayoutResizesInsteadOfSpreading() async throws {
+        let original = gridColumns([101, 50, 50])
+        let equalized = gridColumns([67, 67, 67])
+        for version in ["3.8", "3.7c"] {
+            var current = original
+            var commands: [String] = []
+            try await TmuxSplitEqualizer.run(windowID: 1, layout: original) { command in
+                commands.append(command)
+                if command.hasPrefix("display-message") { return self.reply(current, version: version) }
+                current = equalized
+                return ""
+            }
+            XCTAssertEqual(current.leaves, equalized.leaves)
+            let spreads = commands.filter { $0.hasPrefix("select-layout") }
+            if version == "3.8" {
+                XCTAssertTrue(spreads.isEmpty)
+                XCTAssertEqual(commands.filter { $0.hasPrefix("resize-pane") }, ["resize-pane -t @1.%0 -x 67"])
+            } else {
+                XCTAssertFalse(spreads.isEmpty)
+            }
+        }
+    }
+
+    func testTmux38RejectsUnplannableNestedLayoutWithoutSpreading() async {
+        let original = nestedGroups([[75, 75], [25, 25]])
+        XCTAssertTrue(original.nativeEqualizationProducesEqualLeaves)
+        var commands: [String] = []
+        do {
+            try await TmuxSplitEqualizer.run(windowID: 1, layout: original) { command in
+                commands.append(command)
+                return self.reply(original, version: "3.8")
+            }
+            XCTFail("tmux 3.8 must not receive -E for nested groups")
+        } catch TmuxSplitEqualizer.Failure.unsafeLayout {
+            XCTAssertEqual(commands.count, 1)
+            XCTAssertTrue(commands[0].hasPrefix("display-message"))
+        } catch { XCTFail("Unexpected error: \(error)") }
+    }
+
+    func testTmux38RejectsFloatingPaneThatCanHideNesting() async {
+        let flat = split(.horizontal, [pane(0, width: 120), pane(1, width: 31), pane(2, width: 50)])
+        var commands: [String] = []
+        do {
+            try await TmuxSplitEqualizer.run(windowID: 1, layout: flat) { command in
+                commands.append(command)
+                return self.reply(flat, version: "3.8", floating: 1)
+            }
+            XCTFail("The legacy layout cannot show what a floating pane collapsed")
+        } catch TmuxSplitEqualizer.Failure.unsafeLayout {
+            XCTAssertEqual(commands.count, 1)
+            XCTAssertTrue(commands[0].hasPrefix("display-message"))
+        } catch { XCTFail("Unexpected error: \(error)") }
+    }
+
+    func testStableButUnequalSpreadIsNotReportedAsSuccess() async {
+        let original = gridColumns([101, 50, 50])
+        var spreads = 0
+        do {
+            try await TmuxSplitEqualizer.run(windowID: 1, layout: original) { command in
+                if command.hasPrefix("display-message") { return self.reply(original) }
+                spreads += 1
+                return ""
+            }
+            XCTFail("An unchanged, unequal layout must not count as equalized")
+        } catch TmuxSplitEqualizer.Failure.didNotConverge {
+            XCTAssertEqual(spreads, original.paneIDs.count)
+        } catch { XCTFail("Unexpected error: \(error)") }
+    }
+
+    func testTmux35RemainderOnLastSiblingCountsAsEqualized() async throws {
+        // 82 cells: tmux 3.5a's -E settles at 26/26/28, all remainder last.
+        let settled = split(.horizontal, [pane(0, width: 26), pane(1, width: 26), pane(2, width: 28)])
+        XCTAssertEqual(settled.width, 82)
+        var spreads = 0
+        try await TmuxSplitEqualizer.run(windowID: 1, layout: settled) { command in
+            if command.hasPrefix("display-message") { return self.reply(settled, version: "3.5a") }
+            spreads += 1
+            return ""
+        }
+        XCTAssertEqual(spreads, settled.paneIDs.count)
     }
 
     func testSinglePaneNeedsNoCommands() async throws {

@@ -125,6 +125,50 @@ final class TmuxSplitEqualizationTests: XCTestCase {
         XCTAssertEqual(try geometry(control), expected)
     }
 
+    /// tmux 3.8's -E spreads the two plain columns over the whole window here.
+    func testMixedNestedAndPlainColumnsBecomeThirds() async throws {
+        let server = try Server()
+        defer { server.stop() }
+        try server.cli(["split-window", "-h", "-t", "%0"])
+        try server.cli(["split-window", "-h", "-t", "%1"])
+        try server.cli(["split-window", "-v", "-t", "%0"])
+        let control = try server.attach()
+        defer { control.stop() }
+        try control.command("resize-pane -t %0 -x 120")
+        let layout = split(.horizontal, [split(.vertical, [pane(0), pane(3)]), pane(1), pane(2)])
+        try await TmuxSplitEqualizer.run(windowID: 0, layout: layout) { try control.command($0) }
+        XCTAssertEqual(try geometry(control), [
+            "%0 0 0 67 34", "%3 0 35 67 34", "%1 68 0 67 69", "%2 136 0 67 69"
+        ].sorted())
+        XCTAssertEqual(try control.command("display-message -p mixed-replies-aligned"), "mixed-replies-aligned")
+    }
+
+    /// The control-mode layout drops a floating pane and collapses its column,
+    /// while the server still spreads that column as a group.
+    func testFloatingPaneHidingNestedColumnIsRejectedOnAffectedTmux() async throws {
+        let server = try Server()
+        defer { server.stop() }
+        try server.cli(["split-window", "-h", "-t", "%0"])
+        try server.cli(["split-window", "-h", "-t", "%1"])
+        try server.cli(["split-window", "-v", "-t", "%0"])
+        let control = try server.attach()
+        defer { control.stop() }
+        let version = try control.command("display-message -p '#{version}'")
+        guard TmuxSplitEqualizer.spreadSkipsNestedGroups(version: version) else {
+            throw XCTSkip("tmux \(version) spreads nested groups correctly")
+        }
+        try control.command("resize-pane -t %0 -x 120")
+        try control.command("break-pane -W -s %3")
+        let before = try geometry(control)
+        let layout = split(.horizontal, [pane(0), pane(1), pane(2)])
+        do {
+            try await TmuxSplitEqualizer.run(windowID: 0, layout: layout) { try control.command($0) }
+            XCTFail("Expected the hidden nested column to be rejected")
+        } catch TmuxSplitEqualizer.Failure.unsafeLayout {}
+        XCTAssertEqual(try geometry(control), before)
+        XCTAssertEqual(try control.command("display-message -p floating-replies-aligned"), "floating-replies-aligned")
+    }
+
     func testIssue475NestedSameAxisColumnsBecomeThirds() async throws {
         let server = try Server()
         defer { server.stop() }
@@ -186,9 +230,9 @@ final class TmuxSplitEqualizationTests: XCTestCase {
             try await TmuxSplitEqualizer.run(windowID: 0, layout: nested) { command in
                 if command.hasPrefix("resize-pane"), swappedOrder == nil {
                     try server.cli(["swap-pane", "-s", "%0", "-t", "%2"])
-                    let snapshot = try server.cli(["display-message", "-p", "-t", "@0", "#{window_layout}"])
+                    // tmux 3.8 gives CLI clients the JSON layout; control clients keep the legacy one.
                     swappedOrder = try XCTUnwrap(TmuxLayoutNode.parseServerLayout(
-                        snapshot.trimmingCharacters(in: .whitespacesAndNewlines))).paneIDs
+                        control.command("display-message -p -t @0 '#{window_layout}'"))).paneIDs
                 }
                 return try control.command(command)
             }
@@ -240,19 +284,36 @@ final class TmuxSplitEqualizationTests: XCTestCase {
                 let control = try server.attach()
                 defer { control.stop() }
                 try control.command("refresh-client -C \(original.width),\(original.height)")
+                let target = try XCTUnwrap(original.equalizationTarget())
+                // Without a resize plan these need -E, which a buggy tmux never gets.
+                let version = try control.command("display-message -p '#{version}'")
+                let rejected = original.resizePlan(to: target) == nil
+                    && TmuxSplitEqualizer.spreadSkipsNestedGroups(version: version)
                 for zoomed in [false, true] {
                     try control.command("select-layout -t @0 '\(original.serverLayoutString)'")
                     if zoomed { try control.command("resize-pane -Z -t %0") }
-                    try await TmuxSplitEqualizer.run(windowID: 0, layout: original) { try control.command($0) }
+                    if rejected {
+                        do {
+                            try await TmuxSplitEqualizer.run(windowID: 0, layout: original) { try control.command($0) }
+                            XCTFail("Expected \(sizes) to be rejected without -E")
+                        } catch TmuxSplitEqualizer.Failure.unsafeLayout {}
+                    } else {
+                        try await TmuxSplitEqualizer.run(windowID: 0, layout: original) { try control.command($0) }
+                    }
                     XCTAssertEqual(try control.command("display-message -p -t @0 '#{window_zoomed_flag}'"), zoomed ? "1" : "0")
                     if zoomed { try control.command("resize-pane -Z -t %0") }
+                    if rejected {
+                        XCTAssertEqual(try control.command("display-message -p -t @0 '#{window_layout}'"),
+                                       original.serverLayoutString)
+                        XCTAssertEqual(try control.command("display-message -p rejected-replies-aligned"), "rejected-replies-aligned")
+                        continue
+                    }
                     let actual = try XCTUnwrap(TmuxLayoutNode.parseServerLayout(
                         control.command("display-message -p -t @0 '#{window_layout}'")))
                     XCTAssertTrue(actual.hasSameTopology(as: original))
                     XCTAssertEqual(actual.width, original.width)
                     XCTAssertEqual(actual.height, original.height)
                     let dimensions = actual.leaves.map { vertical ? $0.height : $0.width }.sorted()
-                    let target = try XCTUnwrap(original.equalizationTarget())
                     XCTAssertEqual(dimensions, target.leaves.map { vertical ? $0.height : $0.width }.sorted())
                     XCTAssertEqual(try control.command("display-message -p ancestor-replies-aligned"), "ancestor-replies-aligned")
                 }
