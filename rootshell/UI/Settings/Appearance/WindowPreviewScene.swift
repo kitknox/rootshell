@@ -43,6 +43,8 @@ typealias PreviewDraw = (inout GraphicsContext, PreviewKit, PreviewVector) -> Vo
 struct PreviewSceneCard: View {
     let values: PreviewVector
     var height: CGFloat = 176
+    /// Overrides the default spring, for scenes that run timed phases.
+    var animation: Animation? = nil
     let draw: PreviewDraw
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -55,7 +57,7 @@ struct PreviewSceneCard: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
             }
-            .animation(reduceMotion ? .easeInOut(duration: 0.3) : .smooth(duration: 0.9), value: values)
+            .animation(reduceMotion ? .easeInOut(duration: 0.3) : (animation ?? .smooth(duration: 0.9)), value: values)
             .accessibilityHidden(true)
     }
 }

@@ -442,7 +442,7 @@ struct TabBarPreviewCard: View {
 // MARK: - Controls
 
 /// Icon segmented control in the style of the Appearance Mode picker.
-private struct PreviewSegmentedControl<Value: Hashable>: View {
+struct PreviewSegmentedControl<Value: Hashable>: View {
     struct Option {
         let value: Value
         let symbol: String
@@ -453,6 +453,8 @@ private struct PreviewSegmentedControl<Value: Hashable>: View {
     let options: [Option]
     let selection: Value
     let onSelect: (Value) -> Void
+    /// Vertical stacks each icon over its title, for many options in a narrow row.
+    var labelAxis: Axis = .horizontal
 
     @Namespace private var pillNamespace
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -490,7 +492,8 @@ private struct PreviewSegmentedControl<Value: Hashable>: View {
             bounceCounts[option.value, default: 0] += 1
             withAnimation(.smooth(duration: 0.35)) { onSelect(option.value) }
         } label: {
-            HStack(spacing: 6) {
+            let label = labelAxis == .vertical ? AnyLayout(VStackLayout(spacing: 3)) : AnyLayout(HStackLayout(spacing: 6))
+            label {
                 Image(systemName: option.symbol)
                     .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                     .symbolEffect(.bounce, value: bounceCounts[option.value, default: 0])
@@ -501,7 +504,7 @@ private struct PreviewSegmentedControl<Value: Hashable>: View {
             }
             .font(.subheadline.weight(isSelected ? .semibold : .regular))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
+            .padding(.vertical, labelAxis == .vertical ? 7 : 9)
             .padding(.horizontal, 6)
             .background {
                 if isSelected {
