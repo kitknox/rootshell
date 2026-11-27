@@ -108,6 +108,7 @@ struct WindowSettingsView: View {
 struct WindowTabBarSettingsView: View {
     @Environment(\.duoLayout) private var duoLayout
     @Setting(Settings.Tabs.duoFrontDisplayMode) private var duoFrontDisplayMode
+    @Setting(Settings.Tabs.duoBehindCameraShowsTabs) private var duoBehindCameraShowsTabs
     @Setting(Settings.Tabs.hoverPreviews) private var tabHoverPreviewsEnabled
     @Setting(Settings.Tabs.hoverPreviewActivation) private var tabHoverPreviewActivation
     @Setting(Settings.Tabs.showScopeMenu) private var showTabScopeMenu
@@ -209,6 +210,15 @@ struct WindowTabBarSettingsView: View {
             #if os(iOS) && !targetEnvironment(macCatalyst)
             if #available(iOS 27.1, *), duoLayout.hasHinge {
                 Section {
+                    PreviewSceneCard(
+                        values: DuoFrontSceneValues(
+                            mode: DuoFrontDisplayMode.allCases.firstIndex(of: duoFrontDisplayMode) ?? 0,
+                            showsTabs: duoBehindCameraShowsTabs
+                        ).vector,
+                        draw: DuoFrontScene.draw
+                    )
+                    .themedRow()
+
                     Picker(selection: $duoFrontDisplayMode) {
                         ForEach(DuoFrontDisplayMode.allCases, id: \.rawValue) { mode in
                             Text(mode.displayName).tag(mode)
@@ -279,10 +289,14 @@ struct TabBarScenePreview: View {
     @Setting(Settings.Tabs.programIcons) private var programIcons
     @Setting(Settings.Tabs.barAnimationsDisabled) private var animationsDisabled
     @Setting(Settings.Tabs.hoverPreviews) private var hoverPreviews
+    @Setting(Settings.Window.tabsInTitlebar) private var tabsInTitlebar
+    @Setting(Settings.Window.hideTitleBar) private var hideTitleBar
     @Setting(Settings.Tabs.exposeShowsCaptions) private var exposeShowsCaptions
 
     var body: some View {
         var values = TabBarSceneValues()
+        values.tabsInTitleBar = tabsInTitlebar ? 1 : 0
+        values.hideTitleBar = hideTitleBar ? 1 : 0
         values.shown = tabBarHidden ? 0 : 1
         values.bottom = tabBarPosition == .bottom ? 1 : 0
         let layout = TopTabLayout.resolve(style: topTabStyle, compactPills: compactPillTabSpacing)
@@ -851,6 +865,7 @@ struct WindowPanesSettingsView: View {
 // MARK: - Display
 
 struct WindowDisplaySettingsView: View {
+    @Environment(\.duoLayout) private var duoLayout
     #if !targetEnvironment(macCatalyst) && !os(visionOS)
     @Setting(Settings.Window.fullScreenMode) private var fullScreenMode
     #endif
@@ -902,10 +917,9 @@ struct WindowDisplaySettingsView: View {
         if brightnessSliderMax > 1.0001 {
             values.brightness = min(1, max(0, (brightnessManager.gain - 1) / (brightnessSliderMax - 1)))
         }
-        #if targetEnvironment(macCatalyst) || os(visionOS)
-        values.device = 2
-        #else
-        values.device = UIDevice.current.userInterfaceIdiom == .pad ? 1 : 0
+        values.duoFrontMode = Double(DuoFrontDisplayMode.allCases.firstIndex(of: duoLayout.frontMode) ?? 0)
+        values.duoShowsTabs = duoLayout.behindCameraShowsTabs ? 1 : 0
+        #if !targetEnvironment(macCatalyst) && !os(visionOS)
         values.fullScreen = fullScreenMode ? 1 : 0
         values.hasHomeIndicator = deviceHasHomeIndicator ? 1 : 0
         values.extendUnderHomeIndicator = paddingManager.extendUnderHomeIndicator ? 1 : 0

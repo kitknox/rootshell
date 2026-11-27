@@ -40,14 +40,16 @@ nonisolated enum TabSwitcherScene {
         let shape = kit.windowShell(&context, win)
         let (_, phase) = kit.cycle(6.5)
 
+        let content = kit.contentRect(win)
         context.drawLayer { layer in
             layer.clip(to: shape)
-            kit.terminal(&layer, in: win)
+            kit.terminal(&layer, in: content)
             if v.sidebar > 0.5 {
-                drawSidebar(&layer, kit, v, window: win, phase: phase)
+                drawSidebar(&layer, kit, v, window: content, phase: phase)
             } else {
-                drawSheet(&layer, kit, v, window: win, phase: phase)
+                drawSheet(&layer, kit, v, window: content, phase: phase)
             }
+            kit.macTitleBar(&layer, win)
         }
         kit.windowEdge(&context, shape)
     }
@@ -133,7 +135,12 @@ nonisolated enum TabSwitcherScene {
                         height: 3.2, color: row == selected ? p.foreground : p.dim, opacity: visible)
             }
             if row == tapRow && tap > 0.01 {
-                kit.touch(&context, at: CGPoint(x: rect.midX + 10 * k, y: rect.midY), opacity: tap, pressed: tap)
+                let point = CGPoint(x: rect.midX + 10 * k, y: rect.midY)
+                if kit.device.isMac {
+                    kit.pointer(&context, tip: point, opacity: min(1, tap * 2), pressed: tap)
+                } else {
+                    kit.touch(&context, at: point, opacity: tap, pressed: tap)
+                }
             }
             y += rowHeight + 4 * k
         }
@@ -181,7 +188,7 @@ nonisolated enum PanesScene {
 
         let gap = 5 * k * v.rounded
         let radius = 8 * k * v.rounded
-        let inner = win.insetBy(dx: gap, dy: gap)
+        let inner = kit.contentRect(win).insetBy(dx: gap, dy: gap)
         let half = (inner.width - gap) / 2
         let panes = [
             CGRect(x: inner.minX, y: inner.minY, width: half, height: inner.height),
@@ -213,6 +220,7 @@ nonisolated enum PanesScene {
                 layer.fill(Path(CGRect(x: panes[0].maxX - 0.4 * k, y: inner.minY, width: 0.8 * k, height: inner.height)),
                            with: .color(p.foreground.color(0.16 * (1 - v.rounded))))
             }
+            kit.macTitleBar(&layer, win)
         }
         kit.windowEdge(&context, shape)
 
@@ -266,112 +274,316 @@ nonisolated enum PanesScene {
     }
 }
 
+// MARK: - Devices
+
+/// The hardware drawn as itself: the Duo closed (its front display, with a
+/// punch-hole camera and the side rail) or open (the fold down the middle),
+/// iPhone with its Dynamic Island, iPad in landscape, and a MacBook.
+nonisolated struct DeviceFrame {
+    let kit: PreviewKit
+    let device: PreviewDevice
+
+    var k: Double { kit.k }
+
+    /// The device body, sized to the stage.
+    var body: CGRect {
+        let w = kit.w, h = kit.h
+        let (height, aspect): (Double, Double) = switch device {
+        case .phone: (h * 0.84, 0.48)
+        case .duoClosed: (h * 0.84, 0.69)
+        case .duoOpen: (h * 0.78, 1.18)
+        case .pad, .vision: (h * 0.66, 1.42)
+        case .mac: (h * 0.62, 1.55)
+        }
+        let width = min(height * aspect, w * 0.62)
+        return CGRect(x: (w - width) / 2, y: h * (device == .mac ? 0.05 : 0.06), width: width, height: width / aspect)
+    }
+
+    private var cornerRadius: Double {
+        switch device {
+        case .phone: 17
+        case .duoClosed, .duoOpen: 13
+        case .pad, .vision: 11
+        case .mac: 6
+        }
+    }
+
+    /// Bezel, shadows, and (on the Mac) the keyboard deck. Returns the screen.
+    func drawBody(_ context: inout GraphicsContext) -> (screen: CGRect, shape: Path) {
+        let body = body
+        if device == .mac {
+            // Aluminum deck under the lid.
+            let deck = CGRect(x: body.minX - body.width * 0.07, y: body.maxY, width: body.width * 1.14, height: 5.5 * k)
+            kit.windowShell(&context, body, radius: cornerRadius, fill: PreviewRGB(0.08, 0.08, 0.09), groundY: deck.maxY + 3 * k)
+            var deckPath = Path()
+            deckPath.addRoundedRect(in: deck, cornerSize: CGSize(width: 3 * k, height: 3 * k))
+            context.fill(deckPath, with: .linearGradient(Gradient(colors: [PreviewRGB(0.86, 0.87, 0.89).color(), PreviewRGB(0.6, 0.61, 0.64).color()]),
+                                                         startPoint: CGPoint(x: deck.midX, y: deck.minY), endPoint: CGPoint(x: deck.midX, y: deck.maxY)))
+            context.fill(Path(roundedRect: CGRect(x: deck.midX - 11 * k, y: deck.minY, width: 22 * k, height: 1.8 * k), cornerRadius: 0.9 * k),
+                         with: .color(PreviewRGB(0.5, 0.51, 0.54).color()))
+            let screen = CGRect(x: body.minX + 3 * k, y: body.minY + 3 * k, width: body.width - 6 * k, height: body.height - 4 * k)
+            return (screen, Path(roundedRect: screen, cornerRadius: 3 * k, style: .continuous))
+        }
+        kit.windowShell(&context, body, radius: cornerRadius, fill: PreviewRGB(0.07, 0.07, 0.08), groundY: body.maxY + 6 * k)
+        context.stroke(Path(roundedRect: body, cornerRadius: cornerRadius * k, style: .continuous), with: .color(.white.opacity(0.18)), lineWidth: 0.8 * k)
+        let inset = (device == .pad || device == .vision ? 4.5 : 3) * k
+        let screen = body.insetBy(dx: inset, dy: inset)
+        return (screen, Path(roundedRect: screen, cornerRadius: max(2, cornerRadius - 3) * k, style: .continuous))
+    }
+
+    /// Camera hardware drawn over the screen content.
+    func drawCamera(_ context: inout GraphicsContext, screen: CGRect) {
+        switch device {
+        case .phone:
+            context.fill(Path(roundedRect: CGRect(x: screen.midX - 11 * k, y: screen.minY + 3.5 * k, width: 22 * k, height: 6.5 * k), cornerRadius: 3.25 * k),
+                         with: .color(.black))
+        case .duoClosed:
+            context.fill(kit.circle(CGPoint(x: screen.maxX - 9 * k, y: screen.minY + 9 * k), 3.6 * k), with: .color(.black))
+        case .duoOpen:
+            // Inner display camera, in the top middle of the right half.
+            context.fill(kit.circle(CGPoint(x: screen.midX + screen.width * 0.25, y: screen.minY + 5 * k), 2.6 * k), with: .color(.black))
+            // The fold catches a little light down the middle of the inner display.
+            let crease = CGRect(x: screen.midX - 2 * k, y: screen.minY, width: 4 * k, height: screen.height)
+            context.fill(Path(crease), with: .linearGradient(Gradient(colors: [.black.opacity(0), .black.opacity(0.22), .white.opacity(0.08), .black.opacity(0.22), .black.opacity(0)]),
+                                                             startPoint: CGPoint(x: crease.minX, y: crease.midY), endPoint: CGPoint(x: crease.maxX, y: crease.midY)))
+        case .pad, .vision:
+            context.fill(kit.circle(CGPoint(x: screen.midX, y: screen.minY - 2.2 * k), 1.1 * k), with: .color(PreviewRGB(0.25, 0.27, 0.3).color()))
+        case .mac:
+            context.fill(Path(roundedRect: CGRect(x: screen.midX - 9 * k, y: screen.minY - 0.5 * k, width: 18 * k, height: 4.5 * k), cornerRadius: 2 * k),
+                         with: .color(.black))
+        }
+    }
+}
+
+// MARK: - Duo front display
+
+nonisolated struct DuoFrontSceneValues: Equatable, Sendable {
+    /// `DuoFrontDisplayMode` index: side rail, below camera, behind camera.
+    var mode = 0.0
+    var showsTabs = 1.0
+
+    var vector: PreviewVector { PreviewVector([mode, showsTabs]) }
+
+    init(mode: Int, showsTabs: Bool) {
+        self.mode = Double(mode)
+        self.showsTabs = showsTabs ? 1 : 0
+    }
+
+    init(_ v: PreviewVector) {
+        mode = v[0]; showsTabs = v[1]
+    }
+}
+
+nonisolated enum DuoFrontScene {
+    static func draw(_ context: inout GraphicsContext, _ kit: PreviewKit, _ vector: PreviewVector) {
+        let v = DuoFrontSceneValues(vector)
+        kit.stage(&context)
+        let frame = DeviceFrame(kit: kit, device: .duoClosed)
+        let (screen, shape) = frame.drawBody(&context)
+        context.drawLayer { layer in
+            layer.clip(to: shape)
+            drawScreen(&layer, kit, screen: screen, mode: v.mode, showsTabs: v.showsTabs)
+        }
+        frame.drawCamera(&context, screen: screen)
+    }
+
+    /// The closed Duo's front display in each layout, cross-faded by `mode`.
+    static func drawScreen(_ context: inout GraphicsContext, _ kit: PreviewKit, screen: CGRect, mode: Double, showsTabs: Double,
+                           status: Double = 1, glow: Double = 0) {
+        let k = kit.k, p = kit.palette
+        context.fill(Path(screen), with: .color(p.background.color()))
+        let weights = (0..<3).map { max(0, 1 - abs(mode - Double($0))) }
+        let selection = TabBarScene.selection(kit, animationsOff: 0)
+
+        // Side Rail: tabs, the clock, and controls in a rail beside the camera.
+        if weights[0] > 0.01 {
+            context.drawLayer { layer in
+                layer.opacity = weights[0]
+                let railWidth = screen.width * 0.2
+                let terminal = CGRect(x: screen.minX, y: screen.minY, width: screen.width - railWidth, height: screen.height)
+                kit.terminal(&layer, in: terminal, padX: 5, padY: 6, lineHeight: 8, glow: glow)
+                let rail = CGRect(x: terminal.maxX, y: screen.minY, width: railWidth, height: screen.height)
+                if status > 0.01 {
+                    kit.label(&layer, "9:41", at: CGPoint(x: rail.midX, y: rail.minY + 20 * k), size: 5.6, color: p.foreground, opacity: status)
+                    kit.symbol(&layer, "wifi", in: CGRect(x: rail.midX - 3.5 * k, y: rail.minY + 26 * k, width: 7 * k, height: 5.5 * k),
+                               color: p.foreground, opacity: status)
+                }
+                let capsule = CGRect(x: rail.midX - 7 * k, y: rail.minY + 38 * k, width: 14 * k, height: 44 * k)
+                kit.glass(&layer, capsule)
+                kit.symbol(&layer, "plus", in: CGRect(x: capsule.midX - 3 * k, y: capsule.minY + 5 * k, width: 6 * k, height: 6 * k), color: p.foreground)
+                let badge = CGRect(x: capsule.midX - 4.5 * k, y: capsule.midY - 4 * k, width: 9 * k, height: 8 * k)
+                layer.fill(Path(roundedRect: badge, cornerRadius: 2 * k), with: .color(p.accent.color(0.35)))
+                kit.label(&layer, "3", at: CGPoint(x: badge.midX, y: badge.midY), size: 5.4, color: p.foreground)
+                kit.symbol(&layer, "gearshape", in: CGRect(x: capsule.midX - 3.2 * k, y: capsule.maxY - 11 * k, width: 6.4 * k, height: 6.4 * k), color: p.foreground)
+            }
+        }
+
+        // Below Camera: top tabs under the camera band, full width beneath.
+        if weights[1] > 0.01 {
+            context.drawLayer { layer in
+                layer.opacity = weights[1]
+                let band = 17 * k
+                if status > 0.01 {
+                    kit.label(&layer, "9:41", at: CGPoint(x: screen.minX + 8 * k, y: screen.minY + band / 2), size: 5.4,
+                              color: p.foreground, opacity: status, anchor: .leading)
+                }
+                let strip = CGRect(x: screen.minX, y: screen.minY + band, width: screen.width, height: 20 * k)
+                layer.fill(Path(strip), with: .color(p.chrome.color()))
+                TabStripPainter(kit: kit, k: k * 0.8, selection: selection).paint(&layer, layout: .pills, strip: strip, terminalBelow: true)
+                let terminal = CGRect(x: screen.minX, y: strip.maxY, width: screen.width, height: screen.maxY - strip.maxY)
+                kit.terminal(&layer, in: terminal, padX: 5, padY: 6, lineHeight: 8, glow: glow)
+            }
+        }
+
+        // Behind Camera: the terminal runs to the top edge, under the camera;
+        // the top tabs, if shown, sit behind it too.
+        if weights[2] > 0.01 {
+            context.drawLayer { layer in
+                layer.opacity = weights[2]
+                let stripHeight = 20 * k * showsTabs
+                if stripHeight > 0.5 {
+                    let strip = CGRect(x: screen.minX, y: screen.minY, width: screen.width, height: 20 * k)
+                    layer.drawLayer { tabs in
+                        tabs.opacity = showsTabs
+                        tabs.fill(Path(strip), with: .color(p.chrome.color()))
+                        TabStripPainter(kit: kit, k: k * 0.8, selection: selection).paint(&tabs, layout: .pills, strip: strip, terminalBelow: true)
+                    }
+                }
+                let terminal = CGRect(x: screen.minX, y: screen.minY + stripHeight, width: screen.width, height: screen.height - stripHeight)
+                kit.terminal(&layer, in: terminal, padX: 5, padY: 5, lineHeight: 8, glow: glow)
+            }
+        }
+    }
+}
+
 // MARK: - Display
 
 nonisolated struct DisplaySceneValues: Equatable, Sendable {
-    /// 0 phone, 1 tablet, 2 Mac window.
-    var device = 0.0
     var fullScreen = 0.0
     var hasHomeIndicator = 1.0
     var extendUnderHomeIndicator = 0.0
     /// 0 sleeps when idle, 1 stays on for a while, 2 always on.
     var alwaysOn = 0.0
     var brightness = 0.0
+    /// Closed Duo only: the front display layout and its top tabs.
+    var duoFrontMode = 0.0
+    var duoShowsTabs = 1.0
 
     var vector: PreviewVector {
-        PreviewVector([device, fullScreen, hasHomeIndicator, extendUnderHomeIndicator, alwaysOn, brightness])
+        PreviewVector([fullScreen, hasHomeIndicator, extendUnderHomeIndicator, alwaysOn, brightness, duoFrontMode, duoShowsTabs])
     }
 
     init() {}
 
     init(_ v: PreviewVector) {
-        device = v[0]; fullScreen = v[1]; hasHomeIndicator = v[2]; extendUnderHomeIndicator = v[3]
-        alwaysOn = v[4]; brightness = v[5]
+        fullScreen = v[0]; hasHomeIndicator = v[1]; extendUnderHomeIndicator = v[2]
+        alwaysOn = v[3]; brightness = v[4]; duoFrontMode = v[5]; duoShowsTabs = v[6]
     }
 }
 
 nonisolated enum DisplayScene {
     static func draw(_ context: inout GraphicsContext, _ kit: PreviewKit, _ vector: PreviewVector) {
         let v = DisplaySceneValues(vector)
-        let k = kit.k, p = kit.palette
         kit.stage(&context)
+        let frame = DeviceFrame(kit: kit, device: kit.device)
+        let (screen, screenShape) = frame.drawBody(&context)
 
-        if v.device > 1.5 {
-            // Mac: only the brightness boost applies.
-            let win = kit.windowRect()
-            let shape = kit.windowShell(&context, win)
-            context.drawLayer { layer in
-                layer.clip(to: shape)
-                kit.terminal(&layer, in: win, glow: v.brightness)
-            }
-            kit.windowEdge(&context, shape)
-            drawBoostRays(&context, kit, v, around: win)
+        if kit.device == .mac {
+            drawMacDesktop(&context, kit, v, screen: screen, shape: screenShape)
+            frame.drawCamera(&context, screen: screen)
+            drawBoostGlow(&context, kit, v, around: frame.body)
             return
         }
 
-        let isTablet = v.device > 0.5
-        let deviceHeight = kit.h * (isTablet ? 0.66 : 0.84)
-        let deviceWidth = isTablet ? deviceHeight * 1.42 : deviceHeight * 0.48
-        let body = CGRect(x: (kit.w - deviceWidth) / 2, y: kit.h * 0.06, width: deviceWidth, height: deviceHeight)
-        let bezel = Path(roundedRect: body, cornerRadius: (isTablet ? 11 : 17) * k, style: .continuous)
-        kit.windowShell(&context, body, radius: isTablet ? 11 : 17, fill: PreviewRGB(0.07, 0.07, 0.08), groundY: body.maxY + 6 * k)
-        context.stroke(bezel, with: .color(.white.opacity(0.18)), lineWidth: 0.8 * k)
-        let screen = body.insetBy(dx: 3 * k, dy: 3 * k)
-        let screenShape = Path(roundedRect: screen, cornerRadius: (isTablet ? 8.5 : 14.5) * k, style: .continuous)
-
+        let k = kit.k, p = kit.palette
         // Idle dimming: off sleeps soon, a duration later, always never.
         let (_, phase) = kit.cycle(7)
         let sleepStart = v.alwaysOn < 0.5 ? 0.38 : 0.62
         let sleepDepth = max(0, 1 - v.alwaysOn / 2) * (v.alwaysOn < 0.5 ? 0.88 : 0.45)
         let dim = kit.reduceMotion ? 0 : sleepDepth * PreviewKit.ease((phase - sleepStart) / 0.1) * (1 - PreviewKit.ease((phase - 0.9) / 0.05))
-
-        let statusHeight = 13 * k * (1 - v.fullScreen)
-        let homeGap = 10 * k * v.hasHomeIndicator * (1 - v.extendUnderHomeIndicator)
-        let content = CGRect(x: screen.minX, y: screen.minY + statusHeight + 2 * k * (1 - v.fullScreen),
-                             width: screen.width, height: screen.height - statusHeight - homeGap - 2 * k * (1 - v.fullScreen))
+        let status = 1 - v.fullScreen
+        let homeGap = 9 * k * v.hasHomeIndicator * (1 - v.extendUnderHomeIndicator)
 
         context.drawLayer { layer in
             layer.clip(to: screenShape)
             layer.fill(screenShape, with: .color(p.chrome.color()))
-            layer.fill(Path(content), with: .color(p.background.color()))
-            kit.terminal(&layer, in: content, padX: isTablet ? 8 : 6, padY: 7, lineHeight: isTablet ? 9 : 8.5, glow: v.brightness)
-
-            // Status bar.
-            let status = 1 - v.fullScreen
-            if status > 0.01 {
-                let y = screen.minY + 7 * k
-                kit.label(&layer, "9:41", at: CGPoint(x: screen.minX + (isTablet ? 14 : 12) * k, y: y), size: 5.6, weight: .semibold,
-                          color: p.foreground, opacity: status, anchor: .leading)
-                kit.symbol(&layer, "wifi", in: CGRect(x: screen.maxX - 22 * k, y: y - 2.6 * k, width: 6.5 * k, height: 5.2 * k), color: p.foreground, opacity: status)
-                kit.symbol(&layer, "battery.75percent", in: CGRect(x: screen.maxX - 14 * k, y: y - 2.4 * k, width: 9 * k, height: 4.8 * k), color: p.foreground, opacity: status)
-            }
-            if !isTablet {
-                // Camera housing.
-                layer.fill(Path(roundedRect: CGRect(x: screen.midX - 11 * k, y: screen.minY + 3.5 * k, width: 22 * k, height: 6.5 * k), cornerRadius: 3.25 * k),
-                           with: .color(.black))
+            let usable = CGRect(x: screen.minX, y: screen.minY, width: screen.width, height: screen.height - homeGap)
+            if kit.device == .duoClosed {
+                DuoFrontScene.drawScreen(&layer, kit, screen: usable, mode: v.duoFrontMode, showsTabs: v.duoShowsTabs,
+                                         status: status, glow: v.brightness)
+            } else {
+                let isTablet = kit.device == .pad || kit.device == .duoOpen || kit.device == .vision
+                let statusHeight = 13 * k * status
+                let content = CGRect(x: usable.minX, y: usable.minY + statusHeight, width: usable.width, height: usable.height - statusHeight)
+                layer.fill(Path(content), with: .color(p.background.color()))
+                kit.terminal(&layer, in: content, padX: isTablet ? 8 : 6, padY: 7, lineHeight: isTablet ? 9 : 8.5, glow: v.brightness)
+                if status > 0.01 {
+                    // On iPhone the clock and icons sit in the ears beside the Dynamic Island.
+                    let y = screen.minY + 7 * k
+                    let ear = kit.device == .phone ? (screen.width / 2 - 11 * k) / 2 : 14 * k
+                    kit.label(&layer, "9:41", at: CGPoint(x: screen.minX + ear, y: y), size: 5.6, color: p.foreground, opacity: status)
+                    let iconsX = screen.maxX - ear
+                    kit.symbol(&layer, "wifi", in: CGRect(x: iconsX - 8 * k, y: y - 2.6 * k, width: 6.5 * k, height: 5.2 * k), color: p.foreground, opacity: status)
+                    kit.symbol(&layer, "battery.75percent", in: CGRect(x: iconsX - 0.5 * k, y: y - 2.4 * k, width: 9 * k, height: 4.8 * k), color: p.foreground, opacity: status)
+                }
             }
             if v.hasHomeIndicator > 0.5 {
                 let indicator = CGRect(x: screen.midX - screen.width * 0.17, y: screen.maxY - 5 * k, width: screen.width * 0.34, height: 2.2 * k)
                 layer.fill(Path(roundedRect: indicator, cornerRadius: 1.1 * k), with: .color(p.foreground.color(0.75)))
             }
-            if dim > 0.01 {
-                layer.fill(screenShape, with: .color(.black.opacity(dim)))
-            }
         }
-        drawBoostRays(&context, kit, v, around: body)
-        drawIdleBadge(&context, kit, v, beside: body, phase: phase, sleepStart: sleepStart)
+        frame.drawCamera(&context, screen: screen)
+        if dim > 0.01 {
+            context.fill(screenShape, with: .color(.black.opacity(dim)))
+        }
+        drawBoostGlow(&context, kit, v, around: frame.body)
+        drawIdleBadge(&context, kit, v, beside: frame.body, phase: phase, sleepStart: sleepStart)
     }
 
-    /// Sun rays behind the device that grow with the brightness boost.
-    private static func drawBoostRays(_ context: inout GraphicsContext, _ kit: PreviewKit, _ v: DisplaySceneValues, around rect: CGRect) {
+    /// macOS: a menu bar over a tinted desktop, with the terminal window on it.
+    private static func drawMacDesktop(_ context: inout GraphicsContext, _ kit: PreviewKit, _ v: DisplaySceneValues, screen: CGRect, shape: Path) {
+        let k = kit.k, p = kit.palette
+        context.drawLayer { layer in
+            layer.clip(to: shape)
+            layer.fill(Path(screen), with: .linearGradient(Gradient(colors: [p.accent.mix(.black, 0.35).color(), p.accent.mix(.black, 0.7).color()]),
+                                                           startPoint: CGPoint(x: screen.minX, y: screen.minY), endPoint: CGPoint(x: screen.maxX, y: screen.maxY)))
+            let menuBar = CGRect(x: screen.minX, y: screen.minY, width: screen.width, height: 6 * k)
+            layer.fill(Path(menuBar), with: .color(.white.opacity(0.14)))
+            kit.symbol(&layer, "apple.logo", in: CGRect(x: menuBar.minX + 4 * k, y: menuBar.minY + 1.2 * k, width: 3.4 * k, height: 3.6 * k), color: .white, opacity: 0.85)
+            for (index, width) in [10.0, 8, 9].enumerated() {
+                kit.bar(&layer, x: menuBar.minX + (12 + Double(index) * 13) * k, y: menuBar.midY, width: width * k, height: 1.8, color: .white, opacity: 0.6)
+            }
+            let window = CGRect(x: screen.minX + screen.width * 0.12, y: menuBar.maxY + 6 * k, width: screen.width * 0.76, height: screen.height - menuBar.height - 12 * k)
+            let windowShape = Path(roundedRect: window, cornerRadius: 5 * k, style: .continuous)
+            layer.drawLayer { shadowed in
+                shadowed.addFilter(.shadow(color: .black.opacity(0.4), radius: 4 * k, y: 2 * k))
+                shadowed.fill(windowShape, with: .color(p.background.color()))
+            }
+            layer.drawLayer { inside in
+                inside.clip(to: windowShape)
+                let titleHeight = 9 * k
+                let content = CGRect(x: window.minX, y: window.minY + titleHeight, width: window.width, height: window.height - titleHeight)
+                kit.terminal(&inside, in: content, padX: 5, padY: 5, lineHeight: 7.5, glow: v.brightness)
+                inside.fill(Path(CGRect(x: window.minX, y: window.minY, width: window.width, height: titleHeight)), with: .color(p.chrome.color()))
+                let colors = [PreviewRGB(1, 0.37, 0.34), PreviewRGB(1, 0.74, 0.18), PreviewRGB(0.16, 0.78, 0.25)]
+                for (index, color) in colors.enumerated() {
+                    inside.fill(kit.circle(CGPoint(x: window.minX + (5 + Double(index) * 5) * k, y: window.minY + titleHeight / 2), 1.6 * k),
+                                with: .color(color.color()))
+                }
+            }
+        }
+    }
+
+    /// A warm bloom behind the device that grows with the brightness boost.
+    private static func drawBoostGlow(_ context: inout GraphicsContext, _ kit: PreviewKit, _ v: DisplaySceneValues, around rect: CGRect) {
         let k = kit.k
         guard v.brightness > 0.01 else { return }
-        let center = CGPoint(x: rect.midX, y: rect.midY)
         context.drawLayer { layer in
             layer.blendMode = .plusLighter
             layer.fill(Path(ellipseIn: rect.insetBy(dx: -24 * k * v.brightness, dy: -18 * k * v.brightness)),
                        with: .radialGradient(Gradient(colors: [kit.palette.yellow.mix(.white, 0.4).color(0.25 * v.brightness), .clear]),
-                                             center: center, startRadius: 0, endRadius: max(rect.width, rect.height) * 0.8))
+                                             center: CGPoint(x: rect.midX, y: rect.midY), startRadius: 0,
+                                             endRadius: max(rect.width, rect.height) * 0.8))
         }
     }
 
@@ -423,7 +635,8 @@ nonisolated enum SelectionScene {
         kit.stage(&context)
         let win = kit.windowRect()
         let shape = kit.windowShell(&context, win)
-        let lines = kit.terminalRuns(in: win)
+        let content = kit.contentRect(win)
+        let lines = kit.terminalRuns(in: content)
         guard lines.count > 3 else { return }
         let target = lines[lines.count - 4]
         let startX = target.first?.rect.minX ?? win.minX
@@ -439,7 +652,8 @@ nonisolated enum SelectionScene {
 
         context.drawLayer { layer in
             layer.clip(to: shape)
-            kit.terminal(&layer, in: win, typing: false)
+            kit.terminal(&layer, in: content, typing: false)
+            kit.macTitleBar(&layer, win)
             // Selected text, in the selection colors.
             if present > 0.01 && drag > 0.01 {
                 let highlight = CGRect(x: startX - 2 * k, y: lineY - 4.6 * k, width: selectionEnd - startX + 4 * k, height: 9.2 * k)

@@ -66,6 +66,7 @@ private struct PreviewScene: View, Animatable {
     let draw: PreviewDraw
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.duoLayout) private var duoLayout
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.sheetThemeColors) private var sheetThemeColors
     @Environment(\.self) private var environment
@@ -81,12 +82,13 @@ private struct PreviewScene: View, Animatable {
         let draw = draw
         let palette = WindowPreviewPalette.current(sheetThemeColors: sheetThemeColors, environment: environment)
         let reduceMotion = reduceMotion
+        let device = PreviewDevice.current(duoLayout: duoLayout)
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion || !isVisible || scenePhase != .active)) { timeline in
             // Reduce Motion: one representative still frame.
             let time = reduceMotion ? 3.4 : timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600)
             Canvas { context, size in
                 guard size.width > 1, size.height > 1 else { return }
-                draw(&context, PreviewKit(size: size, time: time, palette: palette, reduceMotion: reduceMotion), values)
+                draw(&context, PreviewKit(size: size, time: time, palette: palette, reduceMotion: reduceMotion, device: device), values)
             }
         }
         .onAppear { isVisible = true }
@@ -185,6 +187,27 @@ extension WindowPreviewPalette {
     }
 }
 
+// MARK: - Device
+
+/// The hardware the previews draw, so the Duo, iPad, and Mac look like themselves.
+nonisolated enum PreviewDevice: Int, Sendable {
+    case phone, duoClosed, duoOpen, pad, mac, vision
+
+    var isMac: Bool { self == .mac }
+
+    @MainActor
+    static func current(duoLayout: DuoLayoutContext) -> PreviewDevice {
+        #if targetEnvironment(macCatalyst)
+        return .mac
+        #elseif os(visionOS)
+        return .vision
+        #else
+        if duoLayout.hasHinge { return duoLayout.isFrontDisplay ? .duoClosed : .duoOpen }
+        return UIDevice.current.userInterfaceIdiom == .pad ? .pad : .phone
+        #endif
+    }
+}
+
 // MARK: - Kit
 
 /// One colored run of terminal text, laid out in scene points.
@@ -199,6 +222,7 @@ nonisolated struct PreviewKit {
     let time: Double
     let palette: WindowPreviewPalette
     let reduceMotion: Bool
+    var device: PreviewDevice = .phone
 
     var w: Double { size.width }
     var h: Double { size.height }
@@ -304,6 +328,34 @@ nonisolated struct PreviewKit {
         return shape
     }
 
+    // MARK: Mac window chrome
+
+    var macTitleBarHeight: Double { 20 * k }
+
+    /// The window below the Mac title bar; the whole window elsewhere.
+    func contentRect(_ window: CGRect) -> CGRect {
+        guard device.isMac else { return window }
+        return CGRect(x: window.minX, y: window.minY + macTitleBarHeight, width: window.width, height: window.height - macTitleBarHeight)
+    }
+
+    /// The Mac title bar row and its traffic lights. Draw inside the window clip.
+    func macTitleBar(_ context: inout GraphicsContext, _ window: CGRect, height: Double? = nil, opacity: Double = 1) {
+        guard device.isMac, opacity > 0.01 else { return }
+        let barHeight = height ?? macTitleBarHeight
+        context.fill(Path(CGRect(x: window.minX, y: window.minY, width: window.width, height: barHeight)),
+                     with: .color(palette.chrome.color(opacity)))
+        trafficLights(&context, center: CGPoint(x: window.minX + 10 * k, y: window.minY + barHeight / 2), opacity: opacity)
+    }
+
+    func trafficLights(_ context: inout GraphicsContext, center: CGPoint, opacity: Double = 1) {
+        let colors = [PreviewRGB(1, 0.37, 0.34), PreviewRGB(1, 0.74, 0.18), PreviewRGB(0.16, 0.78, 0.25)]
+        for (index, color) in colors.enumerated() {
+            let point = CGPoint(x: center.x + Double(index) * 10 * k, y: center.y)
+            context.fill(circle(point, 3.2 * k), with: .color(color.color(opacity)))
+            context.stroke(circle(point, 3.2 * k), with: .color(.black.opacity(0.18 * opacity)), lineWidth: 0.5 * k)
+        }
+    }
+
     func windowEdge(_ context: inout GraphicsContext, _ shape: Path) {
         context.stroke(shape, with: .color(.white.opacity(palette.isLight ? 0.5 : 0.12)), lineWidth: 0.75)
     }
@@ -349,6 +401,9 @@ nonisolated struct PreviewKit {
     /// Text runs, then a command typing at the prompt and a blinking cursor.
     func terminal(_ context: inout GraphicsContext, in rect: CGRect, padX: Double = 10, padY: Double = 12,
                   lineHeight: Double = 10, glow: Double = 0, typing: Bool = true) {
+        // Narrow terminals (a rail beside them, a small pane) cut their lines off.
+        var context = context
+        context.clip(to: Path(rect))
         let lines = terminalRuns(in: rect, padX: padX, padY: padY, lineHeight: lineHeight)
         drawRuns(&context, lines.flatMap { $0 }, glow: glow)
         guard let prompt = lines.last?.last else { return }
@@ -485,10 +540,14 @@ nonisolated struct TabBarSceneValues: Equatable, Sendable {
     var exposeCaptions = 1.0
     /// 1 while the scene is showing Tab Exposé.
     var exposeMoment = 0.0
+    /// Mac only: the tabs share the title bar row with the traffic lights.
+    var tabsInTitleBar = 1.0
+    /// Mac only: no title bar or traffic lights.
+    var hideTitleBar = 0.0
 
     var vector: PreviewVector {
         PreviewVector([shown, bottom, layout, shortcuts, groupMenu, groupMenuSize, programIcons, animationsOff,
-                       hoverPreviews, hoverMoment, exposeCaptions, exposeMoment])
+                       hoverPreviews, hoverMoment, exposeCaptions, exposeMoment, tabsInTitleBar, hideTitleBar])
     }
 
     init() {}
@@ -496,7 +555,7 @@ nonisolated struct TabBarSceneValues: Equatable, Sendable {
     init(_ v: PreviewVector) {
         shown = v[0]; bottom = v[1]; layout = v[2]; shortcuts = v[3]; groupMenu = v[4]; groupMenuSize = v[5]
         programIcons = v[6]; animationsOff = v[7]; hoverPreviews = v[8]; hoverMoment = v[9]
-        exposeCaptions = v[10]; exposeMoment = v[11]
+        exposeCaptions = v[10]; exposeMoment = v[11]; tabsInTitleBar = v[12]; hideTitleBar = v[13]
     }
 }
 
@@ -531,14 +590,35 @@ nonisolated enum TabBarScene {
         let stripHeight = 27 * kit.k * (1 - expose)
         let topAmount = v.shown * (1 - v.bottom)
         let bottomAmount = v.shown * v.bottom
-        let content = CGRect(x: win.minX, y: win.minY + topAmount * stripHeight,
-                             width: win.width, height: win.height - (topAmount + bottomAmount) * stripHeight)
+
+        // Mac: a title bar row with traffic lights. With Tabs in Title Bar the
+        // top tabs move into that row beside the lights; Hide Title Bar drops it.
+        let isMac = kit.device.isMac
+        let titleVisible = isMac ? (1 - v.hideTitleBar) * (1 - expose) : 0
+        let titleHeight = kit.macTitleBarHeight * titleVisible
+        let merged = isMac ? v.tabsInTitleBar * (1 - v.bottom) * titleVisible : 0
+        let separateRow = titleHeight + stripHeight * topAmount
+        let mergedRow = max(titleHeight, stripHeight * topAmount)
+        let topRow = separateRow + (mergedRow - separateRow) * merged
+        let lightsInset = 40 * kit.k * merged
+
+        let content = CGRect(x: win.minX, y: win.minY + topRow,
+                             width: win.width, height: win.height - topRow - bottomAmount * stripHeight)
         context.drawLayer { layer in
             layer.clip(to: shape)
             kit.terminal(&layer, in: content, padX: 10 - 4 * expose, padY: 12 - 5 * expose, lineHeight: 10 - 3 * expose)
+            if titleVisible > 0.01 {
+                layer.fill(Path(CGRect(x: win.minX, y: win.minY, width: win.width, height: topRow)),
+                           with: .color(kit.palette.chrome.color(titleVisible)))
+            }
             if topAmount > 0.001 && stripHeight > 1 {
-                let strip = CGRect(x: win.minX, y: win.minY - (1 - topAmount) * stripHeight, width: win.width, height: stripHeight)
+                let stripTop = win.minY + titleHeight * (1 - merged) - (1 - topAmount) * stripHeight
+                let strip = CGRect(x: win.minX + lightsInset, y: stripTop, width: win.width - lightsInset, height: stripHeight)
                 drawStrip(&layer, kit, v, strip: strip, terminalBelow: true, opacity: min(1, topAmount * 1.6))
+            }
+            if titleVisible > 0.01 {
+                let lightsY = win.minY + (titleHeight + (topRow - titleHeight) * merged) / 2
+                kit.trafficLights(&layer, center: CGPoint(x: win.minX + 10 * kit.k, y: lightsY), opacity: titleVisible)
             }
             if bottomAmount > 0.001 && stripHeight > 1 {
                 let strip = CGRect(x: win.minX, y: win.maxY - bottomAmount * stripHeight, width: win.width, height: stripHeight)
