@@ -25,7 +25,9 @@ struct GitDiffSummaryPill: View {
         return theme.isDarkSurface ? .dark : .light
     }
 
-    private var palette: GitDiffPalette { GitDiffPalette(isDark: surfaceScheme == .dark) }
+    private var palette: GitDiffPalette {
+        GitDiffPalette(isDark: surfaceScheme == .dark, sheetTheme: sheetThemeColors)
+    }
 
     private var innerMaxWidth: CGFloat? {
         maxWidth.map { max(0, $0 - Self.horizontalPadding * 2) }

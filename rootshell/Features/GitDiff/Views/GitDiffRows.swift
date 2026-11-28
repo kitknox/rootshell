@@ -10,29 +10,46 @@
 import SwiftUI
 import UIKit
 
-/// Diff colours for a light or dark panel surface.
+/// Diff colours for the panel surface, from the terminal theme when the
+/// panel is themed, else tuned for the system's light and dark backgrounds.
 struct GitDiffPalette: Equatable {
     let isDark: Bool
+    let colors: GitDiffColors
 
-    var addition: Color {
-        isDark ? Color(red: 0.25, green: 0.73, blue: 0.31) : Color(red: 0.10, green: 0.50, blue: 0.22)
+    init(isDark: Bool) {
+        self.isDark = isDark
+        colors = .standard(isDark: isDark)
     }
 
-    var deletion: Color {
-        isDark ? Color(red: 0.97, green: 0.32, blue: 0.29) : Color(red: 0.81, green: 0.13, blue: 0.18)
+    /// `surface` is the page the code sits on; `terminal` the theme it came from.
+    init(isDark: Bool, surface: Color, terminal: ThemeManager.ThemeInfo.ThemeColors) {
+        let key = CacheKey(isDark: isDark, surface: GitDiffRGB(surface), terminal: terminal)
+        self.isDark = isDark
+        if let cached = Self.cache, cached.key == key {
+            colors = cached.colors
+            return
+        }
+        colors = GitDiffPaletteDerivation.colors(
+            surface: key.surface, isDark: isDark,
+            foreground: GitDiffRGB(hex: terminal.foreground),
+            ansi: terminal.palette.compactMap(GitDiffRGB.init(hex:)))
+        Self.cache = (key, colors)
     }
 
-    var modified: Color {
-        isDark ? Color(red: 0.47, green: 0.66, blue: 0.95) : Color(red: 0.04, green: 0.41, blue: 0.85)
+    /// The panel and its pill rebuild this every body; they share one surface, so one entry serves both.
+    private struct CacheKey: Equatable {
+        let isDark: Bool
+        let surface: GitDiffRGB
+        let terminal: ThemeManager.ThemeInfo.ThemeColors
     }
 
-    var renamed: Color {
-        isDark ? Color(red: 0.74, green: 0.55, blue: 0.95) : Color(red: 0.51, green: 0.31, blue: 0.87)
-    }
+    private static var cache: (key: CacheKey, colors: GitDiffColors)?
 
-    var conflicted: Color {
-        isDark ? Color(red: 0.89, green: 0.70, blue: 0.26) : Color(red: 0.60, green: 0.40, blue: 0.0)
-    }
+    var addition: Color { Color(colors.addition) }
+    var deletion: Color { Color(colors.deletion) }
+    var modified: Color { Color(colors.modified) }
+    var renamed: Color { Color(colors.renamed) }
+    var conflicted: Color { Color(colors.conflicted) }
 
     func accent(_ kind: GitDiffLine.Kind) -> Color? {
         switch kind {
@@ -42,30 +59,39 @@ struct GitDiffPalette: Equatable {
         }
     }
 
+    private func tint(_ kind: GitDiffLine.Kind) -> GitDiffRGB? {
+        switch kind {
+        case .addition: colors.additionTint
+        case .deletion: colors.deletionTint
+        case .context: nil
+        }
+    }
+
     func rowTint(_ kind: GitDiffLine.Kind) -> Color {
-        accent(kind)?.opacity(isDark ? 0.15 : 0.11) ?? .clear
+        tint(kind).map { Color($0).opacity(GitDiffTint.row(isDark: isDark)) } ?? .clear
     }
 
     /// The gutter reads a step stronger than the row, so numbers stay a column.
     func gutterTint(_ kind: GitDiffLine.Kind) -> Color {
-        accent(kind)?.opacity(isDark ? 0.24 : 0.19) ?? Color.primary.opacity(isDark ? 0.035 : 0.025)
+        tint(kind).map { Color($0).opacity(GitDiffTint.gutter(isDark: isDark)) }
+            ?? Color.primary.opacity(isDark ? 0.035 : 0.025)
     }
 
     func emphasis(_ kind: GitDiffLine.Kind) -> Color {
-        accent(kind)?.opacity(isDark ? 0.42 : 0.30) ?? .clear
+        tint(kind).map { Color($0).opacity(GitDiffTint.emphasis(isDark: isDark)) } ?? .clear
     }
 
-    var hunkTint: Color { modified.opacity(isDark ? 0.10 : 0.07) }
+    var hunkTint: Color { Color(colors.modifiedTint).opacity(GitDiffTint.hunk(isDark: isDark)) }
 
     var selection: Color { Color.accentColor.opacity(isDark ? 0.45 : 0.30) }
 
     func token(_ token: GitDiffSyntax.Token) -> Color? {
         switch token {
-        case .plain: nil
-        case .keyword: isDark ? Color(red: 0.86, green: 0.55, blue: 0.80) : Color(red: 0.61, green: 0.14, blue: 0.58)
-        case .string: isDark ? Color(red: 0.93, green: 0.70, blue: 0.47) : Color(red: 0.72, green: 0.31, blue: 0.05)
-        case .comment: isDark ? Color(white: 0.56) : Color(white: 0.45)
-        case .number: isDark ? Color(red: 0.50, green: 0.78, blue: 0.93) : Color(red: 0.05, green: 0.42, blue: 0.66)
+        case .plain: colors.text.map { Color($0) }
+        case .keyword: Color(colors.keyword)
+        case .string: Color(colors.string)
+        case .comment: Color(colors.comment)
+        case .number: Color(colors.number)
         }
     }
 
@@ -77,6 +103,31 @@ struct GitDiffPalette: Equatable {
         case .renamed, .copied: renamed
         case .conflicted: conflicted
         }
+    }
+}
+
+extension GitDiffPalette {
+    /// The panel's palette: themed when the panel carries its terminal theme.
+    init(isDark: Bool, sheetTheme: SheetThemeColors?) {
+        if let sheetTheme, let terminal = sheetTheme.terminal {
+            self.init(isDark: isDark, surface: sheetTheme.background, terminal: terminal)
+        } else {
+            self.init(isDark: isDark)
+        }
+    }
+}
+
+private extension Color {
+    init(_ rgb: GitDiffRGB) {
+        self.init(red: rgb.red, green: rgb.green, blue: rgb.blue)
+    }
+}
+
+private extension GitDiffRGB {
+    init(_ color: Color) {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        self.init(red: Double(red), green: Double(green), blue: Double(blue))
     }
 }
 

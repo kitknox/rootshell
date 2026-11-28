@@ -27,6 +27,8 @@ struct SheetThemeColors: Equatable {
     let rowBackground: Color
     /// Accent color derived from the terminal theme (cursor/palette), propagated to sub-sheets
     let accentColor: Color?
+    /// The terminal theme these colours came from, for content that follows its palette.
+    var terminal: ThemeManager.ThemeInfo.ThemeColors? = nil
 }
 
 private struct SheetThemeColorsKey: EnvironmentKey {
@@ -80,7 +82,7 @@ extension MainView {
         let accent = overrides.sheetAccent.flatMap { Color(hex: $0) } ?? derived.sheetAccent
         let surface = EffectiveSurface.resolve(backgroundHex: themeColors.background)
         return ResolvedSheetTheme(
-            themeColors: SheetThemeColors(background: bg, rowBackground: row, accentColor: accent),
+            themeColors: SheetThemeColors(background: bg, rowBackground: row, accentColor: accent, terminal: themeColors),
             accentColor: accent,
             colorScheme: derived.isLight ? .light : .dark,
             translucentBackground: surface?.translucentFill(showing: bg)

@@ -83,7 +83,7 @@ struct CustomTheme: Codable, Identifiable, Equatable, Hashable {
             background: background,
             foreground: foreground,
             cursor: resolvedCursor,
-            palette: Array(palette.prefix(8))
+            palette: Array(palette.prefix(16))
         )
     }
 

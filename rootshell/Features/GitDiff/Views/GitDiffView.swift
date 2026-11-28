@@ -70,7 +70,9 @@ struct GitDiffView: View {
         return theme.isDarkSurface ? .dark : .light
     }
 
-    private var palette: GitDiffPalette { GitDiffPalette(isDark: surfaceScheme == .dark) }
+    private var palette: GitDiffPalette {
+        GitDiffPalette(isDark: surfaceScheme == .dark, sheetTheme: sheetThemeColors)
+    }
 
     private var surface: Color {
         sheetThemeColors?.background ?? Color(uiColor: .systemBackground)
