@@ -1312,96 +1312,167 @@ private nonisolated struct ThemeRoomPainter {
         }
     }
 
-    /// A golden retriever sitting up: drop ears, feathered chest and tail,
-    /// and a panting smile.
+    /// A golden retriever sitting up: broad head with close-hung ears, a long
+    /// muzzle, thick ruff, feathered legs and plumed tail, and a collar tag.
     private func drawGoldenRetriever(_ c: inout GraphicsContext, x: Double, ground: Double, blink: Bool) {
-        // A size up from the other pets; retrievers are big dogs.
+        // Drawn around the dog's spot, a size up; retrievers are big dogs.
         var dog = c
         dog.translateBy(x: x, y: ground)
         dog.scaleBy(x: 1.15, y: 1.15)
-        dog.translateBy(x: -x, y: -ground)
-        let gold = PreviewRGB(0.88, 0.63, 0.3).mix(p.yellow, 0.08)
-        let cream = PreviewRGB(0.97, 0.84, 0.58)
-        let shade = PreviewRGB(0.72, 0.47, 0.2)
-        let wag = reduceMotion ? 0 : sin(time * 7)
+        let coat = PreviewRGB(0.88, 0.64, 0.37).mix(p.yellow, 0.06)
+        let cream = PreviewRGB(0.97, 0.89, 0.72)
+        let shade = PreviewRGB(0.7, 0.46, 0.23)
+        let ruff = coat.mix(cream, 0.2)
+        let wag = reduceMotion ? 0 : sin(time * 5)
 
-        // Plumed tail sweeping behind the haunch.
+        // Soft wisps along a to b, pointing to its clockwise side.
+        func fringe(_ a: CGPoint, _ b: CGPoint, count: Int, depth: Double) -> Path {
+            let dx = (b.x - a.x) / Double(count), dy = (b.y - a.y) / Double(count)
+            let length = max(0.001, hypot(dx, dy))
+            let nx = -dy / length * depth, ny = dx / length * depth
+            var path = Path()
+            path.move(to: a)
+            for index in 0..<count {
+                let s = CGPoint(x: a.x + dx * Double(index), y: a.y + dy * Double(index))
+                path.addQuadCurve(to: CGPoint(x: s.x + dx * 0.6 + nx, y: s.y + dy * 0.6 + ny),
+                                  control: CGPoint(x: s.x + nx * 1.1, y: s.y + ny * 1.1))
+                path.addQuadCurve(to: CGPoint(x: s.x + dx, y: s.y + dy),
+                                  control: CGPoint(x: s.x + dx * 1.05 + nx * 0.7, y: s.y + dy * 1.05 + ny * 0.7))
+            }
+            path.closeSubpath()
+            return path
+        }
+
+        dog.fill(Path(ellipseIn: CGRect(x: -11, y: -1.4, width: 30, height: 3.2)), with: .color(.black.opacity(0.18)))
+
+        // Plumed tail sweeping out behind the haunch, feathered underneath.
+        let tip = CGPoint(x: 19 + wag * 1.5, y: -10 - wag * 1.5)
         var tail = Path()
-        let tip = CGPoint(x: x + 17 + wag * 2.5, y: ground - 14 - wag * 2)
-        tail.move(to: CGPoint(x: x + 7, y: ground - 3))
-        tail.addQuadCurve(to: tip, control: CGPoint(x: x + 18, y: ground - 2))
-        tail.addQuadCurve(to: CGPoint(x: x + 8, y: ground - 9), control: CGPoint(x: x + 11 + wag, y: ground - 13))
+        tail.move(to: CGPoint(x: 6, y: -3))
+        tail.addQuadCurve(to: tip, control: CGPoint(x: 16, y: -1))
+        tail.addQuadCurve(to: CGPoint(x: 7, y: -8), control: CGPoint(x: 12 + wag * 0.5, y: -11))
         tail.closeSubpath()
-        dog.fill(tail, with: .linearGradient(Gradient(colors: [gold.color(), cream.color()]),
-                                             startPoint: CGPoint(x: x + 7, y: ground), endPoint: tip))
-        // Feathering strands off the underside of the plume.
-        var strands = Path()
-        for step in 1...3 {
-            let t = Double(step) / 4
-            let base = CGPoint(x: x + 8 + (tip.x - x - 8) * t, y: ground - 3 + (tip.y - ground + 3) * t)
-            strands.move(to: base)
-            strands.addLine(to: CGPoint(x: base.x + 2.4, y: base.y + 1.6))
-        }
-        dog.stroke(strands, with: .color(cream.color()), style: StrokeStyle(lineWidth: 1, lineCap: .round))
+        let plume = cream.mix(coat, 0.25)
+        dog.fill(tail, with: .linearGradient(Gradient(colors: [coat.color(), plume.color()]),
+                                             startPoint: CGPoint(x: 6, y: 0), endPoint: tip))
+        dog.fill(fringe(CGPoint(x: 9, y: -1.4), CGPoint(x: tip.x - 1, y: tip.y + 1.6), count: 4, depth: 1.6), with: .color(plume.color()))
 
-        // Haunch, body, and the cream feathering down the chest.
-        dog.fill(Path(ellipseIn: CGRect(x: x + 1, y: ground - 13, width: 13, height: 13)), with: .color(shade.mix(gold, 0.5).color()))
-        let body = CGRect(x: x - 9, y: ground - 24, width: 18, height: 24)
-        dog.fill(Path(ellipseIn: body), with: .linearGradient(Gradient(colors: [gold.color(), shade.mix(gold, 0.4).color()]),
+        // Haunch and body.
+        dog.fill(Path(ellipseIn: CGRect(x: 1, y: -13, width: 13, height: 13)), with: .color(shade.mix(coat, 0.45).color()))
+        let body = CGRect(x: -9, y: -24, width: 18, height: 24)
+        dog.fill(Path(ellipseIn: body), with: .linearGradient(Gradient(colors: [coat.color(), shade.mix(coat, 0.4).color()]),
                                                            startPoint: CGPoint(x: body.minX, y: 0), endPoint: CGPoint(x: body.maxX, y: 0)))
-        var bib = Path()
-        bib.move(to: CGPoint(x: x - 5, y: ground - 20))
-        bib.addQuadCurve(to: CGPoint(x: x + 5, y: ground - 20), control: CGPoint(x: x, y: ground - 23))
-        for step in 0..<4 {
-            let fx = x + 5 - Double(step + 1) * 2.5
-            bib.addQuadCurve(to: CGPoint(x: fx, y: ground - 8 - Double(step % 2)), control: CGPoint(x: fx + 1.6, y: ground - 5))
-        }
-        bib.closeSubpath()
-        dog.fill(bib, with: .color(cream.color()))
-        // Wavy fur down the chest.
-        var fur = Path()
-        for (index, fy) in [ground - 18, ground - 14.5, ground - 11].enumerated() {
-            let fx = x - 2.5 + Double(index % 2)
-            fur.move(to: CGPoint(x: fx, y: fy))
-            fur.addQuadCurve(to: CGPoint(x: fx + 2.5, y: fy + 0.4), control: CGPoint(x: fx + 1.2, y: fy + 1.6))
-        }
-        dog.stroke(fur, with: .color(gold.mix(cream, 0.4).color()), style: StrokeStyle(lineWidth: 0.6, lineCap: .round))
 
-        // Front legs and paws.
-        for lx in [x - 5.5, x + 1] {
-            dog.fill(Path(roundedRect: CGRect(x: lx, y: ground - 11, width: 4.5, height: 11), cornerRadius: 2), with: .color(gold.color()))
-            dog.fill(Path(ellipseIn: CGRect(x: lx - 0.6, y: ground - 2.6, width: 5.7, height: 3)), with: .color(cream.color()))
+        // Thick ruff around the neck, falling in wisps over the chest.
+        dog.fill(Path(ellipseIn: CGRect(x: -9.5, y: -27, width: 19, height: 16)), with: .color(ruff.color()))
+        dog.fill(fringe(CGPoint(x: -7.5, y: -12.8), CGPoint(x: 7.5, y: -12.8), count: 5, depth: 2.4), with: .color(ruff.color()))
+        var waves = Path()
+        for (fx, fy) in [(-6.0, -19.5), (4.0, -20.0), (-5.0, -15.0), (3.5, -15.5), (0.5, -21.0)] {
+            waves.move(to: CGPoint(x: fx, y: fy))
+            waves.addQuadCurve(to: CGPoint(x: fx + 1.2, y: fy + 2.4), control: CGPoint(x: fx + 1.6, y: fy + 0.8))
         }
+        dog.stroke(waves, with: .color(shade.color(0.3)), style: StrokeStyle(lineWidth: 0.4, lineCap: .round))
+        var streak = Path()
+        streak.move(to: CGPoint(x: 0.4, y: -12))
+        streak.addQuadCurve(to: CGPoint(x: 1, y: -6), control: CGPoint(x: 2, y: -9))
+        streak.addQuadCurve(to: CGPoint(x: 0.4, y: -12), control: CGPoint(x: -0.4, y: -9))
+        dog.fill(streak, with: .color(cream.color(0.6)))
+
+        // Front legs, feathered on the outside, with big cream paws.
+        for (lx, side) in [(-5.5, -1.0), (1.0, 1.0)] {
+            dog.fill(Path(roundedRect: CGRect(x: lx, y: -11.5, width: 4.5, height: 11.5), cornerRadius: 2), with: .color(coat.color()))
+            let edge = side < 0 ? lx + 0.2 : lx + 4.3
+            let wisps = side < 0
+                ? fringe(CGPoint(x: edge, y: -9.5), CGPoint(x: edge, y: -3.5), count: 2, depth: 0.8)
+                : fringe(CGPoint(x: edge, y: -3.5), CGPoint(x: edge, y: -9.5), count: 2, depth: 0.8)
+            dog.fill(wisps, with: .color(coat.mix(cream, 0.35).color()))
+            let paw = CGRect(x: lx - 0.8, y: -3.2, width: 6.1, height: 3.6)
+            dog.fill(Path(ellipseIn: paw), with: .color(cream.color()))
+            var toes = Path()
+            for gap in 1...2 {
+                let gx = paw.minX + Double(gap) * paw.width / 3
+                toes.move(to: CGPoint(x: gx, y: paw.maxY - 1.8))
+                toes.addLine(to: CGPoint(x: gx, y: paw.maxY - 0.4))
+            }
+            dog.stroke(toes, with: .color(shade.mix(cream, 0.5).color(0.6)), style: StrokeStyle(lineWidth: 0.35, lineCap: .round))
+        }
+
+        // Round beach tag on the collar.
+        let tag = CGPoint(x: -2.5, y: -15.5)
+        dog.stroke(Path { $0.move(to: CGPoint(x: tag.x, y: tag.y - 2.6)); $0.addLine(to: CGPoint(x: tag.x, y: tag.y - 1.4)) },
+                   with: .color(PreviewRGB(0.6, 0.6, 0.62).color()), lineWidth: 0.35)
+        var badge = dog
+        badge.clip(to: circle(tag, 1.5))
+        badge.fill(circle(tag, 1.5), with: .color(PreviewRGB(0.55, 0.78, 0.95).color()))
+        badge.fill(Path(CGRect(x: tag.x - 2, y: tag.y + 0.2, width: 4, height: 2)), with: .color(PreviewRGB(0.96, 0.86, 0.6).color()))
+        dog.stroke(circle(tag, 1.5), with: .color(PreviewRGB(0.2, 0.2, 0.25).color(0.7)), lineWidth: 0.3)
 
         // Head, a touch tilted.
         var head = dog
-        let center = CGPoint(x: x, y: ground - 29)
-        head.translateBy(x: center.x, y: center.y)
+        head.translateBy(x: 0, y: -29)
         head.rotate(by: .degrees(reduceMotion ? -6 : -6 + sin(time * 0.8) * 3))
-        head.fill(Path(ellipseIn: CGRect(x: -7.5, y: -7, width: 15, height: 13.5)), with: .color(gold.color()))
         for side in [-1.0, 1.0] {
+            // Drop ears set at eye level, hanging close beside the cheeks.
             var ear = Path()
-            // Long drop ears that hang past the jaw, with a wavy feathered edge.
-            ear.move(to: CGPoint(x: side * 4.5, y: -6))
-            ear.addQuadCurve(to: CGPoint(x: side * 10, y: 4), control: CGPoint(x: side * 11.5, y: -4))
-            ear.addQuadCurve(to: CGPoint(x: side * 8.5, y: 9.5), control: CGPoint(x: side * 11, y: 8))
-            ear.addQuadCurve(to: CGPoint(x: side * 6.5, y: 8.5), control: CGPoint(x: side * 7.6, y: 10.5))
-            ear.addQuadCurve(to: CGPoint(x: side * 5, y: 2), control: CGPoint(x: side * 5.2, y: 6))
+            ear.move(to: CGPoint(x: side * 5.2, y: -6))
+            ear.addQuadCurve(to: CGPoint(x: side * 8.8, y: -1), control: CGPoint(x: side * 8.9, y: -6.2))
+            ear.addQuadCurve(to: CGPoint(x: side * 7.4, y: 5.4), control: CGPoint(x: side * 9.6, y: 3.6))
+            ear.addQuadCurve(to: CGPoint(x: side * 5.2, y: 3), control: CGPoint(x: side * 5.6, y: 5.6))
             ear.closeSubpath()
-            head.fill(ear, with: .linearGradient(Gradient(colors: [shade.color(), shade.mix(gold, 0.5).color()]),
-                                                 startPoint: CGPoint(x: 0, y: -6), endPoint: CGPoint(x: 0, y: 10)))
+            head.fill(ear, with: .linearGradient(Gradient(colors: [shade.mix(coat, 0.35).color(), coat.mix(cream, 0.3).color()]),
+                                                 startPoint: CGPoint(x: 0, y: -6), endPoint: CGPoint(x: 0, y: 5)))
         }
-        // The long retriever muzzle, a shade lighter than the head.
-        head.fill(Path(roundedRect: CGRect(x: -4.2, y: -0.5, width: 8.4, height: 7.8), cornerRadius: 3.8), with: .color(cream.mix(gold, 0.25).color()))
+        // Broad skull, full cheeks, and a pale blaze down to the stop.
+        head.fill(Path(ellipseIn: CGRect(x: -7, y: -8.5, width: 14, height: 12)), with: .color(coat.color()))
+        head.fill(Path(ellipseIn: CGRect(x: -6.4, y: -3.5, width: 12.8, height: 7.5)), with: .color(coat.color()))
+        var blaze = Path()
+        blaze.move(to: CGPoint(x: -1.1, y: -8.4))
+        blaze.addQuadCurve(to: CGPoint(x: 0, y: -3.4), control: CGPoint(x: -0.5, y: -5.5))
+        blaze.addQuadCurve(to: CGPoint(x: 1.1, y: -8.4), control: CGPoint(x: 0.5, y: -5.5))
+        head.fill(blaze, with: .linearGradient(Gradient(colors: [cream.color(0.85), cream.color(0.1)]),
+                                               startPoint: CGPoint(x: 0, y: -8.4), endPoint: CGPoint(x: 0, y: -3.4)))
+        // Long muzzle, paler toward the chin.
+        head.fill(Path(roundedRect: CGRect(x: -3.7, y: -1.6, width: 7.4, height: 8.2), cornerRadius: 3.5),
+                  with: .linearGradient(Gradient(colors: [coat.mix(cream, 0.45).color(), cream.color()]),
+                                        startPoint: CGPoint(x: 0, y: -1.6), endPoint: CGPoint(x: 0, y: 6.6)))
+        // Open, panting smile.
         let pant = reduceMotion ? 0 : (sin(time * 9) + 1) * 0.4
-        head.fill(Path(roundedRect: CGRect(x: -1.4, y: 4.6, width: 2.8, height: 3 + pant), cornerRadius: 1.4),
-                  with: .color(PreviewRGB(0.95, 0.45, 0.5).color()))
+        head.fill(Path(ellipseIn: CGRect(x: -2.6, y: 3.6, width: 5.2, height: 2.2)), with: .color(PreviewRGB(0.3, 0.12, 0.1).color()))
+        head.fill(Path(roundedRect: CGRect(x: -1.3, y: 4.3, width: 2.6, height: 2.8 + pant), cornerRadius: 1.3),
+                  with: .color(PreviewRGB(0.93, 0.47, 0.52).color()))
         var smile = Path()
-        smile.move(to: CGPoint(x: -2.6, y: 4))
-        smile.addQuadCurve(to: CGPoint(x: 2.6, y: 4), control: CGPoint(x: 0, y: 5.8))
-        head.stroke(smile, with: .color(PreviewRGB(0.3, 0.18, 0.1).color()), lineWidth: 0.6)
-        head.fill(Path(ellipseIn: CGRect(x: -1.6, y: 1.4, width: 3.2, height: 2.2)), with: .color(PreviewRGB(0.12, 0.08, 0.06).color()))
-        eyes(&head, head: CGPoint(x: 0, y: -1.8), spacing: 3, size: 1.1, color: PreviewRGB(0.25, 0.14, 0.06), blink: blink)
+        smile.move(to: CGPoint(x: 0, y: 2.8))
+        smile.addLine(to: CGPoint(x: 0, y: 3.7))
+        smile.move(to: CGPoint(x: -2.5, y: 3.5))
+        smile.addQuadCurve(to: CGPoint(x: 2.5, y: 3.5), control: CGPoint(x: 0, y: 4.5))
+        head.stroke(smile, with: .color(PreviewRGB(0.3, 0.18, 0.1).color(0.7)), style: StrokeStyle(lineWidth: 0.4, lineCap: .round))
+        // Big black nose.
+        head.fill(Path(ellipseIn: CGRect(x: -2.1, y: 0.1, width: 4.2, height: 2.9)), with: .color(PreviewRGB(0.1, 0.08, 0.08).color()))
+        head.fill(Path(ellipseIn: CGRect(x: -1.2, y: 0.4, width: 1.5, height: 0.55)), with: .color(.white.opacity(0.3)))
+        // Soft brown eyes under a gentle brow.
+        for side in [-1.0, 1.0] {
+            let eye = CGPoint(x: side * 3, y: -3.2)
+            if blink {
+                var lid = Path()
+                lid.move(to: CGPoint(x: eye.x - 1.2, y: eye.y))
+                lid.addQuadCurve(to: CGPoint(x: eye.x + 1.2, y: eye.y), control: CGPoint(x: eye.x, y: eye.y + 0.7))
+                head.stroke(lid, with: .color(PreviewRGB(0.2, 0.12, 0.08).color()), style: StrokeStyle(lineWidth: 0.45, lineCap: .round))
+                continue
+            }
+            head.fill(Path(ellipseIn: CGRect(x: eye.x - 1.2, y: eye.y - 1, width: 2.4, height: 2)), with: .color(PreviewRGB(0.2, 0.1, 0.05).color()))
+            head.fill(circle(CGPoint(x: eye.x - 0.35, y: eye.y - 0.3), 0.3), with: .color(.white.opacity(0.65)))
+            var lid = Path()
+            lid.move(to: CGPoint(x: eye.x - 1.4, y: eye.y - 0.2))
+            lid.addQuadCurve(to: CGPoint(x: eye.x + 1.4, y: eye.y - 0.2), control: CGPoint(x: eye.x, y: eye.y - 1.7))
+            lid.addLine(to: CGPoint(x: eye.x + 1.4, y: eye.y - 2))
+            lid.addLine(to: CGPoint(x: eye.x - 1.4, y: eye.y - 2))
+            lid.closeSubpath()
+            head.fill(lid, with: .color(coat.color()))
+            var brow = Path()
+            brow.move(to: CGPoint(x: eye.x - side * 0.6, y: eye.y - 1.9))
+            brow.addQuadCurve(to: CGPoint(x: eye.x + side * 1.4, y: eye.y - 1.5), control: CGPoint(x: eye.x + side * 0.5, y: eye.y - 2.5))
+            head.stroke(brow, with: .color(shade.color(0.5)), style: StrokeStyle(lineWidth: 0.4, lineCap: .round))
+        }
     }
 
     private func eyes(_ c: inout GraphicsContext, head: CGPoint, spacing: Double, size: Double, color: PreviewRGB, blink: Bool) {
