@@ -3,6 +3,50 @@
 All notable changes to the rootshell app for iPhone, iPad, Vision Pro, and Mac, newest first.
 Versions are listed as `release-build`, matching the version shown in Settings, About.
 
+## 1.0.17-183 - November 27, 2026
+
+### Git Diff
+
+- **Git Diff** follows the focused local or supported remote pane, including tmux control mode and herdr. Open it from the terminal menu, toolbar, or a shortcut.
+- **Change review** shows uncommitted changes, a comparison with the default branch, or the last commit, with syntax highlighting and line numbers. Jump to a file, wrap lines, hide whitespace changes, or copy a selection that spans files.
+- **View options** include a sidebar, floating panel, full-size view, and iPhone sheet. Collapse the panel or sheet to see just the branch and change summary.
+
+### File Manager
+
+- **Built-in text editor** opens local, SFTP, and S3 files in tabs on Mac, iPhone, iPad, and Vision Pro. Switch back to the file list and return with your edits, undo history, and scroll position intact. Saving checks for conflicts and uploads remote edits.
+- **Editor tools** include syntax highlighting, find and replace, line numbers, line wrapping, and JSON formatting. Expand the editor to full size where available. On iPhone Duo, the side rail includes Save, Find, and Editor Options.
+- **External editing** supports Open With and your preferred editor on Mac. On iPhone, iPad, and Vision Pro, choose built-in Vim, Helix, or an app that edits files in place. Track and retry uploads in Active Edits and view transfer progress in File Manager.
+- **Large S3 folders** load in pages. Case-sensitive prefix search covers the entire folder. S3 operations distinguish files and folders with the same name and preserve distinct Unicode keys.
+- **Touch controls** are larger in File Manager, HTTP Capture, Clipboard, and Agent Inbox. File Manager also makes it easier to switch locations and select multiple files.
+
+### Settings
+
+- **Appearance settings** add illustrated Light, Dark, and Automatic choices. Background Effect previews changes live, App Icon shows all choices on one screen, and appearance changes apply to open Settings sheets.
+- **Settings previews and artwork** include device-specific Window previews, an animated Theme room and Battery racetrack, and new illustrations for SSH Keys and Saved Passwords.
+
+### SSH and Cloud
+
+- **Smallstep sign-in** issues short-lived SSH certificates for hosted teams and self-hosted `step-ca`. In Settings > Connections > SSH Keys, choose Sign In with Smallstep and use OIDC browser sign-in or a JWK provisioner password. Certificates renew when credentials allow. You can also trust the CA’s host certificates for selected hosts.
+- **Keyboard-interactive SSH** shows full prompts, terminal QR codes, and links you can open or copy. Automatic password entry requires a single, unambiguous password prompt with no extra instructions.
+- **FIDO2 SSH sign-in** fixes repeated PIN prompts with keys such as the Nitrokey 3C NFC, following the registration fix in build 182.
+- **Cloud and OpenPubkey sign-ins** verify that the browser callback matches the active sign-in request.
+
+### Terminal
+
+- **Local tabs and splits** start in your home directory when opened from a remote pane. On Mac, if the starting directory is unavailable, the shell starts at home and skips its startup command.
+- **Wrapped commands** no longer produce duplicate lines when edited or pasted at the SFTP prompt or in the local shell on iPhone, iPad, and Vision Pro.
+- **tmux 3.8** equalizes nested splits correctly. On iPad, the Terminal Keyboard returns after you disconnect a hardware keyboard.
+- **iPhone Duo** hides the status bar on the outer display when the side rail runs out of room. The theme picker and editor fit the outer display and tabletop mode.
+- **Background effect shortcut** remembers the last effect across relaunches. The toolbar key editor has a Close button when opened from the toolbar.
+
+### Screen Sharing
+
+- **All Displays (Combined)** now shows every reported display, up to 25 on macOS, lifting the previous two-display limit. Remote modifier keys are less likely to get stuck.
+
+### Agent Usage
+
+- **Antigravity quotas** come from the host’s `agy /usage` report, and sign-in stays on the host. On remote Macs, rootshell uses tmux if SSH cannot access the Keychain.
+
 ## 1.0.17-182 - November 24, 2026
 
 ### Critical TSSH Security Update for KCP
