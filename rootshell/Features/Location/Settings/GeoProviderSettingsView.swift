@@ -56,6 +56,8 @@ struct GeoProviderSettingsView: View {
                 switch resolver.providerType {
                 case .ipinfo:
                     Text("Uses the IPInfo Lite API to look up ASN, organization name, country, and continent for IP addresses. IP addresses are sent to ipinfo.io over HTTPS.")
+                case .internetdata:
+                    Text("Uses the InternetData API to look up ASN, organization name, network, country, and continent for IP addresses. IP addresses are sent to internetdata.io over HTTPS.")
                 case .mmdb:
                     Text("Uses locally imported MMDB files. No IP addresses leave the device. You can import multiple ASN/country databases and the app merges the fields it finds.")
                 case .dns:

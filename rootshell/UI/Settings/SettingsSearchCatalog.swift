@@ -269,7 +269,7 @@ extension SettingsSearchDestination {
                  keywords: ["shell", "zsh", "bash", "fish", "nushell", "nu", "command", "login shell"])
         case .ipGeolocation:
             Meta(section: .terminal, title: String(localized: "IP Geolocation"), systemImage: "location",
-                 keywords: ["geo", "location provider", "ipinfo", "cymru", "dns", "public ip", "clear geo cache", "disabled"])
+                 keywords: ["geo", "location provider", "ipinfo", "internetdata", "cymru", "dns", "public ip", "clear geo cache", "disabled"])
         case .sshKeys:
             Meta(section: .connections, title: String(localized: "SSH Keys"), systemImage: "key",
                  keywords: ["public key", "private key", "agent"])

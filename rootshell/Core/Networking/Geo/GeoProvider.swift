@@ -13,6 +13,7 @@ import OSLog
 
 enum GeoProviderType: String, Codable, CaseIterable, Sendable {
     case ipinfo = "ipinfo"
+    case internetdata = "internetdata"
     case mmdb = "mmdb"
     case dns = "dns"
     case disabled = "disabled"
@@ -37,6 +38,7 @@ enum GeoProviderType: String, Codable, CaseIterable, Sendable {
     var displayName: String {
         switch self {
         case .ipinfo: "IPInfo Lite"
+        case .internetdata: "InternetData"
         case .mmdb: "Local MMDB"
         case .dns: "DNS (Team Cymru)"
         case .disabled: "Disabled"
@@ -46,6 +48,7 @@ enum GeoProviderType: String, Codable, CaseIterable, Sendable {
     var subtitle: String {
         switch self {
         case .ipinfo: "ASN, AS name, country, continent"
+        case .internetdata: "ASN, AS name, network, country, continent"
         case .mmdb: "Local ASN/country MMDB data"
         case .dns: "ASN, CIDR, country code"
         case .disabled: "No third-party geo lookups"
@@ -117,12 +120,18 @@ final class GeoResolver {
             return cached
         }
 
-        // Resolve (IPInfo falls back to DNS on failure)
+        // Resolve (IPInfo and InternetData fall back to DNS on failure)
         let result: GeoInfo?
         switch provider {
         case .ipinfo:
             if let ipinfoResult = await resolveViaIPInfo(ip: ip) {
                 result = ipinfoResult
+            } else {
+                result = await resolveViaDNS(ip: ip)
+            }
+        case .internetdata:
+            if let internetDataResult = await resolveViaInternetData(ip: ip) {
+                result = internetDataResult
             } else {
                 result = await resolveViaDNS(ip: ip)
             }
@@ -135,7 +144,7 @@ final class GeoResolver {
         }
 
         // Store in cache keyed by the configured provider (not the result's provider,
-        // which may differ when IPInfo falls back to DNS)
+        // which may differ when IPInfo or InternetData falls back to DNS)
         if let result {
             await cache.store(ip: ip, info: result, provider: provider)
             cacheEntryCount = await cache.count
@@ -160,6 +169,15 @@ final class GeoResolver {
             return try await IPInfoLiteClient.resolve(ip: ip)
         } catch {
             Self.logger.warning("IPInfo lookup failed for \(ip): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private nonisolated func resolveViaInternetData(ip: String) async -> GeoInfo? {
+        do {
+            return try await InternetDataClient.resolve(ip: ip)
+        } catch {
+            Self.logger.warning("InternetData lookup failed for \(ip): \(error.localizedDescription)")
             return nil
         }
     }
