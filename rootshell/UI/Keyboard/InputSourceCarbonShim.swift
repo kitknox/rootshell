@@ -83,4 +83,10 @@ let kTISCategoryKeyboardInputSource: CFString =
 let kTISPropertyLocalizedName: CFString =
     loadTISStringConstant("kTISPropertyLocalizedName") ?? ("TISPropertyLocalizedName" as CFString)
 
+let kTISPropertyInputSourceType: CFString =
+    loadTISStringConstant("kTISPropertyInputSourceType") ?? ("TISPropertyInputSourceType" as CFString)
+
+let kTISTypeKeyboardLayout: CFString =
+    loadTISStringConstant("kTISTypeKeyboardLayout") ?? ("TISTypeKeyboardLayout" as CFString)
+
 #endif
